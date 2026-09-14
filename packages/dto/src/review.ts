@@ -58,6 +58,7 @@ export const reviewFeedbackResultSchema = z.object({
   reviewState: reviewStateSchema,
   log: reviewLogSchema,
   evolveJobId: z.string().uuid().optional(),
+  analyzeJobId: z.string().uuid().optional(),
 });
 export type ReviewFeedbackResult = z.infer<typeof reviewFeedbackResultSchema>;
 

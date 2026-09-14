@@ -6,7 +6,9 @@ import {
   type DocumentListItem,
   type Topic,
   type TopicSuggestion,
+  type WeeklyReportLatest,
 } from '@inwit/dto';
+import { getLatestWeeklyReport } from '@/api/reports';
 import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
 import { errorMessage } from '@/api/client';
 import {
@@ -57,6 +59,7 @@ export class HomeService extends Service {
   error: string | null = null;
   toast: string | null = null;
   suggestion: TopicSuggestion | null = null;
+  weeklyReport: WeeklyReportLatest | null = null;
   suggestDeadline = 0;
   newTopicOpen = false;
   newTitle = '';
@@ -133,7 +136,7 @@ export class HomeService extends Service {
       if (this.topicId && !this.topics.some((topic) => topic.id === this.topicId)) {
         this.topicId = null;
       }
-      await Promise.all([this.loadDocuments(), this.loadSuggestions()]);
+      await Promise.all([this.loadDocuments(), this.loadSuggestions(), this.loadWeeklyReport()]);
     } catch (err) {
       this.error = errorMessage(err, '加载文档失败');
     }
@@ -243,6 +246,15 @@ export class HomeService extends Service {
       const items = await listTopicSuggestions();
       this.suggestion = items[0] ?? null;
       if (this.suggestion) this.suggestDeadline = 0;
+    } catch {
+      // Banner is optional; keep the last snapshot.
+    }
+  }
+
+  async loadWeeklyReport(): Promise<void> {
+    try {
+      const result = await getLatestWeeklyReport();
+      this.weeklyReport = result.report;
     } catch {
       // Banner is optional; keep the last snapshot.
     }

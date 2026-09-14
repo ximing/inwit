@@ -151,7 +151,7 @@ export const documents = pgTable(
     index('idx_documents_user_status').on(t.userId, t.status),
     index('idx_documents_topic').on(t.topicId),
     index('idx_documents_map_node').on(t.mapNodeId),
-    check('documents_source_check', sql`${t.source} IN ('editor', 'paste', 'chat')`),
+    check('documents_source_check', sql`${t.source} IN ('editor', 'paste', 'chat', 'agent')`),
     check('documents_status_check', sql`${t.status} IN ('pending', 'digested', 'failed')`),
   ],
 );

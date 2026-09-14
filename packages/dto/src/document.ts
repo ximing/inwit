@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { cardWithQuestionsSchema } from './card.js';
 import { paginationQuerySchema } from './common.js';
 
-export const DOCUMENT_SOURCES = ['editor', 'paste', 'chat'] as const;
+export const DOCUMENT_SOURCES = ['editor', 'paste', 'chat', 'agent'] as const;
 export const documentSourceSchema = z.enum(DOCUMENT_SOURCES);
 export type DocumentSource = z.infer<typeof documentSourceSchema>;
 
@@ -11,6 +11,17 @@ export const documentStatusSchema = z.enum(DOCUMENT_STATUSES);
 export type DocumentStatus = z.infer<typeof documentStatusSchema>;
 
 export const DOCUMENT_TITLE_MAX = 40;
+
+export const WEEKLY_REPORT_TITLE_MARK = '学习复盘';
+export const AGENT_DOC_LABEL_REPORT = 'AI 复盘';
+export const AGENT_DOC_LABEL_CONTRAST = '对比专题';
+
+/** List/detail badge for `source=agent` docs. Weekly recap vs contrast essay. */
+export function agentDocumentMetaLabel(source: DocumentSource, title: string): string | null {
+  if (source !== 'agent') return null;
+  if (title.includes(WEEKLY_REPORT_TITLE_MARK)) return AGENT_DOC_LABEL_REPORT;
+  return AGENT_DOC_LABEL_CONTRAST;
+}
 
 /** First non-empty line (ATX heading marks stripped), then at most 40 Unicode characters. */
 export function titleFromContent(contentMd: string): string {

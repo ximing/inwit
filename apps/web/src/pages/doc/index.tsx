@@ -1,7 +1,7 @@
 import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect, useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import type { CardWithQuestions } from '@inwit/dto';
+import { AGENT_DOC_LABEL_REPORT, agentDocumentMetaLabel, type CardWithQuestions } from '@inwit/dto';
 import { QUESTION_TYPE_LABEL } from '@/lib/card-copy';
 import { formatRelativeTime } from '@/lib/format';
 import { AnchoredMarkdown, Markdown } from '@/lib/Markdown';
@@ -55,7 +55,14 @@ const DocPageContent = observer(function DocPageContent() {
           <Link to={ROUTES.home} className="btn-ghost">
             返回
           </Link>
-          {doc ? <h1>{doc.title}</h1> : null}
+          {doc ? (
+            <h1>
+              {doc.title}
+              {agentDocumentMetaLabel(doc.source, doc.title) === AGENT_DOC_LABEL_REPORT ? (
+                <span className="badge">AI 复盘</span>
+              ) : null}
+            </h1>
+          ) : null}
         </div>
         {doc ? (
           <Link to={editorPath(doc.id)} className="btn-secondary">

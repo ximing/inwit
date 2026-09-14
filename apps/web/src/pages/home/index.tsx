@@ -1,9 +1,10 @@
+import { weeklyReportBannerText } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { DocRow } from '@/components/doc-row';
 import { isSubmitHotkey } from '@/lib/format';
-import { topicPath } from '@/routes';
+import { docPath, topicPath } from '@/routes';
 import { HomeService } from './home.service';
 
 const HomePageContent = observer(function HomePageContent() {
@@ -24,6 +25,17 @@ const HomePageContent = observer(function HomePageContent() {
 
   return (
     <section className="page-home">
+      {service.weeklyReport ? (
+        <div className="topic-suggest" role="status">
+          <p>{weeklyReportBannerText(service.weeklyReport.successRate, service.weeklyReport.relearnCount)}</p>
+          <div className="topic-suggest-actions">
+            <Link to={docPath(service.weeklyReport.documentId)} className="btn-primary">
+              去看看
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
       {service.suggestion ? (
         <div className="topic-suggest" role="status">
           <p>

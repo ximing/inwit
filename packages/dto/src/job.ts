@@ -46,11 +46,46 @@ export function documentIdFromJobPayload(payload: JobPayload): string | undefine
   return undefined;
 }
 
+export const EVOLVE_REASONS = ['fuzzy', 'repeated_forgot'] as const;
+export const evolveReasonSchema = z.enum(EVOLVE_REASONS);
+export type EvolveReason = z.infer<typeof evolveReasonSchema>;
+
 export const evolveJobPayloadSchema = z.object({
   cardId: z.string().uuid(),
-  reason: z.string().optional(),
+  reason: evolveReasonSchema,
 });
 export type EvolveJobPayload = z.infer<typeof evolveJobPayloadSchema>;
+
+/** Map historical `reason: 'forgot'` (T6) onto `repeated_forgot`. */
+export function evolveJobPayloadFrom(payload: JobPayload): EvolveJobPayload | undefined {
+  if (typeof payload.cardId !== 'string' || payload.cardId.length === 0) return undefined;
+  const rawReason = payload.reason === 'forgot' ? 'repeated_forgot' : payload.reason;
+  const parsed = evolveJobPayloadSchema.safeParse({ cardId: payload.cardId, reason: rawReason });
+  return parsed.success ? parsed.data : undefined;
+}
+
+export const EVOLVE_ANALYZE_ACTION = 'analyze_patterns' as const;
+export const EVOLVE_ACTIONS = [EVOLVE_ANALYZE_ACTION] as const;
+export const evolveActionSchema = z.enum(EVOLVE_ACTIONS);
+export type EvolveAction = z.infer<typeof evolveActionSchema>;
+
+/** Local calendar day `YYYY-MM-DD` used to dedupe one analyze job per user per day. */
+export const evolveAnalyzeDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
+
+export const evolveAnalyzeJobPayloadSchema = z.object({
+  action: z.literal(EVOLVE_ANALYZE_ACTION),
+  date: evolveAnalyzeDateSchema,
+});
+export type EvolveAnalyzeJobPayload = z.infer<typeof evolveAnalyzeJobPayloadSchema>;
+
+export function evolveAnalyzeJobPayloadFrom(
+  payload: JobPayload,
+): EvolveAnalyzeJobPayload | undefined {
+  const parsed = evolveAnalyzeJobPayloadSchema.safeParse(payload);
+  return parsed.success ? parsed.data : undefined;
+}
 
 export const TOPIC_JOB_ACTIONS = ['organize', 'fill', 'suggest'] as const;
 export const topicJobActionSchema = z.enum(TOPIC_JOB_ACTIONS);
@@ -80,6 +115,23 @@ export type TopicJobPayload = z.infer<typeof topicJobPayloadSchema>;
 
 export function topicJobPayloadFrom(payload: JobPayload): TopicJobPayload | undefined {
   const parsed = topicJobPayloadSchema.safeParse(payload);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** Local calendar Monday `YYYY-MM-DD` used to dedupe one weekly_report job per user per week. */
+export const weeklyReportWeekStartSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'weekStart must be YYYY-MM-DD');
+
+export const weeklyReportJobPayloadSchema = z.object({
+  weekStart: weeklyReportWeekStartSchema,
+});
+export type WeeklyReportJobPayload = z.infer<typeof weeklyReportJobPayloadSchema>;
+
+export function weeklyReportJobPayloadFrom(
+  payload: JobPayload,
+): WeeklyReportJobPayload | undefined {
+  const parsed = weeklyReportJobPayloadSchema.safeParse(payload);
   return parsed.success ? parsed.data : undefined;
 }
 

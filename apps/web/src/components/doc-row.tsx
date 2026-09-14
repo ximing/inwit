@@ -1,4 +1,4 @@
-import type { DocumentListItem } from '@inwit/dto';
+import { agentDocumentMetaLabel, type DocumentListItem } from '@inwit/dto';
 import { Link } from 'react-router';
 import { formatRelativeTime, summarizeAnswer } from '@/lib/format';
 import { docPath } from '@/routes';
@@ -10,6 +10,7 @@ export function DocRow({
   doc: DocumentListItem;
   hanging?: string | null;
 }) {
+  const agentLabel = agentDocumentMetaLabel(doc.source, doc.title);
   return (
     <Link to={docPath(doc.id)} className="doc-row">
       <h2>
@@ -27,6 +28,7 @@ export function DocRow({
       <p className="meta">
         {doc.cardCount} 张卡 · {formatRelativeTime(doc.updatedAt)}
         {doc.topicTitle ? ` · ${doc.topicTitle}` : ''}
+        {agentLabel ? ` · ${agentLabel}` : ''}
       </p>
       {hanging ? <p className="doc-hang">挂在：{hanging}</p> : null}
     </Link>

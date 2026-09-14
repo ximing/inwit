@@ -5,9 +5,11 @@ import type {
   ReviewFeedback,
   ReviewQueueItem,
   ReviewStats,
+  WeeklyReportLatest,
 } from '@inwit/dto';
 import { getCardLinks } from '@/api/cards';
 import { errorMessage } from '@/api/client';
+import { getLatestWeeklyReport } from '@/api/reports';
 import { getReviewStats, getReviewToday, submitReviewFeedback } from '@/api/review';
 import { groupCardLinks, uniqueRelatedCount, type RelatedGroup } from '@/lib/card-copy';
 
@@ -19,6 +21,7 @@ export class ReviewService extends Service {
   ready = false;
   error: string | null = null;
   stats: ReviewStats | null = null;
+  weeklyReport: WeeklyReportLatest | null = null;
   lastFeedback: ReviewFeedback | null = null;
   links: CardLinksResponse | null = null;
   linksCardId: string | null = null;
@@ -90,6 +93,7 @@ export class ReviewService extends Service {
     this.error = null;
     this.flipped = false;
     this.stats = null;
+    this.weeklyReport = null;
     this.lastFeedback = null;
     this.links = null;
     this.linksCardId = null;
@@ -101,6 +105,7 @@ export class ReviewService extends Service {
       this.total = today.total;
       if (this.items.length === 0) {
         this.stats = await getReviewStats();
+        if (this.total > 0) await this.loadWeeklyReport();
       } else {
         void this.loadLinksForCurrent();
       }
@@ -108,6 +113,15 @@ export class ReviewService extends Service {
       this.error = errorMessage(err, '今日队列拿不下来');
     } finally {
       this.ready = true;
+    }
+  }
+
+  async loadWeeklyReport(): Promise<void> {
+    try {
+      const result = await getLatestWeeklyReport();
+      this.weeklyReport = result.report;
+    } catch {
+      this.weeklyReport = null;
     }
   }
 
@@ -148,6 +162,7 @@ export class ReviewService extends Service {
       this.linksCardId = null;
       if (this.items.length === 0) {
         this.stats = await getReviewStats();
+        await this.loadWeeklyReport();
       } else {
         void this.loadLinksForCurrent();
       }

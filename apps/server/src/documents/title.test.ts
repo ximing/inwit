@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agentDocumentMetaLabel,
   cardDetailSchema,
   createDocumentInputSchema,
   documentIdFromJobPayload,
+  documentSourceSchema,
   titleFromContent,
   updateDocumentInputSchema,
 } from '@inwit/dto';
@@ -26,13 +28,27 @@ describe('titleFromContent', () => {
 });
 
 describe('document write schemas', () => {
-  it('accepts editor source and rejects chat on POST /documents', () => {
+  it('accepts editor source and rejects chat/agent on POST /documents', () => {
     expect(createDocumentInputSchema.safeParse({ contentMd: '笔记', source: 'editor' }).success).toBe(
       true,
     );
     expect(createDocumentInputSchema.safeParse({ contentMd: '笔记', source: 'chat' }).success).toBe(
       false,
     );
+    expect(createDocumentInputSchema.safeParse({ contentMd: '笔记', source: 'agent' }).success).toBe(
+      false,
+    );
+  });
+
+  it('includes agent in the document source enum', () => {
+    expect(documentSourceSchema.safeParse('agent').success).toBe(true);
+    expect(documentSourceSchema.options).toContain('agent');
+  });
+
+  it('labels weekly recap vs contrast agent documents', () => {
+    expect(agentDocumentMetaLabel('agent', '9/14–9/20 学习复盘')).toBe('AI 复盘');
+    expect(agentDocumentMetaLabel('agent', '对比专题：偏差 vs 方差')).toBe('对比专题');
+    expect(agentDocumentMetaLabel('editor', '入门：正则化')).toBeNull();
   });
 
   it('requires title or contentMd on PUT', () => {

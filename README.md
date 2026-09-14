@@ -37,7 +37,7 @@ MVP 面向技术学习者 / 备考人群。对话框里可以粘贴笔记，也�
 │   消化 Agent：扫描 inbox→切卡→出题→关联     │
 │   问答 Agent：直接提问→中文回答→自动转卡片   │
 │   主题 Agent：整理知识地图 / 补空白 / 提议开主题 │
-│   进化 Agent：读复习反馈→更新 Memory        │
+│   进化 Agent：换讲法 / 拆卡 / 混淆对对比专题 / 周报复盘 │
 │   能力扩展一律开发为 pi-agent 插件/AgentTool │
 │ LLM 接入 (@earendil-works/pi-ai)：          │
 │   OpenAI / DeepSeek / Claude / 智谱 (BYOK)  │
@@ -68,7 +68,7 @@ inwit/
 pnpm install
 pnpm --filter @inwit/server migrate
 pnpm dev                              # server :3020 + web :5190
-pnpm --filter @inwit/server worker     # 消化 / 问答 Agent 队列，另开一个终端
+pnpm --filter @inwit/server worker     # 消化 / 问答 / 进化 / 周报 Agent 队列，另开一个终端
 ```
 
 浏览器打开 http://localhost:5190 。没有 worker 的话，文档会停在「消化中…」。
@@ -77,7 +77,7 @@ pnpm --filter @inwit/server worker     # 消化 / 问答 Agent 队列，另开�
 
 | 路径 | 页面 |
 |---|---|
-| `/` | 文档列表 + 快捷捕捉条；未归属资料成簇时顶部提示开主题 |
+| `/` | 文档列表 + 快捷捕捉条；未归属资料成簇时顶部提示开主题；本周复盘生成后顶部提示条可跳进文档 |
 | `/login` | 登录 / 注册 |
 | `/editor/new` | 新文档 |
 | `/editor/:id` | 编辑文档 |
