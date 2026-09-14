@@ -23,8 +23,12 @@ import {
   type ReviewStateRow,
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { maybeEnqueueAnalyzePatterns } from '../agent/analyze-enqueue.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
+import { logger } from '../utils/logger.js';
+import { evolveReasonFor } from './evolve-reason.js';
+import { upsertCardMasteryRecent } from './mastery-memory.js';
 import { scheduleReview } from './sm2.js';
 import { insertInitialReviewState } from './state-init.js';
 
@@ -197,10 +201,6 @@ export async function getReviewToday(userId: string, now = new Date()): Promise<
   };
 }
 
-function shouldEnqueueEvolve(feedback: ReviewFeedback, lapses: number): boolean {
-  return feedback === 'fuzzy' || (feedback === 'forgot' && lapses >= 2);
-}
-
 export async function submitReviewFeedback(
   userId: string,
   cardId: string,
@@ -274,14 +274,27 @@ export async function submitReviewFeedback(
       await recalculateMapNodeStatus(card.mapNodeId, tx);
     }
 
+    await upsertCardMasteryRecent(tx, { userId, cardId, now });
+
     let evolveJobId: string | undefined;
-    if (shouldEnqueueEvolve(feedback, next.lapses)) {
+    const evolveReason = evolveReasonFor(feedback, next.lapses);
+    if (evolveReason) {
       const job = await enqueueJob(tx, {
         userId,
         type: 'evolve',
-        payload: { cardId, reason: feedback },
+        payload: { cardId, reason: evolveReason },
       });
       evolveJobId = job.id;
+    }
+
+    let analyzeJobId: string | undefined;
+    if (feedback === 'forgot' || feedback === 'fuzzy') {
+      try {
+        const analyzeJob = await maybeEnqueueAnalyzePatterns(tx, userId, now);
+        if (analyzeJob) analyzeJobId = analyzeJob.id;
+      } catch (err) {
+        logger.error('evolve.analyze_enqueue_failed', err);
+      }
     }
 
     const result: ReviewFeedbackResult = {
@@ -289,6 +302,7 @@ export async function submitReviewFeedback(
       log: toPublicLog(log),
     };
     if (evolveJobId !== undefined) result.evolveJobId = evolveJobId;
+    if (analyzeJobId !== undefined) result.analyzeJobId = analyzeJobId;
     return result;
   });
 }

@@ -80,6 +80,22 @@ Qdrant 语义 ∪ Meili 关键词 → RRF → 百炼 rerank。消化 Agent 是 p
 
 见 `docs/tasks/t20-report.md`。未归属资料近 30 天 ≥4 条聚成一类时，进化/主题 Agent 写入 `memories(scope=user, layer=profile, key=topic_suggestion_<slug>)`。digest 完成未归属文档后轻量入队 `jobs(type=topic, action=suggest)`，也可 `POST /api/topics/suggest-scan`。`GET /api/topic-suggestions` 待处理建议；accept 建主题、归属资料并自动 organize；dismiss 后 30 天内不再提。首页 `--anchor` 淡底提示条「💡 你最近 N 条资料都关于「X」」。README 补齐四实体概念模型。
 
+## T21 进化 Agent 核心
+
+见 `docs/tasks/t21-report.md`。每次复习反馈 upsert `memories(scope=user, layer=mastery, key=card:<id>, recent≤5)`，不改 SM-2。fuzzy 入队 evolve 换题型追加 1 道新题；连续 forgot（lapses≥2）入队 `reason=repeated_forgot`，拆 1–2 张子卡（次日到期、related「由原卡拆小」、原卡保留）。pi-agent 工具：`read_card` / `write_questions` / `split_card` / `write_memory` / `link_cards`。
+
+## T22 错误模式分析
+
+见 `docs/tasks/t22-report.md`。`jobs(type=evolve, action=analyze_patterns)`：当日 forgot+fuzzy ≥3 且近 30 天困难卡 ≥2 张时自动入队（带日期去重，15s 防抖），也可 `POST /api/evolve/analyze`。pi Agent 读困难卡 → confusable 边 + `memories(key=confusable:<a>+<b>)` → 最多一篇 `documents.source=agent` 对比专题，2–3 张对比卡进今日复习。同一对 30 天内不重复出专题。
+
+## T23 周报复盘
+
+见 `docs/tasks/t23-report.md`。`jobs(type=weekly_report)`：worker 启动/每小时扫描，本周（周一起）还没有 done/pending 且本周有学习活动则入队；也可 `POST /api/reports/weekly/generate`。pi Agent 用 SQL 统计写一篇「M/D–M/D 学习复盘」（`source=agent`）并记 mastery memory。首页 `--anchor` 提示条跳进文档；阅读页「AI 复盘」徽标；建议重学带 `/cards/:id` 链接；复习完成态「本周复盘 →」。
+
+## T21–T23 一句话
+
+进化 Agent 闭环收尾：反馈写 Memory + 换讲法/拆卡（T21），混淆对对比专题（T22），周报复盘文档 + 首页提示条（T23）。
+
 ## T16–T20 一句话
 
 从「线程」改成「主题」，再长出知识地图：全量改名（T16），地图数据（T17），Agent 整理/补空白（T18），地图主视图（T19），未归属资料成簇时 Agent 提议开主题（T20）。

@@ -1,7 +1,30 @@
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import DOMPurify from 'dompurify';
 import { Marked } from 'marked';
+import { useNavigate } from 'react-router';
 import { cardIdsFromAnchor, wrapAnchors, type AnchorSpec } from './anchors';
+
+function isInternalAppPath(href: string): boolean {
+  return href.startsWith('/') && !href.startsWith('//');
+}
+
+function navigateInternalLink(
+  event: MouseEvent,
+  navigate: (to: string) => void,
+): boolean {
+  const target = event.target;
+  if (!(target instanceof Element)) return false;
+  const a = target.closest('a');
+  if (!a) return false;
+  const href = a.getAttribute('href');
+  if (!href || !isInternalAppPath(href)) return false;
+  if (a.target === '_blank' || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return false;
+  }
+  event.preventDefault();
+  navigate(href);
+  return true;
+}
 
 const marked = new Marked();
 marked.use({
@@ -48,11 +71,23 @@ export function Markdown({
     () => (inline ? renderMarkdownInline(source) : renderMarkdown(source)),
     [inline, source],
   );
+  const navigate = useNavigate();
   if (!source) return null;
+  const onClick = (event: ReactMouseEvent<HTMLElement>) => {
+    navigateInternalLink(event.nativeEvent, navigate);
+  };
   if (inline) {
-    return <span className={className} dangerouslySetInnerHTML={{ __html: html }} />;
+    return (
+      <span className={className} dangerouslySetInnerHTML={{ __html: html }} onClick={onClick} />
+    );
   }
-  return <div className={className ?? 'md-body'} dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <div
+      className={className ?? 'md-body'}
+      dangerouslySetInnerHTML={{ __html: html }}
+      onClick={onClick}
+    />
+  );
 }
 
 export function AnchoredMarkdown({
@@ -75,6 +110,9 @@ export function AnchoredMarkdown({
   const onClickRef = useRef(onAnchorClick);
   onClickRef.current = onAnchorClick;
   const flashedRef = useRef<string | null>(null);
+  const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
 
   useLayoutEffect(() => {
     const root = rootRef.current;
@@ -82,6 +120,7 @@ export function AnchoredMarkdown({
     root.innerHTML = html;
     wrapAnchors(root, anchors);
     const onClick = (event: MouseEvent) => {
+      if (navigateInternalLink(event, navigateRef.current)) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       const hit = target.closest('mark.anchor, .anchor-block');

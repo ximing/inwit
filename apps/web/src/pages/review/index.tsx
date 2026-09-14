@@ -2,7 +2,7 @@ import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect } from 'react';
 import { Link } from 'react-router';
 import type { ReviewFeedback } from '@inwit/dto';
-import { cardPath, ROUTES } from '@/routes';
+import { cardPath, docPath, ROUTES } from '@/routes';
 import { ReviewService } from './review.service';
 
 const FEEDBACK: Array<{ id: ReviewFeedback; label: string; hint: string; className: string }> = [
@@ -110,6 +110,11 @@ const ReviewPageContent = observer(function ReviewPageContent() {
                 <dd>{service.stats.overdueCount}</dd>
               </div>
             </dl>
+          ) : null}
+          {service.weeklyReport ? (
+            <p className="review-week-link">
+              <Link to={docPath(service.weeklyReport.documentId)}>本周复盘 →</Link>
+            </p>
           ) : null}
         </div>
       ) : null}

@@ -1,3 +1,8 @@
+import {
+  scanAndEnqueueWeeklyReports,
+  weeklyScanEnabled,
+  WEEKLY_SCAN_MS,
+} from './agent/weekly-enqueue.js';
 import { config } from './config.js';
 import { pool } from './db/index.js';
 import { drainJobs, processDueJobs, recoverStuckJobs } from './jobs/queue.js';
@@ -35,24 +40,44 @@ async function tick(): Promise<void> {
   }
 }
 
+async function scanWeekly(): Promise<void> {
+  if (stopping) return;
+  try {
+    const created = await scanAndEnqueueWeeklyReports();
+    if (created > 0) logger.info('worker.weekly.enqueued', { created });
+  } catch (err) {
+    logger.error('worker.weekly.scan_failed', err);
+  }
+}
+
 await ensureRetrievalStores();
 
 const poll = setInterval(() => {
   track(tick);
 }, config.WORKER_POLL_MS);
 
+const scanOn = weeklyScanEnabled();
+const weeklyScan = scanOn
+  ? setInterval(() => {
+      track(scanWeekly);
+    }, WEEKLY_SCAN_MS)
+  : null;
+
 logger.info('worker started', {
   pollMs: config.WORKER_POLL_MS,
   claimLimit: config.WORKER_CLAIM_LIMIT,
   maxAttempts: config.JOB_MAX_ATTEMPTS,
+  weeklyScanMs: scanOn ? WEEKLY_SCAN_MS : 0,
 });
 track(tick);
+if (scanOn) track(scanWeekly);
 
 function shutdown(sig: string): void {
   if (stopping) return;
   stopping = true;
   logger.info(`worker received ${sig}, shutting down`);
   clearInterval(poll);
+  if (weeklyScan) clearInterval(weeklyScan);
   void (async () => {
     await drainJobs();
     await Promise.allSettled([...inFlight]);

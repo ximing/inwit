@@ -1,6 +1,8 @@
 import { ChatTerminalError, processChat } from '../agent/chat.js';
 import { DigestTerminalError, processDigest } from '../agent/digest.js';
+import { EvolveTerminalError, processEvolve } from '../agent/evolve.js';
 import { TopicTerminalError, processTopic } from '../agent/topic.js';
+import { WeeklyTerminalError, processWeeklyReport } from '../agent/weekly.js';
 import type { JobRow } from '../db/schema.js';
 import { logger } from '../utils/logger.js';
 
@@ -29,7 +31,15 @@ export async function processJob(job: JobRow): Promise<void> {
       }
       return;
     case 'evolve':
-      await processEvolveStub(job);
+      try {
+        await processEvolve(job);
+      } catch (err) {
+        if (err instanceof EvolveTerminalError) {
+          logger.warn('evolve.terminal', { jobId: job.id, error: err.message });
+          return;
+        }
+        throw err;
+      }
       return;
     case 'topic':
       try {
@@ -43,7 +53,15 @@ export async function processJob(job: JobRow): Promise<void> {
       }
       return;
     case 'weekly_report':
-      logger.info('job.stub', { jobId: job.id, type: job.type });
+      try {
+        await processWeeklyReport(job);
+      } catch (err) {
+        if (err instanceof WeeklyTerminalError) {
+          logger.warn('weekly.terminal', { jobId: job.id, error: err.message });
+          return;
+        }
+        throw err;
+      }
       return;
     default: {
       const exhaustive: never = job.type;
@@ -52,8 +70,4 @@ export async function processJob(job: JobRow): Promise<void> {
   }
 }
 
-async function processEvolveStub(job: JobRow): Promise<void> {
-  const cardId = typeof job.payload.cardId === 'string' ? job.payload.cardId : undefined;
-  const reason = typeof job.payload.reason === 'string' ? job.payload.reason : undefined;
-  logger.info('evolve.stub', { jobId: job.id, cardId, reason, userId: job.userId });
-}
+

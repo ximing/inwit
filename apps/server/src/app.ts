@@ -12,6 +12,8 @@ import { registerJobRoutes } from './jobs/jobs.routes.js';
 import { registerLlmRoutes } from './llm/llm.routes.js';
 import { registerMapRoutes } from './maps/map.routes.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
+import { registerEvolveRoutes } from './agent/evolve.routes.js';
+import { registerWeeklyRoutes } from './agent/weekly.routes.js';
 import { registerReviewRoutes } from './review/review.routes.js';
 import { registerTopicRoutes } from './topics/topic.routes.js';
 import './types.js';
@@ -49,6 +51,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerTopicRoutes(app);
   registerMapRoutes(app);
   registerReviewRoutes(app);
+  registerEvolveRoutes(app);
+  registerWeeklyRoutes(app);
   registerJobRoutes(app);
   registerAdminRoutes(app);
 
