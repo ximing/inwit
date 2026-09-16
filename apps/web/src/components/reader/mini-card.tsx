@@ -1,0 +1,76 @@
+import { IMAGE_EXCERPT_QUOTE, type DocumentCard } from '@inwit/dto';
+import { Fragment, type ReactNode } from 'react';
+import { parseCloze } from '@/lib/cloze';
+import { formatNextReview, masteryLevel } from '@/lib/format';
+
+export function ClozeText({ text }: { text: string }) {
+  return (
+    <>
+      {parseCloze(text).map((part, index) =>
+        part.type === 'cloze' ? (
+          <span key={index} className="cloze">
+            {part.value}
+          </span>
+        ) : (
+          <Fragment key={index}>{part.value}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
+export function MasteryDots({ level }: { level: number }) {
+  return (
+    <span className="mastery" aria-hidden>
+      {[0, 1, 2, 3].map((slot) => (
+        <i key={slot} className={slot < level ? 'on' : undefined} />
+      ))}
+    </span>
+  );
+}
+
+export function cardMasteryLevel(card: DocumentCard): number {
+  return card.review ? masteryLevel(card.review.intervalDays) : 0;
+}
+
+export function cardNextReviewLabel(card: DocumentCard): string {
+  return card.review ? formatNextReview(card.review.dueAt) : '还没进复习队列';
+}
+
+export function MiniCard({
+  card,
+  open,
+  active,
+  onClick,
+  thumb,
+}: {
+  card: DocumentCard;
+  open: boolean;
+  active: boolean;
+  onClick: () => void;
+  thumb?: ReactNode;
+}) {
+  const question = card.questions[0]?.question ?? card.concept;
+  const answer = card.questions[0]?.answer ?? card.example;
+  return (
+    <button
+      type="button"
+      data-card-id={card.id}
+      className={`mini-card${open ? ' is-open' : ''}${active ? ' is-on' : ''}`}
+      onClick={onClick}
+    >
+      {thumb}
+      {question.trim() !== IMAGE_EXCERPT_QUOTE ? (
+        <div className="mini-q">
+          <ClozeText text={question} />
+        </div>
+      ) : null}
+      {open && answer ? <div className="mini-a">{answer}</div> : null}
+      <div className="mini-foot">
+        <MasteryDots level={cardMasteryLevel(card)} />
+        <span>{cardNextReviewLabel(card)}</span>
+        {card.source === 'manual' ? <span className="hand-tag">手写</span> : null}
+      </div>
+    </button>
+  );
+}

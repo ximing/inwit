@@ -2,10 +2,59 @@ import { observer, useService } from '@rabjs/react';
 import { docDisplayTitle, type MapNodeStatus, type MapTreeNode } from '@inwit/dto';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
-import { Link } from 'react-router';
+import { useNavigate } from 'react-router';
 import { DocRow } from '@/components/doc-row';
-import { cardPath, docPath } from '@/routes';
+import { ReaderService } from '@/components/reader/reader.service';
+import { formatRelativeTime } from '@/lib/format';
 import { chapterMeta, TopicsService } from './topics.service';
+
+type MapLane = {
+  id: string;
+  title: string;
+  meta: string;
+  concepts: MapTreeNode[];
+  collapsible: boolean;
+};
+
+function lanesFromTree(tree: MapTreeNode[]): MapLane[] {
+  const lanes: MapLane[] = [];
+  const ungrouped: MapTreeNode[] = [];
+  for (const node of tree) {
+    if (node.children.length > 0) {
+      lanes.push({
+        id: node.id,
+        title: node.title,
+        meta: chapterMeta(node),
+        concepts: node.children,
+        collapsible: true,
+      });
+    } else {
+      ungrouped.push(node);
+    }
+  }
+  if (ungrouped.length > 0) {
+    let cards = 0;
+    let docs = 0;
+    for (const node of ungrouped) {
+      cards += node.cardCount;
+      docs += node.docCount;
+    }
+    lanes.push({
+      id: '__ungrouped__',
+      title: '其他',
+      meta: docs > 0 ? `${cards}卡 · ${docs}资料` : `${cards}卡`,
+      concepts: ungrouped,
+      collapsible: false,
+    });
+  }
+  return lanes;
+}
+
+function laneCoveredPct(concepts: MapTreeNode[]): number {
+  if (concepts.length === 0) return 0;
+  const covered = concepts.filter((node) => node.status === 'covered').length;
+  return Math.round((covered / concepts.length) * 100);
+}
 
 export const MapTab = observer(function MapTab() {
   const service = useService(TopicsService);
@@ -34,12 +83,27 @@ export const MapTab = observer(function MapTab() {
     );
   }
 
+  const total = service.summary?.totalNodes ?? 0;
+  const lanes = lanesFromTree(service.tree);
+
   return (
     <div className="map-pane">
       <div className="map-toolbar">
         <p className="map-coverage">
-          {`已覆盖 ${String(service.coveredCount)}/${String(service.summary?.totalNodes ?? 0)} 概念`}
+          已覆盖{' '}
+          <b>{`${String(service.coveredCount)}/${String(total)}`}</b>
+          {' 概念'}
         </p>
+        <span
+          className="topic-mastery map-cov-bar"
+          role="progressbar"
+          aria-label="地图覆盖率"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={service.coveragePct}
+        >
+          <i style={{ width: `${String(service.coveragePct)}%` }} />
+        </span>
         <button
           type="button"
           className="btn btn-ghost"
@@ -55,18 +119,125 @@ export const MapTab = observer(function MapTab() {
             '整理地图'
           )}
         </button>
+        <div className="map-legend" aria-hidden>
+          <span>
+            <i className="map-dot is-covered" />
+            已覆盖
+          </span>
+          <span>
+            <i className="map-dot is-learning" />
+            学习中
+          </span>
+          <span>
+            <i className="map-dot is-uncovered" />
+            未覆盖
+          </span>
+        </div>
       </div>
-      <div className="map-tree">
-        {service.tree.map((node) => (
-          <MapBranch key={node.id} node={node} depth={0} />
+      <div className="map-lanes">
+        {lanes.map((lane) => (
+          <MapLaneColumn key={lane.id} lane={lane} />
         ))}
       </div>
     </div>
   );
 });
 
+const MapLaneColumn = observer(function MapLaneColumn({ lane }: { lane: MapLane }) {
+  const service = useService(TopicsService);
+  const collapsed = lane.collapsible && service.isCollapsed(lane.id);
+  const pct = laneCoveredPct(lane.concepts);
+  return (
+    <section className="map-lane">
+      {lane.collapsible ? (
+        <button
+          type="button"
+          className="map-lane-head"
+          aria-expanded={!collapsed}
+          onClick={() => service.toggleCollapsed(lane.id)}
+        >
+          <span className="map-lane-chevron" aria-hidden>
+            {collapsed ? (
+              <ChevronRight width={14} height={14} strokeWidth={1.8} />
+            ) : (
+              <ChevronDown width={14} height={14} strokeWidth={1.8} />
+            )}
+          </span>
+          <h3>{lane.title}</h3>
+          <span className="map-lane-n">{lane.meta}</span>
+        </button>
+      ) : (
+        <div className="map-lane-head">
+          <h3>{lane.title}</h3>
+          <span className="map-lane-n">{lane.meta}</span>
+        </div>
+      )}
+      {collapsed ? null : (
+        <>
+          <div
+            className="topic-mastery map-lane-bar"
+            role="progressbar"
+            aria-label={`${lane.title}覆盖率`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={pct}
+          >
+            <i style={{ width: `${String(pct)}%` }} />
+          </div>
+          {lane.concepts.map((node) => (
+            <ConceptCard key={node.id} node={node} />
+          ))}
+        </>
+      )}
+    </section>
+  );
+});
+
+const ConceptCard = observer(function ConceptCard({ node }: { node: MapTreeNode }) {
+  const service = useService(TopicsService);
+  const filling = service.fillingNodeId === node.id;
+  const uncovered = node.status === 'uncovered';
+  const masteryPct = Math.round(node.mastery * 100);
+  const on = service.selectedNodeId === node.id;
+  return (
+    <div
+      className={`map-concept map-concept-card${uncovered ? ' is-uncovered' : ''}${on ? ' is-on' : ''}`}
+    >
+      <button
+        type="button"
+        className="map-concept-main"
+        onClick={() => void service.openNode(node.id)}
+      >
+        <span className="map-concept-t">
+          <StatusDot status={node.status} />
+          {node.title}
+        </span>
+        <span className="map-concept-meta">{`${String(node.cardCount)}卡 · 掌握 ${String(masteryPct)}%`}</span>
+      </button>
+      {uncovered ? (
+        <button
+          type="button"
+          className="map-concept-fill"
+          disabled={service.topic?.status === 'archived' || service.jobRunning}
+          onClick={() => void service.fill(node.id)}
+        >
+          {filling ? (
+            <>
+              <Loader2 className="icon-spin" width={12} height={12} strokeWidth={1.8} />
+              让 AI 补
+            </>
+          ) : (
+            '✦ 让 AI 补'
+          )}
+        </button>
+      ) : null}
+    </div>
+  );
+});
+
 export const FeedTab = observer(function FeedTab() {
   const service = useService(TopicsService);
+  const navigate = useNavigate();
 
   if (service.documents.length === 0) {
     return <p className="empty compact">这个主题还没有资料。到「文档」里扔一点进来。</p>;
@@ -74,9 +245,21 @@ export const FeedTab = observer(function FeedTab() {
 
   return (
     <>
-      <div className="doc-list">
+      <div className="topic-feed">
         {service.documents.map((doc) => (
-          <DocRow key={doc.id} doc={doc} hanging={service.hangingTitle(doc)} />
+          <div key={doc.id} className="topic-feed-item">
+            <span className="topic-feed-time">{formatRelativeTime(doc.updatedAt)}</span>
+            <div className="topic-feed-card">
+              <DocRow
+                doc={doc}
+                hanging={service.hangingTitle(doc)}
+                onOpen={(id) => {
+                  const to = service.readerNavForDoc(id, doc.fileMime);
+                  if (to) navigate(to);
+                }}
+              />
+            </div>
+          </div>
         ))}
       </div>
       {service.hasMoreDocs ? (
@@ -93,132 +276,15 @@ export const FeedTab = observer(function FeedTab() {
   );
 });
 
-const MapBranch = observer(function MapBranch({
-  node,
-  depth,
-}: {
-  node: MapTreeNode;
-  depth: number;
-}) {
-  const service = useService(TopicsService);
-  const isChapter = node.children.length > 0;
-  const collapsed = service.isCollapsed(node.id);
-
-  return (
-    <>
-      {isChapter ? (
-        <ChapterRow node={node} depth={depth} collapsed={collapsed} />
-      ) : (
-        <ConceptRow node={node} depth={depth} />
-      )}
-      {isChapter && !collapsed
-        ? node.children.map((child) => <MapBranch key={child.id} node={child} depth={depth + 1} />)
-        : null}
-    </>
-  );
-});
-
-const ChapterRow = observer(function ChapterRow({
-  node,
-  depth,
-  collapsed,
-}: {
-  node: MapTreeNode;
-  depth: number;
-  collapsed: boolean;
-}) {
-  const service = useService(TopicsService);
-  return (
-    <div className="map-row" style={{ paddingLeft: depth * 20 }}>
-      <button
-        type="button"
-        className="map-row-main"
-        aria-expanded={!collapsed}
-        onClick={() => service.toggleCollapsed(node.id)}
-      >
-        <span className="map-chevron" aria-hidden="true">
-          {collapsed ? (
-            <ChevronRight width={14} height={14} strokeWidth={1.8} />
-          ) : (
-            <ChevronDown width={14} height={14} strokeWidth={1.8} />
-          )}
-        </span>
-        <span className="map-chapter">{node.title}</span>
-        <span className="map-meta">{chapterMeta(node)}</span>
-      </button>
-    </div>
-  );
-});
-
-const ConceptRow = observer(function ConceptRow({
-  node,
-  depth,
-}: {
-  node: MapTreeNode;
-  depth: number;
-}) {
-  const service = useService(TopicsService);
-  const filling = service.fillingNodeId === node.id;
-  const uncovered = node.status === 'uncovered';
-  return (
-    <div
-      className={`map-row map-concept${service.selectedNodeId === node.id ? ' is-on' : ''}`}
-      style={{ paddingLeft: depth * 20 }}
-    >
-      <button type="button" className="map-row-main" onClick={() => void service.openNode(node.id)}>
-        <StatusDot status={node.status} />
-        <span className={`map-concept-title${uncovered ? ' is-blank' : ''}`}>{node.title}</span>
-        {node.cardCount > 0 ? <span className="map-badge">{node.cardCount}卡</span> : null}
-        {node.docCount > 0 ? <DocGlyph /> : null}
-      </button>
-      {uncovered ? (
-        <button
-          type="button"
-          className="btn btn-ghost map-fill"
-          disabled={service.topic?.status === 'archived' || service.jobRunning}
-          onClick={() => void service.fill(node.id)}
-        >
-          {filling ? (
-            <>
-              <Loader2 className="icon-spin" width={12} height={12} strokeWidth={1.8} />
-              让 AI 补
-            </>
-          ) : (
-            '让 AI 补'
-          )}
-        </button>
-      ) : null}
-    </div>
-  );
-});
-
 function StatusDot({ status }: { status: MapNodeStatus }) {
-  const label = status === 'covered' ? '掌握' : status === 'learning' ? '在学' : '空白';
-  return <span className={`map-dot is-${status}`} title={label} aria-label={label} />;
-}
-
-function DocGlyph() {
-  return (
-    <svg
-      className="map-doc-icon"
-      width="12"
-      height="12"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-label="有资料"
-    >
-      <rect x="4" y="2.5" width="8" height="11" rx="1.2" />
-      <path d="M6 6h4M6 8.5h4M6 11h2.5" />
-    </svg>
-  );
+  const label = status === 'covered' ? '已覆盖' : status === 'learning' ? '学习中' : '未覆盖';
+  return <i className={`map-dot is-${status}`} title={label} aria-label={label} />;
 }
 
 export const NodeDrawer = observer(function NodeDrawer() {
   const service = useService(TopicsService);
+  const reader = useService(ReaderService);
+  const navigate = useNavigate();
   const open = service.drawerOpen;
   const detail = service.nodeDetail;
   const loading = service.$model.openNode.loading && service.selectedNodeId !== null;
@@ -230,10 +296,13 @@ export const NodeDrawer = observer(function NodeDrawer() {
       if (!(target instanceof Element)) return;
       if (target.closest('.card-drawer')) return;
       if (target.closest('.map-concept')) return;
+      if (target.closest('.reader-overlay-root')) return;
       service.closeDrawer();
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') service.closeDrawer();
+      if (event.key !== 'Escape') return;
+      if (reader.isOpen) return;
+      service.closeDrawer();
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
@@ -241,7 +310,7 @@ export const NodeDrawer = observer(function NodeDrawer() {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [service, open]);
+  }, [service, reader, open]);
 
   return (
     <aside
@@ -269,9 +338,13 @@ export const NodeDrawer = observer(function NodeDrawer() {
           <ul className="node-card-list">
             {detail.cards.map((card) => (
               <li key={card.id}>
-                <Link
-                  to={cardPath(card.id, card.documentId)}
+                <button
+                  type="button"
                   className="related-card related-card-link"
+                  onClick={() => {
+                    const to = service.readerNavForCard(card.id, card.documentId);
+                    if (to) navigate(to);
+                  }}
                 >
                   <h4>{card.concept}</h4>
                   {card.tags.length > 0 ? (
@@ -281,7 +354,7 @@ export const NodeDrawer = observer(function NodeDrawer() {
                       ))}
                     </ul>
                   ) : null}
-                </Link>
+                </button>
               </li>
             ))}
           </ul>
@@ -291,7 +364,15 @@ export const NodeDrawer = observer(function NodeDrawer() {
           <ul className="related-sheet-list">
             {detail.documents.map((doc) => (
               <li key={doc.id}>
-                <Link to={docPath(doc.id)}>{docDisplayTitle(doc)}</Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const to = service.readerNavForDoc(doc.id);
+                    if (to) navigate(to);
+                  }}
+                >
+                  {docDisplayTitle(doc)}
+                </button>
               </li>
             ))}
           </ul>

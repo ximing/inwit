@@ -25,14 +25,16 @@ export function DocRowSummary({
 export function DocRow({
   doc,
   hanging,
+  onOpen,
 }: {
   doc: DocumentListItem;
   hanging?: string | null;
+  onOpen?: (docId: string) => void;
 }) {
   const agentLabel = agentDocumentMetaLabel(doc.source, doc.title);
   const summary = docSummaryLine(doc);
-  return (
-    <Link to={docPath(doc.id)} className="doc-row">
+  const body = (
+    <>
       <h2>
         {docDisplayTitle(doc)}
         {doc.status === 'pending' ? (
@@ -53,6 +55,18 @@ export function DocRow({
         {agentLabel ? ` · ${agentLabel}` : ''}
       </p>
       {hanging ? <p className="doc-hang">挂在：{hanging}</p> : null}
+    </>
+  );
+  if (onOpen) {
+    return (
+      <button type="button" className="doc-row" onClick={() => onOpen(doc.id)}>
+        {body}
+      </button>
+    );
+  }
+  return (
+    <Link to={docPath(doc.id)} className="doc-row">
+      {body}
     </Link>
   );
 }

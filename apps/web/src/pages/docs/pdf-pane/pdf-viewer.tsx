@@ -405,10 +405,11 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
   // 取消选中（点击空白/关闭高亮）或离开页面时，清掉跳转留下的搜索高亮
   useEffect(() => {
     if (activeAnnotationId || activeCardId) return;
+    pdf.clearJumpKey();
     if (!jumpSearchRef.current) return;
     jumpSearchRef.current = false;
     search.provides?.stopSearch();
-  }, [activeAnnotationId, activeCardId, search.provides]);
+  }, [activeAnnotationId, activeCardId, search.provides, pdf]);
 
   useEffect(() => {
     return () => {

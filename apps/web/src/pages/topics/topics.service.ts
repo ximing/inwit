@@ -12,6 +12,8 @@ import type {
 import { isChatQuestion, topicJobPayloadFrom } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
 import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
+import { ReaderService } from '@/components/reader/reader.service';
+import { cardPath, docAnchorPath, docPath } from '@/routes';
 import { getJob } from '@/api/jobs';
 import {
   fillMapNode,
@@ -216,6 +218,14 @@ export class TopicsService extends Service {
     return this.documents.length < this.documentsTotal;
   }
 
+  get mapNodeCount(): number {
+    return this.summary?.totalNodes ?? this.selectedItem?.totalNodes ?? 0;
+  }
+
+  get reader(): ReaderService {
+    return this.resolve(ReaderService);
+  }
+
   get canSend(): boolean {
     return (
       this.draft.trim().length > 0 &&
@@ -261,6 +271,23 @@ export class TopicsService extends Service {
 
   setTab(tab: TopicTab): void {
     this.tab = tab;
+  }
+
+  /** PDF 返回应跳转的完整页路径；否则打开阅读弹层并返回 null。 */
+  readerNavForDoc(docId: string, fileMime?: string | null): string | null {
+    const mime = fileMime ?? this.documents.find((item) => item.id === docId)?.fileMime ?? null;
+    if (mime === 'application/pdf') return docPath(docId);
+    void this.reader.openDoc(docId);
+    return null;
+  }
+
+  /** PDF / 无所属文档时返回跳转路径；否则打开卡片模式弹层。 */
+  readerNavForCard(cardId: string, documentId: string | null): string | null {
+    if (!documentId) return cardPath(cardId, documentId);
+    const mime = this.documents.find((item) => item.id === documentId)?.fileMime ?? null;
+    if (mime === 'application/pdf') return docAnchorPath(documentId, cardId);
+    void this.reader.openCard(cardId, documentId);
+    return null;
   }
 
   setDraft(value: string): void {
@@ -420,6 +447,7 @@ export class TopicsService extends Service {
   }
 
   async openTopic(id: string | null): Promise<void> {
+    if (this.topicId !== id) this.reader.close();
     const gen = ++this.topicLoadGen;
     this.topicId = id;
     this.detailError = null;
