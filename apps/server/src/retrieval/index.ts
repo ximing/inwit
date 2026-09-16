@@ -12,6 +12,7 @@ export {
   searchDocuments,
   tryDeleteDocumentFromIndex,
   tryIndexDocument,
+  type HybridSearchOptions,
   type IndexableCard,
   type IndexableDocument,
 } from './pipeline.js';
@@ -24,6 +25,14 @@ export {
   resetRetrievalClientsForTest,
   setRetrievalClientsForTest,
 } from './registry.js';
-export { ilikeContainsPattern, orderByIds, withSearchFallback } from './search-logic.js';
+export {
+  escapeMeiliValue,
+  ilikeContainsPattern,
+  intersectOrdered,
+  meiliScopeFilter,
+  orderByIds,
+  qdrantScopeFilter,
+  withSearchFallback,
+} from './search-logic.js';
 export { createRerankClient, type RerankClient } from './rerank.js';
 export { rrfMerge } from './rrf.js';

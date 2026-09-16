@@ -5,17 +5,34 @@ import {
   type SearchQuery,
   type SearchResult,
 } from '@inwit/dto';
-import { and, desc, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, or, type SQL } from 'drizzle-orm';
 import { toPublicCardBase } from '../cards/card.mapper.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { cards, documents } from '../db/schema.js';
 import { getDocumentListItemsByIds } from '../documents/document.service.js';
 import { searchCards, searchDocuments } from '../retrieval/pipeline.js';
-import { ilikeContainsPattern, orderByIds, withSearchFallback } from '../retrieval/search-logic.js';
+import {
+  ilikeContainsPattern,
+  intersectOrdered,
+  orderByIds,
+  withSearchFallback,
+} from '../retrieval/search-logic.js';
 import { logger } from '../utils/logger.js';
 
-async function searchDocumentIdsIlike(userId: string, query: string, limit: number): Promise<string[]> {
+function topicEq(
+  column: typeof documents.topicId | typeof cards.topicId,
+  topicId?: string,
+): SQL | undefined {
+  return topicId ? eq(column, topicId) : undefined;
+}
+
+async function searchDocumentIdsIlike(
+  userId: string,
+  query: string,
+  limit: number,
+  topicId?: string,
+): Promise<string[]> {
   const pattern = ilikeContainsPattern(query);
   const rows = await getDb()
     .select({ id: documents.id })
@@ -23,6 +40,7 @@ async function searchDocumentIdsIlike(userId: string, query: string, limit: numb
     .where(
       and(
         eq(documents.userId, userId),
+        topicEq(documents.topicId, topicId),
         or(
           ilike(documents.title, pattern),
           ilike(documents.description, pattern),
@@ -35,7 +53,12 @@ async function searchDocumentIdsIlike(userId: string, query: string, limit: numb
   return rows.map((row) => row.id);
 }
 
-async function searchCardIdsIlike(userId: string, query: string, limit: number): Promise<string[]> {
+async function searchCardIdsIlike(
+  userId: string,
+  query: string,
+  limit: number,
+  topicId?: string,
+): Promise<string[]> {
   const pattern = ilikeContainsPattern(query);
   const rows = await getDb()
     .select({ id: cards.id })
@@ -43,12 +66,28 @@ async function searchCardIdsIlike(userId: string, query: string, limit: number):
     .where(
       and(
         eq(cards.userId, userId),
+        topicEq(cards.topicId, topicId),
         or(ilike(cards.concept, pattern), ilike(cards.example, pattern), ilike(cards.confusionPoint, pattern)),
       ),
     )
     .orderBy(desc(cards.updatedAt), desc(cards.id))
     .limit(limit);
   return rows.map((row) => row.id);
+}
+
+async function idsInTopic(
+  kind: 'documents' | 'cards',
+  userId: string,
+  ids: string[],
+  topicId: string,
+): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const table = kind === 'documents' ? documents : cards;
+  const rows = await getDb()
+    .select({ id: table.id })
+    .from(table)
+    .where(and(eq(table.userId, userId), eq(table.topicId, topicId), inArray(table.id, ids)));
+  return intersectOrdered(ids, new Set(rows.map((row) => row.id)));
 }
 
 async function loadCardsByIds(userId: string, ids: string[]): Promise<SearchCard[]> {
@@ -90,18 +129,38 @@ function fallbackOpts(scope: string) {
   };
 }
 
+async function retrieveSearchIds(
+  hybrid: () => Promise<string[]>,
+  fallback: () => Promise<string[]>,
+  scope: string,
+  fallbackIfEmpty: boolean,
+): Promise<string[]> {
+  const ids = await withSearchFallback(hybrid, fallback, fallbackOpts(scope));
+  if (fallbackIfEmpty && ids.length === 0) return fallback();
+  return ids;
+}
+
 export async function search(userId: string, query: SearchQuery): Promise<SearchResult> {
-  const { q, limit } = query;
+  const { q, limit, topicId } = query;
+  const scoped = Boolean(topicId);
+  const docScope = topicId
+    ? { topicId, filterIds: (ids: string[]) => idsInTopic('documents', userId, ids, topicId) }
+    : undefined;
+  const cardScope = topicId
+    ? { topicId, filterIds: (ids: string[]) => idsInTopic('cards', userId, ids, topicId) }
+    : undefined;
   const [documentIds, cardIds] = await Promise.all([
-    withSearchFallback(
-      () => searchDocuments(userId, q, limit),
-      () => searchDocumentIdsIlike(userId, q, limit),
-      fallbackOpts('documents'),
+    retrieveSearchIds(
+      () => searchDocuments(userId, q, limit, docScope),
+      () => searchDocumentIdsIlike(userId, q, limit, topicId),
+      'documents',
+      scoped,
     ),
-    withSearchFallback(
-      () => searchCards(userId, q, limit),
-      () => searchCardIdsIlike(userId, q, limit),
-      fallbackOpts('cards'),
+    retrieveSearchIds(
+      () => searchCards(userId, q, limit, cardScope),
+      () => searchCardIdsIlike(userId, q, limit, topicId),
+      'cards',
+      scoped,
     ),
   ]);
 

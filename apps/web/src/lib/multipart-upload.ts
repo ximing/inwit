@@ -153,6 +153,8 @@ export async function uploadRemainingParts(deps: UploadPartsDeps): Promise<Compl
     deps.onProgress(100);
     return completed;
   }
+  const redo = new Set(ranges.map((range) => range.partNumber));
+  completed = completed.filter((part) => !redo.has(part.partNumber));
 
   emitProgress();
   await ensureUrls(ranges.map((range) => range.partNumber));
@@ -177,7 +179,11 @@ export async function uploadRemainingParts(deps: UploadPartsDeps): Promise<Compl
           emitProgress();
         });
         inflight.delete(range.partNumber);
-        completed = mergeCompletedParts(completed, { partNumber: range.partNumber, etag });
+        completed = mergeCompletedParts(completed, {
+          partNumber: range.partNumber,
+          etag,
+          size: blob.size,
+        });
         deps.onCheckpoint({ ...deps.checkpoint, parts: completed });
         emitProgress();
         return;
@@ -205,6 +211,7 @@ export function checkpointFromInit(
     key: init.key,
     filename: file.name,
     size: file.size,
+    lastModified: file.lastModified,
     parts,
   };
 }

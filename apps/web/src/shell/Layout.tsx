@@ -56,7 +56,7 @@ const LayoutContent = observer(function LayoutContent() {
       if (!isSearchHotkey(event)) return;
       event.preventDefault();
       const path = location.pathname;
-      if (path !== ROUTES.home && path !== ROUTES.docs) {
+      if (path !== ROUTES.home && path !== ROUTES.docs && path !== ROUTES.topics) {
         navigate(ROUTES.docs, { state: { focusSearch: true } });
       }
       requestSearchFocus();

@@ -2105,6 +2105,9 @@ label.check {
 }
 .topic-stat-mastery .topic-mastery { width: 56px; flex: none; height: 4px; }
 
+.topic-search { margin: 12px 0 4px; }
+.topic-search .search-results-compact { padding: 10px 0 16px; }
+
 .topic-tabs {
   display: flex;
   gap: 2px;

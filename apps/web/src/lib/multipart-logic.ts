@@ -1,5 +1,6 @@
-/** S3 multipart minimum part size (except the last part). */
-export const MULTIPART_PART_SIZE = 5 * 1024 * 1024;
+import { MULTIPART_PART_SIZE } from '@inwit/dto';
+
+export { MULTIPART_PART_SIZE };
 export const MULTIPART_MAX_PARTS = 10_000;
 export const MULTIPART_CONCURRENCY = 3;
 export const MULTIPART_PART_ATTEMPTS = 3;
@@ -15,6 +16,7 @@ export type ByteRange = {
 export type CompletedPart = {
   partNumber: number;
   etag: string;
+  size: number;
 };
 
 export type ImportCheckpoint = {
@@ -23,6 +25,8 @@ export type ImportCheckpoint = {
   key: string;
   filename: string;
   size: number;
+  /** File.lastModified; required to resume so same-name/same-size files do not mix. */
+  lastModified?: number;
   parts: CompletedPart[];
 };
 
@@ -71,6 +75,10 @@ export function completedBytes(
 ): number {
   let bytes = 0;
   for (const part of parts) {
+    if (Number.isInteger(part.size) && part.size > 0) {
+      bytes += part.size;
+      continue;
+    }
     const range = rangeForPart(part.partNumber, size, partSize);
     if (!range) continue;
     bytes += range.endExclusive - range.start;
@@ -92,8 +100,15 @@ export function remainingRanges(
   completed: readonly CompletedPart[],
   partSize = MULTIPART_PART_SIZE,
 ): ByteRange[] {
-  const done = new Set(completed.map((part) => part.partNumber));
-  return sliceRanges(size, partSize).filter((range) => !done.has(range.partNumber));
+  const ranges = sliceRanges(size, partSize);
+  const expectedByPart = new Map(
+    ranges.map((range) => [range.partNumber, range.endExclusive - range.start] as const),
+  );
+  const done = new Set<number>();
+  for (const part of completed) {
+    if (part.size === expectedByPart.get(part.partNumber)) done.add(part.partNumber);
+  }
+  return ranges.filter((range) => !done.has(range.partNumber));
 }
 
 export function mergeCompletedParts(
@@ -101,15 +116,22 @@ export function mergeCompletedParts(
   incoming: CompletedPart,
 ): CompletedPart[] {
   const next = existing.filter((part) => part.partNumber !== incoming.partNumber);
-  next.push({ partNumber: incoming.partNumber, etag: incoming.etag.trim() });
+  next.push({ partNumber: incoming.partNumber, etag: incoming.etag.trim(), size: incoming.size });
   next.sort((a, b) => a.partNumber - b.partNumber);
   return next;
 }
 
 export function sortedCompleteParts(parts: readonly CompletedPart[]): CompletedPart[] {
   return [...parts]
-    .map((part) => ({ partNumber: part.partNumber, etag: part.etag.trim() }))
-    .filter((part) => Number.isInteger(part.partNumber) && part.partNumber > 0 && part.etag.length > 0)
+    .map((part) => ({ partNumber: part.partNumber, etag: part.etag.trim(), size: part.size }))
+    .filter(
+      (part) =>
+        Number.isInteger(part.partNumber) &&
+        part.partNumber > 0 &&
+        part.etag.length > 0 &&
+        Number.isInteger(part.size) &&
+        part.size > 0,
+    )
     .sort((a, b) => a.partNumber - b.partNumber);
 }
 
@@ -122,13 +144,16 @@ export function readEtagHeader(getHeader: (name: string) => string | null): stri
 
 function isCompletedPart(value: unknown): value is CompletedPart {
   if (typeof value !== 'object' || value === null) return false;
-  const part = value as { partNumber?: unknown; etag?: unknown };
+  const part = value as { partNumber?: unknown; etag?: unknown; size?: unknown };
   return (
     typeof part.partNumber === 'number' &&
     Number.isInteger(part.partNumber) &&
     part.partNumber > 0 &&
     typeof part.etag === 'string' &&
-    part.etag.trim().length > 0
+    part.etag.trim().length > 0 &&
+    typeof part.size === 'number' &&
+    Number.isInteger(part.size) &&
+    part.size > 0
   );
 }
 
@@ -143,15 +168,21 @@ export function parseCheckpoint(value: unknown): ImportCheckpoint | null {
   if (!Array.isArray(raw.parts)) return null;
   const parts: CompletedPart[] = [];
   for (const item of raw.parts) {
-    if (!isCompletedPart(item)) return null;
-    parts.push({ partNumber: item.partNumber, etag: item.etag.trim() });
+    // Resume re-uploads parts that lack size (legacy checkpoints).
+    if (!isCompletedPart(item)) continue;
+    parts.push({ partNumber: item.partNumber, etag: item.etag.trim(), size: item.size });
   }
+  const lastModified =
+    typeof raw.lastModified === 'number' && Number.isFinite(raw.lastModified)
+      ? raw.lastModified
+      : undefined;
   return {
     documentId: raw.documentId,
     uploadId: raw.uploadId,
     key: raw.key,
     filename: raw.filename,
     size: raw.size,
+    ...(lastModified !== undefined ? { lastModified } : {}),
     parts: sortedCompleteParts(parts),
   };
 }
@@ -183,8 +214,16 @@ export function matchCheckpoint(
   items: readonly ImportCheckpoint[],
   filename: string,
   size: number,
+  lastModified: number,
 ): ImportCheckpoint | null {
-  return items.find((item) => item.filename === filename && item.size === size) ?? null;
+  return (
+    items.find(
+      (item) =>
+        item.filename === filename &&
+        item.size === size &&
+        item.lastModified === lastModified,
+    ) ?? null
+  );
 }
 
 function memoryStore(): CheckpointStore {
@@ -247,7 +286,8 @@ export function findCheckpoint(
 export function findCheckpointForFile(
   filename: string,
   size: number,
+  lastModified: number,
   store: CheckpointStore = defaultCheckpointStore(),
 ): ImportCheckpoint | null {
-  return matchCheckpoint(loadCheckpoints(store), filename, size);
+  return matchCheckpoint(loadCheckpoints(store), filename, size, lastModified);
 }

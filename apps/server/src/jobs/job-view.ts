@@ -66,6 +66,15 @@ function payloadString(payload: JobPayload, key: string): string | undefined {
   return nonempty(typeof payload[key] === 'string' ? payload[key] : undefined);
 }
 
+/** Drop OCR page texts if a leftover `pageTexts` field is still on the row. */
+export function publicJobPayload(type: JobType, payload: JobPayload): JobPayload {
+  if (type !== 'ocr') return payload;
+  if (!Object.prototype.hasOwnProperty.call(payload, 'pageTexts')) return payload;
+  const rest = { ...payload };
+  delete rest.pageTexts;
+  return rest;
+}
+
 /** Truncate to `max` Unicode code points. */
 export function truncateChars(text: string, max: number): string {
   const chars = [...text.trim().replace(/\s+/g, ' ')];

@@ -17,6 +17,7 @@ import {
   USAGE_DAYS,
   aggregateJobUsage,
   collectRelatedIds,
+  publicJobPayload,
   relatedForJob,
   startedElapsedSec,
   summarizeJob,
@@ -26,13 +27,14 @@ import {
 import { CANCEL_REASON } from './queue.js';
 
 export function toPublicJob(row: JobRow, related?: JobRelated): Job {
-  const { summary, description } = summarizeJob(row.type, row.payload, related);
+  const payload = publicJobPayload(row.type, row.payload);
+  const { summary, description } = summarizeJob(row.type, payload, related);
   return {
     id: row.id,
     userId: row.userId,
     type: row.type,
     status: row.status,
-    payload: row.payload,
+    payload,
     runAt: row.runAt.toISOString(),
     finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
     attempts: row.attempts,

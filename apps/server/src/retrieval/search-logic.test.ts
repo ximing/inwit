@@ -4,8 +4,12 @@ import {
   clipChars,
   documentEmbeddingText,
   escapeIlikePattern,
+  escapeMeiliValue,
   ilikeContainsPattern,
+  intersectOrdered,
+  meiliScopeFilter,
   orderByIds,
+  qdrantScopeFilter,
   withSearchFallback,
 } from './search-logic.js';
 
@@ -43,6 +47,44 @@ describe('ilike pattern', () => {
   it('escapes LIKE wildcards and wraps with %', () => {
     expect(escapeIlikePattern('100%_off\\x')).toBe('100\\%\\_off\\\\x');
     expect(ilikeContainsPattern('  光合%  ')).toBe('%光合\\%%');
+  });
+});
+
+describe('scope filters', () => {
+  it('escapes meili quotes and backslashes', () => {
+    expect(escapeMeiliValue("a'b\\c")).toBe("a\\'b\\\\c");
+  });
+
+  it('builds user-only filters', () => {
+    const userId = '11111111-1111-4111-8111-111111111111';
+    expect(qdrantScopeFilter(userId)).toEqual({
+      must: [{ key: 'user_id', match: { value: userId } }],
+    });
+    expect(meiliScopeFilter(userId)).toBe(`user_id = '${userId}'`);
+  });
+
+  it('adds topic_id when scoping a topic', () => {
+    const userId = '11111111-1111-4111-8111-111111111111';
+    const topicId = '22222222-2222-4222-8222-222222222222';
+    expect(qdrantScopeFilter(userId, topicId)).toEqual({
+      must: [
+        { key: 'user_id', match: { value: userId } },
+        { key: 'topic_id', match: { value: topicId } },
+      ],
+    });
+    expect(meiliScopeFilter(userId, topicId)).toBe(
+      `user_id = '${userId}' AND topic_id = '${topicId}'`,
+    );
+  });
+});
+
+describe('intersectOrdered', () => {
+  it('keeps rank order and drops ids outside the allowed set', () => {
+    expect(intersectOrdered(['c', 'a', 'x', 'b'], new Set(['a', 'b', 'c']))).toEqual([
+      'c',
+      'a',
+      'b',
+    ]);
   });
 });
 

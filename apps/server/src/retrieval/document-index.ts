@@ -9,6 +9,7 @@ export async function tryIndexOwnedDocument(userId: string, documentId: string):
     .select({
       id: documents.id,
       userId: documents.userId,
+      topicId: documents.topicId,
       title: documents.title,
       description: documents.description,
       contentMd: documents.contentMd,

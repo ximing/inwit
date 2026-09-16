@@ -361,6 +361,7 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
             await indexCard({
               id: row.id,
               userId: row.userId,
+              topicId: row.topicId,
               concept: row.concept,
               example: row.example,
               confusionPoint: row.confusionPoint,

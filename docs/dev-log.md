@@ -106,6 +106,18 @@ Qdrant 语义 ∪ Meili 关键词 → RRF → 百炼 rerank。消化 Agent 是 p
 
 见 `docs/tasks/t24-report.md`。一份文档两种视图：`contentMd` 仍是 digest / 检索 / 锚点真相，PDF 原件作 S3 展示附件。导入改 S3 分片直传（5MB/片，天花板 2GB）；`extract` / `ocr` 异步 job，扫描版走独立 `ocr_configs` + qwen-vl-ocr 逐页 Chat API（pdfjs-dist + @napi-rs/canvas 拆页）。阅读页 EmbedPDF v2.15.0 pin，自有批注格式经 `annotation-adapter.ts` 隔离；PDF 强制预览以保护页锚点。框选转卡走同步 `POST /api/cards`（`imageKey`），不走 selection job。回归修了三件事：vite `?url` 根相对路径在 blob worker 里 fetch 失败、unpdf 污染 `globalThis.pdfjsWorker` 与 pdfjs-dist 冲突、CDP `pointercancel` 不触发 `endSelection`（另有 zoom 0 尺寸闸死 viewport）。截图 `docs/screenshots/t24-*.png`。
 
+## T24 技术债偿还（D1–D5）
+
+T24 落地后的债务清扫，不扩功能。
+
+- **D1**（P0）：OCR `pageTexts` 从 `jobs.payload` 迁入新表 `ocr_pages`（migration `0016`）；`toPublicJob` 剔除正文；断点续跑改为表驱动。
+- **D2**（P0）：分片 complete 完整性校验（parts 带 `size`、比对 `partCountForSize` 与总字节，422 `IMPORT_PARTS_MISMATCH`）；web 断点结构带 `size`。
+- **D3**（P1）：`PDF_PAGE_SEPARATOR` / 导入白名单 / `EXCERPT_MAX_BYTES` / `PART_SIZE` 收敛 `@inwit/dto` 单源；批注缩略图与卡片图统一 presign 缓存（`presigned-thumb` 组件）；补 doc-pipeline 单测。
+- **D4**（P1）：`docs.service.ts` 拆出 `DocsImportService` 等；`index.tsx` 1500→263 行（拆 `card-rail` / `pane-read` / `pane-edit` 等 8 个组件文件）；Escape 双处逻辑收敛。
+- **D5**（收尾）：文档行「上传中」僵尸态改为「中断」+ 可重试；OCR 用量独立 `ocr` capability（migration `0017`）；worker 定期清扫超时 multipart（`multipart-sweep`）；`pdf-pane` 清旧 `fileUrl`；断点匹配加 `lastModified`；EmbedPDF 类型收回适配层。
+- 同期记下 **G8 阅读器翻新**：缩略图栏、页码输入、缩放预设、旋转、搜索条、键盘导航，样式按 design-system。
+- 测试规模：server 211→301、web 0→67。
+
 ## T21–T23 一句话
 
 进化 Agent 闭环收尾：反馈写 Memory + 换讲法/拆卡（T21），混淆对对比专题（T22），周报复盘文档 + 首页提示条（T23）。

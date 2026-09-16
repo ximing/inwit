@@ -36,6 +36,31 @@ export function orderByIds<T extends { id: string }>(ids: string[], rows: T[]): 
   return ordered;
 }
 
+export function intersectOrdered(ids: string[], allowed: ReadonlySet<string>): string[] {
+  return ids.filter((id) => allowed.has(id));
+}
+
+export function escapeMeiliValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+export function qdrantScopeFilter(
+  userId: string,
+  topicId?: string,
+): { must: Array<{ key: string; match: { value: string } }> } {
+  const must: Array<{ key: string; match: { value: string } }> = [
+    { key: 'user_id', match: { value: userId } },
+  ];
+  if (topicId) must.push({ key: 'topic_id', match: { value: topicId } });
+  return { must };
+}
+
+export function meiliScopeFilter(userId: string, topicId?: string): string {
+  const user = `user_id = '${escapeMeiliValue(userId)}'`;
+  if (!topicId) return user;
+  return `${user} AND topic_id = '${escapeMeiliValue(topicId)}'`;
+}
+
 /** Run hybrid search; on throw (or forced) fall back to PG ILIKE. Never rethrows the hybrid error. */
 export async function withSearchFallback<T>(
   hybrid: () => Promise<T>,

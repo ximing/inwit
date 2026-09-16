@@ -1,5 +1,6 @@
 import { Service } from '@rabjs/react';
 import {
+  EXCERPT_MAX_BYTES,
   IMAGE_EXCERPT_QUOTE,
   type Annotation,
   type AnnotationGeometry,
@@ -12,11 +13,9 @@ import {
   geometryFromRects,
   PDF_HIGHLIGHT_COLOR,
   type OwnPdfAnnotation,
+  type PdfRect,
 } from './pdf-pane/annotation-adapter';
 import { isPdfOcrPending, pageIndexFromAnchor } from './pdf-pane/page-logic';
-import type { Rect } from '@embedpdf/models';
-
-const EXCERPT_MAX_BYTES = 5 * 1024 * 1024;
 
 export type PdfJumpRequest = {
   key: string;
@@ -80,6 +79,8 @@ export class PdfPaneService extends Service {
   async loadFile(documentId: string): Promise<void> {
     const gen = ++this.loadGen;
     this.fileError = null;
+    this.fileUrl = null;
+    this.fileMime = null;
     try {
       const file = await getDocumentFile(documentId);
       if (gen !== this.loadGen) return;
@@ -96,7 +97,7 @@ export class PdfPaneService extends Service {
   noteSelection(input: {
     text: string;
     pageIndex: number;
-    rects: Rect[];
+    rects: PdfRect[];
   }): void {
     this.selectionText = input.text.trim();
     this.selectionPageIndex = input.pageIndex;

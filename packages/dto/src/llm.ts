@@ -4,7 +4,7 @@ export const LLM_PROVIDERS = ['openai', 'deepseek', 'claude', 'zhipu', 'dashscop
 export const llmProviderSchema = z.enum(LLM_PROVIDERS);
 export type LlmProvider = z.infer<typeof llmProviderSchema>;
 
-export const LLM_CAPABILITIES = ['chat', 'embed', 'rerank'] as const;
+export const LLM_CAPABILITIES = ['chat', 'embed', 'rerank', 'ocr'] as const;
 export const llmCapabilitySchema = z.enum(LLM_CAPABILITIES);
 export type LlmCapability = z.infer<typeof llmCapabilitySchema>;
 

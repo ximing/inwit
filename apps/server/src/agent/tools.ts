@@ -152,6 +152,7 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
           await indexCard({
             id: row.id,
             userId: row.userId,
+            topicId: row.topicId,
             concept: row.concept,
             example: row.example,
             confusionPoint: row.confusionPoint,

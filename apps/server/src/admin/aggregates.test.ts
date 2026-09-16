@@ -40,6 +40,7 @@ describe('usageWindow + fillDailySeries', () => {
         chatTokens: 30,
         embedTokens: 10,
         rerankTokens: 0,
+        ocrTokens: 0,
       },
     ]);
     expect(filled.map((row) => row.date)).toEqual([

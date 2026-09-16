@@ -26,13 +26,13 @@ export interface MeiliClient {
 }
 
 export const CARD_INDEX_SETTINGS: MeiliIndexSettings = {
-  filterableAttributes: ['user_id', 'card_id', 'tags', 'id'],
+  filterableAttributes: ['user_id', 'card_id', 'topic_id', 'tags', 'id'],
   searchableAttributes: ['concept', 'example', 'confusion_point', 'tags', 'text'],
   localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
 };
 
 export const DOCS_INDEX_SETTINGS: MeiliIndexSettings = {
-  filterableAttributes: ['user_id', 'doc_id', 'id'],
+  filterableAttributes: ['user_id', 'doc_id', 'topic_id', 'id'],
   searchableAttributes: ['title', 'description', 'content_md', 'text'],
   localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
 };

@@ -1,11 +1,12 @@
+import { PDF_PAGE_SEPARATOR } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
-import { PDF_PAGE_SEPARATOR } from '../documents/import-logic.js';
 import {
   applyPageFailure,
   applyPageSuccess,
   buildOcrChatBody,
   chunkPages,
   initialOcrProgress,
+  mergeOcrResume,
   normalizeOcrText,
   OCR_DEFAULT_BASE_URL,
   OCR_MIN_PIXELS,
@@ -18,6 +19,7 @@ import {
   parseOcrChatResponse,
   parseOcrProgress,
   pendingPages,
+  pickLatestCompletedPages,
   pngToDataUrl,
   redactSecret,
   toOcrJobPayload,
@@ -134,23 +136,87 @@ describe('progress / checkpoint', () => {
     expect(chunkPages([], 10)).toEqual([]);
   });
 
-  it('round-trips payload including pageTexts for recover/retry', () => {
+  it('round-trips checkpoint without pageTexts', () => {
     let progress = initialOcrProgress(DOC_ID, 3);
     progress = applyPageSuccess(progress, 0, 'one');
     progress = applyPageFailure(progress, 1);
     const payload = toOcrJobPayload(progress);
+    expect(payload).not.toHaveProperty('pageTexts');
     const restored = parseOcrProgress(payload);
-    expect(restored).toEqual(progress);
+    expect(restored?.donePages).toEqual([0]);
+    expect(restored?.failedPages).toEqual([1]);
+    expect(restored?.pageTexts).toEqual(['', '', '']);
     expect(pendingPages(restored!)).toEqual([1, 2]);
   });
 
-  it('ocrPayloadForRetry keeps completed pages from the previous job', () => {
+  it('ocrPayloadForRetry keeps completed page indexes without pageTexts', () => {
     const previous = toOcrJobPayload(applyPageSuccess(initialOcrProgress(DOC_ID, 5), 0, 'keep'));
     const retry = ocrPayloadForRetry(DOC_ID, 5, previous);
+    expect(retry).not.toHaveProperty('pageTexts');
     const parsed = parseOcrProgress(retry);
     expect(parsed?.donePages).toEqual([0]);
-    expect(parsed?.pageTexts[0]).toBe('keep');
+    expect(parsed?.pageTexts).toEqual(['', '', '', '', '']);
     expect(pendingPages(parsed!)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('mergeOcrResume restores texts from completed pages and ignores payload pageTexts', () => {
+    const payload = {
+      documentId: DOC_ID,
+      totalPages: 4,
+      donePages: [0, 1],
+      failedPages: [2],
+      pageTexts: ['stale0', 'stale1', '', ''],
+    };
+    const progress = mergeOcrResume(payload, [
+      { pageIndex: 0, pageText: 'keep0' },
+      { pageIndex: 0, pageText: 'older0' },
+    ]);
+    expect(progress?.donePages).toEqual([0]);
+    expect(progress?.failedPages).toEqual([2]);
+    expect(progress?.pageTexts).toEqual(['keep0', '', '', '']);
+    expect(pendingPages(progress!)).toEqual([1, 2, 3]);
+  });
+
+  it('mergeOcrResume resumes remaining pages after a checkpoint (stuck-job recover)', () => {
+    const payload = {
+      documentId: DOC_ID,
+      totalPages: 5,
+      donePages: [0, 2],
+      failedPages: [1],
+    };
+    const progress = mergeOcrResume(payload, [
+      { pageIndex: 2, pageText: 'p2' },
+      { pageIndex: 0, pageText: 'p0' },
+    ]);
+    expect(progress?.donePages).toEqual([0, 2]);
+    expect(progress?.failedPages).toEqual([1]);
+    expect(progress?.pageTexts[0]).toBe('p0');
+    expect(progress?.pageTexts[2]).toBe('p2');
+    expect(pendingPages(progress!)).toEqual([1, 3, 4]);
+  });
+
+  it('pickLatestCompletedPages keeps the first row per pageIndex', () => {
+    expect(
+      pickLatestCompletedPages([
+        { pageIndex: 1, pageText: 'new' },
+        { pageIndex: 1, pageText: 'old' },
+        { pageIndex: 0, pageText: 'p0' },
+      ]),
+    ).toEqual([
+      { pageIndex: 0, pageText: 'p0' },
+      { pageIndex: 1, pageText: 'new' },
+    ]);
+  });
+
+  it('parseOcrProgress ignores leftover pageTexts on old payloads', () => {
+    const restored = parseOcrProgress({
+      documentId: DOC_ID,
+      totalPages: 2,
+      donePages: [0],
+      pageTexts: ['legacy'],
+    });
+    expect(restored?.donePages).toEqual([0]);
+    expect(restored?.pageTexts).toEqual(['', '']);
   });
 
   it('ocrPayloadForRetry starts fresh when previous payload is missing or another document', () => {

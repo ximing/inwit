@@ -1,5 +1,4 @@
-import { ocrJobPayloadSchema, type JobPayload } from '@inwit/dto';
-import { PDF_PAGE_SEPARATOR } from '../documents/import-logic.js';
+import { ocrJobPayloadSchema, PDF_PAGE_SEPARATOR, type JobPayload } from '@inwit/dto';
 
 export const OCR_DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 export const OCR_DEFAULT_MODEL = 'qwen-vl-ocr';
@@ -19,12 +18,17 @@ export const OCR_DOCUMENT_PARSING_PROMPT =
 
 export type OcrBuiltinTask = 'text_recognition' | 'document_parsing';
 
+export interface CompletedOcrPage {
+  pageIndex: number;
+  pageText: string;
+}
+
 export interface OcrProgress {
   documentId: string;
   totalPages: number;
   donePages: number[];
   failedPages: number[];
-  /** Index-aligned with pages; empty string means not yet filled. */
+  /** In-memory only; persisted in `ocr_pages`, never in `jobs.payload`. */
   pageTexts: string[];
 }
 
@@ -180,7 +184,8 @@ export function parseOcrProgress(payload: JobPayload): OcrProgress | null {
     totalPages,
     donePages: uniqueSorted(parsed.data.donePages ?? []),
     failedPages: uniqueSorted(parsed.data.failedPages ?? []),
-    pageTexts: parsePageTexts(payload.pageTexts, totalPages),
+    // Ignore legacy payload.pageTexts; texts live in `ocr_pages`.
+    pageTexts: emptyPageTexts(totalPages),
   };
 }
 
@@ -190,7 +195,60 @@ export function toOcrJobPayload(progress: OcrProgress): JobPayload {
     totalPages: progress.totalPages,
     donePages: progress.donePages,
     failedPages: progress.failedPages,
-    pageTexts: progress.pageTexts,
+  };
+}
+
+/** First occurrence per pageIndex wins; caller should pass rows newest-first. */
+export function pickLatestCompletedPages(
+  rows: readonly CompletedOcrPage[],
+): CompletedOcrPage[] {
+  const seen = new Set<number>();
+  const out: CompletedOcrPage[] = [];
+  for (const row of rows) {
+    if (!Number.isInteger(row.pageIndex) || row.pageIndex < 0) continue;
+    if (seen.has(row.pageIndex)) continue;
+    seen.add(row.pageIndex);
+    out.push({ pageIndex: row.pageIndex, pageText: row.pageText });
+  }
+  return out.sort((a, b) => a.pageIndex - b.pageIndex);
+}
+
+export function pageTextsFromCompleted(
+  totalPages: number,
+  completed: readonly CompletedOcrPage[],
+): string[] {
+  const out = emptyPageTexts(totalPages);
+  for (const page of completed) {
+    if (Number.isInteger(page.pageIndex) && page.pageIndex >= 0 && page.pageIndex < totalPages) {
+      out[page.pageIndex] = page.pageText;
+    }
+  }
+  return out;
+}
+
+/**
+ * Resume checkpoint: `ocr_pages` is the source of truth for completed text.
+ * `jobs.payload` supplies totalPages / failedPages; legacy `pageTexts` is ignored.
+ */
+export function mergeOcrResume(
+  payload: JobPayload,
+  completedPages: readonly CompletedOcrPage[],
+): OcrProgress | null {
+  const parsed = parseOcrProgress(payload);
+  if (!parsed) return null;
+  const latest = pickLatestCompletedPages(completedPages);
+  const n = parsed.totalPages;
+  const inRange = n > 0 ? latest.filter((p) => p.pageIndex < n) : latest;
+  const doneFromTable = uniqueSorted(inRange.map((p) => p.pageIndex));
+  const totalPages = n > 0 ? n : Math.max(0, ...doneFromTable.map((i) => i + 1));
+  return {
+    documentId: parsed.documentId,
+    totalPages,
+    donePages: doneFromTable,
+    failedPages: uniqueSorted(
+      parsed.failedPages.filter((i) => (n === 0 || i < n) && !doneFromTable.includes(i)),
+    ),
+    pageTexts: pageTextsFromCompleted(totalPages, inRange),
   };
 }
 

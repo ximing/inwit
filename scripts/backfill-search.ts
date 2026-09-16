@@ -24,6 +24,7 @@ try {
     .select({
       id: documents.id,
       userId: documents.userId,
+      topicId: documents.topicId,
       title: documents.title,
       description: documents.description,
       contentMd: documents.contentMd,
@@ -56,6 +57,7 @@ try {
     .select({
       id: cards.id,
       userId: cards.userId,
+      topicId: cards.topicId,
       concept: cards.concept,
       example: cards.example,
       confusionPoint: cards.confusionPoint,

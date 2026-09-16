@@ -126,7 +126,7 @@ export async function testOcrConfig(userId: string): Promise<OcrTestResult> {
       userId,
       provider: 'dashscope',
       model: resolved.model,
-      capability: 'chat',
+      capability: 'ocr',
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
       totalTokens: result.totalTokens,

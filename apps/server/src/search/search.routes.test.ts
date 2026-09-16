@@ -57,6 +57,26 @@ describe('GET /api/search', () => {
     await app.close();
   });
 
+  it('forwards a topicId to scope hybrid search', async () => {
+    const app = await buildTestApp();
+    const topicId = '22222222-2222-4222-8222-222222222222';
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/search?q=光合&topicId=${topicId}`,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(search).toHaveBeenCalledWith(USER_ID, { q: '光合', limit: 8, topicId });
+    await app.close();
+  });
+
+  it('rejects a malformed topicId with 400', async () => {
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: '/api/search?q=光合&topicId=not-a-uuid' });
+    expect(res.statusCode).toBe(400);
+    expect(search).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('rejects a missing q with 400', async () => {
     const app = await buildTestApp();
     const res = await app.inject({ method: 'GET', url: '/api/search' });

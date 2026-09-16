@@ -1,7 +1,11 @@
 import { logger } from '../utils/logger.js';
 import { cardsStoreName, docsStoreName, ensureRetrievalStores, getRetrievalClients } from './registry.js';
 import { rrfMerge } from './rrf.js';
-import { documentEmbeddingText } from './search-logic.js';
+import {
+  documentEmbeddingText,
+  meiliScopeFilter,
+  qdrantScopeFilter,
+} from './search-logic.js';
 
 export { documentEmbeddingText } from './search-logic.js';
 
@@ -12,6 +16,7 @@ export interface IndexableCard {
   example: string;
   confusionPoint: string;
   tags: string[];
+  topicId?: string | null;
 }
 
 export interface IndexableDocument {
@@ -20,7 +25,13 @@ export interface IndexableDocument {
   title: string | null;
   description: string | null;
   contentMd: string;
+  topicId?: string | null;
 }
+
+export type HybridSearchOptions = {
+  topicId?: string | undefined;
+  filterIds?: ((ids: string[]) => Promise<string[]>) | undefined;
+};
 
 const RECALL_LIMIT = 20;
 
@@ -32,8 +43,8 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-function escapeMeiliValue(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+function topicIdPayload(topicId: string | null | undefined): string {
+  return topicId ?? '';
 }
 
 function payloadText(source: Record<string, unknown>): string | null {
@@ -120,6 +131,7 @@ export async function indexCard(card: IndexableCard): Promise<void> {
   const payload = {
     card_id: card.id,
     user_id: card.userId,
+    topic_id: topicIdPayload(card.topicId),
     tags: card.tags,
     concept: card.concept,
     example: card.example,
@@ -135,6 +147,7 @@ export async function indexCard(card: IndexableCard): Promise<void> {
       id: card.id,
       card_id: card.id,
       user_id: card.userId,
+      topic_id: topicIdPayload(card.topicId),
       tags: card.tags,
       concept: card.concept,
       example: card.example,
@@ -168,6 +181,7 @@ export async function indexDocument(doc: IndexableDocument): Promise<void> {
   const payload = {
     doc_id: doc.id,
     user_id: doc.userId,
+    topic_id: topicIdPayload(doc.topicId),
     title: doc.title ?? '',
     description: doc.description ?? '',
     content_md: doc.contentMd,
@@ -182,6 +196,7 @@ export async function indexDocument(doc: IndexableDocument): Promise<void> {
       id: doc.id,
       doc_id: doc.id,
       user_id: doc.userId,
+      topic_id: topicIdPayload(doc.topicId),
       title: doc.title ?? '',
       description: doc.description ?? '',
       content_md: doc.contentMd,
@@ -225,6 +240,8 @@ async function hybridSearchIds(input: {
   userId: string;
   query: string;
   limit: number;
+  topicId?: string | undefined;
+  filterIds?: ((ids: string[]) => Promise<string[]>) | undefined;
   idOf: (id: string | number, source: Record<string, unknown>) => string;
   textOf: (source: Record<string, unknown>) => string | null;
 }): Promise<string[]> {
@@ -240,22 +257,25 @@ async function hybridSearchIds(input: {
     qdrant.queryPoints(
       input.storeName,
       vector,
-      { must: [{ key: 'user_id', match: { value: input.userId } }] },
+      qdrantScopeFilter(input.userId, input.topicId),
       recall,
     ),
     meili.search(input.storeName, {
       q: trimmed,
-      filter: `user_id = '${escapeMeiliValue(input.userId)}'`,
+      filter: meiliScopeFilter(input.userId, input.topicId),
       limit: recall,
     }),
   ]);
 
-  const merged = rrfMerge([
+  let merged = rrfMerge([
     scored.map((point) => input.idOf(point.id, point.payload)),
     hits.map((hit) =>
       input.idOf(typeof hit.id === 'string' || typeof hit.id === 'number' ? hit.id : '', hit),
     ),
   ]).slice(0, recall);
+  if (input.filterIds && merged.length > 0) {
+    merged = await input.filterIds(merged);
+  }
   if (merged.length === 0) return [];
 
   const textById = new Map<string, string>();
@@ -295,15 +315,23 @@ async function hybridSearchIds(input: {
 }
 
 /**
- * Hybrid card search: Qdrant semantic ∪ Meili keyword, both filtered by user_id,
- * fused with RRF, then DashScope rerank. Returns card ids in rank order.
+ * Hybrid card search: Qdrant semantic ∪ Meili keyword, both filtered by user_id
+ * (and optional topic_id), fused with RRF, then DashScope rerank.
+ * Returns card ids in rank order.
  */
-export async function searchCards(userId: string, query: string, limit = 10): Promise<string[]> {
+export async function searchCards(
+  userId: string,
+  query: string,
+  limit = 10,
+  options?: HybridSearchOptions,
+): Promise<string[]> {
   return hybridSearchIds({
     storeName: cardsStoreName(),
     userId,
     query,
     limit,
+    topicId: options?.topicId,
+    filterIds: options?.filterIds,
     idOf: cardIdOf,
     textOf: payloadText,
   });
@@ -313,13 +341,20 @@ export async function searchCards(userId: string, query: string, limit = 10): Pr
  * Hybrid document search: same dual-path → RRF → rerank as cards.
  * Rerank text is title + description + content head (stored as `text`).
  */
-export async function searchDocuments(userId: string, query: string, limit = 8): Promise<string[]> {
+export async function searchDocuments(
+  userId: string,
+  query: string,
+  limit = 8,
+  options?: HybridSearchOptions,
+): Promise<string[]> {
   await ensureRetrievalStores();
   return hybridSearchIds({
     storeName: docsStoreName(),
     userId,
     query,
     limit,
+    topicId: options?.topicId,
+    filterIds: options?.filterIds,
     idOf: docIdOf,
     textOf: documentPayloadText,
   });

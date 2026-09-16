@@ -1,6 +1,5 @@
 import { Service } from '@rabjs/react';
 import {
-  excerptCardInputFromAnnotation,
   isChatQuestion,
   type Annotation,
   type AnnotationGeometry,
@@ -16,25 +15,15 @@ import {
   type Job,
   type Topic,
 } from '@inwit/dto';
+import { listDocumentAnnotations } from '@/api/annotations';
+import { createCard } from '@/api/cards';
+import { errorMessage } from '@/api/client';
 import {
-  createAnnotation,
-  deleteAnnotation,
-  getAnnotationImage,
-  listDocumentAnnotations,
-  updateAnnotation,
-} from '@/api/annotations';
-import { createCard, getCardImage } from '@/api/cards';
-import { ApiError, errorMessage } from '@/api/client';
-import {
-  abortImport,
-  completeImport,
   createChat,
   createDocument,
   enqueueSelectionCards,
   getDocument,
-  initImport,
   listDocuments,
-  presignImportParts,
   retryDocument,
   updateDocument,
 } from '@/api/documents';
@@ -47,24 +36,12 @@ import {
 } from '@/lib/doc-pipeline';
 import {
   checkpointPercent,
-  findCheckpointForFile,
-  loadCheckpoints,
-  removeCheckpoint,
-  upsertCheckpoint,
   type ImportCheckpoint,
 } from '@/lib/multipart-logic';
-import {
-  checkpointFromInit,
-  isAbortError,
-  uploadRemainingParts,
-} from '@/lib/multipart-upload';
-import {
-  isPresignedStale,
-  livePresignedUrl,
-  shouldRetryPresign,
-  type PresignedUrlEntry,
-} from '@/lib/presign-cache-logic';
+import { type PresignedUrlEntry } from '@/lib/presign-cache-logic';
 import { CARD_RAIL_NARROW_PX } from '@/services/ui-prefs.service';
+import { DocsAnnotationsService } from './docs-annotations.service';
+import { DocsImportService, importFailMessage } from './docs-import.service';
 import { EditorService } from './editor.service';
 
 const DOC_PAGE = 20;
@@ -72,51 +49,6 @@ const POLL_MS = 3000;
 const TOAST_MS = 3200;
 const SELECTION_POLL_MS = 2000;
 const SELECTION_POLL_FOR_MS = 9000;
-const IMPORT_EXTS = new Set(['pdf', 'docx', 'epub', 'txt', 'md']);
-const MIME_BY_EXT: Record<string, string> = {
-  pdf: 'application/pdf',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  epub: 'application/epub+zip',
-  txt: 'text/plain',
-  md: 'text/markdown',
-};
-
-function fileExt(name: string): string {
-  const base = name.split(/[/\\]/).pop() ?? name;
-  const dot = base.lastIndexOf('.');
-  if (dot <= 0) return '';
-  return base.slice(dot + 1).toLowerCase();
-}
-
-function mimeOf(file: File): string {
-  const fromFile = file.type.split(';')[0]?.trim() ?? '';
-  if (fromFile.length > 0) return fromFile;
-  return MIME_BY_EXT[fileExt(file.name)] ?? 'application/octet-stream';
-}
-
-function importFailMessage(err: unknown): string {
-  if (err instanceof ApiError) {
-    if (err.status === 415 || err.code === 'IMPORT_UNSUPPORTED_TYPE') {
-      return '不支持这种文件。目前可以导入 PDF、Word、EPUB、TXT 和 Markdown';
-    }
-    if (err.status === 413) {
-      return '文件太大了';
-    }
-    if (err.code === 'STORAGE_NOT_CONFIGURED') {
-      return '文件存储还没配好';
-    }
-    if (err.code === 'DOCUMENT_NOT_RETRYABLE') {
-      return '这篇现在不能重试';
-    }
-    if (err.code === 'IMPORT_EMPTY') {
-      return '这个文件里没有可提取的文字';
-    }
-    if (err.status === 422 || err.code === 'IMPORT_PARSE_FAILED') {
-      return '这个文件解析失败了，可能已加密或损坏';
-    }
-  }
-  return errorMessage(err, '导入失败');
-}
 
 function asDocumentCard(card: Card): DocumentCard {
   return {
@@ -165,15 +97,8 @@ export class DocsService extends Service {
   captureTopicId: string | null = null;
   draft = '';
   error: string | null = null;
-  importError: string | null = null;
-  importingName: string | null = null;
-  uploadByDoc: Record<string, { percent: number; filename: string }> = {};
-  importCheckpoints: ImportCheckpoint[] = [];
   activeJobs: Job[] = [];
-  importAbort: AbortController | null = null;
-  uploadingDocumentId: string | null = null;
   retryingId: string | null = null;
-  cancelingId: string | null = null;
   toast: string | null = null;
   topicMenuOpen = false;
   paneTopicMenuOpen = false;
@@ -185,10 +110,6 @@ export class DocsService extends Service {
 
   doc: DocumentDetail | null = null;
   docError: string | null = null;
-  annotations: Annotation[] = [];
-  annotationImageUrls: Record<string, string> = {};
-  cardImageUrls: Record<string, PresignedUrlEntry> = {};
-  convertingAnnotationId: string | null = null;
   openCardIds: string[] = [];
   activeCardId: string | null = null;
   activeAnnotationId: string | null = null;
@@ -224,6 +145,91 @@ export class DocsService extends Service {
   selectionTickTimer: ReturnType<typeof setTimeout> | null = null;
   selectionWatchdog: ReturnType<typeof setTimeout> | null = null;
   loadGen = 0;
+
+  get importService(): DocsImportService {
+    return this.resolve(DocsImportService);
+  }
+
+  get annotationService(): DocsAnnotationsService {
+    return this.resolve(DocsAnnotationsService);
+  }
+
+  get importError(): string | null {
+    return this.importService.importError;
+  }
+  set importError(value: string | null) {
+    this.importService.importError = value;
+  }
+
+  get importingName(): string | null {
+    return this.importService.importingName;
+  }
+  set importingName(value: string | null) {
+    this.importService.importingName = value;
+  }
+
+  get uploadByDoc(): Record<string, { percent: number; filename: string }> {
+    return this.importService.uploadByDoc;
+  }
+  set uploadByDoc(value: Record<string, { percent: number; filename: string }>) {
+    this.importService.uploadByDoc = value;
+  }
+
+  get importCheckpoints(): ImportCheckpoint[] {
+    return this.importService.importCheckpoints;
+  }
+  set importCheckpoints(value: ImportCheckpoint[]) {
+    this.importService.importCheckpoints = value;
+  }
+
+  get importAbort(): AbortController | null {
+    return this.importService.importAbort;
+  }
+  set importAbort(value: AbortController | null) {
+    this.importService.importAbort = value;
+  }
+
+  get uploadingDocumentId(): string | null {
+    return this.importService.uploadingDocumentId;
+  }
+  set uploadingDocumentId(value: string | null) {
+    this.importService.uploadingDocumentId = value;
+  }
+
+  get cancelingId(): string | null {
+    return this.importService.cancelingId;
+  }
+  set cancelingId(value: string | null) {
+    this.importService.cancelingId = value;
+  }
+
+  get annotations(): Annotation[] {
+    return this.annotationService.annotations;
+  }
+  set annotations(value: Annotation[]) {
+    this.annotationService.annotations = value;
+  }
+
+  get annotationImageUrls(): Record<string, PresignedUrlEntry> {
+    return this.annotationService.annotationImageUrls;
+  }
+  set annotationImageUrls(value: Record<string, PresignedUrlEntry>) {
+    this.annotationService.annotationImageUrls = value;
+  }
+
+  get cardImageUrls(): Record<string, PresignedUrlEntry> {
+    return this.annotationService.cardImageUrls;
+  }
+  set cardImageUrls(value: Record<string, PresignedUrlEntry>) {
+    this.annotationService.cardImageUrls = value;
+  }
+
+  get convertingAnnotationId(): string | null {
+    return this.annotationService.convertingAnnotationId;
+  }
+  set convertingAnnotationId(value: string | null) {
+    this.annotationService.convertingAnnotationId = value;
+  }
 
   get captureTopic(): Topic | null {
     if (this.captureTopicId === null) return null;
@@ -261,13 +267,14 @@ export class DocsService extends Service {
   }
 
   checkpointFor(documentId: string): ImportCheckpoint | null {
-    return this.importCheckpoints.find((item) => item.documentId === documentId) ?? null;
+    return this.importService.checkpointFor(documentId);
   }
 
   stageFor(doc: {
     id: string;
     status: DocumentStatus;
     source: DocumentSource;
+    contentMd?: string;
   }): DocPipelineStage {
     const job = this.jobFor(doc.id);
     const upload = this.uploadByDoc[doc.id];
@@ -282,32 +289,25 @@ export class DocsService extends Service {
       source: doc.source,
       uploadPercent,
       hasCheckpoint: Boolean(checkpoint),
+      hasContent: Boolean(doc.contentMd?.trim()),
       job: upload ? null : job,
     });
   }
 
   rememberCheckpoint(checkpoint: ImportCheckpoint): void {
-    upsertCheckpoint(checkpoint);
-    const rest = this.importCheckpoints.filter((item) => item.documentId !== checkpoint.documentId);
-    this.importCheckpoints = [...rest, checkpoint];
+    this.importService.rememberCheckpoint(checkpoint);
   }
 
   forgetCheckpoint(documentId: string): void {
-    removeCheckpoint(documentId);
-    this.importCheckpoints = this.importCheckpoints.filter((item) => item.documentId !== documentId);
+    this.importService.forgetCheckpoint(documentId);
   }
 
   setUploadProgress(documentId: string, percent: number, filename: string): void {
-    const current = this.uploadByDoc[documentId];
-    if (current && current.percent === percent && current.filename === filename) return;
-    this.uploadByDoc = { ...this.uploadByDoc, [documentId]: { percent, filename } };
+    this.importService.setUploadProgress(documentId, percent, filename);
   }
 
   clearUploadProgress(documentId: string): void {
-    if (!(documentId in this.uploadByDoc)) return;
-    const next = { ...this.uploadByDoc };
-    delete next[documentId];
-    this.uploadByDoc = next;
+    this.importService.clearUploadProgress(documentId);
   }
 
   get activeCard(): DocumentCard | null {
@@ -409,12 +409,12 @@ export class DocsService extends Service {
   }
 
   dismissImportError(): void {
-    this.importError = null;
+    this.importService.dismissImportError();
   }
 
   async boot(): Promise<void> {
     this.error = null;
-    this.importCheckpoints = loadCheckpoints();
+    this.importService.hydrateCheckpoints();
     try {
       this.topics = await listTopics('active');
       if (this.captureTopicId && !this.topics.some((topic) => topic.id === this.captureTopicId)) {
@@ -541,124 +541,11 @@ export class DocsService extends Service {
   }
 
   async importFile(file: File): Promise<string | null> {
-    if (this.importingName !== null) return null;
-    this.importError = null;
-    const ext = fileExt(file.name);
-    if (ext && !IMPORT_EXTS.has(ext)) {
-      this.importError = importFailMessage(
-        new ApiError(415, 'IMPORT_UNSUPPORTED_TYPE', '不支持的文件类型'),
-      );
-      return null;
-    }
-    if (file.size <= 0) {
-      this.importError = '这个文件是空的';
-      return null;
-    }
-
-    this.importingName = file.name;
-    const ac = new AbortController();
-    this.importAbort = ac;
-    let documentId: string | null = null;
-
-    try {
-      let checkpoint = findCheckpointForFile(file.name, file.size);
-      let existing: DocumentDetail | null = null;
-      if (checkpoint) {
-        try {
-          existing = await getDocument(checkpoint.documentId);
-        } catch (err) {
-          if (isAbortError(err)) throw err;
-          if (err instanceof ApiError && err.status === 404) {
-            this.forgetCheckpoint(checkpoint.documentId);
-            checkpoint = null;
-          }
-        }
-      }
-
-      if (!checkpoint) {
-        const init = await initImport({
-          filename: file.name,
-          mime: mimeOf(file),
-          size: file.size,
-          ...(this.actionTopicId ? { topicId: this.actionTopicId } : {}),
-        });
-        checkpoint = checkpointFromInit(init, file);
-        this.rememberCheckpoint(checkpoint);
-      }
-
-      documentId = checkpoint.documentId;
-      this.uploadingDocumentId = documentId;
-      this.setUploadProgress(documentId, checkpointPercent(checkpoint), file.name);
-
-      if (existing && existing.id === documentId) {
-        this.ingestCreated(existing);
-      } else {
-        try {
-          this.ingestCreated(await getDocument(documentId));
-        } catch (err) {
-          if (isAbortError(err)) throw err;
-        }
-      }
-
-      const uploadId = checkpoint.uploadId;
-      const parts = await uploadRemainingParts({
-        file,
-        checkpoint,
-        listPartUrls: async (partNumbers) => {
-          const res = await presignImportParts(documentId!, {
-            uploadId,
-            partNumbers,
-          });
-          return res.parts;
-        },
-        signal: ac.signal,
-        onCheckpoint: (next) => {
-          checkpoint = next;
-          this.rememberCheckpoint(next);
-        },
-        onProgress: (percent) => {
-          if (documentId) this.setUploadProgress(documentId, percent, file.name);
-        },
-      });
-
-      const created = await completeImport(documentId, { uploadId, parts });
-      this.forgetCheckpoint(documentId);
-      this.clearUploadProgress(documentId);
-      this.ingestCreated(created);
-      await this.refreshJobs();
-      this.syncPolling();
-      return created.id;
-    } catch (err) {
-      if (isAbortError(err)) return null;
-      this.importError = importFailMessage(err);
-      return documentId;
-    } finally {
-      this.importingName = null;
-      this.importAbort = null;
-      this.uploadingDocumentId = null;
-      if (documentId) this.clearUploadProgress(documentId);
-    }
+    return this.importService.importFile(file);
   }
 
   async cancelImport(documentId: string): Promise<void> {
-    this.cancelingId = documentId;
-    const checkpoint = this.checkpointFor(documentId);
-    if (this.uploadingDocumentId === documentId) this.importAbort?.abort();
-    try {
-      if (checkpoint) await abortImport(documentId, { uploadId: checkpoint.uploadId });
-    } catch (err) {
-      if (!(err instanceof ApiError && err.status === 404)) {
-        this.showToast(errorMessage(err, '没取消掉'));
-      }
-    } finally {
-      this.forgetCheckpoint(documentId);
-      this.clearUploadProgress(documentId);
-      const had = this.documents.some((doc) => doc.id === documentId);
-      this.documents = this.documents.filter((doc) => doc.id !== documentId);
-      if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
-      if (this.doc?.id === documentId) this.closeDoc();
-      this.cancelingId = null;
-    }
+    return this.importService.cancelImport(documentId);
   }
 
   async retryFailed(documentId: string): Promise<void> {
@@ -878,85 +765,39 @@ export class DocsService extends Service {
     note: string,
     extra?: Pick<CreateAnnotationInput, 'kind' | 'pageIndex' | 'geometry' | 'imageKey'>,
   ): Promise<boolean> {
-    const clipped = quote.trim();
-    if (!clipped) return false;
-    try {
-      const created = await createAnnotation({
-        documentId,
-        quote: clipped,
-        note: note.trim(),
-        ...(extra?.kind ? { kind: extra.kind } : {}),
-        ...(extra?.pageIndex !== undefined ? { pageIndex: extra.pageIndex } : {}),
-        ...(extra?.geometry ? { geometry: extra.geometry } : {}),
-        ...(extra?.imageKey ? { imageKey: extra.imageKey } : {}),
-      });
-      if (!this.doc || this.doc.id === documentId) {
-        this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
-      }
-      this.openAnnotation(created.id);
-      return true;
-    } catch (err) {
-      this.showToast(errorMessage(err, '没记下这条批注'));
-      return false;
-    }
+    return this.annotationService.addAnnotation(documentId, quote, note, extra);
   }
 
   async saveAnnotationNote(id: string, note: string): Promise<boolean> {
-    try {
-      const updated = await updateAnnotation(id, { note });
-      this.annotations = this.annotations.map((item) => (item.id === id ? updated : item));
-      return true;
-    } catch (err) {
-      this.showToast(errorMessage(err, '没改上'));
-      return false;
-    }
+    return this.annotationService.saveAnnotationNote(id, note);
   }
 
   async removeAnnotation(id: string): Promise<void> {
-    try {
-      await deleteAnnotation(id);
-      this.annotations = this.annotations.filter((item) => item.id !== id);
-      if (this.activeAnnotationId === id) this.activeAnnotationId = null;
-      if (this.annotationImageUrls[id]) {
-        const next = { ...this.annotationImageUrls };
-        delete next[id];
-        this.annotationImageUrls = next;
-      }
-    } catch (err) {
-      this.showToast(errorMessage(err, '没删掉'));
-    }
+    return this.annotationService.removeAnnotation(id);
   }
 
-  async loadAnnotationImage(id: string): Promise<string | null> {
-    if (this.annotationImageUrls[id]) return this.annotationImageUrls[id] ?? null;
-    try {
-      const { url } = await getAnnotationImage(id);
-      this.annotationImageUrls = { ...this.annotationImageUrls, [id]: url };
-      return url;
-    } catch {
-      return null;
-    }
+  annotationImageUrl(id: string): string | null {
+    return this.annotationService.annotationImageUrl(id);
+  }
+
+  async loadAnnotationImage(id: string, force = false): Promise<string | null> {
+    return this.annotationService.loadAnnotationImage(id, force);
+  }
+
+  retryAnnotationImage(id: string): void {
+    this.annotationService.retryAnnotationImage(id);
   }
 
   cardImageUrl(id: string): string | null {
-    return livePresignedUrl(this.cardImageUrls[id]);
+    return this.annotationService.cardImageUrl(id);
   }
 
   async loadCardImage(id: string, force = false): Promise<string | null> {
-    const existing = this.cardImageUrls[id];
-    if (!force && existing && !isPresignedStale(existing)) return existing.url;
-    try {
-      const { url } = await getCardImage(id);
-      this.cardImageUrls = { ...this.cardImageUrls, [id]: { url, fetchedAt: Date.now() } };
-      return url;
-    } catch {
-      return null;
-    }
+    return this.annotationService.loadCardImage(id, force);
   }
 
   retryCardImage(id: string): void {
-    if (!shouldRetryPresign(this.cardImageUrls[id])) return;
-    void this.loadCardImage(id, true);
+    this.annotationService.retryCardImage(id);
   }
 
   async addManualCard(input: CreateCardInput): Promise<boolean> {
@@ -991,20 +832,7 @@ export class DocsService extends Service {
   }
 
   async cardFromExcerpt(annotationId: string): Promise<boolean> {
-    if (this.convertingAnnotationId) return false;
-    const item = this.annotations.find((note) => note.id === annotationId);
-    if (!item) return false;
-    const input = excerptCardInputFromAnnotation(item);
-    if (!input) {
-      this.showToast('这条批注没有截图');
-      return false;
-    }
-    this.convertingAnnotationId = annotationId;
-    try {
-      return await this.addManualCard(input);
-    } finally {
-      this.convertingAnnotationId = null;
-    }
+    return this.annotationService.cardFromExcerpt(annotationId);
   }
 
   async queueSelectionCards(documentId: string, text: string): Promise<boolean> {
@@ -1123,7 +951,7 @@ export class DocsService extends Service {
   }
 
   override destroy(): void {
-    this.importAbort?.abort();
+    this.importService.abortInFlight();
     this.stopPolling();
     this.finishSelectionPoll();
     if (this.toastTimer !== null) {

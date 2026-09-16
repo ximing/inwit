@@ -8,13 +8,16 @@ import { pool } from './db/index.js';
 import { pruneAccessTokenLogs } from './auth/access-tokens.js';
 import { drainJobs, processDueJobs, recoverStuckJobs } from './jobs/queue.js';
 import { ensureRetrievalStores } from './retrieval/registry.js';
+import { abortStaleMultipartUploads } from './storage/multipart-sweep.js';
 import { logger } from './utils/logger.js';
 
 let stopping = false;
 const inFlight = new Set<Promise<void>>();
 const running = new Set<() => Promise<void>>();
 const ACCESS_TOKEN_LOG_PRUNE_MS = 60 * 60 * 1000;
+const MULTIPART_SWEEP_MS = 60 * 60 * 1000;
 let lastAccessTokenLogPrune = 0;
+let lastMultipartSweep = 0;
 
 function track(fn: () => Promise<void>): void {
   if (stopping || running.has(fn)) return;
@@ -48,6 +51,15 @@ async function tick(): Promise<void> {
       await pruneAccessTokenLogs();
     } catch (err) {
       logger.error('worker.access_token_logs.prune_failed', err);
+    }
+  }
+  if (now - lastMultipartSweep >= MULTIPART_SWEEP_MS) {
+    lastMultipartSweep = now;
+    try {
+      const aborted = await abortStaleMultipartUploads();
+      if (aborted > 0) logger.info('worker.multipart.sweep', { aborted });
+    } catch (err) {
+      logger.error('worker.multipart.sweep_failed', err);
     }
   }
 }

@@ -17,6 +17,8 @@ export class SearchService extends Service {
   /** Homepage Spotlight palette. Docs keeps the inline box always visible. */
   surfaceOpen = false;
   activeIndex = 0;
+  /** When set, hybrid search is scoped to this topic. */
+  topicId: string | null = null;
   inputEl: HTMLInputElement | null = null;
   debounceTimer: ReturnType<typeof setTimeout> | null = null;
   abort: AbortController | null = null;
@@ -51,6 +53,16 @@ export class SearchService extends Service {
   closeSurface(): void {
     this.surfaceOpen = false;
     this.clear();
+  }
+
+  setTopicId(id: string | null): void {
+    if (this.topicId === id) return;
+    this.topicId = id;
+    if (!id) {
+      this.clear();
+      return;
+    }
+    if (this.hasQuery) this.schedule();
   }
 
   setActiveIndex(index: number): void {
@@ -117,7 +129,7 @@ export class SearchService extends Service {
     this.abort = ac;
     this.error = null;
     try {
-      const data = await searchQuery(trimmed, { signal: ac.signal });
+      const data = await searchQuery(trimmed, { signal: ac.signal, topicId: this.topicId });
       if (seq !== this.seq) return;
       this.results = data;
       this.activeIndex = 0;

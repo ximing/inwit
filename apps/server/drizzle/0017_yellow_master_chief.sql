@@ -1,0 +1,2 @@
+ALTER TABLE "llm_usage_logs" DROP CONSTRAINT "llm_usage_logs_capability_check";--> statement-breakpoint
+ALTER TABLE "llm_usage_logs" ADD CONSTRAINT "llm_usage_logs_capability_check" CHECK ("llm_usage_logs"."capability" IN ('chat', 'embed', 'rerank', 'ocr'));

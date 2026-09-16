@@ -17,6 +17,42 @@ export const WEEKLY_REPORT_TITLE_MARK = '学习复盘';
 export const AGENT_DOC_LABEL_REPORT = 'AI 复盘';
 export const AGENT_DOC_LABEL_CONTRAST = '对比专题';
 
+/** Page separator written into `contentMd` by PDF extract / OCR. */
+export const PDF_PAGE_SEPARATOR = '\n\n---\n\n';
+
+export const IMPORT_FORMATS = ['pdf', 'docx', 'epub', 'txt', 'md'] as const;
+export type ImportFormat = (typeof IMPORT_FORMATS)[number];
+
+export const FORMAT_BY_EXT: Record<string, ImportFormat> = {
+  pdf: 'pdf',
+  docx: 'docx',
+  epub: 'epub',
+  txt: 'txt',
+  md: 'md',
+};
+
+export const FORMAT_BY_MIME: Record<string, ImportFormat> = {
+  'application/pdf': 'pdf',
+  'application/x-pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/epub+zip': 'epub',
+  'application/epub': 'epub',
+  'text/plain': 'txt',
+  'text/markdown': 'md',
+  'text/x-markdown': 'md',
+};
+
+export const MIME_BY_FORMAT: Record<ImportFormat, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  epub: 'application/epub+zip',
+  txt: 'text/plain',
+  md: 'text/markdown',
+};
+
+/** S3 multipart minimum part size (except the last part). */
+export const MULTIPART_PART_SIZE = 5 * 1024 * 1024;
+
 /** List/detail badge for `source=agent` docs. Weekly recap vs contrast essay. */
 export function agentDocumentMetaLabel(
   source: DocumentSource,
@@ -176,6 +212,7 @@ export type ImportPartsResponse = z.infer<typeof importPartsResponseSchema>;
 export const importCompletePartSchema = z.object({
   partNumber: z.number().int().positive().max(10_000),
   etag: z.string().min(1).max(200),
+  size: z.number().int().positive(),
 });
 export type ImportCompletePart = z.infer<typeof importCompletePartSchema>;
 

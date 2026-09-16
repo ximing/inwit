@@ -1,5 +1,6 @@
+import { type ImportFormat } from '@inwit/dto';
 import { isBlankDocumentContent } from './document-logic.js';
-import { isPdfMime, type ImportFormat } from './import-logic.js';
+import { isPdfMime } from './import-logic.js';
 
 export type ExtractFollowUp = 'digest' | 'ocr' | 'none';
 export type RetryJobKind = 'extract' | 'ocr' | 'digest';

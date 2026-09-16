@@ -95,7 +95,10 @@ export async function completeImport(
   input: ImportCompleteInput,
 ): Promise<Document> {
   const doc = await getOwnedImport(userId, documentId);
-  const parts = validateCompleteParts(input.parts);
+  if (typeof doc.fileSize !== 'number' || !Number.isFinite(doc.fileSize) || doc.fileSize <= 0) {
+    throw AppError.of(400, 'VALIDATION_ERROR');
+  }
+  const parts = validateCompleteParts(input.parts, doc.fileSize);
   try {
     await completeMultipartUpload(doc.fileKey!, input.uploadId, parts);
   } catch (err) {
@@ -111,8 +114,6 @@ export async function completeImport(
     const [row] = await tx
       .update(documents)
       .set({
-        fileSize: doc.fileSize,
-        fileMime: doc.fileMime,
         updatedAt: new Date(),
       })
       .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))

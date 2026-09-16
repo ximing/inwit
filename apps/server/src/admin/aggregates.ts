@@ -50,6 +50,7 @@ const EMPTY_DAY = {
   chatTokens: 0,
   embedTokens: 0,
   rerankTokens: 0,
+  ocrTokens: 0,
 } as const;
 
 export function fillDailySeries(from: Date, days: number, rows: UsageDay[]): UsageDay[] {

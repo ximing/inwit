@@ -5,6 +5,7 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  ListMultipartUploadsCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -179,6 +180,37 @@ export async function abortMultipartUpload(key: string, uploadId: string): Promi
       UploadId: uploadId,
     }),
   );
+}
+
+export async function listMultipartUploads(
+  prefix?: string,
+): Promise<Array<{ key: string; uploadId: string; initiated: Date | undefined }>> {
+  const { cfg, client } = getClient();
+  const out: Array<{ key: string; uploadId: string; initiated: Date | undefined }> = [];
+  let keyMarker: string | undefined;
+  let uploadIdMarker: string | undefined;
+  for (;;) {
+    const listed = await client.send(
+      new ListMultipartUploadsCommand({
+        Bucket: cfg.bucket,
+        ...(prefix !== undefined ? { Prefix: prefix } : {}),
+        ...(keyMarker !== undefined ? { KeyMarker: keyMarker } : {}),
+        ...(uploadIdMarker !== undefined ? { UploadIdMarker: uploadIdMarker } : {}),
+      }),
+    );
+    for (const upload of listed.Uploads ?? []) {
+      if (!upload.Key || !upload.UploadId) continue;
+      out.push({ key: upload.Key, uploadId: upload.UploadId, initiated: upload.Initiated });
+    }
+    if (!listed.IsTruncated) break;
+    const nextKey = listed.NextKeyMarker;
+    const nextUpload = listed.NextUploadIdMarker;
+    if (!nextKey && !nextUpload) break;
+    if (nextKey === keyMarker && nextUpload === uploadIdMarker) break;
+    keyMarker = nextKey;
+    uploadIdMarker = nextUpload;
+  }
+  return out;
 }
 
 export async function getObjectToFile(key: string, destPath: string): Promise<void> {
