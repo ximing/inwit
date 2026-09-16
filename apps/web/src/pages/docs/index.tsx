@@ -5,6 +5,7 @@ import { SearchService } from '@/components/search';
 import { ANCHOR_HIT_SELECTOR } from '@/lib/anchors';
 import { scrollFlashAnnotationAnchor, scrollFlashCardAnchor } from '@/lib/anchor-scroll';
 import { ROUTES, docsPath } from '@/routes';
+import { AssetUrlsService } from '@/services/asset-urls.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { DocsAnnotationsService } from './docs-annotations.service';
 import { DocsImportService } from './docs-import.service';
@@ -247,4 +248,5 @@ export const DocsPage = bindServices(DocsPageContent, [
   DocsAnnotationsService,
   EditorService,
   SearchService,
+  AssetUrlsService,
 ]);
