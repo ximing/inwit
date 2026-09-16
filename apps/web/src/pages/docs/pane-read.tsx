@@ -7,9 +7,9 @@ import { observer, useService } from '@rabjs/react';
 import { Loader2, PenLine } from 'lucide-react';
 import { lazy, Suspense, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { DocView } from '@/components/doc/DocView';
 import { Tag } from '@/components/tag';
 import { docAnchors } from '@/lib/anchors';
-import { AnchoredMarkdown, Markdown } from '@/lib/Markdown';
 import { ROUTES } from '@/routes';
 import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
@@ -107,11 +107,11 @@ export const PaneRead = observer(function PaneRead() {
                 {doc.source === 'chat' && doc.answer ? (
                   <aside className="doc-answer">
                     <p className="doc-answer-kicker">AI 回答</p>
-                    <Markdown source={doc.answer} />
+                    <DocView source={doc.answer} />
                   </aside>
                 ) : null}
                 {doc.contentMd.trim().length > 0 ? (
-                  <AnchoredMarkdown
+                  <DocView
                     source={doc.contentMd}
                     anchors={anchors}
                     activeCardId={service.activeCardId}
@@ -122,7 +122,6 @@ export const PaneRead = observer(function PaneRead() {
                       const id = ids[0];
                       if (id) service.openAnnotation(id);
                     }}
-                    className="md-body prose"
                   />
                 ) : (
                   <p className="empty">{emptyHint}</p>
