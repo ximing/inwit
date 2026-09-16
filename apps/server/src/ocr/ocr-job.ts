@@ -1,0 +1,210 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { and, eq } from 'drizzle-orm';
+import { config } from '../config.js';
+import { getDb } from '../db/index.js';
+import { documents, jobs, type DocumentRow, type JobRow } from '../db/schema.js';
+import { isBlankDocumentContent } from '../documents/document-logic.js';
+import { heartbeatJob } from '../jobs/heartbeat.js';
+import { enqueueJob } from '../jobs/queue.js';
+import { logLlmUsage } from '../llm/usage.js';
+import { tryIndexDocument } from '../retrieval/pipeline.js';
+import { getObjectToFile } from '../storage/client.js';
+import { logger } from '../utils/logger.js';
+import { completeOcrPage } from './ocr-api.js';
+import {
+  applyPageFailure,
+  applyPageSuccess,
+  chunkPages,
+  OCR_PAGE_CONCURRENCY,
+  ocrIncompleteError,
+  pagesToMarkdown,
+  parseOcrProgress,
+  pendingPages,
+  pngToDataUrl,
+  toOcrJobPayload,
+  withTotalPages,
+  type OcrProgress,
+} from './ocr-logic.js';
+import { resolveOcrFor } from './ocr.service.js';
+import { openPdf } from './rasterize.js';
+
+async function loadDocument(userId: string, documentId: string): Promise<DocumentRow | null> {
+  const [row] = await getDb()
+    .select()
+    .from(documents)
+    .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
+    .limit(1);
+  return row ?? null;
+}
+
+async function markDocumentFailed(userId: string, documentId: string): Promise<void> {
+  await getDb()
+    .update(documents)
+    .set({ status: 'failed', updatedAt: new Date() })
+    .where(and(eq(documents.id, documentId), eq(documents.userId, userId)));
+}
+
+async function persistOcrProgress(jobId: string, progress: OcrProgress): Promise<void> {
+  await getDb()
+    .update(jobs)
+    .set({
+      payload: toOcrJobPayload(progress),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(jobs.id, jobId), eq(jobs.status, 'running')));
+}
+
+async function mapPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  if (items.length === 0) return;
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const current = next;
+      next += 1;
+      const item = items[current];
+      if (item === undefined) return;
+      await fn(item);
+    }
+  });
+  await Promise.all(workers);
+}
+
+type PageOutcome =
+  | { pageIndex: number; ok: true; text: string; promptTokens: number; completionTokens: number; totalTokens: number }
+  | { pageIndex: number; ok: false };
+
+export async function processOcr(job: JobRow): Promise<void> {
+  const parsed = parseOcrProgress(job.payload);
+  if (!parsed) throw new Error('ocr job missing documentId');
+  const documentId = parsed.documentId;
+
+  const document = await loadDocument(job.userId, documentId);
+  if (!document) {
+    logger.warn('ocr.document_missing', { jobId: job.id, documentId });
+    return;
+  }
+  if (!document.fileKey) throw new Error('ocr job missing fileKey');
+
+  const dir = await mkdtemp(path.join(tmpdir(), 'inwit-ocr-'));
+  const dest = path.join(dir, 'source.pdf');
+  let progress = parsed;
+
+  try {
+    await getObjectToFile(document.fileKey, dest);
+    await heartbeatJob(job.id);
+
+    const pdf = await openPdf(dest);
+    try {
+      progress = withTotalPages(progress, pdf.pageCount);
+      await persistOcrProgress(job.id, progress);
+
+      const resolved = await resolveOcrFor(job.userId);
+      const remaining = pendingPages(progress);
+      const batches = chunkPages(remaining, config.OCR_PAGE_BATCH_SIZE);
+
+      for (const batch of batches) {
+        await heartbeatJob(job.id);
+        let persistChain = Promise.resolve();
+        const persistOutcome = (outcome: PageOutcome): Promise<void> => {
+          persistChain = persistChain.then(async () => {
+            progress = outcome.ok
+              ? applyPageSuccess(progress, outcome.pageIndex, outcome.text)
+              : applyPageFailure(progress, outcome.pageIndex);
+            await persistOcrProgress(job.id, progress);
+            if (outcome.ok) {
+              await logLlmUsage({
+                userId: job.userId,
+                provider: 'dashscope',
+                model: resolved.model,
+                capability: 'chat',
+                promptTokens: outcome.promptTokens,
+                completionTokens: outcome.completionTokens,
+                totalTokens: outcome.totalTokens,
+              });
+            }
+          });
+          return persistChain;
+        };
+
+        await mapPool(batch, OCR_PAGE_CONCURRENCY, async (pageIndex) => {
+          let outcome: PageOutcome;
+          try {
+            const png = await pdf.renderPng(pageIndex);
+            const result = await completeOcrPage({
+              apiKey: resolved.apiKey,
+              model: resolved.model,
+              baseUrl: resolved.baseUrl,
+              imageDataUrl: pngToDataUrl(png),
+            });
+            outcome = {
+              pageIndex,
+              ok: true,
+              text: result.text,
+              promptTokens: result.promptTokens,
+              completionTokens: result.completionTokens,
+              totalTokens: result.totalTokens,
+            };
+          } catch (err) {
+            logger.warn('ocr.page_failed', {
+              jobId: job.id,
+              documentId,
+              pageIndex,
+              err: err instanceof Error ? err.message : String(err),
+            });
+            outcome = { pageIndex, ok: false };
+          }
+          await persistOutcome(outcome);
+        });
+        await persistChain;
+      }
+    } finally {
+      await pdf.destroy();
+    }
+
+    if (progress.failedPages.length > 0) {
+      await markDocumentFailed(job.userId, documentId);
+      throw new Error(ocrIncompleteError(progress.failedPages));
+    }
+
+    const contentMd = pagesToMarkdown(progress.pageTexts);
+    const blank = isBlankDocumentContent(contentMd);
+
+    await getDb().transaction(async (tx) => {
+      const [updated] = await tx
+        .update(documents)
+        .set({
+          contentMd,
+          pageCount: progress.totalPages,
+          status: blank ? 'digested' : 'pending',
+          updatedAt: new Date(),
+        })
+        .where(and(eq(documents.id, documentId), eq(documents.userId, job.userId)))
+        .returning();
+      if (!updated) throw new Error('ocr job document disappeared');
+      if (!blank) {
+        await enqueueJob(tx, {
+          userId: job.userId,
+          type: 'digest',
+          payload: { documentId },
+        });
+      }
+    });
+
+    if (!blank) {
+      await tryIndexDocument({
+        id: document.id,
+        userId: document.userId,
+        title: document.title,
+        description: document.description,
+        contentMd,
+      });
+    }
+  } catch (err) {
+    await markDocumentFailed(job.userId, documentId);
+    throw err;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}

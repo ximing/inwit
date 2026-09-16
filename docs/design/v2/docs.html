@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 文档</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  /* ===== 工作台：左列表 + 右 pane ===== */
+  .ws { display: grid; grid-template-columns: 384px minmax(0, 1fr); height: 100vh; }
+
+  /* 左栏 */
+  .ws-list {
+    border-right: 1px solid var(--line-soft);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg);
+  }
+  .ws-capture { padding: 16px 16px 10px; }
+  .ws-capture .capture { border-radius: var(--r-md); box-shadow: var(--shadow-1); }
+  .ws-capture textarea { padding: 13px 14px 6px; font-size: 14.5px; min-height: 44px; }
+  .ws-capture .capture-bar { padding: 6px 8px 8px; }
+  .ws-capture .capture-hint { display: none; }
+
+  .ws-filters {
+    display: flex; gap: 6px; padding: 6px 16px 10px;
+    overflow-x: auto; flex: none;
+  }
+  .ws-filters .chip { height: 26px; font-size: 12.5px; padding: 0 10px; flex: none; }
+
+  .ws-scroll { flex: 1; overflow-y: auto; padding: 2px 10px 20px; }
+
+  .row {
+    display: block;
+    padding: 11px 12px 9px;
+    border-radius: var(--r-md);
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background 0.13s;
+    margin-bottom: 2px;
+  }
+  .row:hover { background: var(--surface); }
+  .row.is-on { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-1); }
+  .row-title {
+    font-family: var(--serif); font-size: 14.5px; font-weight: 600; line-height: 1.45;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .row-title .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-meta {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 5px; font-size: 11.5px; color: var(--ink-4);
+  }
+  .row-meta .tag { height: 17px; font-size: 10.5px; padding: 0 6px; border-radius: 5px; }
+
+  /* 右 pane 通用 */
+  .ws-pane { min-width: 0; overflow-y: auto; position: relative; }
+  .pane-inner { max-width: 780px; margin: 0 auto; padding: 30px 44px 100px; }
+
+  /* ===== Today 态 ===== */
+  .today-date { font-size: 13px; color: var(--ink-3); }
+  .today-hi { font-family: var(--serif); font-size: 30px; font-weight: 700; margin: 4px 0 26px; }
+  .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg); padding: 18px 20px 16px;
+    transition: all 0.15s;
+  }
+  .stat:hover { box-shadow: var(--shadow-2); transform: translateY(-1px); }
+  .stat-num { font-family: var(--serif); font-size: 30px; font-weight: 700; line-height: 1.1; }
+  .stat-num small { font-size: 14px; font-weight: 500; color: var(--ink-3); margin-left: 2px; }
+  .stat-label { font-size: 12.5px; color: var(--ink-3); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+  .stat-cta { color: var(--accent-deep); font-weight: 600; }
+  .stat.is-accent { background: linear-gradient(150deg, var(--accent-soft), var(--surface) 70%); border-color: var(--accent-line); }
+
+  .today-sec { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3); margin: 30px 0 10px; }
+
+  .act { display: flex; gap: 12px; padding: 10px 4px; font-size: 13.5px; align-items: baseline; }
+  .act-ico {
+    width: 26px; height: 26px; border-radius: 8px; flex: none; align-self: center;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 13px;
+    background: var(--surface); border: 1px solid var(--line-soft);
+  }
+  .act-body { flex: 1; min-width: 0; color: var(--ink-2); line-height: 1.55; }
+  .act-body b { color: var(--ink); font-weight: 600; }
+  .act-time { font-size: 11.5px; color: var(--ink-4); flex: none; }
+
+  /* ===== 文档态（阅读） ===== */
+  .pane-chrome { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+  .pane-chrome .spacer { flex: 1; }
+  .pane-title { font-family: var(--serif); font-size: 27px; font-weight: 700; line-height: 1.4; margin-bottom: 8px; }
+  .pane-meta { font-size: 12.5px; color: var(--ink-4); display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+  .pane-meta .sep { color: var(--line); }
+
+  .paper {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl); box-shadow: var(--shadow-1);
+    padding: 40px 48px 52px;
+  }
+  .doc-answer {
+    border: 1px solid var(--gold-line);
+    background: linear-gradient(160deg, var(--gold-soft), #fdfaf1);
+    border-radius: var(--r-md); padding: 18px 22px; margin-bottom: 26px;
+  }
+  .doc-answer-kicker { font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--gold); margin-bottom: 8px; }
+
+  /* 本文卡片（阅读 pane 底部） */
+  .doc-cards { margin-top: 28px; }
+  .doc-cards-head {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3);
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  }
+  .doc-cards-head .count { background: var(--bg-sunken); border-radius: 8px; padding: 1px 7px; font-size: 11px; }
+  .doc-cards-head .go { margin-left: auto; font-size: 12.5px; color: var(--accent-deep); font-weight: 600; letter-spacing: 0; }
+  .mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mini-card {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-md); padding: 14px 16px; cursor: pointer; transition: all 0.15s;
+  }
+  .mini-card:hover { border-color: var(--accent-line); box-shadow: var(--shadow-1); }
+  .mini-card.is-open { background: var(--accent-soft); border-color: var(--accent-line); }
+  .mini-q { font-size: 13.5px; font-weight: 600; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .mini-a { font-size: 12.5px; color: var(--ink-3); line-height: 1.65; margin-top: 8px; display: none; }
+  .mini-card.is-open .mini-a { display: block; }
+  .mini-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 11.5px; color: var(--ink-4); }
+  .mastery { display: inline-flex; gap: 3px; }
+  .mastery i { width: 14px; height: 4px; border-radius: 2px; background: var(--line); }
+  .mastery i.on { background: var(--green); }
+
+  /* ===== 编辑态（同 pane 就地切换） ===== */
+  .pane-doc.is-editing .paper { display: none; }
+  .pane-doc.is-editing .doc-cards { display: none; }
+  .pane-doc.is-editing .read-only { display: none; }
+  .edit-only { display: none !important; }
+  .pane-doc.is-editing .edit-only { display: block !important; }
+  .pane-doc.is-editing span.edit-only { display: inline-flex !important; }
+  .pane-doc.is-editing button.edit-only { display: inline-flex !important; }
+  .pane-doc.is-editing .pane-title { display: none; }
+
+  .title-input {
+    width: 100%; border: none; outline: none; background: none;
+    font-family: var(--serif); font-size: 27px; font-weight: 700; line-height: 1.4;
+    color: var(--ink); padding: 0; margin-bottom: 8px;
+  }
+  .title-input::placeholder { color: var(--ink-4); }
+  .toolbar {
+    display: flex; align-items: center; gap: 2px;
+    width: fit-content; padding: 5px; margin: 14px 0;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow-1);
+    position: sticky; top: 12px; z-index: 5;
+  }
+  .tool { width: 31px; height: 29px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; color: var(--ink-2); transition: all 0.12s; }
+  .tool:hover { background: var(--bg-sunken); color: var(--ink); }
+  .tool-sep { width: 1px; height: 18px; background: var(--line); margin: 0 5px; }
+  .tool svg { width: 15px; height: 15px; }
+  .writer {
+    width: 100%; border: none; outline: none; resize: none; background: none;
+    font-family: var(--serif); font-size: 16.5px; line-height: 1.9; color: #2b251c;
+    min-height: 55vh;
+  }
+  .writer::placeholder { color: var(--ink-4); }
+  .save-state { font-size: 12.5px; color: var(--ink-4); display: inline-flex; align-items: center; gap: 6px; }
+  .save-state .ok { color: var(--green); }
+
+  @media (max-width: 1080px) {
+    .ws { grid-template-columns: 320px minmax(0, 1fr); }
+    .mini-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-name">Inwit</div>
+      <div class="brand-tag">扔进去，它来消化</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        首页
+      </a>
+      <a class="nav-item is-on" href="docs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        文档
+      </a>
+      <a class="nav-item" href="review.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+        复习
+        <span class="nav-badge">7</span>
+      </a>
+      <a class="nav-item" href="topics.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7l10 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        主题
+      </a>
+      <a class="nav-item" href="jobs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        任务
+      </a>
+      <a class="nav-item" href="settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z"/></svg>
+        设置
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <a class="rail-user" href="settings.html"><span class="avatar">R</span><span>regression@inwit.dev</span></a>
+    </div>
+  </aside>
+
+  <main class="main ws">
+    <!-- ===== 左栏：捕获 + 文档流 ===== -->
+    <div class="ws-list">
+      <div class="ws-capture">
+        <div class="capture">
+          <textarea rows="2" placeholder="扔一句话进来，或以问号结尾问 AI…"></textarea>
+          <div class="capture-bar">
+            <button class="topic-pick"><span class="dot"></span>机器学习基础</button>
+            <div class="capture-hint"></div>
+            <button class="btn btn-ghost" style="height:30px; font-size:12.5px;">问 AI</button>
+            <button class="btn btn-primary" style="height:30px; font-size:12.5px;">扔进去</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="ws-filters">
+        <button class="chip is-on">全部</button>
+        <button class="chip">机器学习基础</button>
+        <button class="chip chip-new">＋ 主题</button>
+      </div>
+
+      <div class="ws-scroll" id="rows">
+        <a class="row" data-doc>
+          <div class="row-title"><span class="t">9/14–9/20 学习复盘</span><span class="tag tag-ai">AI 复盘</span></div>
+          <div class="row-meta"><span>24 分钟前</span></div>
+        </a>
+        <a class="row" data-doc>
+          <div class="row-title"><span class="t">交叉验证入门</span></div>
+          <div class="row-meta"><span class="tag tag-topic">机器学习基础</span><span>2 卡</span><span>·</span><span>3 小时前</span></div>
+        </a>
+        <a class="row" data-doc>
+          <div class="row-title"><span class="t">L1 和 L2 正则化到底啥区别？</span><span class="tag tag-ai">AI 回答</span></div>
+          <div class="row-meta"><span class="tag tag-topic">机器学习基础</span><span>2 卡</span><span>·</span><span>3 小时前</span></div>
+        </a>
+        <a class="row" data-doc>
+          <div class="row-title"><span class="t">偏差与方差</span></div>
+          <div class="row-meta"><span class="tag tag-topic">机器学习基础</span><span>2 卡</span><span>·</span><span>3 小时前</span></div>
+        </a>
+        <a class="row" data-doc>
+          <div class="row-title"><span class="t">梯度消失</span></div>
+          <div class="row-meta"><span class="tag tag-topic">机器学习基础</span><span>3 卡</span><span>·</span><span>3 小时前</span></div>
+        </a>
+        <a class="row" data-doc>
+          <div class="row-title"><span class="t">学习率太大时梯度下降会在最优点附近震荡</span><span class="tag tag-busy"><span class="pulse"></span>&nbsp;消化中</span></div>
+          <div class="row-meta"><span class="tag tag-topic">机器学习基础</span><span>3 小时前</span></div>
+        </a>
+        <a class="row" data-doc>
+          <div class="row-title"><span class="t">过拟合是指模型在训练集上表现很好……</span></div>
+          <div class="row-meta"><span class="tag tag-topic">机器学习基础</span><span>2 卡</span><span>·</span><span>3 小时前</span></div>
+        </a>
+        <a class="row" data-doc>
+          <div class="row-title"><span class="t">注意力机制让模型按权重关注输入的不同位置</span></div>
+          <div class="row-meta"><span class="tag tag-topic">T16 验收主题</span><span>5 小时前</span></div>
+        </a>
+      </div>
+    </div>
+
+    <!-- ===== 右 pane：空态 ===== -->
+    <div class="ws-pane" id="pane-empty">
+      <div class="pane-inner" style="display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:70vh; text-align:center;">
+        <div style="font-family:var(--serif); font-size:44px; margin-bottom:14px; opacity:.35;">✎</div>
+        <div style="font-family:var(--serif); font-size:19px; font-weight:600; color:var(--ink-2);">从左边选一篇，或者直接扔一句话</div>
+        <div style="font-size:13px; color:var(--ink-4); margin-top:6px;">阅读、编辑、卡片都在这一个窗格里完成</div>
+      </div>
+    </div>
+
+    <!-- ===== 右 pane：文档态（阅读 / 编辑同体） ===== -->
+    <div class="ws-pane" id="pane-doc" style="display:none;">
+      <div class="pane-inner pane-doc" id="paneDocInner">
+        <div class="pane-chrome">
+          <button class="btn btn-ghost" id="btn-close">✕ 关闭</button>
+          <span class="spacer"></span>
+          <span class="save-state edit-only"><span class="ok">●</span>已保存 · 14:29</span>
+          <button class="btn btn-secondary read-only" id="btn-edit">编辑</button>
+          <button class="btn btn-primary edit-only" id="btn-done">完成</button>
+        </div>
+
+        <h1 class="pane-title">交叉验证入门</h1>
+        <input class="title-input edit-only" value="交叉验证入门" placeholder="无标题" />
+        <div class="pane-meta">
+          <button class="topic-pick" style="padding:0 8px; height:24px; font-size:12.5px;"><span class="dot"></span>机器学习基础</button>
+          <span>3 小时前</span><span class="sep">·</span><span>2 张卡</span>
+        </div>
+
+        <!-- 阅读 -->
+        <article class="paper read-only">
+          <div class="prose">
+            <p>交叉验证（Cross-Validation）是一种评估机器学习模型泛化能力的统计方法。它通过将数据集反复划分为训练集和验证集，多次训练与测试模型，从而更稳定、更可靠地估计模型在未见数据上的表现，避免因单次随机划分导致的评估偏差。</p>
+            <p>最常用的是 k 折交叉验证（k-Fold Cross-Validation）：将原始数据均匀分成 k 个互斥子集（称为"折"），每次用其中 k−1 个折合并作为训练集，剩下 1 个折作为验证集，共进行 k 次训练与验证。最终取 k 次验证指标的平均值作为模型性能估计。</p>
+            <p><mark>k 的常见取值是 5 或 10。k=5 平衡了计算开销与估计稳定性；k=10 提供更精细的评估但计算成本更高；k 过小（如 k=2）易受划分影响，过大（如 k=n，即留一法）则方差小但偏差增大且耗时剧增。</mark></p>
+            <p><mark>交叉验证不用于最终模型部署——它只用于评估或调参阶段。最终上线模型应使用全部可用训练数据重新训练。这一点常被混淆：交叉验证得到的 k 个模型只是中间产物，不是最终模型。</mark></p>
+          </div>
+        </article>
+
+        <!-- 编辑 -->
+        <div class="edit-only">
+          <div class="toolbar">
+            <button class="tool" style="font-weight:700">B</button>
+            <button class="tool" style="font-style:italic">I</button>
+            <button class="tool" style="text-decoration:line-through">S</button>
+            <span class="tool-sep"></span>
+            <button class="tool">H</button>
+            <button class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="5" cy="6" r="1.2" fill="currentColor"/><circle cx="5" cy="12" r="1.2" fill="currentColor"/><circle cx="5" cy="18" r="1.2" fill="currentColor"/></svg></button>
+            <button class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/></svg></button>
+            <button class="tool"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14a5 5 0 007.07 0l2.83-2.83a5 5 0 00-7.07-7.07L11.5 5.4"/><path d="M14 10a5 5 0 00-7.07 0l-2.83 2.83a5 5 0 007.07 7.07l1.33-1.3"/></svg></button>
+          </div>
+          <textarea class="writer">交叉验证（Cross-Validation）是一种评估机器学习模型泛化能力的统计方法。它通过将数据集反复划分为训练集和验证集，多次训练与测试模型，从而更稳定、更可靠地估计模型在未见数据上的表现，避免因单次随机划分导致的评估偏差。
+
+最常用的是 k 折交叉验证（k-Fold Cross-Validation）：将原始数据均匀分成 k 个互斥子集（称为"折"），每次用其中 k−1 个折合并作为训练集，剩下 1 个折作为验证集，共进行 k 次训练与验证。最终取 k 次验证指标的平均值作为模型性能估计。
+
+k 的常见取值是 5 或 10。k=5 平衡了计算开销与估计稳定性；k=10 提供更精细的评估但计算成本更高；k 过小（如 k=2）易受划分影响，过大（如 k=n，即留一法）则方差小但偏差增大且耗时剧增。</textarea>
+        </div>
+
+        <!-- 本文卡片 -->
+        <div class="doc-cards read-only">
+          <div class="doc-cards-head">本文卡片 <span class="count">2</span><a class="go" href="review.html">去复习 →</a></div>
+          <div class="mini-grid">
+            <div class="mini-card">
+              <div class="mini-q">比较 k=5 与 k=10 的 k 折交叉验证：在计算开销、估计稳定性、对数据划分敏感性三方面有何差异？</div>
+              <div class="mini-a">k=5 计算开销更小，估计稳定性略低于 k=10，对单次划分的敏感性更高；k=10 评估更精细但训练次数翻倍……</div>
+              <div class="mini-foot"><span class="mastery"><i class="on"></i><i class="on"></i><i></i><i></i></span><span>明天再见</span></div>
+            </div>
+            <div class="mini-card">
+              <div class="mini-q">为什么交叉验证不能用于最终模型部署？</div>
+              <div class="mini-a">交叉验证只用于评估或调参阶段。最终上线模型应使用全部可用训练数据重新训练……</div>
+              <div class="mini-foot"><span class="mastery"><i class="on"></i><i></i><i></i><i></i></span><span>3 天后再问</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  const paneEmpty = document.getElementById('pane-empty');
+  const paneDoc = document.getElementById('pane-doc');
+  const inner = document.getElementById('paneDocInner');
+  const rows = document.querySelectorAll('.row');
+
+  function showDoc(row) {
+    rows.forEach((r) => r.classList.remove('is-on'));
+    if (row) row.classList.add('is-on');
+    inner.classList.remove('is-editing');
+    paneEmpty.style.display = 'none';
+    paneDoc.style.display = '';
+  }
+  function showEmpty() {
+    rows.forEach((r) => r.classList.remove('is-on'));
+    paneDoc.style.display = 'none';
+    paneEmpty.style.display = '';
+  }
+  rows.forEach((r) => r.addEventListener('click', () => showDoc(r)));
+  document.getElementById('btn-close').addEventListener('click', showEmpty);
+  document.getElementById('btn-edit').addEventListener('click', () => inner.classList.add('is-editing'));
+  document.getElementById('btn-done').addEventListener('click', () => inner.classList.remove('is-editing'));
+  document.querySelectorAll('.mini-card').forEach((c) => c.addEventListener('click', () => c.classList.toggle('is-open')));
+</script>
+</body>
+</html>

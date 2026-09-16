@@ -5,6 +5,7 @@ import {
 } from './agent/weekly-enqueue.js';
 import { config } from './config.js';
 import { pool } from './db/index.js';
+import { pruneAccessTokenLogs } from './auth/access-tokens.js';
 import { drainJobs, processDueJobs, recoverStuckJobs } from './jobs/queue.js';
 import { ensureRetrievalStores } from './retrieval/registry.js';
 import { logger } from './utils/logger.js';
@@ -12,6 +13,8 @@ import { logger } from './utils/logger.js';
 let stopping = false;
 const inFlight = new Set<Promise<void>>();
 const running = new Set<() => Promise<void>>();
+const ACCESS_TOKEN_LOG_PRUNE_MS = 60 * 60 * 1000;
+let lastAccessTokenLogPrune = 0;
 
 function track(fn: () => Promise<void>): void {
   if (stopping || running.has(fn)) return;
@@ -37,6 +40,15 @@ async function tick(): Promise<void> {
     if (claimed > 0) logger.info('worker.tick', { claimed });
   } catch (err) {
     logger.error('worker.tick.failed', err);
+  }
+  const now = Date.now();
+  if (now - lastAccessTokenLogPrune >= ACCESS_TOKEN_LOG_PRUNE_MS) {
+    lastAccessTokenLogPrune = now;
+    try {
+      await pruneAccessTokenLogs();
+    } catch (err) {
+      logger.error('worker.access_token_logs.prune_failed', err);
+    }
   }
 }
 

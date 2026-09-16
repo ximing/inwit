@@ -22,6 +22,12 @@ process.env.PGGSSENCMODE ??= 'disable';
 
 const boolEnum = z.enum(['true', 'false']).transform((value) => value === 'true');
 
+const blankToUndef = (value: unknown) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
+const optionalUrl = z.preprocess(blankToUndef, z.string().url().optional());
+const optionalNonEmpty = z.preprocess(blankToUndef, z.string().min(1).optional());
+
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().default(3020),
@@ -50,10 +56,28 @@ export const envSchema = z.object({
   EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(2560),
   RERANK_MODEL: z.string().min(1).default('qwen3.7-text-rerank'),
   WEB_ORIGIN: z.string().url().default('http://localhost:5190'),
+  S3_ENDPOINT: optionalUrl,
+  S3_REGION: optionalNonEmpty,
+  S3_BUCKET: optionalNonEmpty,
+  S3_ACCESS_KEY: optionalNonEmpty,
+  S3_SECRET_KEY: optionalNonEmpty,
+  S3_FORCE_PATH_STYLE: z.preprocess(blankToUndef, boolEnum.optional()),
+  /** Technical ceiling for imported originals (S3 multipart). Default 2 GiB. */
+  IMPORT_MAX_FILE_BYTES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(2 * 1024 * 1024 * 1024),
+  /** OCR pages per batch. Progress is persisted between batches. */
+  OCR_PAGE_BATCH_SIZE: z.coerce.number().int().positive().default(10),
+  /** Rasterization DPI for OCR page images (150–200 recommended). */
+  OCR_RASTER_DPI: z.coerce.number().int().min(72).max(300).default(180),
   WORKER_POLL_MS: z.coerce.number().int().positive().default(1000),
   WORKER_CLAIM_LIMIT: z.coerce.number().int().positive().default(5),
   WORKER_STUCK_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
   JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  /** When true, GET /api/search skips hybrid retrieval and uses PG ILIKE. */
+  INWIT_SEARCH_FALLBACK: boolEnum.default('false'),
 });
 
 export const config = envSchema.parse(process.env);

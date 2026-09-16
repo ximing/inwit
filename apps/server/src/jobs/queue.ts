@@ -159,7 +159,7 @@ export async function cancelPendingDocumentJobs(
     .where(
       and(
         eq(jobs.userId, userId),
-        inArray(jobs.type, ['digest', 'chat']),
+        inArray(jobs.type, ['digest', 'chat', 'selection', 'extract', 'ocr']),
         eq(jobs.status, 'pending'),
         sql`coalesce(${jobs.payload}->>'documentId', ${jobs.payload}->>'captureId') = ${documentId}`,
       ),

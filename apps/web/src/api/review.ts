@@ -1,4 +1,10 @@
-import type { ReviewFeedback, ReviewFeedbackResult, ReviewStats, ReviewToday } from '@inwit/dto';
+import type {
+  ReviewFeedback,
+  ReviewFeedbackResult,
+  ReviewSettings,
+  ReviewStats,
+  ReviewToday,
+} from '@inwit/dto';
 import { request } from './client';
 
 export function getReviewToday(): Promise<ReviewToday> {
@@ -17,4 +23,15 @@ export function submitReviewFeedback(
 
 export function getReviewStats(): Promise<ReviewStats> {
   return request<ReviewStats>('/api/review/stats');
+}
+
+export function getReviewSettings(): Promise<ReviewSettings> {
+  return request<ReviewSettings>('/api/review/settings');
+}
+
+export function updateReviewSettings(settings: ReviewSettings): Promise<ReviewSettings> {
+  return request<ReviewSettings>('/api/review/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
 }

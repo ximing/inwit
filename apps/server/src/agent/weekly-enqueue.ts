@@ -1,4 +1,4 @@
-import type { Job, WeeklyReportLatest } from '@inwit/dto';
+import { WEEKLY_REPORT_TITLE_MARK, type Job, type WeeklyReportLatest } from '@inwit/dto';
 import { and, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getDb, type Database } from '../db/index.js';
 import { cardLinks, cards, documents, jobs, reviewLogs, users, type JobRow } from '../db/schema.js';
@@ -142,7 +142,7 @@ export async function getLatestWeeklyReport(
     if (doc) {
       return toWeeklyReportLatest({
         documentId: doc.id,
-        title: parsed.title || doc.title,
+        title: parsed.title || doc.title || WEEKLY_REPORT_TITLE_MARK,
         weekStart: parsed.weekStart || weekStart,
         weekEnd: parsed.weekEnd || weekStart,
         successRate: parsed.successRate ?? 0,

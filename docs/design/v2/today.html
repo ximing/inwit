@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 首页</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  .today-col { max-width: 800px; margin: 0 auto; padding: 44px 40px 120px; }
+  .today-date { font-size: 13.5px; color: var(--ink-3); }
+  .today-hi { font-family: var(--serif); font-size: 32px; font-weight: 700; margin: 4px 0 26px; }
+
+  /* 捕获 hero */
+  .hero-capture { margin-bottom: 16px; }
+  .hero-capture textarea { min-height: 76px; font-size: 16.5px; }
+
+  /* 行动卡片区 */
+  .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .action-card {
+    border-radius: var(--r-xl); padding: 22px 24px;
+    display: flex; flex-direction: column; gap: 4px;
+    transition: all 0.16s; text-align: left;
+  }
+  .action-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); }
+  .action-review {
+    background: linear-gradient(140deg, #fdf3ec, var(--surface) 70%);
+    border: 1px solid var(--accent-line);
+  }
+  .action-report {
+    background: linear-gradient(140deg, var(--gold-soft), var(--surface) 70%);
+    border: 1px solid var(--gold-line);
+  }
+  .action-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--ink-3); display: flex; align-items: center; gap: 6px; }
+  .action-big { font-family: var(--serif); font-size: 30px; font-weight: 700; margin-top: 8px; }
+  .action-big small { font-size: 14px; font-weight: 500; color: var(--ink-3); }
+  .action-sub { font-size: 12.5px; color: var(--ink-3); }
+  .action-go { margin-top: 14px; display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--accent-deep); }
+  .action-report .action-go { color: var(--gold); }
+
+  /* 统计条 */
+  .stat-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg); padding: 16px 20px 14px;
+  }
+  .stat-num { font-family: var(--serif); font-size: 26px; font-weight: 700; line-height: 1.15; }
+  .stat-num small { font-size: 13px; font-weight: 500; color: var(--ink-3); }
+  .stat-label { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+  .today-sec { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3); margin: 32px 0 10px; display: flex; align-items: center; gap: 10px; }
+  .today-sec .more { margin-left: auto; font-size: 12.5px; font-weight: 500; letter-spacing: 0; color: var(--ink-4); }
+  .today-sec .more:hover { color: var(--accent-deep); }
+
+  /* 动态 */
+  .act { display: flex; gap: 12px; padding: 11px 6px; font-size: 13.5px; align-items: baseline; border-radius: var(--r-sm); }
+  .act:hover { background: var(--surface); }
+  .act-ico {
+    width: 28px; height: 28px; border-radius: 8px; flex: none; align-self: center;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--surface); border: 1px solid var(--line-soft); color: var(--ink-3);
+  }
+  .act-ico svg { width: 14px; height: 14px; }
+  .act-body { flex: 1; min-width: 0; color: var(--ink-2); line-height: 1.55; }
+  .act-body b { color: var(--ink); font-weight: 600; }
+  .act-time { font-size: 11.5px; color: var(--ink-4); flex: none; }
+
+  /* 最近文档（紧凑行） */
+  .recent-row {
+    display: flex; align-items: baseline; gap: 12px;
+    padding: 12px 14px; border-radius: var(--r-md); cursor: pointer;
+    transition: background 0.13s;
+  }
+  .recent-row:hover { background: var(--surface); }
+  .recent-title {
+    font-family: var(--serif); font-size: 15px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;
+  }
+  .recent-meta { font-size: 12px; color: var(--ink-4); flex: none; display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-name">Inwit</div>
+      <div class="brand-tag">扔进去，它来消化</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item is-on" href="today.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        首页
+      </a>
+      <a class="nav-item" href="docs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        文档
+      </a>
+      <a class="nav-item" href="review.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+        复习
+        <span class="nav-badge">7</span>
+      </a>
+      <a class="nav-item" href="topics.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7l10 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        主题
+      </a>
+      <a class="nav-item" href="jobs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        任务
+      </a>
+      <a class="nav-item" href="settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z"/></svg>
+        设置
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <a class="rail-user" href="settings.html"><span class="avatar">R</span><span>regression@inwit.dev</span></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="today-col">
+      <div class="today-date">9月14日 星期日</div>
+      <div class="today-hi">下午好。</div>
+
+      <!-- 捕获 hero -->
+      <div class="capture hero-capture">
+        <textarea rows="2" placeholder="扔一句话进来，或以问号结尾问 AI…"></textarea>
+        <div class="capture-bar">
+          <button class="topic-pick"><span class="dot"></span>机器学习基础<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div class="capture-hint"><span class="kbd">⌘</span><span class="kbd">⏎</span>发送</div>
+          <button class="btn btn-ghost">问 AI</button>
+          <button class="btn btn-primary">扔进去</button>
+        </div>
+      </div>
+
+      <!-- 行动卡片 -->
+      <div class="action-grid">
+        <a class="action-card action-review" href="review.html">
+          <span class="action-kicker">🔥 连续复习 5 天</span>
+          <span class="action-big">7 <small>张待复习 · 约 3 分钟</small></span>
+          <span class="action-sub">现在刷掉，今天的记忆就稳了</span>
+          <span class="action-go">开始复习 →</span>
+        </a>
+        <a class="action-card action-report" href="docs.html">
+          <span class="action-kicker">📖 本周复盘已生成</span>
+          <span class="action-big">80<small>% 成功率</small></span>
+          <span class="action-sub">这周学得很稳</span>
+          <span class="action-go">去看看 →</span>
+        </a>
+      </div>
+
+      <!-- 统计条 -->
+      <div class="stat-strip">
+        <div class="stat"><div class="stat-num">15<small> 张</small></div><div class="stat-label">总卡片</div></div>
+        <div class="stat"><div class="stat-num">12<small> 张</small></div><div class="stat-label">本周新卡</div></div>
+        <div class="stat"><div class="stat-num">7<small> 篇</small></div><div class="stat-label">文档</div></div>
+      </div>
+
+      <!-- 最近动态 -->
+      <div class="today-sec">最近动态<a class="more" href="jobs.html">全部任务 →</a></div>
+      <div class="act">
+        <span class="act-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 2.4-1.2 4.5-3 5.7V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 017-7z"/><path d="M9 22h6"/></svg></span>
+        <div class="act-body"><b>消化完成</b> · 「学习率太大时梯度下降会在最优点附近震荡」提取了 2 张卡</div>
+        <span class="act-time">13:05</span>
+      </div>
+      <div class="act">
+        <span class="act-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V2H6.5A2.5 2.5 0 004 4.5v15z"/><path d="M4 19.5A2.5 2.5 0 006.5 22H20v-5"/></svg></span>
+        <div class="act-body"><b>周报生成</b> · 9/14–9/20 学习复盘</div>
+        <span class="act-time">11:40</span>
+      </div>
+      <div class="act">
+        <span class="act-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8L4 8.8h6.1L12 3z"/></svg></span>
+        <div class="act-body"><b>主题进化</b> · 「机器学习基础」的知识地图已更新</div>
+        <span class="act-time">02:48</span>
+      </div>
+
+      <!-- 最近文档 -->
+      <div class="today-sec">最近文档<a class="more" href="docs.html">全部文档 →</a></div>
+      <a class="recent-row" href="docs.html">
+        <span class="recent-title">9/14–9/20 学习复盘</span>
+        <span class="recent-meta"><span class="tag tag-ai">AI 复盘</span><span>24 分钟前</span></span>
+      </a>
+      <a class="recent-row" href="docs.html">
+        <span class="recent-title">交叉验证入门</span>
+        <span class="recent-meta"><span class="tag tag-topic">机器学习基础</span><span>2 卡 · 3 小时前</span></span>
+      </a>
+      <a class="recent-row" href="docs.html">
+        <span class="recent-title">L1 和 L2 正则化到底啥区别？</span>
+        <span class="recent-meta"><span class="tag tag-ai">AI 回答</span><span>3 小时前</span></span>
+      </a>
+      <a class="recent-row" href="docs.html">
+        <span class="recent-title">梯度消失</span>
+        <span class="recent-meta"><span class="tag tag-topic">机器学习基础</span><span>3 卡 · 3 小时前</span></span>
+      </a>
+    </div>
+  </main>
+</div>
+</body>
+</html>

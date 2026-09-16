@@ -2,47 +2,64 @@
 export const ROUTES = {
   home: '/',
   login: '/login',
+  docs: '/docs',
   review: '/review',
   topics: '/topics',
   topic: '/topics/:id',
+  jobs: '/jobs',
   settings: '/settings',
-  admin: '/admin',
-  editorNew: '/editor/new',
-  editor: '/editor/:id',
-  doc: '/doc/:id',
-  card: '/cards/:id',
-  captures: '/captures',
 } as const;
 
-export function editorPath(id: string): string {
-  return `/editor/${id}`;
+export function docsPath(docId?: string, opts?: { edit?: boolean; anchor?: string }): string {
+  if (!docId && !opts?.edit && !opts?.anchor) return ROUTES.docs;
+  const params = new URLSearchParams();
+  if (docId) params.set('doc', docId);
+  if (opts?.edit) params.set('edit', '1');
+  if (opts?.anchor) params.set('anchor', opts.anchor);
+  const qs = params.toString();
+  return qs ? `${ROUTES.docs}?${qs}` : ROUTES.docs;
 }
 
-export function topicPath(id: string): string {
-  return `/topics/${id}`;
+export function editorPath(id: string): string {
+  return docsPath(id, { edit: true });
+}
+
+export function editorNewPath(topicId?: string | null): string {
+  const params = new URLSearchParams({ edit: '1' });
+  if (topicId) params.set('topicId', topicId);
+  return `${ROUTES.docs}?${params.toString()}`;
+}
+
+export function topicPath(id?: string): string {
+  if (!id) return ROUTES.topics;
+  const params = new URLSearchParams();
+  params.set('topic', id);
+  return `${ROUTES.topics}?${params.toString()}`;
 }
 
 export function docPath(id: string): string {
-  return `/doc/${id}`;
+  return docsPath(id);
 }
 
-export function cardPath(id: string): string {
-  return `/cards/${id}`;
+export function cardPath(cardId: string, documentId?: string | null): string {
+  if (documentId) return docAnchorPath(documentId, cardId);
+  return ROUTES.review;
 }
 
 export function docAnchorPath(docId: string, cardId: string): string {
-  return `${docPath(docId)}?anchor=${encodeURIComponent(cardId)}`;
+  return docsPath(docId, { anchor: cardId });
 }
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];
 
 export const PAGE_LIST: ReadonlyArray<{ path: AppRoute; title: string; auth: boolean }> = [
   { path: ROUTES.login, title: '登录 / 注册', auth: false },
-  { path: ROUTES.home, title: '文档', auth: true },
+  { path: ROUTES.home, title: '首页', auth: true },
+  { path: ROUTES.docs, title: '文档', auth: true },
   { path: ROUTES.review, title: '复习', auth: true },
   { path: ROUTES.topics, title: '主题', auth: true },
+  { path: ROUTES.jobs, title: '任务', auth: true },
   { path: ROUTES.settings, title: '设置', auth: true },
-  { path: ROUTES.admin, title: '任务与用量', auth: true },
 ];
 
 /** Nested <Route path> under Layout (no leading slash). */

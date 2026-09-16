@@ -1,19 +1,44 @@
 import { Service } from '@rabjs/react';
-import type {
-  CardLinksResponse,
-  MapPlacement,
-  ReviewFeedback,
-  ReviewQueueItem,
-  ReviewStats,
-  WeeklyReportLatest,
+import {
+  DEFAULT_REVIEW_SETTINGS,
+  type ReviewFeedback,
+  type ReviewQueueItem,
+  type ReviewSettings,
+  type ReviewStats,
+  type ReviewToday,
 } from '@inwit/dto';
-import { getCardLinks } from '@/api/cards';
 import { errorMessage } from '@/api/client';
-import { getLatestWeeklyReport } from '@/api/reports';
-import { getReviewStats, getReviewToday, submitReviewFeedback } from '@/api/review';
-import { groupCardLinks, uniqueRelatedCount, type RelatedGroup } from '@/lib/card-copy';
+import { getCardImage } from '@/api/cards';
+import { maskCloze, stripCloze } from '@/lib/cloze';
+import {
+  isPresignedStale,
+  livePresignedUrl,
+  shouldRetryPresign,
+  type PresignedUrlEntry,
+} from '@/lib/presign-cache-logic';
+import {
+  getReviewSettings,
+  getReviewStats,
+  getReviewToday,
+  submitReviewFeedback,
+  updateReviewSettings,
+} from '@/api/review';
+import { LayoutService } from '@/shell/layout.service';
+
+const TOAST_MS = 3200;
+
+export function cloneSettings(settings: ReviewSettings): ReviewSettings {
+  return {
+    dailyReviewLimit: settings.dailyReviewLimit,
+    dailyNewLimit: settings.dailyNewLimit,
+    startingEase: settings.startingEase,
+    fuzzyScale: settings.fuzzyScale,
+    learningSteps: [...settings.learningSteps],
+  };
+}
 
 export class ReviewService extends Service {
+  mode: 'hub' | 'session' = 'hub';
   items: ReviewQueueItem[] = [];
   reviewedToday = 0;
   total = 0;
@@ -21,135 +46,161 @@ export class ReviewService extends Service {
   ready = false;
   error: string | null = null;
   stats: ReviewStats | null = null;
-  weeklyReport: WeeklyReportLatest | null = null;
+  settings: ReviewSettings = cloneSettings(DEFAULT_REVIEW_SETTINGS);
   lastFeedback: ReviewFeedback | null = null;
-  links: CardLinksResponse | null = null;
-  linksCardId: string | null = null;
-  sheetOpen = false;
+  toast: string | null = null;
+  toastTimer: ReturnType<typeof setTimeout> | null = null;
+  cardImageUrls: Record<string, PresignedUrlEntry> = {};
+
+  get layout(): LayoutService {
+    return this.resolve(LayoutService);
+  }
+
+  private refreshDueBadge(): void {
+    try {
+      void this.layout.refreshDue();
+    } catch {
+      // Rail badge is optional if this page is rendered without Layout.
+    }
+  }
 
   get current(): ReviewQueueItem | null {
     return this.items[0] ?? null;
   }
 
-  get done(): boolean {
-    return this.items.length === 0 && this.total > 0;
+  get dueCount(): number {
+    return Math.max(0, this.total - this.reviewedToday);
   }
 
-  get empty(): boolean {
-    return this.items.length === 0 && this.total === 0;
+  get cardOrdinal(): number {
+    if (this.total <= 0) return 0;
+    if (this.items.length === 0) return this.total;
+    return Math.min(this.total, this.reviewedToday + 1);
   }
 
   get progressPct(): number {
     if (this.total <= 0) return 0;
-    return Math.min(100, (this.reviewedToday / this.total) * 100);
-  }
-
-  get relatedCount(): number {
-    if (!this.links) return 0;
-    return uniqueRelatedCount(this.links);
-  }
-
-  get relatedGroups(): RelatedGroup[] {
-    if (!this.links) return [];
-    return groupCardLinks(this.links);
-  }
-
-  get mapPlacement(): MapPlacement | null {
-    return this.current?.mapPlacement ?? null;
+    return Math.min(100, (this.cardOrdinal / this.total) * 100);
   }
 
   get question(): string {
     const item = this.current;
     if (!item) return '';
     const first = item.card.questions[0];
-    return first?.question ?? item.card.concept;
+    return maskCloze(first?.question ?? item.card.concept);
   }
 
   get answer(): string {
     const item = this.current;
     if (!item) return '';
     const first = item.card.questions[0];
-    if (first) return first.answer;
+    if (first) return stripCloze(first.answer);
     const parts = [item.card.example, item.card.confusionPoint].filter((part) => part.length > 0);
     return parts.length > 0 ? parts.join('\n\n') : item.card.concept;
   }
 
+  get crumb(): string | null {
+    const placement = this.current?.mapPlacement;
+    if (!placement) return null;
+    return `${placement.topicTitle} · ${placement.nodePath}`;
+  }
+
+  get currentImageUrl(): string | null {
+    const id = this.current?.card.id;
+    if (!id || !this.current?.card.hasImage) return null;
+    return livePresignedUrl(this.cardImageUrls[id]);
+  }
+
+  async loadCardImage(id: string, force = false): Promise<string | null> {
+    const existing = this.cardImageUrls[id];
+    if (!force && existing && !isPresignedStale(existing)) return existing.url;
+    try {
+      const { url } = await getCardImage(id);
+      this.cardImageUrls = { ...this.cardImageUrls, [id]: { url, fetchedAt: Date.now() } };
+      return url;
+    } catch {
+      return null;
+    }
+  }
+
+  retryCardImage(id: string): void {
+    if (!shouldRetryPresign(this.cardImageUrls[id])) return;
+    void this.loadCardImage(id, true);
+  }
+
+  get tomorrowDue(): number {
+    return this.stats?.forecast[1]?.count ?? 0;
+  }
+
+  get grading(): boolean {
+    return this.$model.grade.loading;
+  }
+
+  showToast(message: string): void {
+    this.toast = message;
+    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      this.toast = null;
+      this.toastTimer = null;
+    }, TOAST_MS);
+  }
+
   flip(): void {
-    if (!this.current) return;
+    if (!this.current || this.grading) return;
     this.flipped = !this.flipped;
   }
 
-  openSheet(): void {
-    if (this.relatedCount === 0) return;
-    this.sheetOpen = true;
-  }
-
-  closeSheet(): void {
-    this.sheetOpen = false;
+  applyToday(today: ReviewToday): void {
+    this.items = today.items;
+    this.reviewedToday = today.reviewedToday;
+    this.total = today.total;
   }
 
   async load(): Promise<void> {
-    this.ready = false;
     this.error = null;
     this.flipped = false;
-    this.stats = null;
-    this.weeklyReport = null;
     this.lastFeedback = null;
-    this.links = null;
-    this.linksCardId = null;
-    this.sheetOpen = false;
     try {
-      const today = await getReviewToday();
-      this.items = today.items;
-      this.reviewedToday = today.reviewedToday;
-      this.total = today.total;
-      if (this.items.length === 0) {
-        this.stats = await getReviewStats();
-        if (this.total > 0) await this.loadWeeklyReport();
-      } else {
-        void this.loadLinksForCurrent();
-      }
+      const [today, stats, settings] = await Promise.all([
+        getReviewToday(),
+        getReviewStats(),
+        getReviewSettings(),
+      ]);
+      this.applyToday(today);
+      this.stats = stats;
+      this.settings = cloneSettings(settings);
+      this.refreshDueBadge();
     } catch (err) {
-      this.error = errorMessage(err, '今日队列拿不下来');
+      this.error = errorMessage(err, '复习中心加载失败');
     } finally {
       this.ready = true;
     }
   }
 
-  async loadWeeklyReport(): Promise<void> {
+  async startSession(): Promise<void> {
+    this.error = null;
+    this.flipped = false;
+    this.lastFeedback = null;
     try {
-      const result = await getLatestWeeklyReport();
-      this.weeklyReport = result.report;
-    } catch {
-      this.weeklyReport = null;
+      const today = await getReviewToday();
+      this.applyToday(today);
+      this.mode = 'session';
+      this.refreshDueBadge();
+    } catch (err) {
+      this.error = errorMessage(err, '今日队列拿不下来');
     }
   }
 
-  async loadLinksForCurrent(): Promise<void> {
-    const item = this.current;
-    if (!item) {
-      this.links = null;
-      this.linksCardId = null;
-      this.sheetOpen = false;
-      return;
-    }
-    const cardId = item.card.id;
-    if (this.linksCardId === cardId && this.links) return;
-    this.linksCardId = cardId;
-    this.sheetOpen = false;
-    try {
-      const links = await getCardLinks(cardId);
-      if (this.current?.card.id !== cardId) return;
-      this.links = links;
-    } catch {
-      if (this.current?.card.id !== cardId) return;
-      this.links = { outgoing: [], incoming: [] };
-    }
+  async exitSession(): Promise<void> {
+    this.mode = 'hub';
+    this.flipped = false;
+    this.lastFeedback = null;
+    await this.load();
   }
 
   async grade(feedback: ReviewFeedback): Promise<void> {
     const item = this.current;
-    if (!item || this.$model.grade.loading) return;
+    if (!item || this.grading || !this.flipped) return;
     this.error = null;
     this.lastFeedback = feedback;
     try {
@@ -157,18 +208,52 @@ export class ReviewService extends Service {
       this.reviewedToday += 1;
       this.items = this.items.slice(1);
       this.flipped = false;
-      this.sheetOpen = false;
-      this.links = null;
-      this.linksCardId = null;
+      this.lastFeedback = null;
+      this.refreshDueBadge();
       if (this.items.length === 0) {
-        this.stats = await getReviewStats();
-        await this.loadWeeklyReport();
-      } else {
-        void this.loadLinksForCurrent();
+        try {
+          this.stats = await getReviewStats();
+        } catch {
+          // Complete copy can live without a fresh forecast.
+        }
       }
     } catch (err) {
       this.error = errorMessage(err, '这次反馈没记下，再点一次');
       this.lastFeedback = null;
     }
+  }
+
+  async saveSettings(input: ReviewSettings): Promise<boolean> {
+    this.error = null;
+    try {
+      const saved = await updateReviewSettings(input);
+      this.settings = cloneSettings(saved);
+      this.showToast('设置已保存');
+      return true;
+    } catch (err) {
+      this.error = errorMessage(err, '设置保存失败');
+      return false;
+    }
+  }
+
+  async restoreDefaults(): Promise<ReviewSettings | null> {
+    this.error = null;
+    try {
+      const saved = await updateReviewSettings(cloneSettings(DEFAULT_REVIEW_SETTINGS));
+      this.settings = cloneSettings(saved);
+      this.showToast('已恢复默认');
+      return cloneSettings(saved);
+    } catch (err) {
+      this.error = errorMessage(err, '恢复默认失败');
+      return null;
+    }
+  }
+
+  override destroy(): void {
+    if (this.toastTimer !== null) {
+      clearTimeout(this.toastTimer);
+      this.toastTimer = null;
+    }
+    super.destroy();
   }
 }

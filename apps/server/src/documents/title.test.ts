@@ -3,6 +3,7 @@ import {
   agentDocumentMetaLabel,
   cardDetailSchema,
   createDocumentInputSchema,
+  docDisplayTitle,
   documentIdFromJobPayload,
   documentSourceSchema,
   titleFromContent,
@@ -27,7 +28,30 @@ describe('titleFromContent', () => {
   });
 });
 
+describe('docDisplayTitle', () => {
+  it('prefers a non-empty title', () => {
+    expect(docDisplayTitle({ title: '过拟合', description: '讲模型记样本' })).toBe('过拟合');
+  });
+
+  it('falls back to the first description line, capped at 40 characters', () => {
+    expect(docDisplayTitle({ title: null, description: '  \n讲梯度消失。\n更多' })).toBe('讲梯度消失。');
+    expect(docDisplayTitle({ title: '  ', description: 'a'.repeat(50) })).toBe('a'.repeat(40));
+  });
+
+  it('falls back to 未命名文档 when both are empty', () => {
+    expect(docDisplayTitle({ title: null, description: null })).toBe('未命名文档');
+    expect(docDisplayTitle({ title: '', description: '   ' })).toBe('未命名文档');
+  });
+});
+
 describe('document write schemas', () => {
+  it('accepts empty contentMd on create (blank document, no digest)', () => {
+    expect(createDocumentInputSchema.safeParse({ contentMd: '' }).success).toBe(true);
+    expect(createDocumentInputSchema.safeParse({ contentMd: '   ' }).success).toBe(true);
+    const parsed = createDocumentInputSchema.parse({ contentMd: '   ' });
+    expect(parsed.contentMd).toBe('');
+  });
+
   it('accepts editor source and rejects chat/agent on POST /documents', () => {
     expect(createDocumentInputSchema.safeParse({ contentMd: '笔记', source: 'editor' }).success).toBe(
       true,
@@ -38,6 +62,9 @@ describe('document write schemas', () => {
     expect(createDocumentInputSchema.safeParse({ contentMd: '笔记', source: 'agent' }).success).toBe(
       false,
     );
+    expect(createDocumentInputSchema.safeParse({ contentMd: '笔记', source: 'import' }).success).toBe(
+      false,
+    );
   });
 
   it('includes agent in the document source enum', () => {
@@ -45,16 +72,30 @@ describe('document write schemas', () => {
     expect(documentSourceSchema.options).toContain('agent');
   });
 
+  it('includes import in the document source enum', () => {
+    expect(documentSourceSchema.safeParse('import').success).toBe(true);
+    expect(documentSourceSchema.options).toContain('import');
+  });
+
   it('labels weekly recap vs contrast agent documents', () => {
     expect(agentDocumentMetaLabel('agent', '9/14–9/20 学习复盘')).toBe('AI 复盘');
     expect(agentDocumentMetaLabel('agent', '对比专题：偏差 vs 方差')).toBe('对比专题');
     expect(agentDocumentMetaLabel('editor', '入门：正则化')).toBeNull();
+    expect(agentDocumentMetaLabel('agent', null)).toBe('对比专题');
   });
 
-  it('requires title or contentMd on PUT', () => {
+  it('requires title, contentMd, or topicId on PUT', () => {
     expect(updateDocumentInputSchema.safeParse({}).success).toBe(false);
     expect(updateDocumentInputSchema.safeParse({ contentMd: '' }).success).toBe(true);
     expect(updateDocumentInputSchema.safeParse({ title: '过拟合' }).success).toBe(true);
+    expect(updateDocumentInputSchema.safeParse({ title: null }).success).toBe(true);
+    expect(updateDocumentInputSchema.safeParse({ title: '' }).success).toBe(false);
+    expect(updateDocumentInputSchema.safeParse({ title: '   ' }).success).toBe(false);
+    expect(
+      updateDocumentInputSchema.safeParse({ topicId: '11111111-1111-4111-8111-111111111111' })
+        .success,
+    ).toBe(true);
+    expect(updateDocumentInputSchema.safeParse({ topicId: null }).success).toBe(true);
   });
 });
 
@@ -81,6 +122,7 @@ describe('cardDetailSchema', () => {
       source: 'agent',
       anchorText: '梯度在反向传播中逐层变小',
       anchorBlock: '2',
+      hasImage: false,
       createdAt: '2026-09-14T00:00:00.000Z',
       updatedAt: '2026-09-14T00:00:00.000Z',
       questions: [],

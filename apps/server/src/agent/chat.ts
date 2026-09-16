@@ -6,6 +6,7 @@ import { documents, type JobRow } from '../db/schema.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
 import { logLlmUsage } from '../llm/usage.js';
 import { modelResponseError, resolveModelFor } from '../llm/pi.js';
+import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
 import { logger } from '../utils/logger.js';
 import {
   associationHintForCards,
@@ -15,6 +16,7 @@ import {
 } from './digest.js';
 import { finishExecution, saveExecutionSteps, startExecution, summarizeValue } from './executions.js';
 import { extractAssistantText, isAssistantMessage } from './messages.js';
+import { ensureDocumentMeta } from './doc-meta.js';
 import { CHAT_SYSTEM_PROMPT, chatUserPrompt } from './prompts.js';
 import { runWithAgentContext } from './run-context.js';
 import { chatTools, type DigestSession } from './tools.js';
@@ -214,6 +216,20 @@ export async function processChat(job: JobRow): Promise<void> {
         const hint = await associationHintForCards(job.userId, cardIds);
         const linkN = await countOutgoingLinks(job.userId, cardIds);
         await markChatDocument(documentId, 'digested', answerText, hint);
+        try {
+          await ensureDocumentMeta({
+            userId: job.userId,
+            documentId,
+            executionId,
+            alreadyWritten: session.documentMetaWritten === true,
+          });
+        } catch (err) {
+          logger.warn('chat.meta_failed', {
+            jobId: job.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+        await tryIndexOwnedDocument(job.userId, documentId);
         await finishExecution({
           executionId,
           status: 'done',

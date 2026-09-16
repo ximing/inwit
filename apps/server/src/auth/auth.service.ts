@@ -5,14 +5,27 @@ import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
 import { users, type UserRow } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { isStorageConfigured, presignGet } from '../storage/client.js';
 import { setAccessCookie, setRefreshCookie } from './cookies.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { signAccessToken, signRefreshToken } from './token.js';
 
-export function toPublicUser(row: UserRow): User {
+async function avatarUrlFor(key: string | null): Promise<string | null> {
+  if (!key || !isStorageConfigured()) return null;
+  try {
+    return await presignGet(key);
+  } catch {
+    // Login / me must not fail if signing is unavailable.
+    return null;
+  }
+}
+
+export async function toPublicUser(row: UserRow): Promise<User> {
   return {
     id: row.id,
     email: row.email,
+    displayName: row.displayName ?? null,
+    avatarUrl: await avatarUrlFor(row.avatarKey ?? null),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -29,8 +42,8 @@ export function issueAuthCookies(reply: FastifyReply, userId: string): void {
   setRefreshCookie(reply, signRefreshToken(userId));
 }
 
-function authResponse(row: UserRow): AuthResponse {
-  return { user: toPublicUser(row) };
+async function authResponse(row: UserRow): Promise<AuthResponse> {
+  return { user: await toPublicUser(row) };
 }
 
 export async function registerUser(input: RegisterInput, reply: FastifyReply): Promise<AuthResponse> {

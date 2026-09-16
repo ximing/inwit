@@ -8,21 +8,34 @@ export interface MeiliClientOptions {
 
 export type MeiliFilter = string | Array<string | string[]>;
 
+export type MeiliIndexSettings = {
+  filterableAttributes: readonly string[];
+  searchableAttributes: readonly string[];
+  localizedAttributes: readonly { attributePatterns: readonly string[]; locales: readonly string[] }[];
+};
+
 export interface MeiliClient {
-  ensureIndex(uid: string): Promise<void>;
+  ensureIndex(uid: string, settings?: MeiliIndexSettings): Promise<void>;
   upsertDocuments(uid: string, docs: Record<string, unknown>[]): Promise<void>;
   deleteDocuments(uid: string, ids: (string | number)[]): Promise<void>;
+  listIds(uid: string): Promise<string[]>;
   search(
     uid: string,
     query: { q: string; filter?: MeiliFilter; limit?: number },
   ): Promise<Record<string, unknown>[]>;
 }
 
-const INDEX_SETTINGS = {
+export const CARD_INDEX_SETTINGS: MeiliIndexSettings = {
   filterableAttributes: ['user_id', 'card_id', 'tags', 'id'],
   searchableAttributes: ['concept', 'example', 'confusion_point', 'tags', 'text'],
   localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
-} as const;
+};
+
+export const DOCS_INDEX_SETTINGS: MeiliIndexSettings = {
+  filterableAttributes: ['user_id', 'doc_id', 'id'],
+  searchableAttributes: ['title', 'description', 'content_md', 'text'],
+  localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
+};
 
 const TASK_TIMEOUT_MS = 30_000;
 
@@ -87,7 +100,7 @@ export function createMeiliClient(options: MeiliClientOptions): MeiliClient {
   }
 
   return {
-    async ensureIndex(uid) {
+    async ensureIndex(uid, settings = CARD_INDEX_SETTINGS) {
       const existing = await call('GET', `/indexes/${uid}`);
       if (existing.status === 404) {
         await submitAndWait('POST', '/indexes', 'meili create index', { uid, primaryKey: 'id' });
@@ -98,7 +111,7 @@ export function createMeiliClient(options: MeiliClientOptions): MeiliClient {
           await submitAndWait('PATCH', `/indexes/${uid}`, 'meili set primary key', { primaryKey: 'id' });
         }
       }
-      await submitAndWait('PATCH', `/indexes/${uid}/settings`, 'meili settings', INDEX_SETTINGS);
+      await submitAndWait('PATCH', `/indexes/${uid}/settings`, 'meili settings', settings);
     },
 
     async upsertDocuments(uid, docs) {
@@ -120,6 +133,30 @@ export function createMeiliClient(options: MeiliClientOptions): MeiliClient {
         'meili delete documents',
         { filter: `id IN [${quoted}]` },
       );
+    },
+
+    async listIds(uid) {
+      const ids: string[] = [];
+      let offset = 0;
+      const limit = 1000;
+      for (;;) {
+        const res = await call(
+          'GET',
+          `/indexes/${uid}/documents?limit=${String(limit)}&offset=${String(offset)}&fields=id`,
+        );
+        ensure2xx(res, 'meili list documents');
+        const results = Array.isArray((res.json as { results?: unknown }).results)
+          ? ((res.json as { results: unknown[] }).results)
+          : [];
+        for (const item of results) {
+          if (typeof item === 'object' && item !== null && 'id' in item) {
+            ids.push(String((item as { id: unknown }).id));
+          }
+        }
+        if (results.length < limit) break;
+        offset += limit;
+      }
+      return ids;
     },
 
     async search(uid, query) {

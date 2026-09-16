@@ -92,6 +92,20 @@ Qdrant 语义 ∪ Meili 关键词 → RRF → 百炼 rerank。消化 Agent 是 p
 
 见 `docs/tasks/t23-report.md`。`jobs(type=weekly_report)`：worker 启动/每小时扫描，本周（周一起）还没有 done/pending 且本周有学习活动则入队；也可 `POST /api/reports/weekly/generate`。pi Agent 用 SQL 统计写一篇「M/D–M/D 学习复盘」（`source=agent`）并记 mastery memory。首页 `--anchor` 提示条跳进文档；阅读页「AI 复盘」徽标；建议重学带 `/cards/:id` 链接；复习完成态「本周复盘 →」。
 
+## 2026-09-14 UI/UX 大重构（rewrite T1–T8）
+
+范围：路由收敛、复习设置/统计、任务队列接口、设计系统重写。设计稿在 `docs/design/v2/`。
+
+- **复习设置 / 统计**（T1）：`users.review_settings` jsonb；`GET/PUT /api/review/settings`（无记录返回默认：每日上限 20、新卡 5、ease 2.5、fuzzyScale 1.2、learningSteps `[1,3,6]`）。非法 body 走统一校验，`400 VALIDATION_ERROR`。SM-2 按用户设置参数化；今日队列尊重每日/新卡上限，`ReviewToday.truncated` 记被顺延张数。`GET /api/review/stats` 在 `last7Days` / `overdueCount` 之上扩展 `streak`、`totalCards`、`masteredCount`、`retention7d`、`reviews7d`、`daily`、`forecast`。
+- **任务队列接口**（T2）：`GET /api/jobs/queue`（running / pending / counts）、`GET /api/jobs/usage`（近 7 天 daily + byType + total）。`Job` 增加人类可读 `summary` / `description`；queue 条目另带 `startedElapsedSec` / `scheduledFor`。原 `GET /api/jobs`、retry、cancel 仍在。
+- **路由收敛 + 设计系统**（T3）：rail 六项——首页 `/`、文档 `/docs`、复习 `/review`、主题 `/topics`、任务 `/jobs`、设置 `/settings`。`styles.css` 按 v2 tokens 重写，lucide-react 图标。旧路由重定向：`/doc/:id`→`/docs?doc=`，`/editor`→`/docs?edit=1`，`/card` `/cards`→`/review`，`/admin` `/captures`→`/jobs`。
+- **前端换皮**（T4–T7）：Today / Docs 工作台 / 复习中心 / 主题 / 任务页 / 设置按 mockup 落地。任务页走 queue + usage，不再挂 `/admin`。
+- **收尾**（T8）：`scripts/smoke-t21.sh` 19/19、`smoke-t22.sh` 22/22、`smoke-t23.sh` 22/22（无残留 worker 时 `pgrep` 在 pipefail 下会误退出，已补 `|| true`）；新增 `scripts/smoke-t24.sh` 覆盖 settings / stats / queue / usage。`docs/regression-v0.md`、README 路由表同步。
+
+## T24 PDF 原生预览 + 批注 + 扫描版 OCR
+
+见 `docs/tasks/t24-report.md`。一份文档两种视图：`contentMd` 仍是 digest / 检索 / 锚点真相，PDF 原件作 S3 展示附件。导入改 S3 分片直传（5MB/片，天花板 2GB）；`extract` / `ocr` 异步 job，扫描版走独立 `ocr_configs` + qwen-vl-ocr 逐页 Chat API（pdfjs-dist + @napi-rs/canvas 拆页）。阅读页 EmbedPDF v2.15.0 pin，自有批注格式经 `annotation-adapter.ts` 隔离；PDF 强制预览以保护页锚点。框选转卡走同步 `POST /api/cards`（`imageKey`），不走 selection job。回归修了三件事：vite `?url` 根相对路径在 blob worker 里 fetch 失败、unpdf 污染 `globalThis.pdfjsWorker` 与 pdfjs-dist 冲突、CDP `pointercancel` 不触发 `endSelection`（另有 zoom 0 尺寸闸死 viewport）。截图 `docs/screenshots/t24-*.png`。
+
 ## T21–T23 一句话
 
 进化 Agent 闭环收尾：反馈写 Memory + 换讲法/拆卡（T21），混淆对对比专题（T22），周报复盘文档 + 首页提示条（T23）。

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 设置</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  .settings-layout { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 40px; max-width: 880px; margin: 0 auto; padding: 36px 40px 120px; }
+  .settings-nav { position: sticky; top: 36px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
+  .settings-nav a {
+    padding: 8px 12px; border-radius: var(--r-sm); font-size: 13.5px; color: var(--ink-2);
+  }
+  .settings-nav a:hover { background: var(--bg-sunken); }
+  .settings-nav a.is-on { background: var(--accent-soft); color: var(--accent-deep); font-weight: 600; }
+
+  .section { margin-bottom: 40px; }
+  .section-title { font-size: 16px; font-weight: 700; font-family: var(--serif); margin-bottom: 4px; }
+  .section-lede { font-size: 13px; color: var(--ink-3); margin-bottom: 16px; }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    padding: 20px 22px;
+  }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--ink-2); margin-bottom: 6px; font-weight: 500; }
+  .field input, .field select {
+    width: 100%; height: 38px; padding: 0 12px;
+    border: 1px solid var(--line); border-radius: var(--r-sm);
+    background: var(--surface-2); font-size: 14px; outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); background: var(--surface); }
+  .theme-opts { display: flex; gap: 10px; }
+  .theme-opt {
+    flex: 1; border: 1.5px solid var(--line); border-radius: var(--r-md);
+    padding: 12px; cursor: pointer; background: var(--surface); transition: all 0.15s;
+  }
+  .theme-opt.is-on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .theme-swatch { height: 44px; border-radius: 8px; margin-bottom: 8px; border: 1px solid var(--line); }
+  .theme-opt span { font-size: 13px; font-weight: 500; }
+
+  .jobs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .jobs-table th {
+    text-align: left; font-weight: 500; color: var(--ink-4); font-size: 12px;
+    padding: 0 12px 10px; border-bottom: 1px solid var(--line-soft);
+  }
+  .jobs-table td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); }
+  .jobs-table tr:last-child td { border-bottom: none; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-name">Inwit</div>
+      <div class="brand-tag">扔进去，它来消化</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        首页
+      </a>
+      <a class="nav-item" href="docs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        文档
+      </a>
+      <a class="nav-item" href="review.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+        复习
+        <span class="nav-badge">7</span>
+      </a>
+      <a class="nav-item" href="topics.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7l10 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        主题
+      </a>
+      <a class="nav-item" href="jobs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        任务
+      </a>
+      <a class="nav-item is-on" href="settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z"/></svg>
+        设置
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <a class="rail-user" href="settings.html"><span class="avatar">R</span><span>regression@inwit.dev</span></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="settings-layout">
+      <nav class="settings-nav">
+        <a class="is-on" href="#">外观</a>
+        <a href="#models">模型配置</a>
+      </nav>
+
+      <div>
+        <div class="section">
+          <div class="section-title">外观</div>
+          <div class="section-lede">浅色是白日书桌，深色是灯下夜读。</div>
+          <div class="theme-opts">
+            <button class="theme-opt is-on"><div class="theme-swatch" style="background:linear-gradient(135deg,#f6f3ec,#fffdf8)"></div><span>浅色</span></button>
+            <button class="theme-opt"><div class="theme-swatch" style="background:linear-gradient(135deg,#1c1915,#26221c)"></div><span>深色</span></button>
+            <button class="theme-opt"><div class="theme-swatch" style="background:linear-gradient(90deg,#f6f3ec 50%,#1c1915 50%)"></div><span>跟随系统</span></button>
+          </div>
+        </div>
+
+        <div class="section" id="models">
+          <div class="section-title">模型配置</div>
+          <div class="section-lede">自带密钥（BYOK）。完整密钥只在新增时提交一次，列表里只显示掩码。</div>
+          <div class="panel">
+            <div class="field"><label>供应商</label><select><option>通义百炼</option><option>OpenAI</option><option>Anthropic</option></select></div>
+            <div class="field"><label>模型</label><input value="qwen-plus" /></div>
+            <div class="field"><label>API Key</label><input type="password" placeholder="sk-…" /></div>
+            <div class="field"><label>Base URL（可选）</label><input placeholder="https://…" /></div>
+            <button class="btn btn-primary">新增配置</button>
+          </div>
+          <p style="font-size:13px; color:var(--ink-4); margin-top:12px;">还没有自己的模型，现在会走系统通义 —— 想换的话在上面加一条。</p>
+        </div>
+
+</div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

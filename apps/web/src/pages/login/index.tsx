@@ -1,5 +1,6 @@
 import { bindServices, observer, useService } from '@rabjs/react';
-import { Navigate, useLocation } from 'react-router';
+import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { ROUTES } from '@/routes';
 import { AuthService } from '@/services/auth.service';
 import { LoginService } from './login.service';
@@ -8,16 +9,27 @@ const LoginContent = observer(function LoginContent() {
   const auth = useService(AuthService);
   const form = useService(LoginService);
   const location = useLocation();
-  const from =
+  const rawFrom =
     location.state &&
     typeof location.state === 'object' &&
     'from' in location.state &&
     typeof location.state.from === 'string'
       ? location.state.from
       : ROUTES.home;
+  const from = rawFrom === ROUTES.login ? ROUTES.home : rawFrom;
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!auth.user) return;
+    navigate(from, { replace: true });
+  }, [auth.user, from, navigate]);
 
   if (auth.user) {
-    return <Navigate to={from} replace />;
+    return (
+      <div className="splash">
+        <p className="brand-mark">Inwit</p>
+      </div>
+    );
   }
 
   return (
@@ -84,7 +96,7 @@ const LoginContent = observer(function LoginContent() {
               {form.error}
             </p>
           ) : null}
-          <button type="submit" className="btn-primary" disabled={!form.canSubmit}>
+          <button type="submit" className="btn btn-primary" disabled={!form.canSubmit}>
             {form.$model.submit.loading ? '请稍等…' : form.mode === 'login' ? '登录' : '注册并进入'}
           </button>
         </form>

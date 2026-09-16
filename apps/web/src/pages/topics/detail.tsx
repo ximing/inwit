@@ -1,133 +1,15 @@
-import { bindServices, observer, useService } from '@rabjs/react';
+import { observer, useService } from '@rabjs/react';
+import { docDisplayTitle, type MapNodeStatus, type MapTreeNode } from '@inwit/dto';
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
-import { Link, useParams } from 'react-router';
-import type { MapNodeStatus, MapTreeNode } from '@inwit/dto';
+import { Link } from 'react-router';
 import { DocRow } from '@/components/doc-row';
-import { cardPath, docPath, ROUTES } from '@/routes';
-import { chapterMeta, TopicService } from './topic.service';
+import { cardPath, docPath } from '@/routes';
+import { chapterMeta, TopicsService } from './topics.service';
 
-const TopicDetailContent = observer(function TopicDetailContent() {
-  const service = useService(TopicService);
-  const { id } = useParams();
-
-  useEffect(() => {
-    if (id) void service.load(id);
-    return () => service.stopPolling();
-  }, [id, service]);
-
-  useEffect(() => {
-    if (!service.drawerOpen) return;
-    const onDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest('.card-drawer')) return;
-      if (target.closest('.map-concept')) return;
-      service.closeDrawer();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') service.closeDrawer();
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [service, service.drawerOpen]);
-
-  const topic = service.topic;
-  const archived = topic?.status === 'archived';
-  const summary = service.summary;
-
-  return (
-    <section className={`page-topic${service.drawerOpen ? ' is-drawer-open' : ''}`}>
-      {service.$model.load.loading && !topic ? <p className="empty">打开主题…</p> : null}
-
-      {service.error ? (
-        <p className="banner-error" role="alert">
-          {service.error} <Link to={ROUTES.topics}>回主题列表</Link>
-        </p>
-      ) : null}
-
-      {topic ? (
-        <>
-          <header className="topic-head">
-            <div className="topic-head-row">
-              <h1>{topic.title}</h1>
-              <div className="topic-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  disabled={archived || service.jobRunning}
-                  onClick={() => void service.organize()}
-                >
-                  {service.organizing ? (
-                    <>
-                      <span className="spin" aria-hidden="true" />
-                      整理中…
-                    </>
-                  ) : (
-                    '整理地图'
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  disabled={archived || service.busyArchive}
-                  onClick={() => void service.archive()}
-                >
-                  {service.busyArchive ? '归档中…' : archived ? '已归档' : '归档'}
-                </button>
-              </div>
-            </div>
-            <p className="topic-goal">目标：{topic.goal ?? '还没写学习目标'}</p>
-            <div
-              className="coverage-track"
-              role="progressbar"
-              aria-label="覆盖率"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={service.coveragePct}
-            >
-              <div className="coverage-bar" style={{ width: `${String(service.coveragePct)}%` }} />
-            </div>
-            <p className="meta topic-stats">
-              {`已覆盖 ${String(service.coveredCount)}/${String(summary?.totalNodes ?? 0)} 概念 · ${String(summary?.cardCount ?? 0)} 张卡 · 掌握 ${String(summary?.masteryPct ?? 0)}%`}
-            </p>
-          </header>
-
-          <div className="map-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={service.tab === 'map'}
-              className={service.tab === 'map' ? 'is-on' : undefined}
-              onClick={() => service.setTab('map')}
-            >
-              地图
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={service.tab === 'feed'}
-              className={service.tab === 'feed' ? 'is-on' : undefined}
-              onClick={() => service.setTab('feed')}
-            >
-              资料流
-            </button>
-          </div>
-
-          {service.tab === 'map' ? <MapTab /> : <FeedTab />}
-        </>
-      ) : null}
-
-      <NodeDrawer />
-    </section>
-  );
-});
-
-const MapTab = observer(function MapTab() {
-  const service = useService(TopicService);
+export const MapTab = observer(function MapTab() {
+  const service = useService(TopicsService);
+  const archived = service.topic?.status === 'archived';
 
   if (service.emptyMap) {
     return (
@@ -135,13 +17,13 @@ const MapTab = observer(function MapTab() {
         <p className="empty">{service.organizing ? '正在长出地图…' : '还没有地图'}</p>
         <button
           type="button"
-          className="btn-primary"
-          disabled={service.topic?.status === 'archived' || service.jobRunning}
+          className="btn btn-primary"
+          disabled={archived || service.jobRunning}
           onClick={() => void service.organize()}
         >
           {service.organizing ? (
             <>
-              <span className="spin" aria-hidden="true" />
+              <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
               整理中…
             </>
           ) : (
@@ -153,19 +35,41 @@ const MapTab = observer(function MapTab() {
   }
 
   return (
-    <div className="map-tree">
-      {service.tree.map((node) => (
-        <MapBranch key={node.id} node={node} depth={0} />
-      ))}
+    <div className="map-pane">
+      <div className="map-toolbar">
+        <p className="map-coverage">
+          {`已覆盖 ${String(service.coveredCount)}/${String(service.summary?.totalNodes ?? 0)} 概念`}
+        </p>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={archived || service.jobRunning}
+          onClick={() => void service.organize()}
+        >
+          {service.organizing ? (
+            <>
+              <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+              整理中…
+            </>
+          ) : (
+            '整理地图'
+          )}
+        </button>
+      </div>
+      <div className="map-tree">
+        {service.tree.map((node) => (
+          <MapBranch key={node.id} node={node} depth={0} />
+        ))}
+      </div>
     </div>
   );
 });
 
-const FeedTab = observer(function FeedTab() {
-  const service = useService(TopicService);
+export const FeedTab = observer(function FeedTab() {
+  const service = useService(TopicsService);
 
   if (service.documents.length === 0) {
-    return <p className="empty">这个主题还没有资料。回文档页扔一点进来。</p>;
+    return <p className="empty compact">这个主题还没有资料。到「文档」里扔一点进来。</p>;
   }
 
   return (
@@ -178,7 +82,7 @@ const FeedTab = observer(function FeedTab() {
       {service.hasMoreDocs ? (
         <button
           type="button"
-          className="btn-secondary load-more"
+          className="btn btn-secondary load-more"
           disabled={service.$model.loadMoreDocs.loading}
           onClick={() => void service.loadMoreDocs()}
         >
@@ -196,7 +100,7 @@ const MapBranch = observer(function MapBranch({
   node: MapTreeNode;
   depth: number;
 }) {
-  const service = useService(TopicService);
+  const service = useService(TopicsService);
   const isChapter = node.children.length > 0;
   const collapsed = service.isCollapsed(node.id);
 
@@ -223,7 +127,7 @@ const ChapterRow = observer(function ChapterRow({
   depth: number;
   collapsed: boolean;
 }) {
-  const service = useService(TopicService);
+  const service = useService(TopicsService);
   return (
     <div className="map-row" style={{ paddingLeft: depth * 20 }}>
       <button
@@ -233,7 +137,11 @@ const ChapterRow = observer(function ChapterRow({
         onClick={() => service.toggleCollapsed(node.id)}
       >
         <span className="map-chevron" aria-hidden="true">
-          {collapsed ? '▸' : '▾'}
+          {collapsed ? (
+            <ChevronRight width={14} height={14} strokeWidth={1.8} />
+          ) : (
+            <ChevronDown width={14} height={14} strokeWidth={1.8} />
+          )}
         </span>
         <span className="map-chapter">{node.title}</span>
         <span className="map-meta">{chapterMeta(node)}</span>
@@ -249,7 +157,7 @@ const ConceptRow = observer(function ConceptRow({
   node: MapTreeNode;
   depth: number;
 }) {
-  const service = useService(TopicService);
+  const service = useService(TopicsService);
   const filling = service.fillingNodeId === node.id;
   const uncovered = node.status === 'uncovered';
   return (
@@ -266,13 +174,13 @@ const ConceptRow = observer(function ConceptRow({
       {uncovered ? (
         <button
           type="button"
-          className="btn-ghost map-fill"
+          className="btn btn-ghost map-fill"
           disabled={service.topic?.status === 'archived' || service.jobRunning}
           onClick={() => void service.fill(node.id)}
         >
           {filling ? (
             <>
-              <span className="spin" aria-hidden="true" />
+              <Loader2 className="icon-spin" width={12} height={12} strokeWidth={1.8} />
               让 AI 补
             </>
           ) : (
@@ -309,11 +217,31 @@ function DocGlyph() {
   );
 }
 
-const NodeDrawer = observer(function NodeDrawer() {
-  const service = useService(TopicService);
+export const NodeDrawer = observer(function NodeDrawer() {
+  const service = useService(TopicsService);
   const open = service.drawerOpen;
   const detail = service.nodeDetail;
   const loading = service.$model.openNode.loading && service.selectedNodeId !== null;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest('.card-drawer')) return;
+      if (target.closest('.map-concept')) return;
+      service.closeDrawer();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') service.closeDrawer();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [service, open]);
 
   return (
     <aside
@@ -326,11 +254,11 @@ const NodeDrawer = observer(function NodeDrawer() {
     >
       <div className="card-drawer-head">
         <p className="doc-answer-kicker">节点</p>
-        <button type="button" className="btn-ghost" onClick={() => service.closeDrawer()}>
+        <button type="button" className="btn btn-ghost" onClick={() => service.closeDrawer()}>
           收起
         </button>
       </div>
-      {loading && !detail ? <p className="empty">打开节点…</p> : null}
+      {loading && !detail ? <p className="empty compact">打开节点…</p> : null}
       {detail ? (
         <div className="node-drawer-body">
           <h2 className="node-drawer-title">{detail.node.title}</h2>
@@ -341,7 +269,10 @@ const NodeDrawer = observer(function NodeDrawer() {
           <ul className="node-card-list">
             {detail.cards.map((card) => (
               <li key={card.id}>
-                <Link to={cardPath(card.id)} className="related-card related-card-link">
+                <Link
+                  to={cardPath(card.id, card.documentId)}
+                  className="related-card related-card-link"
+                >
                   <h4>{card.concept}</h4>
                   {card.tags.length > 0 ? (
                     <ul className="tag-row">
@@ -360,7 +291,7 @@ const NodeDrawer = observer(function NodeDrawer() {
           <ul className="related-sheet-list">
             {detail.documents.map((doc) => (
               <li key={doc.id}>
-                <Link to={docPath(doc.id)}>{doc.title}</Link>
+                <Link to={docPath(doc.id)}>{docDisplayTitle(doc)}</Link>
               </li>
             ))}
           </ul>
@@ -369,5 +300,3 @@ const NodeDrawer = observer(function NodeDrawer() {
     </aside>
   );
 });
-
-export const TopicDetailPage = bindServices(TopicDetailContent, [TopicService]);

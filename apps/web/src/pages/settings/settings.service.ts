@@ -1,6 +1,30 @@
 import { Service } from '@rabjs/react';
-import { LLM_PROVIDERS, type LlmConfig, type LlmProvider, type LlmTestResult } from '@inwit/dto';
-import { errorMessage } from '@/api/client';
+import {
+  ACCESS_TOKEN_MAX_PER_USER,
+  ACCESS_TOKEN_NAME_MAX,
+  AVATAR_MAX_BYTES,
+  LLM_PROVIDERS,
+  OCR_DEFAULT_MODEL,
+  type AccessToken,
+  type AccessTokenLog,
+  type LlmConfig,
+  type LlmProvider,
+  type LlmTestResult,
+  type OcrConfig,
+  type OcrTestResult,
+  type UpdateProfileInput,
+  type UpsertOcrConfigInput,
+} from '@inwit/dto';
+import {
+  confirmAvatar,
+  createAccessToken,
+  listAccessTokenLogs,
+  listAccessTokens,
+  requestAvatarUploadUrl,
+  revealAccessToken,
+  updateMe,
+} from '@/api/auth';
+import { ApiError, errorMessage } from '@/api/client';
 import {
   createLlmConfig,
   deleteLlmConfig,
@@ -8,6 +32,8 @@ import {
   setDefaultLlmConfig,
   testLlmConfig,
 } from '@/api/llm';
+import { getOcrConfig, testOcrConfig, upsertOcrConfig } from '@/api/ocr';
+import { AuthService } from '@/services/auth.service';
 
 export const PROVIDER_LABELS: Record<LlmProvider, string> = {
   openai: 'OpenAI',
@@ -27,6 +53,20 @@ export const PROVIDER_MODELS: Record<LlmProvider, string> = {
 
 export const PROVIDERS = LLM_PROVIDERS;
 
+export type SettingsSection = 'profile' | 'appearance' | 'models' | 'ocr' | 'token';
+export type TokenPane = 'list' | 'logs';
+
+export { ACCESS_TOKEN_MAX_PER_USER, ACCESS_TOKEN_NAME_MAX };
+
+const TOAST_MS = 3200;
+const AVATAR_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+function normalizeAvatarMime(type: string): string | null {
+  const mime = type.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (mime === 'image/jpg') return 'image/jpeg';
+  return AVATAR_MIME.has(mime) ? mime : null;
+}
+
 export class SettingsService extends Service {
   configs: LlmConfig[] = [];
   error: string | null = null;
@@ -39,13 +79,221 @@ export class SettingsService extends Service {
   testingId: string | null = null;
   testResults: Record<string, LlmTestResult> = {};
   busyId: string | null = null;
+  section: SettingsSection = 'profile';
+  displayName = '';
+  email = '';
+  profileError: string | null = null;
+  avatarError: string | null = null;
+  ocrConfig: OcrConfig | null = null;
+  ocrApiKey = '';
+  ocrModel = OCR_DEFAULT_MODEL;
+  ocrBaseUrl = '';
+  ocrFormError: string | null = null;
+  ocrTestResult: OcrTestResult | null = null;
+  tokenPane: TokenPane = 'list';
+  accessTokens: AccessToken[] = [];
+  tokenName = '';
+  accessTokenError: string | null = null;
+  copyingId: string | null = null;
+  accessTokenLogs: AccessTokenLog[] = [];
+  accessTokenLogsTotal = 0;
+  accessTokenLogsPage = 1;
+  accessTokenLogsLimit = 20;
+  accessTokenLogsError: string | null = null;
+  toast: string | null = null;
+  toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  get auth(): AuthService {
+    return this.resolve(AuthService);
+  }
+
+  hydrateProfile(): void {
+    const user = this.auth.user;
+    this.displayName = user?.displayName ?? '';
+    this.email = user?.email ?? '';
+  }
+
+  applyHash(): void {
+    const hash = window.location.hash.replace(/^#/, '');
+    if (hash === 'token-logs') {
+      this.section = 'token';
+      this.tokenPane = 'logs';
+      return;
+    }
+    if (
+      hash === 'models' ||
+      hash === 'appearance' ||
+      hash === 'profile' ||
+      hash === 'ocr' ||
+      hash === 'token'
+    ) {
+      this.section = hash;
+      if (hash === 'token') this.tokenPane = 'list';
+    }
+  }
+
+  setSection(section: SettingsSection): void {
+    this.section = section;
+    const el = document.getElementById(section);
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  setDisplayName(value: string): void {
+    this.displayName = value;
+  }
+
+  setEmail(value: string): void {
+    this.email = value;
+  }
+
+  showToast(message: string): void {
+    this.toast = message;
+    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      this.toast = null;
+      this.toastTimer = null;
+    }, TOAST_MS);
+  }
+
+  override destroy(): void {
+    if (this.toastTimer !== null) {
+      clearTimeout(this.toastTimer);
+      this.toastTimer = null;
+    }
+    super.destroy();
+  }
+
+  async saveProfile(): Promise<void> {
+    this.profileError = null;
+    const displayName = this.displayName.trim();
+    const email = this.email.trim();
+    if (email.length === 0) {
+      this.profileError = '请填写邮箱';
+      return;
+    }
+    const input: UpdateProfileInput = { email };
+    if (displayName.length > 0) input.displayName = displayName;
+    try {
+      const user = await updateMe(input);
+      this.auth.setUser(user);
+      this.displayName = user.displayName ?? '';
+      this.email = user.email;
+      this.showToast('已保存');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        this.profileError = '这个邮箱已被使用';
+        return;
+      }
+      this.profileError = errorMessage(err, '保存失败');
+    }
+  }
+
+  async uploadAvatar(file: File): Promise<void> {
+    this.avatarError = null;
+    if (!file.type.startsWith('image/')) {
+      this.avatarError = '请选择图片文件';
+      return;
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      this.avatarError = '图片不能超过 5MB';
+      return;
+    }
+    const contentType = normalizeAvatarMime(file.type);
+    if (!contentType) {
+      this.avatarError = '请使用 JPEG、PNG 或 WebP 图片';
+      return;
+    }
+    try {
+      const { uploadUrl, key } = await requestAvatarUploadUrl({
+        contentType,
+        sizeBytes: file.size,
+      });
+      const put = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': contentType },
+      });
+      if (!put.ok) {
+        this.avatarError = '头像上传失败';
+        return;
+      }
+      const user = await confirmAvatar({ key });
+      this.auth.setUser(user);
+      this.showToast('头像已更新');
+    } catch (err) {
+      this.avatarError = errorMessage(err, '头像上传失败');
+    }
+  }
 
   async load(): Promise<void> {
     this.error = null;
+    this.hydrateProfile();
     try {
-      this.configs = await listLlmConfigs();
+      const [configs, ocr, tokens] = await Promise.all([
+        listLlmConfigs(),
+        getOcrConfig(),
+        listAccessTokens(),
+      ]);
+      this.configs = configs;
+      this.applyOcrConfig(ocr);
+      this.accessTokens = tokens;
+      if (this.tokenPane === 'logs') void this.loadAccessTokenLogs();
     } catch (err) {
       this.error = errorMessage(err, '加载模型配置失败');
+    }
+  }
+
+  applyOcrConfig(config: OcrConfig | null): void {
+    this.ocrConfig = config;
+    this.ocrApiKey = '';
+    this.ocrModel = config?.model || OCR_DEFAULT_MODEL;
+    this.ocrBaseUrl = config?.baseUrl ?? '';
+  }
+
+  setOcrApiKey(value: string): void {
+    this.ocrApiKey = value;
+  }
+
+  setOcrModel(value: string): void {
+    this.ocrModel = value;
+  }
+
+  setOcrBaseUrl(value: string): void {
+    this.ocrBaseUrl = value;
+  }
+
+  async saveOcr(): Promise<void> {
+    this.ocrFormError = null;
+    const apiKey = this.ocrApiKey.trim();
+    const model = this.ocrModel.trim() || OCR_DEFAULT_MODEL;
+    if (!this.ocrConfig && apiKey.length === 0) {
+      this.ocrFormError = '请填写密钥';
+      return;
+    }
+    const baseUrl = this.ocrBaseUrl.trim();
+    const input: UpsertOcrConfigInput = { model };
+    if (apiKey.length > 0) input.apiKey = apiKey;
+    if (baseUrl.length > 0) input.baseUrl = baseUrl;
+    else if (this.ocrConfig) input.baseUrl = null;
+    try {
+      const saved = await upsertOcrConfig(input);
+      this.applyOcrConfig(saved);
+      this.showToast('已保存');
+    } catch (err) {
+      this.ocrFormError = errorMessage(err, '保存失败');
+    }
+  }
+
+  async testOcr(): Promise<void> {
+    this.ocrFormError = null;
+    try {
+      const result = await testOcrConfig();
+      this.ocrTestResult = result;
+      this.showToast(result.ok ? '连通正常' : `不通：${result.error}`);
+    } catch (err) {
+      const message = errorMessage(err, '测试失败');
+      this.ocrTestResult = { ok: false, error: message };
+      this.showToast(message);
     }
   }
 
@@ -126,6 +374,96 @@ export class SettingsService extends Service {
       this.error = errorMessage(err, '设为默认失败');
     } finally {
       this.busyId = null;
+    }
+  }
+
+  setTokenPane(pane: TokenPane): void {
+    this.tokenPane = pane;
+    if (pane === 'logs') void this.loadAccessTokenLogs();
+  }
+
+  setTokenName(value: string): void {
+    this.tokenName = value;
+  }
+
+  get accessTokenLogsHasPrev(): boolean {
+    return this.accessTokenLogsPage > 1;
+  }
+
+  get accessTokenLogsHasNext(): boolean {
+    return this.accessTokenLogsPage * this.accessTokenLogsLimit < this.accessTokenLogsTotal;
+  }
+
+  async generateAccessToken(): Promise<void> {
+    this.accessTokenError = null;
+    const name = this.tokenName.trim();
+    if (name.length === 0) {
+      this.accessTokenError = '请填写令牌名称';
+      return;
+    }
+    if (this.accessTokens.length >= ACCESS_TOKEN_MAX_PER_USER) {
+      this.accessTokenError = `最多 ${ACCESS_TOKEN_MAX_PER_USER} 个接口令牌`;
+      return;
+    }
+    try {
+      const created = await createAccessToken({ name });
+      this.accessTokens = [created, ...this.accessTokens];
+      this.tokenName = '';
+      this.showToast('已生成');
+    } catch (err) {
+      this.accessTokenError = errorMessage(err, '生成失败');
+    }
+  }
+
+  async copyAccessToken(id: string): Promise<void> {
+    this.accessTokenError = null;
+    this.copyingId = id;
+    try {
+      const { token } = await revealAccessToken(id);
+      try {
+        await navigator.clipboard.writeText(token);
+        this.showToast('已复制');
+        return;
+      } catch {
+        // Clipboard API needs a trusted gesture; fall back to a hidden textarea.
+      }
+      const ta = document.createElement('textarea');
+      ta.value = token;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        if (document.execCommand('copy')) {
+          this.showToast('已复制');
+          return;
+        }
+      } finally {
+        ta.remove();
+      }
+      this.accessTokenError = '复制失败，请稍后重试';
+    } catch (err) {
+      this.accessTokenError = errorMessage(err, '复制失败');
+    } finally {
+      this.copyingId = null;
+    }
+  }
+
+  async loadAccessTokenLogs(page = this.accessTokenLogsPage): Promise<void> {
+    this.accessTokenLogsError = null;
+    const nextPage = Math.max(1, page);
+    const offset = (nextPage - 1) * this.accessTokenLogsLimit;
+    try {
+      const result = await listAccessTokenLogs({
+        limit: this.accessTokenLogsLimit,
+        offset,
+      });
+      this.accessTokenLogs = result.items;
+      this.accessTokenLogsTotal = result.total;
+      this.accessTokenLogsPage = nextPage;
+    } catch (err) {
+      this.accessTokenLogsError = errorMessage(err, '加载调用日志失败');
     }
   }
 

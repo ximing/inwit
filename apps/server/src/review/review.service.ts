@@ -29,26 +29,24 @@ import { recalculateMapNodeStatus } from '../maps/map.service.js';
 import { logger } from '../utils/logger.js';
 import { evolveReasonFor } from './evolve-reason.js';
 import { upsertCardMasteryRecent } from './mastery-memory.js';
+import {
+  addLocalDays,
+  aggregateLast7Days,
+  applyReviewQueueLimits,
+  buildDailyDistribution,
+  buildForecast,
+  computeStreak,
+  endOfLocalDay,
+  localDateKey,
+  retentionPercent,
+  startOfLocalDay,
+} from './review-logic.js';
+import { getReviewSettings, updateReviewSettings } from './review-settings.js';
 import { scheduleReview } from './sm2.js';
 import { insertInitialReviewState } from './state-init.js';
 
-export function startOfLocalDay(now: Date): Date {
-  const d = new Date(now.getTime());
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-export function endOfLocalDay(now: Date): Date {
-  const d = new Date(now.getTime());
-  d.setHours(23, 59, 59, 999);
-  return d;
-}
-
-function startOfLocalDayDaysAgo(now: Date, days: number): Date {
-  const d = startOfLocalDay(now);
-  d.setDate(d.getDate() - days);
-  return d;
-}
+export { startOfLocalDay, endOfLocalDay } from './review-logic.js';
+export { getReviewSettings, updateReviewSettings } from './review-settings.js';
 
 export function toPublicReviewState(row: ReviewStateRow): ReviewState {
   return {
@@ -165,29 +163,38 @@ export async function getReviewToday(userId: string, now = new Date()): Promise<
   const dayStart = startOfLocalDay(now);
   const dayEnd = endOfLocalDay(now);
 
-  const dueRows = await getDb()
-    .select({ state: reviewStates, card: cards })
-    .from(reviewStates)
-    .innerJoin(cards, eq(cards.id, reviewStates.cardId))
-    .where(
-      and(eq(reviewStates.userId, userId), eq(cards.userId, userId), lte(reviewStates.dueAt, dayEnd)),
-    )
-    .orderBy(asc(reviewStates.dueAt), asc(reviewStates.cardId));
+  const [dueRows, settings, reviewedRow] = await Promise.all([
+    getDb()
+      .select({ state: reviewStates, card: cards })
+      .from(reviewStates)
+      .innerJoin(cards, eq(cards.id, reviewStates.cardId))
+      .where(
+        and(eq(reviewStates.userId, userId), eq(cards.userId, userId), lte(reviewStates.dueAt, dayEnd)),
+      )
+      .orderBy(asc(reviewStates.dueAt), asc(reviewStates.cardId)),
+    getReviewSettings(userId),
+    getDb()
+      .select({ n: sql<number>`count(distinct ${reviewLogs.cardId})::int` })
+      .from(reviewLogs)
+      .where(
+        and(
+          eq(reviewLogs.userId, userId),
+          gte(reviewLogs.reviewedAt, dayStart),
+          lte(reviewLogs.reviewedAt, dayEnd),
+        ),
+      )
+      .then((rows) => rows[0]),
+  ]);
 
-  const [reviewedRow] = await getDb()
-    .select({ n: sql<number>`count(distinct ${reviewLogs.cardId})::int` })
-    .from(reviewLogs)
-    .where(
-      and(
-        eq(reviewLogs.userId, userId),
-        gte(reviewLogs.reviewedAt, dayStart),
-        lte(reviewLogs.reviewedAt, dayEnd),
-      ),
-    );
+  const limited = applyReviewQueueLimits(
+    dueRows.map((row) => ({ row, reps: row.state.reps })),
+    settings,
+  );
+  const selectedRows = limited.selected.map((item) => item.row);
 
-  const questionsByCard = await loadQuestionsByCard(dueRows.map((row) => row.card.id));
-  const placements = await loadMapPlacements(dueRows.map((row) => row.card));
-  const items: ReviewQueueItem[] = dueRows.map((row) => ({
+  const questionsByCard = await loadQuestionsByCard(selectedRows.map((row) => row.card.id));
+  const placements = await loadMapPlacements(selectedRows.map((row) => row.card));
+  const items: ReviewQueueItem[] = selectedRows.map((row) => ({
     card: toPublicCard(row.card, questionsByCard.get(row.card.id) ?? []),
     reviewState: toPublicReviewState(row.state),
     mapPlacement: placements.get(row.card.id) ?? null,
@@ -198,6 +205,7 @@ export async function getReviewToday(userId: string, now = new Date()): Promise<
     items,
     reviewedToday,
     total: reviewedToday + items.length,
+    truncated: limited.truncated,
   };
 }
 
@@ -222,8 +230,10 @@ export async function submitReviewFeedback(
       .for('update')
       .limit(1);
 
+    const settings = await getReviewSettings(userId);
+
     if (!state) {
-      await insertInitialReviewState(userId, cardId, now, tx);
+      await insertInitialReviewState(userId, cardId, now, tx, undefined, settings.startingEase);
       [state] = await tx
         .select()
         .from(reviewStates)
@@ -242,6 +252,7 @@ export async function submitReviewFeedback(
       },
       feedback,
       now,
+      settings,
     );
 
     const [log] = await tx
@@ -308,37 +319,53 @@ export async function submitReviewFeedback(
 }
 
 export async function getReviewStats(userId: string, now = new Date()): Promise<ReviewStats> {
-  const from = startOfLocalDayDaysAgo(now, 6);
-  const dayEnd = endOfLocalDay(now);
+  const forecastEnd = endOfLocalDay(addLocalDays(now, 6));
 
-  const distRows = await getDb()
-    .select({
-      feedback: reviewLogs.feedback,
-      n: count(),
-    })
-    .from(reviewLogs)
-    .where(
-      and(
-        eq(reviewLogs.userId, userId),
-        gte(reviewLogs.reviewedAt, from),
-        lte(reviewLogs.reviewedAt, dayEnd),
-      ),
-    )
-    .groupBy(reviewLogs.feedback);
+  const [logRows, cardCountRow, stateRows] = await Promise.all([
+    getDb()
+      .select({
+        reviewedAt: reviewLogs.reviewedAt,
+        feedback: reviewLogs.feedback,
+      })
+      .from(reviewLogs)
+      .where(eq(reviewLogs.userId, userId)),
+    getDb()
+      .select({ n: count() })
+      .from(cards)
+      .where(eq(cards.userId, userId))
+      .then((rows) => rows[0]),
+    getDb()
+      .select({
+        intervalDays: reviewStates.intervalDays,
+        dueAt: reviewStates.dueAt,
+      })
+      .from(reviewStates)
+      .innerJoin(cards, and(eq(cards.id, reviewStates.cardId), eq(cards.userId, userId)))
+      .where(eq(reviewStates.userId, userId)),
+  ]);
 
-  const last7Days: ReviewStats['last7Days'] = { forgot: 0, fuzzy: 0, remembered: 0, total: 0 };
-  for (const row of distRows) {
-    last7Days[row.feedback] = Number(row.n);
-    last7Days.total += Number(row.n);
-  }
-
-  const [overdueRow] = await getDb()
-    .select({ n: count() })
-    .from(reviewStates)
-    .where(and(eq(reviewStates.userId, userId), lte(reviewStates.dueAt, dayEnd)));
+  const daily = buildDailyDistribution(logRows, now);
+  const last7Days = aggregateLast7Days(daily);
+  const streak = computeStreak(
+    logRows.map((row) => localDateKey(row.reviewedAt)),
+    now,
+  );
+  const masteredCount = stateRows.filter((row) => row.intervalDays >= 21).length;
+  const overdueCount = stateRows.filter((row) => row.dueAt.getTime() <= endOfLocalDay(now).getTime())
+    .length;
+  const forecastDue = stateRows
+    .map((row) => row.dueAt)
+    .filter((dueAt) => dueAt.getTime() <= forecastEnd.getTime());
 
   return {
     last7Days,
-    overdueCount: Number(overdueRow?.n ?? 0),
+    overdueCount,
+    streak,
+    totalCards: Number(cardCountRow?.n ?? 0),
+    masteredCount,
+    retention7d: retentionPercent(last7Days.remembered, last7Days.total),
+    reviews7d: last7Days.total,
+    daily,
+    forecast: buildForecast(forecastDue, now),
   };
 }

@@ -41,7 +41,9 @@ export function errorMessage(err: unknown, fallback = '请求失败'): string {
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.body !== undefined && !headers.has('Content-Type')) {
+  const form = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  // FormData must keep the browser-generated multipart boundary.
+  if (init.body !== undefined && !headers.has('Content-Type') && !form) {
     headers.set('Content-Type', 'application/json');
   }
 

@@ -7,9 +7,27 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
     "preview": "vite preview --port 5190 --strictPort"
   },
   "dependencies": {
+    "@embedpdf/core": "2.15.0",
+    "@embedpdf/engines": "2.15.0",
+    "@embedpdf/models": "2.15.0",
+    "@embedpdf/pdfium": "2.15.0",
+    "@embedpdf/plugin-annotation": "2.15.0",
+    "@embedpdf/plugin-capture": "2.15.0",
+    "@embedpdf/plugin-document-manager": "2.15.0",
+    "@embedpdf/plugin-history": "2.15.0",
+    "@embedpdf/plugin-interaction-manager": "2.15.0",
+    "@embedpdf/plugin-render": "2.15.0",
+    "@embedpdf/plugin-rotate": "2.15.0",
+    "@embedpdf/plugin-scroll": "2.15.0",
+    "@embedpdf/plugin-search": "2.15.0",
+    "@embedpdf/plugin-selection": "2.15.0",
+    "@embedpdf/plugin-thumbnail": "2.15.0",
+    "@embedpdf/plugin-viewport": "2.15.0",
+    "@embedpdf/plugin-zoom": "2.15.0",
     "@inwit/dto": "workspace:*",
     "@rabjs/react": "^9.4.0",
     "@tiptap/core": "^3.31.3",
@@ -19,6 +37,7 @@
     "@tiptap/react": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
     "dompurify": "^3.4.15",
+    "lucide-react": "^1.46.0",
     "marked": "^18.0.13",
     "react": "19.1.0",
     "react-dom": "19.1.0",
@@ -31,6 +50,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
     "typescript": "^5.7.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^5.0.0"
   }
 }

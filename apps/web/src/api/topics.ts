@@ -1,4 +1,11 @@
-import type { AcceptTopicSuggestionResult, CreateTopicInput, Job, Topic, TopicSuggestion } from '@inwit/dto';
+import type {
+  AcceptTopicSuggestionResult,
+  CreateTopicInput,
+  Job,
+  Topic,
+  TopicSuggestion,
+  UpdateTopicInput,
+} from '@inwit/dto';
 import { request } from './client';
 
 export function getTopic(id: string): Promise<Topic> {
@@ -26,6 +33,17 @@ export function restoreTopic(id: string): Promise<Topic> {
     method: 'PATCH',
     body: JSON.stringify({ status: 'active' }),
   });
+}
+
+export function updateTopic(id: string, input: UpdateTopicInput): Promise<Topic> {
+  return request<Topic>(`/api/topics/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteTopic(id: string): Promise<void> {
+  return request<void>(`/api/topics/${id}`, { method: 'DELETE' });
 }
 
 export function listTopicSuggestions(): Promise<TopicSuggestion[]> {

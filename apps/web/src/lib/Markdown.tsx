@@ -2,7 +2,13 @@ import { useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } 
 import DOMPurify from 'dompurify';
 import { Marked } from 'marked';
 import { useNavigate } from 'react-router';
-import { cardIdsFromAnchor, wrapAnchors, type AnchorSpec } from './anchors';
+import {
+  ANCHOR_HIT_SELECTOR,
+  annotationIdsFromAnchor,
+  cardIdsFromAnchor,
+  wrapAnchors,
+  type AnchorSpec,
+} from './anchors';
 
 function isInternalAppPath(href: string): boolean {
   return href.startsWith('/') && !href.startsWith('//');
@@ -94,21 +100,27 @@ export function AnchoredMarkdown({
   source,
   anchors,
   activeCardId,
+  activeAnnotationId,
   focusCardId,
   onAnchorClick,
+  onAnnotationClick,
   className,
 }: {
   source: string;
   anchors: AnchorSpec[];
   activeCardId?: string | null;
+  activeAnnotationId?: string | null;
   focusCardId?: string | null;
   onAnchorClick: (cardIds: string[]) => void;
+  onAnnotationClick?: (ids: string[]) => void;
   className?: string;
 }) {
   const html = useMemo(() => renderMarkdown(source), [source]);
   const rootRef = useRef<HTMLDivElement>(null);
   const onClickRef = useRef(onAnchorClick);
   onClickRef.current = onAnchorClick;
+  const onNoteClickRef = useRef(onAnnotationClick);
+  onNoteClickRef.current = onAnnotationClick;
   const flashedRef = useRef<string | null>(null);
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
@@ -123,9 +135,14 @@ export function AnchoredMarkdown({
       if (navigateInternalLink(event, navigateRef.current)) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const hit = target.closest('mark.anchor, .anchor-block');
+      const hit = target.closest(ANCHOR_HIT_SELECTOR);
       if (!hit || !root.contains(hit)) return;
       event.preventDefault();
+      const notes = annotationIdsFromAnchor(hit);
+      if (notes.length > 0) {
+        onNoteClickRef.current?.(notes);
+        return;
+      }
       const ids = cardIdsFromAnchor(hit);
       if (ids.length > 0) onClickRef.current(ids);
     };
@@ -156,11 +173,15 @@ export function AnchoredMarkdown({
   useLayoutEffect(() => {
     const root = rootRef.current;
     if (!root) return;
-    for (const el of root.querySelectorAll('mark.anchor, .anchor-block')) {
-      const ids = cardIdsFromAnchor(el);
-      el.classList.toggle('is-on', Boolean(activeCardId && ids.includes(activeCardId)));
+    for (const el of root.querySelectorAll(ANCHOR_HIT_SELECTOR)) {
+      const cards = cardIdsFromAnchor(el);
+      const notes = annotationIdsFromAnchor(el);
+      const on =
+        Boolean(activeCardId && cards.includes(activeCardId)) ||
+        Boolean(activeAnnotationId && notes.includes(activeAnnotationId));
+      el.classList.toggle('is-on', on);
     }
-  }, [html, anchors, activeCardId]);
+  }, [html, anchors, activeCardId, activeAnnotationId]);
 
   if (!source) return null;
   return <div ref={rootRef} className={className ?? 'md-body'} />;

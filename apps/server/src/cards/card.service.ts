@@ -1,10 +1,12 @@
 import type {
   Card,
   CardDetail,
+  CardImageResponse,
   CardLink,
   CardLinksResponse,
   CardLinkWithCard,
   CardSummary,
+  CreateCardInput,
 } from '@inwit/dto';
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
@@ -17,8 +19,12 @@ import {
   type CardLinkRow,
   type CardRow,
 } from '../db/schema.js';
+import { getOwnedDocument } from '../documents/document.service.js';
+import { isExcerptKeyFor } from '../documents/excerpt-logic.js';
 import { AppError } from '../errors.js';
 import { recalculateMapNodeStatus, requireWritableMapNode } from '../maps/map.service.js';
+import { insertInitialReviewState } from '../review/state-init.js';
+import { presignGet } from '../storage/client.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
 
 function toPublicLink(row: CardLinkRow): CardLink {
@@ -46,6 +52,49 @@ async function getOwnedCard(userId: string, id: string): Promise<CardRow> {
     .limit(1);
   if (!row) throw AppError.of(404, 'CARD_NOT_FOUND');
   return row;
+}
+
+export async function createCard(userId: string, input: CreateCardInput): Promise<Card> {
+  const document = await getOwnedDocument(userId, input.documentId);
+  if (input.imageKey && !isExcerptKeyFor(input.imageKey, userId, document.id)) {
+    throw AppError.of(400, 'VALIDATION_ERROR');
+  }
+  const now = new Date();
+  const anchorText = input.anchorText !== undefined ? input.anchorText : null;
+  const anchorBlock = input.anchorBlock !== undefined ? input.anchorBlock : null;
+  const imageKey = input.imageKey !== undefined ? input.imageKey : null;
+
+  return getDb().transaction(async (tx) => {
+    const [row] = await tx
+      .insert(cards)
+      .values({
+        userId,
+        documentId: document.id,
+        topicId: document.topicId,
+        concept: input.concept,
+        example: input.example,
+        confusionPoint: '',
+        tags: [],
+        source: 'manual',
+        anchorText,
+        anchorBlock,
+        imageKey,
+      })
+      .returning();
+    if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
+    await insertInitialReviewState(userId, row.id, now, tx, now);
+    return toPublicCardBase(row);
+  });
+}
+
+export async function getCardImage(userId: string, id: string): Promise<CardImageResponse> {
+  const row = await getOwnedCard(userId, id);
+  if (!row.imageKey) throw AppError.of(404, 'CARD_IMAGE_NOT_FOUND');
+  if (!row.documentId || !isExcerptKeyFor(row.imageKey, userId, row.documentId)) {
+    throw AppError.of(404, 'CARD_IMAGE_NOT_FOUND');
+  }
+  const url = await presignGet(row.imageKey);
+  return { url };
 }
 
 export async function getCard(userId: string, id: string): Promise<CardDetail> {

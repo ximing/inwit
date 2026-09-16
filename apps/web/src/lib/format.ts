@@ -19,6 +19,22 @@ export function formatDate(iso: string): string {
   }).format(date);
 }
 
+const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'] as const;
+
+/** Local calendar line used on Today, e.g. `9月14日 星期日`. */
+export function formatTodayLong(date = new Date()): string {
+  const weekday = WEEKDAYS[date.getDay()] ?? '星期日';
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${weekday}`;
+}
+
+/** 时段问候（含句号）：上午 5–12 / 下午 12–18 / 其余为晚上。 */
+export function dayGreeting(date = new Date()): string {
+  const hour = date.getHours();
+  if (hour >= 5 && hour < 12) return '上午好。';
+  if (hour >= 12 && hour < 18) return '下午好。';
+  return '晚上好。';
+}
+
 function startOfLocalDay(ts: number): number {
   const date = new Date(ts);
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -54,6 +70,24 @@ export function formatDueAt(iso: string, now = Date.now()): string {
 
 export function formatIntervalDays(days: number): string {
   return `间隔 ${days} 天`;
+}
+
+/** Mastery bar fill 1–4 from SM-2 intervalDays. */
+export function masteryLevel(intervalDays: number): 1 | 2 | 3 | 4 {
+  if (intervalDays < 3) return 1;
+  if (intervalDays < 7) return 2;
+  if (intervalDays < 21) return 3;
+  return 4;
+}
+
+/** Mini-card footer: 明天再见 / N 天后再问. */
+export function formatNextReview(iso: string, now = Date.now()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const days = Math.round((startOfLocalDay(date.getTime()) - startOfLocalDay(now)) / 86_400_000);
+  if (days <= 0) return '今天再问';
+  if (days === 1) return '明天再见';
+  return `${days} 天后再问`;
 }
 
 export function formatTimeHm(date: Date): string {
