@@ -10,6 +10,7 @@ import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { Tag } from '@/components/tag';
 import { formatRelativeTime, isSubmitHotkey, summarizeAnswer } from '@/lib/format';
 import { ROUTES, topicPath } from '@/routes';
+import { AssetUrlsService } from '@/services/asset-urls.service';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
 import { TopicsService, type TopicListItem } from './topics.service';
 
@@ -638,4 +639,5 @@ export const TopicsPage = bindServices(TopicsPageContent, [
   TopicsService,
   SearchService,
   ReaderService,
+  AssetUrlsService,
 ]);

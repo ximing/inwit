@@ -15,11 +15,11 @@ import { Loader2, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
+import { DocView } from '@/components/doc/DocView';
 import { Tag } from '@/components/tag';
 import { scrollFlashCardAnchor } from '@/lib/anchor-scroll';
 import { docAnchors, type AnchorSpec } from '@/lib/anchors';
 import { formatRelativeTime } from '@/lib/format';
-import { AnchoredMarkdown, Markdown } from '@/lib/Markdown';
 import { ROUTES, docAnchorPath, docPath } from '@/routes';
 import {
   ClozeText,
@@ -121,7 +121,7 @@ export const ReaderOverlay = observer(function ReaderOverlay() {
     service.clearPendingScrollTop();
   }, [service, service.pendingScrollTop, doc]);
 
-  // 与 docs 页相同：消费 focusCardId 走共享滚动闪烁，避免传给 AnchoredMarkdown 导致正文重绘。
+  // 消费 focusCardId 走共享滚动闪烁，避免传给 DocView 后同一张卡无法再次闪（flashedRef）。
   useEffect(() => {
     const cardId = service.focusCardId;
     if (!cardId) return;
@@ -229,26 +229,26 @@ const ReaderDocBody = observer(function ReaderDocBody({
   return (
     <>
       {chatAnswer ? (
-        <AnchoredMarkdown
+        <DocView
           source={chatAnswer}
           anchors={anchors}
           activeCardId={service.activeCardId}
-          className="md-body prose reader-overlay-prose"
+          className="reader-overlay-prose"
           onAnchorClick={onAnchorClick}
         />
       ) : null}
       {description ? (
         <aside className="reader-overlay-summary">
           <p className="reader-overlay-summary-k">AI 摘要</p>
-          <Markdown source={description} />
+          <DocView source={description} />
         </aside>
       ) : null}
       {showContentMd ? (
-        <AnchoredMarkdown
+        <DocView
           source={contentMd}
           anchors={anchors}
           activeCardId={service.activeCardId}
-          className="md-body prose reader-overlay-prose"
+          className="reader-overlay-prose"
           onAnchorClick={onAnchorClick}
         />
       ) : null}
