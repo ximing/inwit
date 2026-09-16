@@ -1,0 +1,447 @@
+import type {
+  BlockContent,
+  Code,
+  Heading,
+  Image,
+  Link,
+  List,
+  ListItem,
+  Paragraph,
+  PhrasingContent,
+  Root,
+  RootContent,
+  Strong,
+  Emphasis,
+  Delete,
+  InlineCode,
+  Table,
+  TableCell,
+  TableRow,
+  Text,
+} from 'mdast';
+import type { LeafDirective } from 'mdast-util-directive';
+import { isRecord, type MdastRoot, type PmMark, type PmNode } from './types.js';
+
+/** `asset:users/<uuid>/doc-assets/<uuid>.<ext>` — scheme + path segments case-sensitive. */
+const ASSET_SRC =
+  /^asset:users\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\/doc-assets\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.[a-zA-Z0-9]{1,16}$/;
+
+const MIME_ATTR = /^[^\s"'{}]+$/;
+
+/** Allow `asset:` object keys and http(s) URLs; drop everything else (including `/api/v1/uploads/`). */
+export function safeMediaSrc(url: string): string | null {
+  if (ASSET_SRC.test(url)) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') return parsed.href;
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function safeMime(value: string): string | null {
+  if (value !== '' && value.length <= 127 && MIME_ATTR.test(value)) return value;
+  return null;
+}
+
+function withContent(type: string, content: PmNode[], attrs?: PmNode['attrs']): PmNode {
+  const node: PmNode = { type };
+  if (attrs !== undefined) node.attrs = attrs;
+  if (content.length > 0) node.content = content;
+  return node;
+}
+
+function textNode(value: string, marks: PmMark[]): PmNode {
+  const node: PmNode = { type: 'text', text: value };
+  if (marks.length > 0) node.marks = marks;
+  return node;
+}
+
+function phrasingToPm(nodes: PhrasingContent[], marks: PmMark[]): PmNode[] {
+  const out: PmNode[] = [];
+  for (const node of nodes) {
+    switch (node.type) {
+      case 'text':
+        out.push(textNode(node.value, marks));
+        break;
+      case 'strong':
+        out.push(...phrasingToPm(node.children, [...marks, { type: 'bold' }]));
+        break;
+      case 'emphasis':
+        out.push(...phrasingToPm(node.children, [...marks, { type: 'italic' }]));
+        break;
+      case 'delete':
+        out.push(...phrasingToPm(node.children, [...marks, { type: 'strike' }]));
+        break;
+      case 'inlineCode':
+        out.push(textNode(node.value, [...marks, { type: 'code' }]));
+        break;
+      case 'link': {
+        const attrs: Record<string, string | number | boolean | null> = { href: node.url };
+        if (node.title !== null && node.title !== undefined) attrs.title = node.title;
+        out.push(...phrasingToPm(node.children, [...marks, { type: 'link', attrs }]));
+        break;
+      }
+      case 'break':
+        out.push({ type: 'hardBreak' });
+        break;
+      case 'vitalEntity':
+        out.push({
+          type: 'vitalEntity',
+          attrs: { kind: node.kind, id: node.id },
+        });
+        break;
+      case 'image': {
+        const src = safeMediaSrc(node.url);
+        if (src === null) break;
+        const attrs: Record<string, string | number | boolean | null> = { src };
+        if (node.alt) attrs.alt = node.alt;
+        if (node.title) attrs.title = node.title;
+        out.push({ type: 'image', attrs });
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return out;
+}
+
+function listToPm(node: List): PmNode {
+  const type = node.ordered === true ? 'orderedList' : 'bulletList';
+  const attrs =
+    node.ordered === true && node.start !== null && node.start !== undefined && node.start !== 1
+      ? { start: node.start }
+      : undefined;
+  return withContent(
+    type,
+    node.children.map((item) => listItemToPm(item)),
+    attrs,
+  );
+}
+
+function listItemToPm(node: ListItem): PmNode {
+  return withContent(
+    'listItem',
+    node.children.flatMap((child) => {
+      const flow = flowToPm(child);
+      return flow ? [flow] : [];
+    }),
+  );
+}
+
+function videoAttrsFromUnknown(raw: Record<string, unknown>): Record<
+  string,
+  string | number | boolean | null
+> | null {
+  const srcRaw = raw.src;
+  const src = typeof srcRaw === 'string' ? safeMediaSrc(srcRaw) : null;
+  if (src === null) return null;
+  const attrs: Record<string, string | number | boolean | null> = { src };
+  if (typeof raw.poster === 'string') {
+    const poster = safeMediaSrc(raw.poster);
+    if (poster) attrs.poster = poster;
+  }
+  if (typeof raw.mime === 'string') {
+    const mime = safeMime(raw.mime);
+    if (mime) attrs.mime = mime;
+  }
+  return attrs;
+}
+
+function leafDirectiveToPm(node: LeafDirective): PmNode | null {
+  if (node.name !== 'video') return null;
+  const attrs = videoAttrsFromUnknown((node.attributes ?? {}) as Record<string, unknown>);
+  if (attrs === null) return null;
+  return { type: 'video', attrs };
+}
+
+function flowToPm(node: BlockContent | RootContent): PmNode | null {
+  switch (node.type) {
+    case 'paragraph':
+      return withContent('paragraph', phrasingToPm(node.children, []));
+    case 'heading':
+      return withContent('heading', phrasingToPm(node.children, []), { level: node.depth });
+    case 'list':
+      return listToPm(node);
+    case 'code': {
+      const attrs =
+        node.lang !== null && node.lang !== undefined && node.lang !== ''
+          ? { language: node.lang }
+          : undefined;
+      const content = node.value === '' ? [] : [textNode(node.value, [])];
+      return withContent('codeBlock', content, attrs);
+    }
+    case 'blockquote':
+      return withContent(
+        'blockquote',
+        node.children.flatMap((child) => {
+          const flow = flowToPm(child);
+          return flow ? [flow] : [];
+        }),
+      );
+    case 'thematicBreak':
+      return { type: 'horizontalRule' };
+    case 'table':
+      return tableToPm(node);
+    case 'leafDirective':
+      return leafDirectiveToPm(node);
+    default:
+      return withContent('paragraph', []);
+  }
+}
+
+function tableCellToPm(node: TableCell, header: boolean): PmNode {
+  return withContent(header ? 'tableHeader' : 'tableCell', [
+    withContent('paragraph', phrasingToPm(node.children, [])),
+  ]);
+}
+
+function tableToPm(node: Table): PmNode {
+  return withContent(
+    'table',
+    node.children.map((row, index) =>
+      withContent(
+        'tableRow',
+        row.children.map((cell) => tableCellToPm(cell, index === 0)),
+      ),
+    ),
+  );
+}
+
+export function mdastToPmJSON(tree: MdastRoot): PmNode {
+  const content: PmNode[] = [];
+  for (const child of tree.children) {
+    if (child.type === 'vitalEntity') {
+      content.push(withContent('paragraph', phrasingToPm([child], [])));
+      continue;
+    }
+    const flow = flowToPm(child);
+    if (flow) content.push(flow);
+  }
+  return { type: 'doc', content };
+}
+
+function isPmNode(value: unknown): value is PmNode {
+  return isRecord(value) && typeof value.type === 'string';
+}
+
+function asPmNodes(value: unknown): PmNode[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isPmNode);
+}
+
+function markHref(mark: PmMark): string {
+  if (mark.attrs && typeof mark.attrs.href === 'string') return mark.attrs.href;
+  return '';
+}
+
+function markTitle(mark: PmMark): string | null {
+  if (!mark.attrs) return null;
+  const title = mark.attrs.title;
+  return typeof title === 'string' ? title : null;
+}
+
+function wrapPhrasing(inner: PhrasingContent, marks: PmMark[]): PhrasingContent {
+  let node = inner;
+  // Innermost first so stringify emits `**_text_**` rather than mixed wrappers.
+  const order = ['code', 'strike', 'italic', 'bold', 'link'];
+  const sorted = [...marks].sort((a, b) => {
+    const ia = order.indexOf(a.type);
+    const ib = order.indexOf(b.type);
+    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+  });
+  for (const mark of sorted) {
+    if (mark.type === 'code' && node.type === 'text') {
+      const code: InlineCode = { type: 'inlineCode', value: node.value };
+      node = code;
+      continue;
+    }
+    if (mark.type === 'bold') {
+      const strong: Strong = { type: 'strong', children: [node] };
+      node = strong;
+      continue;
+    }
+    if (mark.type === 'italic') {
+      const em: Emphasis = { type: 'emphasis', children: [node] };
+      node = em;
+      continue;
+    }
+    if (mark.type === 'strike') {
+      const del: Delete = { type: 'delete', children: [node] };
+      node = del;
+      continue;
+    }
+    if (mark.type === 'link') {
+      const link: Link = {
+        type: 'link',
+        url: markHref(mark),
+        title: markTitle(mark),
+        children: [node],
+      };
+      node = link;
+    }
+  }
+  return node;
+}
+
+function pmPhrasing(nodes: PmNode[]): PhrasingContent[] {
+  const out: PhrasingContent[] = [];
+  for (const node of nodes) {
+    if (node.type === 'text') {
+      const value = node.text ?? '';
+      const marks = node.marks ?? [];
+      const text: Text = { type: 'text', value };
+      out.push(wrapPhrasing(text, marks));
+      continue;
+    }
+    if (node.type === 'hardBreak') {
+      out.push({ type: 'break' });
+      continue;
+    }
+    if (node.type === 'vitalEntity') {
+      const attrs = node.attrs ?? {};
+      const kind = attrs.kind;
+      const id = attrs.id;
+      if ((kind === 'task' || kind === 'inbox') && typeof id === 'string') {
+        out.push({ type: 'vitalEntity', kind, id });
+      }
+      continue;
+    }
+    if (node.type === 'image') {
+      const attrs = node.attrs ?? {};
+      const src = typeof attrs.src === 'string' ? safeMediaSrc(attrs.src) : null;
+      if (src === null) continue;
+      const image: Image = {
+        type: 'image',
+        url: src,
+        alt: typeof attrs.alt === 'string' ? attrs.alt : null,
+        title: typeof attrs.title === 'string' ? attrs.title : null,
+      };
+      out.push(image);
+    }
+  }
+  return out;
+}
+
+function pmListItem(node: PmNode): ListItem {
+  const children: BlockContent[] = [];
+  for (const child of asPmNodes(node.content)) {
+    const flow = pmFlow(child);
+    if (flow) children.push(flow);
+  }
+  const item: ListItem = { type: 'listItem', spread: false, children };
+  return item;
+}
+
+function pmVideoToMdast(node: PmNode): LeafDirective | null {
+  const attrs = videoAttrsFromUnknown((node.attrs ?? {}) as Record<string, unknown>);
+  if (attrs === null) return null;
+  const attributes: Record<string, string> = { src: String(attrs.src) };
+  if (typeof attrs.poster === 'string') attributes.poster = attrs.poster;
+  if (typeof attrs.mime === 'string') attributes.mime = attrs.mime;
+  return {
+    type: 'leafDirective',
+    name: 'video',
+    attributes,
+    children: [],
+  };
+}
+
+function pmFlow(node: PmNode): BlockContent | null {
+  switch (node.type) {
+    case 'paragraph': {
+      const p: Paragraph = { type: 'paragraph', children: pmPhrasing(asPmNodes(node.content)) };
+      return p;
+    }
+    case 'heading': {
+      const raw = node.attrs?.level;
+      const depth = raw === 1 || raw === 2 || raw === 3 || raw === 4 || raw === 5 || raw === 6 ? raw : 1;
+      const h: Heading = {
+        type: 'heading',
+        depth,
+        children: pmPhrasing(asPmNodes(node.content)),
+      };
+      return h;
+    }
+    case 'bulletList':
+    case 'orderedList': {
+      const list: List = {
+        type: 'list',
+        ordered: node.type === 'orderedList',
+        spread: false,
+        children: asPmNodes(node.content).map((item) => pmListItem(item)),
+      };
+      if (node.type === 'orderedList') {
+        const start = node.attrs?.start;
+        list.start = typeof start === 'number' ? start : 1;
+      }
+      return list;
+    }
+    case 'codeBlock': {
+      const language = node.attrs?.language;
+      const text = asPmNodes(node.content)
+        .map((c) => c.text ?? '')
+        .join('');
+      const code: Code = {
+        type: 'code',
+        lang: typeof language === 'string' ? language : null,
+        value: text,
+      };
+      return code;
+    }
+    case 'blockquote':
+      return {
+        type: 'blockquote',
+        children: asPmNodes(node.content).flatMap((child) => {
+          const flow = pmFlow(child);
+          return flow ? [flow] : [];
+        }),
+      };
+    case 'horizontalRule':
+      return { type: 'thematicBreak' };
+    case 'image': {
+      const phrasing = pmPhrasing([node]);
+      if (phrasing.length === 0) return null;
+      const p: Paragraph = { type: 'paragraph', children: phrasing };
+      return p;
+    }
+    case 'video':
+      return pmVideoToMdast(node);
+    case 'table':
+      return pmTable(node);
+    default:
+      return null;
+  }
+}
+
+function pmTableCell(node: PmNode): TableCell {
+  const phrasing = asPmNodes(node.content).flatMap((block) => {
+    if (block.type === 'paragraph') return pmPhrasing(asPmNodes(block.content));
+    if (block.type === 'text' || block.type === 'image' || block.type === 'hardBreak') {
+      return pmPhrasing([block]);
+    }
+    return [];
+  });
+  return { type: 'tableCell', children: phrasing };
+}
+
+function pmTable(node: PmNode): Table {
+  const rows: TableRow[] = asPmNodes(node.content).map((row) => ({
+    type: 'tableRow',
+    children: asPmNodes(row.content).map((cell) => pmTableCell(cell)),
+  }));
+  return { type: 'table', children: rows };
+}
+
+export function pmJSONToMdast(doc: unknown): MdastRoot {
+  const root: Root = { type: 'root', children: [] };
+  if (!isPmNode(doc)) return root;
+  const content = doc.type === 'doc' ? asPmNodes(doc.content) : [doc];
+  for (const child of content) {
+    const flow = pmFlow(child);
+    if (flow) root.children.push(flow);
+  }
+  return root;
+}
