@@ -118,7 +118,7 @@ apps/mobile/                  # Expo 最小壳（spike 版）
 ```
 
 - dev：WebView `source={{ uri: 'http://<局域网IP>:5199' }}`（vite dev server），热更新调试；release：`source={require('../assets/doc-engine.html')}`。
-- 引擎复用 `apps/web/src/components/doc/extensions.ts`、`pages/docs/anchor-highlight.ts`、`lib/entity-marks.ts`——spike 阶段允许直接相对引用，验收通过后随 client-core 抽包正式迁移。
+- 引擎复用 web 代码的方式是**拷贝进 `vendor/` 后独立适配**（来源：`apps/web/src/components/doc/extensions.ts`、`pages/docs/anchor-highlight.ts`、`lib/entity-marks.ts`、`lib/anchors.ts`、`lib/pm-doc.ts`），web 端零改动、不做 alias/相对引用；`AssetUrlsService` 依赖替换为引擎内置的注入 URL map（见 rn-mobile.md §1 拷贝清单）。
 - 样式：抽 `docs/design/v2/inwit.css` 的排版相关段落为引擎内联样式，主题变量由 `init`/`setTheme` 注入。
 
 ## 4. 验收标准
