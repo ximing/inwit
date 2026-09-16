@@ -11,6 +11,7 @@ import {
   type WeeklyReportLatest,
 } from '@inwit/dto';
 import { errorMessage } from '@/api/client';
+import { textToPmDoc } from '@/lib/pm-doc';
 import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
 import { listJobs } from '@/api/jobs';
 import { getLatestWeeklyReport } from '@/api/reports';
@@ -44,7 +45,7 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     ...item,
     title: detail.title,
     description: detail.description,
-    contentMd: detail.contentMd,
+    contentJson: detail.contentJson,
     status: detail.status,
     answer: detail.answer,
     linkHint: detail.linkHint,
@@ -209,7 +210,7 @@ export class TodayService extends Service {
             ...(this.topicId ? { topicId: this.topicId } : {}),
           })
         : await createDocument({
-            contentMd: content,
+            contentJson: textToPmDoc(content),
             ...(this.topicId ? { topicId: this.topicId } : {}),
           });
       this.draft = '';

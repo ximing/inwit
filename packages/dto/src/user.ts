@@ -22,10 +22,26 @@ export type RegisterInput = z.infer<typeof registerInputSchema>;
 export const loginInputSchema = registerInputSchema;
 export type LoginInput = z.infer<typeof loginInputSchema>;
 
+export const authModeSchema = z.enum(['cookie', 'bearer']);
+export type AuthMode = z.infer<typeof authModeSchema>;
+
+export const authTokensSchema = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
+  expiresIn: z.number().int().positive(),
+});
+export type AuthTokens = z.infer<typeof authTokensSchema>;
+
 export const authResponseSchema = z.object({
   user: userSchema,
+  tokens: authTokensSchema.optional(),
 });
 export type AuthResponse = z.infer<typeof authResponseSchema>;
+
+export const refreshInputSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+export type RefreshInput = z.infer<typeof refreshInputSchema>;
 
 export const updateProfileInputSchema = z.object({
   displayName: z.string().trim().min(1).max(64).optional(),

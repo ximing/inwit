@@ -14,6 +14,7 @@ import {
   reviewStates,
   type CardRow,
 } from '../db/schema.js';
+import { asPmJson } from '../documents/content-json.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
 import { deleteCard, indexCard } from '../retrieval/pipeline.js';
 import {
@@ -24,7 +25,7 @@ import {
 } from '../review/mastery-memory.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
-import { parseAnchorBlock, resolveAnchor } from './anchors.js';
+import { resolveQuoteAnchor } from './card-anchor-logic.js';
 import { SPLIT_LINK_REASON, SPLIT_LINK_TYPE, SPLIT_MAX_CHILDREN } from './evolve-logic.js';
 import { asToolError } from './tools.js';
 
@@ -119,7 +120,7 @@ export function readCardTool(session: EvolveSession): AgentTool<typeof readCardS
           topicId: card.topicId,
           mapNodeId: card.mapNodeId,
           anchorText: card.anchorText,
-          anchorBlock: card.anchorBlock,
+          anchorBlockIndex: card.anchorBlockIndex,
         },
         questions: questionRows.map((row) => toPublicQuestion(row)),
         existingQuestionTypes: [...new Set(questionRows.map((row) => row.type))],
@@ -225,7 +226,8 @@ const splitChildSchema = Type.Object({
   concept: Type.String({ minLength: 1, maxLength: 2000 }),
   example: Type.String({ minLength: 1, maxLength: 4000 }),
   confusion_point: Type.String({ minLength: 1, maxLength: 2000 }),
-  anchor_text: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+  blockIndex: Type.Optional(Type.Integer({ minimum: 1, maximum: 999 })),
+  quote: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
 });
 
 export const splitCardSchema = Type.Object({
@@ -282,7 +284,7 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
     name: 'split_card',
     label: '拆小卡片',
     description:
-      '把当前卡拆成 1-2 张更小范围的子卡。子卡 source=agent、与原卡同 document_id，自动建次日到期的复习状态，并与原卡建 related 边（reason=「由原卡拆小」）。原卡保留。若已经拆过，返回已有子卡。',
+      '把当前卡拆成 1-2 张更小范围的子卡。子卡 source=agent、与原卡同 document_id，自动建次日到期的复习状态，并与原卡建 related 边（reason=「由原卡拆小」）。原卡保留。若已经拆过，返回已有子卡。可选 quote + blockIndex 按原文块定位；省略则继承原卡锚；定位失败仍建卡、无锚。',
     parameters: splitCardSchema,
     execute: async (_id, params) => {
       if (session.reason !== 'repeated_forgot') {
@@ -328,13 +330,20 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
         for (const draft of params.children) {
           const now = new Date();
           let anchorText = parent.anchorText;
-          let anchorBlock = parent.anchorBlock;
-          if (draft.anchor_text && document) {
-            const resolved = resolveAnchor(document.contentMd, draft.anchor_text, parseAnchorBlock(1));
-            anchorText = resolved.anchorText;
-            anchorBlock = resolved.anchorBlock;
-          } else if (draft.anchor_text) {
-            anchorText = draft.anchor_text.trim();
+          let anchorBlockIndex = parent.anchorBlockIndex;
+          if (draft.quote) {
+            if (document) {
+              const resolved = resolveQuoteAnchor(
+                asPmJson(document.contentJson),
+                draft.blockIndex,
+                draft.quote,
+              );
+              anchorText = resolved.anchorText;
+              anchorBlockIndex = resolved.anchorBlockIndex;
+            } else {
+              anchorText = draft.quote.trim();
+              anchorBlockIndex = null;
+            }
           }
           const tags =
             parent.tags.length > 0 ? parent.tags : ['拆小'];
@@ -351,7 +360,7 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
               tags,
               source: 'agent',
               anchorText,
-              anchorBlock,
+              anchorBlockIndex,
             })
             .returning();
           if (!row) throw new Error('failed to insert child card');

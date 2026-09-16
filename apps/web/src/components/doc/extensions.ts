@@ -1,3 +1,4 @@
+import { AnnotationMark, CardAnchorMark, PageBreak, VitalEntity } from '@inwit/doc-schema';
 import { mergeAttributes, Node, type AnyExtension, type NodeViewRendererProps } from '@tiptap/core';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Image from '@tiptap/extension-image';
@@ -10,7 +11,6 @@ import TaskList from '@tiptap/extension-task-list';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { NodeView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
-import { ENTITY_CHIP_TYPE, isEntityKind } from '@inwit/markdown';
 import { common, createLowlight } from 'lowlight';
 import type { AssetUrlsService } from '@/services/asset-urls.service';
 
@@ -190,43 +190,6 @@ function createVideoNode(assetUrls: AssetUrlsService) {
   });
 }
 
-const VitalEntityNode = Node.create({
-  name: ENTITY_CHIP_TYPE,
-  group: 'inline',
-  inline: true,
-  atom: true,
-  selectable: true,
-  draggable: true,
-
-  addAttributes() {
-    return {
-      kind: {
-        default: 'task',
-        parseHTML: (element) => {
-          const value = element.getAttribute('data-kind');
-          return value && isEntityKind(value) ? value : 'task';
-        },
-        renderHTML: (attributes) => ({ 'data-kind': attributes.kind }),
-      },
-      id: {
-        default: '',
-        parseHTML: (element) => element.getAttribute('data-id') ?? '',
-        renderHTML: (attributes) => ({ 'data-id': attributes.id }),
-      },
-    };
-  },
-
-  parseHTML() {
-    return [{ tag: 'span.vital-chip' }];
-  },
-
-  renderHTML({ node, HTMLAttributes }) {
-    const kind = attrString(node, 'kind');
-    const id = attrString(node, 'id');
-    return ['span', mergeAttributes({ class: 'vital-chip' }, HTMLAttributes), `${kind}:${id}`];
-  },
-});
-
 export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension[] {
   const extensions: AnyExtension[] = [
     StarterKit.configure({
@@ -248,7 +211,10 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
     TaskItem.configure({ nested: true }),
     Subscript,
     Superscript,
-    VitalEntityNode,
+    VitalEntity,
+    PageBreak,
+    AnnotationMark,
+    CardAnchorMark,
   ];
   if (opts.editable) {
     extensions.push(

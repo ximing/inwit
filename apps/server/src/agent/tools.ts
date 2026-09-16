@@ -5,13 +5,14 @@ import { and, count, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
 import { cardLinks, cardQuestions, cards, documents, topics } from '../db/schema.js';
+import { asPmJson } from '../documents/content-json.js';
 import { AppError } from '../errors.js';
 import { getTopicMapFlat, placeCardOnMap, recalculateMapNodeStatus } from '../maps/map.service.js';
 import { OutlineError, parsePlaceOnMapTarget } from '../maps/outline.js';
 import { deleteCard, indexCard, searchCards } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
-import { parseAnchorBlock, resolveAnchor, splitMarkdownBlocks } from './anchors.js';
+import { numberedBlocksFromDoc, resolveQuoteAnchor } from './card-anchor-logic.js';
 import { persistDocumentMeta } from './doc-meta.js';
 import { isUserOwnedTitle } from './doc-meta-logic.js';
 
@@ -46,11 +47,8 @@ export const cardDraftSchema = Type.Object({
   example: Type.String({ minLength: 1, maxLength: 4000 }),
   confusion_point: Type.String({ minLength: 1, maxLength: 2000 }),
   tags: Type.Array(Type.String({ minLength: 1, maxLength: 40 }), { minItems: 1, maxItems: 8 }),
-  anchor_text: Type.String({ minLength: 1, maxLength: 4000 }),
-  anchor_block: Type.Union([
-    Type.Number({ minimum: 1, maximum: 999 }),
-    Type.String({ minLength: 1, maxLength: 8 }),
-  ]),
+  blockIndex: Type.Integer({ minimum: 1, maximum: 999 }),
+  quote: Type.String({ minLength: 1, maxLength: 4000 }),
 });
 
 export const readDocumentSchema = Type.Object({
@@ -62,7 +60,8 @@ export function readDocumentTool(session: DigestSession): AgentTool<typeof readD
   return {
     name: 'read_document',
     label: '读取文档',
-    description: '读取当前文档的标题、原文、主题归属和状态。必须先调用这个工具再切卡。',
+    description:
+      '读取当前文档的标题、编号块视图、主题归属和状态。必须先调用这个工具再切卡。numberedView 形如「[块 1 | 第 1 页] …」；引用原文时用 blockIndex + quote。',
     parameters: readDocumentSchema,
     execute: async (_id, params) => {
       if (params.documentId !== session.documentId) {
@@ -74,6 +73,7 @@ export function readDocumentTool(session: DigestSession): AgentTool<typeof readD
         .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId)))
         .limit(1);
       if (!row) throw new Error('document not found');
+      const { blocks, numberedView } = numberedBlocksFromDoc(asPmJson(row.contentJson));
       const payload = {
         id: row.id,
         title: row.title,
@@ -82,8 +82,8 @@ export function readDocumentTool(session: DigestSession): AgentTool<typeof readD
         topicId: row.topicId,
         source: row.source,
         status: row.status,
-        contentMd: row.contentMd,
-        blocks: splitMarkdownBlocks(row.contentMd),
+        blocks,
+        numberedView,
       };
       return toolResult(JSON.stringify(payload), payload);
     },
@@ -100,7 +100,7 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
     name: 'write_cards',
     label: '写入卡片',
     description:
-      '把原子卡片写入数据库并建立检索索引。每张卡必须包含一条概念、一个例子、一个易混点、若干标签，以及从原文逐字引用的 anchor_text 和 1 起计的段落号 anchor_block。一次写入 2 张或以上。',
+      '把原子卡片写入数据库并建立检索索引。每张卡必须包含一条概念、一个例子、一个易混点、若干标签，以及原文结构化引用 blockIndex（1 起计的块序号）和该块内的精确 quote。一次写入 2 张或以上。quote 校验失败仍建卡，只是无锚。',
     parameters: writeCardsSchema,
     execute: async (_id, params) => {
       const [document] = await getDb()
@@ -113,17 +113,14 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
       const created: {
         id: string;
         concept: string;
-        anchorText: string;
-        anchorBlock: string;
-        anchorMatch: string;
+        quote: string;
+        blockIndex: number | null;
+        anchored: boolean;
       }[] = [];
+      const contentJson = asPmJson(document.contentJson);
       for (const draft of params.cards) {
         const now = new Date();
-        const resolved = resolveAnchor(
-          document.contentMd,
-          draft.anchor_text,
-          parseAnchorBlock(draft.anchor_block),
-        );
+        const resolved = resolveQuoteAnchor(contentJson, draft.blockIndex, draft.quote);
         const [row] = await getDb()
           .insert(cards)
           .values({
@@ -137,7 +134,7 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
             tags: draft.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0),
             source: session.cardSource ?? 'agent',
             anchorText: resolved.anchorText,
-            anchorBlock: resolved.anchorBlock,
+            anchorBlockIndex: resolved.anchorBlockIndex,
           })
           .returning();
         if (!row) throw new Error('failed to insert card');
@@ -172,9 +169,9 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
         created.push({
           id: row.id,
           concept: row.concept,
-          anchorText: row.anchorText ?? resolved.anchorText,
-          anchorBlock: row.anchorBlock ?? resolved.anchorBlock,
-          anchorMatch: resolved.matched,
+          quote: resolved.anchorText,
+          blockIndex: resolved.anchorBlockIndex,
+          anchored: resolved.anchorBlockIndex != null,
         });
       }
       if (document.mapNodeId) {
@@ -633,7 +630,7 @@ export function chatWriteCardsTool(session: DigestSession): AgentTool<typeof cha
     name: base.name,
     label: base.label,
     description:
-      '把本次问答的知识点写成 1-3 张原子卡片并建立检索索引。每张卡必须包含一条概念、一个例子、一个易混点、若干标签，以及从用户问题原文逐字引用的 anchor_text 和 1 起计的段落号 anchor_block。',
+      '把本次问答的知识点写成 1-3 张原子卡片并建立检索索引。每张卡必须包含一条概念、一个例子、一个易混点、若干标签，以及从用户问题原文给出的 blockIndex（通常为 1）和精确 quote。quote 校验失败仍建卡，只是无锚。',
     parameters: chatWriteCardsSchema,
     execute: base.execute,
   };

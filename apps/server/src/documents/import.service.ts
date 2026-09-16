@@ -52,7 +52,6 @@ export async function initImport(userId: string, input: ImportInitInput): Promis
       userId,
       topicId: input.topicId ?? null,
       title: titleFromFilename(input.filename),
-      contentMd: '',
       source: 'import',
       status: 'pending',
       fileKey: key,

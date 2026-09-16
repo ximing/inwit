@@ -56,6 +56,7 @@ pnpm monorepo：
 inwit/
 ├── apps/server     Fastify + drizzle + worker
 ├── apps/web        Vite + React + @rabjs/react（端口 5190，/api 代理到 3020）
+├── apps/desktop    Tauri 2 桌面壳（macOS 菜单栏 / Win·Linux 托盘）
 ├── packages/dto    前后端共享 zod schema
 └── docs/           PRD、任务 prompt、开发日志
 ```
@@ -72,6 +73,16 @@ pnpm --filter @inwit/server worker     # 消化 / 问答 / 进化 / 周报 Agent
 ```
 
 浏览器打开 http://localhost:5190 。没有 worker 的话，文档会停在「消化中…」。
+
+桌面端（需 Rust / 系统 WebView）：
+
+```bash
+pnpm --filter @inwit/desktop dev     # 等 Vite :5190，连本地 API :3020
+```
+
+macOS 点红灯会藏到菜单栏，并不退出；「退出 Inwit」才退出。全局快捷键 ⌘⇧2 / Ctrl+Shift+2 区域截图（macOS 需「屏幕录制」权限）。生产包把 `VITE_TAURI_API_URL`（默认 `https://inwit.aimo.plus`）打进前端。
+
+GitHub Release 打 `v*.*.*` tag 后，Actions「Build Desktop」会把 macOS / Windows / Linux 安装包挂到该 Release。Server 镜像推 `ghcr.io/ximing/inwit-server`（同一镜像 `node dist/worker.js` 跑 worker）。
 
 ## 页面路由
 
@@ -103,6 +114,15 @@ pnpm -r typecheck
 pnpm -r build
 pnpm --filter @inwit/server test
 pnpm --filter @inwit/server start      # node dist，需先 build
+pnpm --filter @inwit/desktop test      # Tauri 合同测试
+pnpm --filter @inwit/brand raster-icons
+```
+
+生产 compose（需 `.env`，见 `.env.production.example`）：
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm migrate
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ## 环境变量

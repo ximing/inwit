@@ -11,6 +11,7 @@ import { initialOcrProgress, toOcrJobPayload } from '../ocr/ocr-logic.js';
 import { tryIndexDocument } from '../retrieval/pipeline.js';
 import { getObjectToFile } from '../storage/client.js';
 import { logger } from '../utils/logger.js';
+import { markdownToContentJson } from './content-json.js';
 import { isBlankDocumentContent } from './document-logic.js';
 import { extractImported } from './extract.js';
 import { followUpAfterExtract } from './extract-logic.js';
@@ -66,8 +67,9 @@ export async function processExtract(job: JobRow): Promise<void> {
     await getObjectToFile(document.fileKey, dest);
     await heartbeatJob(job.id);
     const buffer = await readFile(dest);
-    const { contentMd, pageCount } = await extractImported(buffer, format);
-    const followUp = followUpAfterExtract(contentMd, format);
+    const { markdown, pageCount } = await extractImported(buffer, format);
+    const contentJson = markdownToContentJson(markdown);
+    const followUp = followUpAfterExtract(contentJson, format);
     const title =
       document.title && document.title.trim().length > 0
         ? document.title
@@ -77,7 +79,7 @@ export async function processExtract(job: JobRow): Promise<void> {
       const [updated] = await tx
         .update(documents)
         .set({
-          contentMd,
+          contentJson,
           pageCount,
           title,
           status: followUp === 'none' ? 'digested' : 'pending',
@@ -101,14 +103,14 @@ export async function processExtract(job: JobRow): Promise<void> {
       }
     });
 
-    if (!isBlankDocumentContent(contentMd)) {
+    if (!isBlankDocumentContent(contentJson)) {
       await tryIndexDocument({
         id: document.id,
         userId: document.userId,
         topicId: document.topicId,
         title,
         description: document.description,
-        contentMd,
+        contentJson,
       });
     }
   } catch (err) {

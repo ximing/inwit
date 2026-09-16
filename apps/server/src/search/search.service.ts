@@ -5,7 +5,7 @@ import {
   type SearchQuery,
   type SearchResult,
 } from '@inwit/dto';
-import { and, desc, eq, ilike, inArray, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { toPublicCardBase } from '../cards/card.mapper.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -44,7 +44,7 @@ async function searchDocumentIdsIlike(
         or(
           ilike(documents.title, pattern),
           ilike(documents.description, pattern),
-          ilike(documents.contentMd, pattern),
+          sql`${documents.contentJson}::text ilike ${pattern}`,
         ),
       ),
     )

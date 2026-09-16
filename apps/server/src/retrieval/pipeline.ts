@@ -1,3 +1,4 @@
+import { documentPlainText } from '../documents/content-json.js';
 import { logger } from '../utils/logger.js';
 import { cardsStoreName, docsStoreName, ensureRetrievalStores, getRetrievalClients } from './registry.js';
 import { rrfMerge } from './rrf.js';
@@ -24,7 +25,7 @@ export interface IndexableDocument {
   userId: string;
   title: string | null;
   description: string | null;
-  contentMd: string;
+  contentJson: unknown;
   topicId?: string | null;
 }
 
@@ -62,7 +63,7 @@ function documentPayloadText(source: Record<string, unknown>): string | null {
   if (stored && stored.trim() !== '') return stored;
   const title = asString(source.title) ?? '';
   const description = asString(source.description) ?? '';
-  const content = asString(source.content_md) ?? asString(source.contentMd) ?? '';
+  const content = asString(source.content_text) ?? asString(source.contentText) ?? '';
   const joined = `${title}\n${description}\n${content}`.trim();
   return joined === '' ? null : joined;
 }
@@ -166,6 +167,7 @@ export async function deleteCard(cardId: string): Promise<void> {
 /** Index (or re-index) one document into Qdrant + Meili. */
 export async function indexDocument(doc: IndexableDocument): Promise<void> {
   await ensureRetrievalStores();
+  const contentText = documentPlainText(doc.contentJson);
   const text = documentEmbeddingText(doc);
   if (text.trim() === '') {
     await deleteDocumentFromIndex(doc.id);
@@ -184,7 +186,7 @@ export async function indexDocument(doc: IndexableDocument): Promise<void> {
     topic_id: topicIdPayload(doc.topicId),
     title: doc.title ?? '',
     description: doc.description ?? '',
-    content_md: doc.contentMd,
+    content_text: contentText,
     text,
   };
   await upsertBoth(
@@ -199,7 +201,7 @@ export async function indexDocument(doc: IndexableDocument): Promise<void> {
       topic_id: topicIdPayload(doc.topicId),
       title: doc.title ?? '',
       description: doc.description ?? '',
-      content_md: doc.contentMd,
+      content_text: contentText,
       text,
     },
     'indexDocument',

@@ -1,4 +1,4 @@
-import { PDF_PAGE_SEPARATOR } from '@inwit/dto';
+import { MARKDOWN_PAGE_SEPARATOR } from '../documents/content-json.js';
 import { describe, expect, it } from 'vitest';
 import {
   applyPageFailure,
@@ -241,7 +241,9 @@ describe('progress / checkpoint', () => {
 
 describe('pagesToMarkdown', () => {
   it('joins pages with the PDF separator and keeps empty slots', () => {
-    expect(pagesToMarkdown(['甲', '', '丙'])).toBe(`甲${PDF_PAGE_SEPARATOR}${PDF_PAGE_SEPARATOR}丙`);
+    expect(pagesToMarkdown(['甲', '', '丙'])).toBe(
+      `甲${MARKDOWN_PAGE_SEPARATOR}${MARKDOWN_PAGE_SEPARATOR}丙`,
+    );
   });
 
   it('returns empty string when every page is blank', () => {

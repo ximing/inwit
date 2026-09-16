@@ -1,4 +1,5 @@
-import { ocrJobPayloadSchema, PDF_PAGE_SEPARATOR, type JobPayload } from '@inwit/dto';
+import { ocrJobPayloadSchema, type JobPayload } from '@inwit/dto';
+import { MARKDOWN_PAGE_SEPARATOR } from '../documents/content-json.js';
 
 export const OCR_DEFAULT_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 export const OCR_DEFAULT_MODEL = 'qwen-vl-ocr';
@@ -307,7 +308,7 @@ export function applyPageFailure(progress: OcrProgress, pageIndex: number): OcrP
 export function pagesToMarkdown(pageTexts: readonly string[]): string {
   if (pageTexts.length === 0) return '';
   if (pageTexts.every((t) => t.trim().length === 0)) return '';
-  return pageTexts.map((t) => t.trim()).join(PDF_PAGE_SEPARATOR);
+  return pageTexts.map((t) => t.trim()).join(MARKDOWN_PAGE_SEPARATOR);
 }
 
 export function ocrIncompleteError(failedPages: number[]): string {

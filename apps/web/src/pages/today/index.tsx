@@ -20,6 +20,7 @@ import {
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { SearchPalette, SearchService } from '@/components/search';
+import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
 import { dayGreeting, formatRelativeTime, formatTodayLong, isSubmitHotkey } from '@/lib/format';
 import { ROUTES, docPath, topicPath } from '@/routes';
@@ -88,6 +89,7 @@ function docTag(doc: DocumentListItem): { tone: 'ai' | 'topic'; label: string } 
   const agent = agentDocumentMetaLabel(doc.source, doc.title);
   if (agent) return { tone: 'ai', label: agent };
   if (doc.source === 'chat') return { tone: 'ai', label: 'AI 回答' };
+  if (doc.source === 'screenshot') return { tone: 'topic', label: '截图' };
   if (doc.topicTitle) return { tone: 'topic', label: doc.topicTitle };
   return null;
 }
@@ -218,6 +220,7 @@ const TodayPageContent = observer(function TodayPageContent() {
             <span className="kbd">⏎</span>
             发送
           </div>
+          <ScreenshotButton topicId={service.topicId} />
           <button
             type="button"
             className={askClass}

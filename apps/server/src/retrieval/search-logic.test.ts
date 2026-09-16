@@ -19,20 +19,36 @@ describe('documentEmbeddingText', () => {
       documentEmbeddingText({
         title: '偏差与方差',
         description: '欠拟合与过拟合的权衡',
-        contentMd: '高偏差通常来自模型太简单。',
+        contentJson: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: '高偏差通常来自模型太简单。' }] }],
+        },
       }),
     ).toBe('偏差与方差\n欠拟合与过拟合的权衡\n高偏差通常来自模型太简单。');
   });
 
   it('drops empty fields and clips content to 500 unicode chars', () => {
     const content = '字'.repeat(DOCUMENT_EMBEDDING_CONTENT_CHARS + 40);
-    const text = documentEmbeddingText({ title: null, description: '  ', contentMd: content });
+    const text = documentEmbeddingText({
+      title: null,
+      description: '  ',
+      contentJson: {
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: content }] }],
+      },
+    });
     expect(text).toBe('字'.repeat(DOCUMENT_EMBEDDING_CONTENT_CHARS));
     expect([...text].length).toBe(DOCUMENT_EMBEDDING_CONTENT_CHARS);
   });
 
   it('returns empty string when there is nothing to index', () => {
-    expect(documentEmbeddingText({ title: null, description: null, contentMd: '  \n' })).toBe('');
+    expect(
+      documentEmbeddingText({
+        title: null,
+        description: null,
+        contentJson: { type: 'doc', content: [{ type: 'paragraph' }] },
+      }),
+    ).toBe('');
   });
 });
 

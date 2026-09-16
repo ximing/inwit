@@ -3,6 +3,7 @@ import { weeklyReportJobPayloadFrom, type AgentExecutionStep } from '@inwit/dto'
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents, type JobRow } from '../db/schema.js';
+import { documentPlainText } from '../documents/content-json.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
 import { modelResponseError, resolveModelFor } from '../llm/pi.js';
 import { logLlmUsage } from '../llm/usage.js';
@@ -174,19 +175,20 @@ async function assertWeeklyOutcome(userId: string, session: WeeklySession): Prom
     throw new Error('weekly report did not write a document');
   }
   const [doc] = await getDb()
-    .select({ id: documents.id, source: documents.source, title: documents.title, contentMd: documents.contentMd })
+    .select({ id: documents.id, source: documents.source, title: documents.title, contentJson: documents.contentJson })
     .from(documents)
     .where(and(eq(documents.id, session.documentId), eq(documents.userId, userId)))
     .limit(1);
   if (!doc) throw new Error('weekly report document missing');
   if (doc.source !== 'agent') throw new Error('weekly report document source must be agent');
   if (!doc.title?.includes('学习复盘')) throw new Error('weekly report title must include 学习复盘');
-  if (!/想起来了/.test(doc.contentMd) || !/模糊/.test(doc.contentMd) || !/忘了/.test(doc.contentMd)) {
+  const contentText = documentPlainText(doc.contentJson);
+  if (!/想起来了/.test(contentText) || !/模糊/.test(contentText) || !/忘了/.test(contentText)) {
     throw new Error('weekly report document missing 三档分布');
   }
   const stats = session.stats;
   if (stats && stats.relearn.length > 0) {
-    const missing = stats.relearn.filter((item) => !doc.contentMd.includes(`/cards/${item.cardId}`));
+    const missing = stats.relearn.filter((item) => !contentText.includes(`/cards/${item.cardId}`));
     if (missing.length > 0) {
       throw new Error('weekly report document missing card links for relearn concepts');
     }

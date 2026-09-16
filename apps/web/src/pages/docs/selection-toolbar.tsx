@@ -1,8 +1,4 @@
-import {
-  IMAGE_EXCERPT_QUOTE,
-  pageIndexToAnchorBlock,
-  type AnnotationGeometry,
-} from '@inwit/dto';
+import { IMAGE_EXCERPT_QUOTE, type AnnotationGeometry } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { Copy, Highlighter, Sparkles, SquarePlus } from 'lucide-react';
 import {
@@ -14,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import type { TextSelectionAnchor } from '@/lib/entity-marks';
 import { DocsService } from './docs.service';
 
 export type SelRect = { left: number; top: number; bottom: number };
@@ -59,11 +56,15 @@ export const SelectionActions = observer(function SelectionActions({
   text,
   documentId,
   getRect,
+  getSelection,
+  blockIndex,
   pdf,
 }: {
   text: string;
   documentId: string | null;
   getRect: () => SelRect;
+  getSelection?: () => TextSelectionAnchor | null;
+  blockIndex?: number;
   pdf?: {
     pageIndex: number;
     geometry: AnnotationGeometry;
@@ -74,22 +75,33 @@ export const SelectionActions = observer(function SelectionActions({
   const digesting = service.selectionDigesting;
   const locked = !documentId;
 
+  const resolveAnchor = (): { blockIndex?: number; from?: number; to?: number } => {
+    const sel = getSelection?.();
+    if (sel) return { blockIndex: sel.blockIndex, from: sel.from, to: sel.to };
+    if (blockIndex != null) return { blockIndex };
+    return {};
+  };
+
   const openPop = (kind: 'annotate' | 'card') => {
     if (!documentId) return;
     const rect = getRect();
+    const anchor = resolveAnchor();
     service.openSelectionPop({
       kind,
       text,
       left: rect.left,
       top: rect.bottom,
       documentId,
+      ...anchor,
       ...(pdf ? { pdf } : {}),
     });
   };
 
   const runAi = () => {
     if (!documentId || digesting) return;
-    void service.queueSelectionCards(documentId, clip(text, 100_000));
+    const index = resolveAnchor().blockIndex;
+    if (index == null) return;
+    void service.queueSelectionCards(documentId, clip(text, 100_000), index);
   };
 
   return (
@@ -195,7 +207,10 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
           geometry: pop.pdf.geometry,
           ...(pop.pdf.imageKey ? { imageKey: pop.pdf.imageKey } : {}),
         }
-      : undefined;
+      : {
+          ...(pop.blockIndex != null ? { anchorBlockIndex: pop.blockIndex } : {}),
+          ...(pop.from != null && pop.to != null ? { from: pop.from, to: pop.to } : {}),
+        };
     const ok = await service.addAnnotation(pop.documentId, clip(pop.text, 20_000), note, extra);
     setSaving(false);
     if (ok) service.closeSelectionPop();
@@ -216,9 +231,11 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
         ? {
             imageKey,
             anchorText: IMAGE_EXCERPT_QUOTE,
-            anchorBlock: pageIndexToAnchorBlock(pdf.pageIndex),
           }
-        : { anchorText: clip(pop.text, 4000) }),
+        : {
+            anchorText: clip(pop.text, 4000),
+            ...(pop.blockIndex != null ? { anchorBlockIndex: pop.blockIndex } : {}),
+          }),
     });
     setSaving(false);
     if (ok) service.closeSelectionPop();
@@ -383,6 +400,7 @@ export const ReadSelectionToolbar = observer(function ReadSelectionToolbar() {
       <SelectionActions
         text={pos.text}
         documentId={service.doc?.id ?? null}
+        getSelection={() => service.editorHost?.selectionAnchor() ?? null}
         getRect={() => ({ left: pos.left, top: pos.top, bottom: pos.bottom })}
       />
     </div>,

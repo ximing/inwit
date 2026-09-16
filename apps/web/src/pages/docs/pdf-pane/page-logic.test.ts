@@ -1,31 +1,59 @@
-import { PDF_PAGE_SEPARATOR } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
-import { pageIndexFromAnchor, splitPdfPages } from './page-logic';
+import type { PmJson } from '@inwit/doc-schema';
+import { isPdfOcrPending, pageIndexFromAnchor, pageTextsFromContent } from './page-logic';
 
-const md = ['第一页正文', '第二页正文', '第三页正文'].join(PDF_PAGE_SEPARATOR);
+function doc(...content: PmJson[]): PmJson {
+  return { type: 'doc', content };
+}
 
-describe('splitPdfPages', () => {
-  it('splits contentMd on the PDF page separator', () => {
-    expect(splitPdfPages(md)).toEqual(['第一页正文', '第二页正文', '第三页正文']);
-    expect(splitPdfPages('')).toEqual([]);
+function p(text: string): PmJson {
+  return { type: 'paragraph', content: [{ type: 'text', text }] };
+}
+
+function pageBreak(pageIndex: number): PmJson {
+  return { type: 'pageBreak', attrs: { pageIndex } };
+}
+
+const threePages = doc(
+  p('第一页正文'),
+  pageBreak(1),
+  p('第二页正文'),
+  pageBreak(2),
+  p('第三页正文'),
+);
+
+describe('pageTextsFromContent', () => {
+  it('groups top-level block text by pageIndex', () => {
+    expect(pageTextsFromContent(threePages)).toEqual(['第一页正文', '第二页正文', '第三页正文']);
+    expect(pageTextsFromContent({ type: 'doc', content: [{ type: 'paragraph' }] })).toEqual(['']);
   });
 });
 
 describe('pageIndexFromAnchor', () => {
   it('prefers an explicit 0-based pageIndex', () => {
-    expect(pageIndexFromAnchor({ contentMd: md, pageIndex: 2, anchorBlock: '1' })).toBe(2);
+    expect(
+      pageIndexFromAnchor({ contentJson: threePages, pageIndex: 2, anchorBlockIndex: 1 }),
+    ).toBe(2);
   });
 
-  it('maps 1-based anchorBlock through page separators', () => {
-    expect(pageIndexFromAnchor({ contentMd: md, anchorBlock: '1' })).toBe(0);
-    expect(pageIndexFromAnchor({ contentMd: md, anchorBlock: '3' })).toBe(2);
+  it('maps 1-based anchorBlockIndex through pageBreaks', () => {
+    expect(pageIndexFromAnchor({ contentJson: threePages, anchorBlockIndex: 1 })).toBe(0);
+    expect(pageIndexFromAnchor({ contentJson: threePages, anchorBlockIndex: 3 })).toBe(1);
+    expect(pageIndexFromAnchor({ contentJson: threePages, anchorBlockIndex: 5 })).toBe(2);
   });
 
   it('finds the page that contains quote when pageIndex is absent', () => {
-    expect(pageIndexFromAnchor({ contentMd: md, quote: '第二页正文' })).toBe(1);
+    expect(pageIndexFromAnchor({ contentJson: threePages, quote: '第二页正文' })).toBe(1);
   });
 
   it('clamps out-of-range blocks to the last page', () => {
-    expect(pageIndexFromAnchor({ contentMd: md, anchorBlock: '99' })).toBe(2);
+    expect(pageIndexFromAnchor({ contentJson: threePages, anchorBlockIndex: 99 })).toBe(2);
+  });
+});
+
+describe('isPdfOcrPending', () => {
+  it('treats empty docs as pending', () => {
+    expect(isPdfOcrPending({ type: 'doc', content: [{ type: 'paragraph' }] })).toBe(true);
+    expect(isPdfOcrPending(threePages)).toBe(false);
   });
 });

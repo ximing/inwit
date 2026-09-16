@@ -38,6 +38,7 @@ import { tryDeleteDocumentFromIndex, tryIndexDocument } from '../retrieval/pipel
 import { deletePrefix, isStorageConfigured, presignGet, presignPut } from '../storage/client.js';
 import { getOwnedTopic } from '../topics/topic.service.js';
 import { logger } from '../utils/logger.js';
+import { EMPTY_PM_DOC, textToParagraphDoc } from './content-json.js';
 import { isBlankDocumentContent, shouldEnqueueDigest } from './document-logic.js';
 import { retryJobKindForDocument } from './extract-logic.js';
 import { excerptKeyFor, validateExcerptUpload } from './excerpt-logic.js';
@@ -51,7 +52,7 @@ export function toPublicDocument(row: DocumentRow): Document {
     mapNodeId: row.mapNodeId,
     title: row.title ?? null,
     description: row.description ?? null,
-    contentMd: row.contentMd,
+    contentJson: (row.contentJson ?? EMPTY_PM_DOC) as Document['contentJson'],
     source: row.source,
     status: row.status,
     answer: row.answer ?? null,
@@ -85,7 +86,7 @@ export async function createDocument(
 ): Promise<Document> {
   await assertWritableTopic(userId, input.topicId);
 
-  const blank = isBlankDocumentContent(input.contentMd);
+  const blank = isBlankDocumentContent(input.contentJson);
 
   const document = await getDb().transaction(async (tx) => {
     const [row] = await tx
@@ -94,7 +95,7 @@ export async function createDocument(
         userId,
         topicId: input.topicId ?? null,
         title: input.title ?? null,
-        contentMd: input.contentMd,
+        contentJson: input.contentJson,
         source: input.source ?? 'paste',
         status: blank ? 'digested' : 'pending',
       })
@@ -123,7 +124,7 @@ export async function createChat(userId: string, input: CreateChatInput): Promis
         userId,
         topicId: input.topicId ?? null,
         title: null,
-        contentMd: input.question,
+        contentJson: textToParagraphDoc(input.question),
         source: 'chat',
         answer: null,
         status: 'pending',
@@ -151,7 +152,7 @@ export async function enqueueSelectionCards(
     const row = await enqueueJob(tx, {
       userId,
       type: 'selection',
-      payload: { documentId, selectionText: input.text },
+      payload: { documentId, selectionText: input.text, blockIndex: input.blockIndex },
     });
     return toPublicJob(row, { documentTitle: document.title });
   });
@@ -240,16 +241,16 @@ export async function updateDocument(
   input: UpdateDocumentInput,
 ): Promise<Document> {
   const existing = await getOwnedDocument(userId, id);
-  const contentMd = input.contentMd ?? existing.contentMd;
+  const contentJson = input.contentJson !== undefined ? input.contentJson : existing.contentJson;
   const title = input.title !== undefined ? input.title : existing.title;
 
   if (input.topicId) await assertWritableTopic(userId, input.topicId);
 
   const topicChanged = input.topicId !== undefined && input.topicId !== existing.topicId;
   const becameNonEmpty =
-    input.contentMd !== undefined &&
-    isBlankDocumentContent(existing.contentMd) &&
-    !isBlankDocumentContent(input.contentMd);
+    input.contentJson !== undefined &&
+    isBlankDocumentContent(existing.contentJson) &&
+    !isBlankDocumentContent(input.contentJson);
 
   const row = await getDb().transaction(async (tx) => {
     let enqueueDigest = false;
@@ -282,7 +283,7 @@ export async function updateDocument(
       .update(documents)
       .set({
         title,
-        contentMd,
+        contentJson,
         updatedAt: new Date(),
         ...(input.topicId !== undefined ? { topicId: input.topicId } : {}),
         ...(topicChanged ? { mapNodeId: null } : {}),
@@ -301,7 +302,9 @@ export async function updateDocument(
     return updated;
   });
   const titleChanged = input.title !== undefined && title !== existing.title;
-  const contentChanged = input.contentMd !== undefined && input.contentMd !== existing.contentMd;
+  const contentChanged =
+    input.contentJson !== undefined &&
+    JSON.stringify(input.contentJson) !== JSON.stringify(existing.contentJson);
   if (titleChanged || contentChanged || topicChanged) await tryIndexDocument(row);
   return toPublicDocument(row);
 }
@@ -431,7 +434,7 @@ export async function retryDocument(userId: string, id: string): Promise<Job> {
   const document = await getOwnedDocument(userId, id);
   const kind = retryJobKindForDocument({
     status: document.status,
-    contentMd: document.contentMd,
+    contentJson: document.contentJson,
     fileKey: document.fileKey ?? null,
     fileMime: document.fileMime ?? null,
     pageCount: document.pageCount ?? null,

@@ -155,6 +155,6 @@ export function describeDocumentStage(input: {
     pulse: false,
     percent: null,
     canCancel: false,
-    canRetry: hasContent || source === 'import',
+    canRetry: hasContent || source === 'import' || source === 'screenshot',
   };
 }

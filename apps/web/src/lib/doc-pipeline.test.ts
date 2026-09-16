@@ -238,6 +238,19 @@ describe('describeDocumentStage', () => {
     });
   });
 
+  it('offers retry for a stalled screenshot without content', () => {
+    expect(
+      describeDocumentStage({
+        status: 'pending',
+        source: 'screenshot',
+        uploadPercent: null,
+        hasCheckpoint: false,
+        hasContent: false,
+        job: null,
+      }).canRetry,
+    ).toBe(true);
+  });
+
   it('does not offer retry for a blank non-import pending doc', () => {
     expect(
       describeDocumentStage({

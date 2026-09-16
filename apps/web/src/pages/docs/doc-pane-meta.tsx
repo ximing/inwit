@@ -9,21 +9,21 @@ export const DocPaneMeta = observer(function DocPaneMeta({
   cardCount,
   status,
   source,
-  contentMd,
+  contentJson,
 }: {
   docId: string;
   updatedAt: string;
   cardCount: number;
   status: DocumentListItem['status'];
   source: DocumentListItem['source'];
-  contentMd?: string;
+  contentJson?: unknown;
 }) {
   const service = useService(DocsService);
   const stage = service.stageFor({
     id: docId,
     status,
     source,
-    contentMd,
+    contentJson,
   });
   return (
     <div className="pane-meta">

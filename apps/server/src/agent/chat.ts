@@ -3,6 +3,7 @@ import { documentIdFromJobPayload, type AgentExecutionStep } from '@inwit/dto';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents, type JobRow } from '../db/schema.js';
+import { documentPlainText } from '../documents/content-json.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
 import { logLlmUsage } from '../llm/usage.js';
 import { modelResponseError, resolveModelFor } from '../llm/pi.js';
@@ -169,8 +170,12 @@ export async function processChat(job: JobRow): Promise<void> {
         }, 15_000);
         heartbeat.unref();
         try {
+          const question =
+            typeof job.payload.question === 'string' && job.payload.question.trim().length > 0
+              ? job.payload.question
+              : documentPlainText(document.contentJson);
           await agent.prompt(
-            chatUserPrompt({ documentId, question: document.contentMd }),
+            chatUserPrompt({ documentId, question }),
           );
         } finally {
           clearTimeout(timeout);

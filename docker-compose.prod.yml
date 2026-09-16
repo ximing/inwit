@@ -1,0 +1,67 @@
+# Production: GHCR server image (API + worker), external Postgres / Qdrant / Meili / S3.
+#
+#   cp .env.production.example .env
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml run --rm migrate
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Same image, different commands. Health is GET /health.
+
+name: inwit
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+x-app: &app
+  env_file: .env
+  environment:
+    NODE_ENV: production
+  restart: unless-stopped
+  logging: *logging
+  pull_policy: always
+
+services:
+  migrate:
+    <<: *app
+    image: ghcr.io/ximing/inwit-server:${INWIT_IMAGE_TAG:-stable}
+    container_name: inwit-migrate
+    command: ['node', 'dist/db/migrate.js']
+    restart: 'no'
+
+  server:
+    <<: *app
+    image: ghcr.io/ximing/inwit-server:${INWIT_IMAGE_TAG:-stable}
+    container_name: inwit-server
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: '3020'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          'fetch("http://127.0.0.1:3020/health").then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    <<: *app
+    stop_grace_period: 5m
+    image: ghcr.io/ximing/inwit-server:${INWIT_IMAGE_TAG:-stable}
+    container_name: inwit-worker
+    command: ['node', 'dist/worker.js']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production

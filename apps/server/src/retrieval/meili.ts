@@ -33,7 +33,7 @@ export const CARD_INDEX_SETTINGS: MeiliIndexSettings = {
 
 export const DOCS_INDEX_SETTINGS: MeiliIndexSettings = {
   filterableAttributes: ['user_id', 'doc_id', 'topic_id', 'id'],
-  searchableAttributes: ['title', 'description', 'content_md', 'text'],
+  searchableAttributes: ['title', 'description', 'content_text', 'text'],
   localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
 };
 

@@ -2,7 +2,6 @@ import {
   createCardInputSchema,
   excerptCardInputFromAnnotation,
   IMAGE_EXCERPT_QUOTE,
-  pageIndexToAnchorBlock,
 } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 
@@ -18,20 +17,20 @@ describe('createCardInputSchema', () => {
       anchorText: '梯度在反向传播中逐层变小',
     });
     expect(parsed.imageKey).toBeUndefined();
-    expect(parsed.anchorBlock).toBeUndefined();
+    expect(parsed.anchorBlockIndex).toBeUndefined();
   });
 
-  it('accepts an excerpt card with imageKey and 1-based anchorBlock', () => {
+  it('accepts an excerpt card with imageKey and optional anchorBlockIndex', () => {
     const parsed = createCardInputSchema.parse({
       documentId: DOCUMENT_ID,
       concept: IMAGE_EXCERPT_QUOTE,
       example: '扫描页上的公式',
       anchorText: IMAGE_EXCERPT_QUOTE,
-      anchorBlock: '3',
+      anchorBlockIndex: 3,
       imageKey: IMAGE_KEY,
     });
     expect(parsed.imageKey).toBe(IMAGE_KEY);
-    expect(parsed.anchorBlock).toBe('3');
+    expect(parsed.anchorBlockIndex).toBe(3);
     expect(parsed.example).toBe('扫描页上的公式');
   });
 
@@ -43,14 +42,6 @@ describe('createCardInputSchema', () => {
         example: '',
       }).success,
     ).toBe(false);
-  });
-});
-
-describe('pageIndexToAnchorBlock', () => {
-  it('maps a 0-based page index to a 1-based block string', () => {
-    expect(pageIndexToAnchorBlock(0)).toBe('1');
-    expect(pageIndexToAnchorBlock(2)).toBe('3');
-    expect(pageIndexToAnchorBlock(-1)).toBe('1');
   });
 });
 
@@ -66,7 +57,7 @@ describe('excerptCardInputFromAnnotation', () => {
     ).toBeNull();
   });
 
-  it('uses the note as example, quote placeholder as anchor, and page as block', () => {
+  it('uses the note as example and quote placeholder as anchor, without a block index', () => {
     expect(
       excerptCardInputFromAnnotation({
         documentId: DOCUMENT_ID,
@@ -80,7 +71,6 @@ describe('excerptCardInputFromAnnotation', () => {
       example: '这条公式要记\n第二行',
       anchorText: IMAGE_EXCERPT_QUOTE,
       imageKey: IMAGE_KEY,
-      anchorBlock: '3',
     });
   });
 
@@ -93,6 +83,6 @@ describe('excerptCardInputFromAnnotation', () => {
     });
     expect(parsed?.concept).toBe(IMAGE_EXCERPT_QUOTE);
     expect(parsed?.example).toBe('   ');
-    expect(parsed?.anchorBlock).toBe('1');
+    expect(parsed?.anchorBlockIndex).toBeUndefined();
   });
 });

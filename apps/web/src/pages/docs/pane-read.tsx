@@ -5,11 +5,11 @@ import {
 } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { Loader2, PenLine } from 'lucide-react';
-import { lazy, Suspense, useMemo } from 'react';
+import { lazy, Suspense } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { DocView } from '@/components/doc/DocView';
 import { Tag } from '@/components/tag';
-import { docAnchors } from '@/lib/anchors';
+import { isBlankPmDoc, textToPmDoc } from '@/lib/pm-doc';
 import { ROUTES } from '@/routes';
 import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
@@ -35,10 +35,6 @@ export const PaneRead = observer(function PaneRead() {
   const [params] = useSearchParams();
   const urlAnchor = params.get('anchor');
   const doc = service.doc;
-  const anchors = useMemo(
-    () => docAnchors(doc?.cards ?? [], service.annotations),
-    [doc, service.annotations],
-  );
 
   if (service.$model.loadDoc.loading && !doc) {
     return (
@@ -99,7 +95,7 @@ export const PaneRead = observer(function PaneRead() {
                 cardCount={doc.cards.length}
                 status={doc.status}
                 source={doc.source}
-                contentMd={doc.contentMd}
+                contentJson={doc.contentJson}
               />
 
               <article className="paper">
@@ -107,23 +103,25 @@ export const PaneRead = observer(function PaneRead() {
                 {doc.source === 'chat' && doc.answer ? (
                   <aside className="doc-answer">
                     <p className="doc-answer-kicker">AI 回答</p>
-                    <DocView source={doc.answer} />
+                    <DocView source={textToPmDoc(doc.answer)} />
                   </aside>
                 ) : null}
-                {doc.contentMd.trim().length > 0 ? (
+                {!isBlankPmDoc(doc.contentJson) ? (
                   <DocView
-                    source={doc.contentMd}
-                    anchors={anchors}
+                    source={doc.contentJson}
+                    cards={doc.cards}
+                    annotations={service.annotations}
                     activeCardId={service.activeCardId}
                     activeAnnotationId={service.activeAnnotationId}
                     focusCardId={urlAnchor}
+                    bindHost={(host) => service.attachEditorHost(host)}
                     onAnchorClick={(ids) => service.openAnchors(ids)}
                     onAnnotationClick={(ids) => {
                       const id = ids[0];
                       if (id) service.openAnnotation(id);
                     }}
                   />
-                ) : (
+                ) : doc.source === 'chat' && doc.answer ? null : (
                   <p className="empty">{emptyHint}</p>
                 )}
               </article>

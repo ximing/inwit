@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { selectionJobPayloadFrom } from '@inwit/dto';
 import {
-  isAnchorInSelection,
   parseSelectionCards,
   selectionResultSummary,
   selectionUserPrompt,
@@ -16,6 +15,9 @@ describe('selectionJobPayloadFrom', () => {
     expect(
       selectionJobPayloadFrom({ documentId: DOC_ID, selectionText: '一段原文' }),
     ).toEqual({ documentId: DOC_ID, selectionText: '一段原文' });
+    expect(
+      selectionJobPayloadFrom({ documentId: DOC_ID, selectionText: '一段原文', blockIndex: 2 }),
+    ).toEqual({ documentId: DOC_ID, selectionText: '一段原文', blockIndex: 2 });
     expect(selectionJobPayloadFrom({ documentId: DOC_ID })).toBeUndefined();
     expect(selectionJobPayloadFrom({ selectionText: '一段原文' })).toBeUndefined();
     expect(selectionJobPayloadFrom({ documentId: DOC_ID, selectionText: '' })).toBeUndefined();
@@ -23,22 +25,13 @@ describe('selectionJobPayloadFrom', () => {
 });
 
 describe('selectionUserPrompt / system prompt', () => {
-  it('embeds title and selection, and asks for JSON cards', () => {
+  it('embeds title and selection, and asks for JSON cards without locating', () => {
     const prompt = selectionUserPrompt({ title: '反向传播', selectionText: SELECTION });
     expect(prompt).toContain('反向传播');
     expect(prompt).toContain(SELECTION);
-    expect(SELECTION_SYSTEM_PROMPT).toContain('anchor_text');
+    expect(SELECTION_SYSTEM_PROMPT).toContain('不必给出原文位置');
     expect(SELECTION_SYSTEM_PROMPT).toContain('1 到 3');
-  });
-});
-
-describe('isAnchorInSelection', () => {
-  it('accepts exact and whitespace-collapsed substrings', () => {
-    expect(isAnchorInSelection('参数几乎不更新', SELECTION)).toBe(true);
-    expect(isAnchorInSelection('  残差连接  ', SELECTION)).toBe(true);
-    expect(isAnchorInSelection('靠前的层梯度会 指数衰减', SELECTION)).toBe(true);
-    expect(isAnchorInSelection('这句不在原文里', SELECTION)).toBe(false);
-    expect(isAnchorInSelection('   ', SELECTION)).toBe(false);
+    expect(SELECTION_SYSTEM_PROMPT).not.toContain('anchor_text');
   });
 });
 
@@ -51,36 +44,32 @@ describe('parseSelectionCards', () => {
           example: '深层网络靠前的层几乎不更新',
           confusion_point: '和梯度爆炸相反',
           tags: ['反向传播', '训练'],
-          anchor_text: '靠前的层梯度会指数衰减',
         },
         {
           concept: 'ReLU 缓解梯度消失',
           example: '用 ReLU 代替饱和激活',
           confusion_point: '',
           tags: ['ReLU'],
-          anchor_text: '常见缓解：ReLU、残差连接',
         },
         {
           concept: '残差连接',
           example: '跨层直连',
           confusion_point: '',
           tags: [],
-          anchor_text: '残差连接',
         },
         {
           concept: '第四张应被丢掉',
           example: '超出上限',
           confusion_point: '',
           tags: [],
-          anchor_text: '参数几乎不更新',
         },
       ],
     });
-    const drafts = parseSelectionCards(raw, SELECTION);
+    const drafts = parseSelectionCards(raw);
     expect(drafts).toHaveLength(3);
     expect(drafts[0]?.concept).toBe('梯度消失');
     expect(drafts[0]?.confusionPoint).toBe('和梯度爆炸相反');
-    expect(drafts[1]?.anchorText).toBe('常见缓解：ReLU、残差连接');
+    expect(drafts[1]?.example).toBe('用 ReLU 代替饱和激活');
   });
 
   it('accepts a fenced JSON array and camelCase keys', () => {
@@ -91,48 +80,39 @@ describe('parseSelectionCards', () => {
     "concept": "梯度消失",
     "example": "指数衰减",
     "confusionPoint": "",
-    "tags": ["训练"],
-    "anchorText": "梯度会指数衰减"
+    "tags": ["训练"]
   }
 ]
 \`\`\``;
-    expect(parseSelectionCards(raw, SELECTION)).toEqual([
+    expect(parseSelectionCards(raw)).toEqual([
       {
         concept: '梯度消失',
         example: '指数衰减',
         confusionPoint: '',
         tags: ['训练'],
-        anchorText: '梯度会指数衰减',
       },
     ]);
   });
 
-  it('drops cards whose anchor is not a substring of the selection', () => {
+  it('keeps drafts even if they still include a leftover agent quote field', () => {
     const raw = JSON.stringify([
-      {
-        concept: '编造的概念',
-        example: '编造的例子',
-        confusion_point: '',
-        tags: [],
-        anchor_text: '原文没有这句话',
-      },
       {
         concept: '有效',
         example: '有效例子',
         confusion_point: '',
         tags: [],
-        anchor_text: '参数几乎不更新',
+        quote: '原文没有这句话',
       },
     ]);
-    const drafts = parseSelectionCards(raw, SELECTION);
+    const drafts = parseSelectionCards(raw);
     expect(drafts).toHaveLength(1);
     expect(drafts[0]?.concept).toBe('有效');
   });
 
   it('returns empty on garbage or missing concept/example', () => {
-    expect(parseSelectionCards('not json', SELECTION)).toEqual([]);
-    expect(parseSelectionCards('{"cards":[{"concept":"只有概念"}]}', SELECTION)).toEqual([]);
-    expect(parseSelectionCards('', SELECTION)).toEqual([]);
+    expect(parseSelectionCards('not json')).toEqual([]);
+    expect(parseSelectionCards('{"cards":[{"concept":"只有概念"}]}')).toEqual([]);
+    expect(parseSelectionCards('')).toEqual([]);
   });
 });
 

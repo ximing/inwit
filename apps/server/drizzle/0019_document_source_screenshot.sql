@@ -1,0 +1,2 @@
+ALTER TABLE "documents" DROP CONSTRAINT "documents_source_check";--> statement-breakpoint
+ALTER TABLE "documents" ADD CONSTRAINT "documents_source_check" CHECK ("documents"."source" IN ('editor', 'paste', 'chat', 'agent', 'import', 'screenshot'));

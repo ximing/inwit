@@ -11,6 +11,7 @@ import type {
 } from '@inwit/dto';
 import { isChatQuestion, topicJobPayloadFrom } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
+import { textToPmDoc } from '@/lib/pm-doc';
 import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
 import { ReaderService } from '@/components/reader/reader.service';
 import { cardPath, docAnchorPath, docPath } from '@/routes';
@@ -101,7 +102,7 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     ...item,
     title: detail.title,
     description: detail.description,
-    contentMd: detail.contentMd,
+    contentJson: detail.contentJson,
     status: detail.status,
     answer: detail.answer,
     linkHint: detail.linkHint,
@@ -616,7 +617,7 @@ export class TopicsService extends Service {
     try {
       const created = useChat
         ? await createChat({ question: content, topicId: this.topic.id })
-        : await createDocument({ contentMd: content, topicId: this.topic.id });
+        : await createDocument({ contentJson: textToPmDoc(content), topicId: this.topic.id });
       this.draft = '';
       this.ingestCreated(created);
       this.showToast(useChat ? '问题扔出去了，正在答' : '已收下，消化中');

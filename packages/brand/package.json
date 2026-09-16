@@ -1,0 +1,16 @@
+{
+  "name": "@inwit/brand",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./logo.svg": "./src/logo.svg"
+  },
+  "scripts": {
+    "raster-icons": "node scripts/raster-icons.mjs"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "png-to-ico": "^3.0.1"
+  }
+}

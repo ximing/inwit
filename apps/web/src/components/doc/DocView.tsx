@@ -1,16 +1,20 @@
-import { parseMarkdownToPmJSON } from '@inwit/markdown';
+import type { Annotation, DocumentCard } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { cardIdsFromAnchor, type AnchorSpec } from '@/lib/anchors';
+import { cardIdsFromAnchor, docEntities } from '@/lib/anchors';
+import {
+  createDocEditorHost,
+  ensureEntityMarksOnEditor,
+  type DocEditorHost,
+} from '@/lib/entity-marks';
+import { asPmJson, isBlankPmDoc } from '@/lib/pm-doc';
 import { AnchorHighlight } from '@/pages/docs/anchor-highlight';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { createDocExtensions } from './extensions';
 
-const EMPTY_DOC = { type: 'doc', content: [{ type: 'paragraph' }] };
-
-const ANCHOR_FLASH_SELECTOR = 'mark.anchor, .anchor-block, .anchor';
+const ANCHOR_FLASH_SELECTOR = '[data-card-ids], [data-card-id], .anchor, .anchor-note';
 
 function isInternalAppPath(href: string): boolean {
   return href.startsWith('/') && !href.startsWith('//');
@@ -44,50 +48,55 @@ function navigateInternalLink(event: MouseEvent, navigate: (to: string) => void)
   return false;
 }
 
-function contentFromSource(source: string) {
-  const json = parseMarkdownToPmJSON(source);
-  if (!json.content || json.content.length === 0) return EMPTY_DOC;
-  return json;
-}
-
 export const DocView = observer(function DocView({
   source,
-  anchors = [],
+  cards = [],
+  annotations = [],
   activeCardId = null,
   activeAnnotationId = null,
   focusCardId = null,
   onAnchorClick,
   onAnnotationClick,
+  bindHost,
   className,
 }: {
-  source: string;
-  anchors?: AnchorSpec[];
+  source: unknown;
+  cards?: DocumentCard[];
+  annotations?: Annotation[];
   activeCardId?: string | null;
   activeAnnotationId?: string | null;
   focusCardId?: string | null;
   onAnchorClick?: (ids: string[]) => void;
   onAnnotationClick?: (ids: string[]) => void;
+  bindHost?: (host: DocEditorHost | null) => void;
   className?: string;
 }) {
   const assetUrls = useService(AssetUrlsService);
   const navigate = useNavigate();
   const onAnchorClickRef = useRef(onAnchorClick);
   const onAnnotationClickRef = useRef(onAnnotationClick);
-  const anchorsRef = useRef(anchors);
+  const entities = useMemo(() => docEntities(cards, annotations), [cards, annotations]);
+  const entitiesRef = useRef(entities);
+  const cardsRef = useRef(cards);
+  const annotationsRef = useRef(annotations);
   const activeCardIdRef = useRef(activeCardId);
   const activeAnnotationIdRef = useRef(activeAnnotationId);
   const flashedRef = useRef<string | null>(null);
   const sourceRef = useRef<string | null>(null);
   onAnchorClickRef.current = onAnchorClick;
   onAnnotationClickRef.current = onAnnotationClick;
-  anchorsRef.current = anchors;
+  entitiesRef.current = entities;
+  cardsRef.current = cards;
+  annotationsRef.current = annotations;
   activeCardIdRef.current = activeCardId;
   activeAnnotationIdRef.current = activeAnnotationId;
+
+  const json = useMemo(() => asPmJson(source), [source]);
 
   const anchorHighlight = useMemo(
     () =>
       AnchorHighlight.configure({
-        getAnchors: () => anchorsRef.current,
+        getEntities: () => entitiesRef.current,
         getActiveCardId: () => activeCardIdRef.current,
         getActiveAnnotationId: () => activeAnnotationIdRef.current,
         onAnchorClick: (ids) => onAnchorClickRef.current?.(ids),
@@ -111,7 +120,7 @@ export const DocView = observer(function DocView({
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
     extensions,
-    content: contentFromSource(source),
+    content: json,
     editorProps: {
       attributes: {
         spellcheck: 'false',
@@ -119,14 +128,25 @@ export const DocView = observer(function DocView({
     },
   });
 
+  const bindHostRef = useRef(bindHost);
+  bindHostRef.current = bindHost;
   useLayoutEffect(() => {
     if (!editor) return;
-    if (sourceRef.current !== source) {
-      sourceRef.current = source;
-      editor.commands.setContent(contentFromSource(source), { emitUpdate: false });
+    const host = createDocEditorHost(editor);
+    bindHostRef.current?.(host);
+    return () => bindHostRef.current?.(null);
+  }, [editor]);
+
+  useLayoutEffect(() => {
+    if (!editor) return;
+    const serialized = JSON.stringify(json);
+    if (sourceRef.current !== serialized) {
+      sourceRef.current = serialized;
+      editor.commands.setContent(json, { emitUpdate: false });
     }
+    ensureEntityMarksOnEditor(editor, cardsRef.current, annotationsRef.current);
     editor.commands.updateDecorations('anchorHighlight');
-  }, [editor, source, anchors, activeCardId, activeAnnotationId]);
+  }, [editor, json, entities, activeCardId, activeAnnotationId, cards, annotations]);
 
   useLayoutEffect(() => {
     if (!editor || !focusCardId || flashedRef.current === focusCardId) return;
@@ -143,9 +163,9 @@ export const DocView = observer(function DocView({
     hit.classList.add('is-flash');
     const flashTimer = window.setTimeout(() => hit.classList.remove('is-flash'), 1100);
     return () => window.clearTimeout(flashTimer);
-  }, [editor, focusCardId, source, anchors]);
+  }, [editor, focusCardId, json, entities]);
 
-  if (!source) return null;
+  if (isBlankPmDoc(json)) return null;
 
   const onClick = (event: ReactMouseEvent<HTMLElement>) => {
     navigateInternalLink(event.nativeEvent, navigate);

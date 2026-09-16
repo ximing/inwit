@@ -1,5 +1,6 @@
 import { Service } from '@rabjs/react';
 import {
+  EMPTY_PM_DOC,
   isChatQuestion,
   type Annotation,
   type AnnotationGeometry,
@@ -13,6 +14,7 @@ import {
   type DocumentSource,
   type DocumentStatus,
   type Job,
+  type PmDocJson,
   type Topic,
 } from '@inwit/dto';
 import { listDocumentAnnotations } from '@/api/annotations';
@@ -39,6 +41,8 @@ import {
   type ImportCheckpoint,
 } from '@/lib/multipart-logic';
 import { type PresignedUrlEntry } from '@/lib/presign-cache-logic';
+import { isLostTextEntity, type DocEditorHost } from '@/lib/entity-marks';
+import { asPmJson, isBlankPmDoc, textToPmDoc } from '@/lib/pm-doc';
 import { CARD_RAIL_NARROW_PX } from '@/services/ui-prefs.service';
 import { DocsAnnotationsService } from './docs-annotations.service';
 import { DocsImportService, importFailMessage } from './docs-import.service';
@@ -74,7 +78,7 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     ...item,
     title: detail.title,
     description: detail.description,
-    contentMd: detail.contentMd,
+    contentJson: detail.contentJson,
     status: detail.status,
     answer: detail.answer,
     linkHint: detail.linkHint,
@@ -133,12 +137,16 @@ export class DocsService extends Service {
     left: number;
     top: number;
     documentId: string;
+    blockIndex?: number;
+    from?: number;
+    to?: number;
     pdf?: {
       pageIndex: number;
       geometry: AnnotationGeometry;
       imageKey?: string;
     };
   } | null = null;
+  editorHost: DocEditorHost | null = null;
 
   pollTimer: ReturnType<typeof setInterval> | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -274,7 +282,7 @@ export class DocsService extends Service {
     id: string;
     status: DocumentStatus;
     source: DocumentSource;
-    contentMd?: string;
+    contentJson?: unknown;
   }): DocPipelineStage {
     const job = this.jobFor(doc.id);
     const upload = this.uploadByDoc[doc.id];
@@ -289,7 +297,7 @@ export class DocsService extends Service {
       source: doc.source,
       uploadPercent,
       hasCheckpoint: Boolean(checkpoint),
-      hasContent: Boolean(doc.contentMd?.trim()),
+      hasContent: !isBlankPmDoc(doc.contentJson),
       job: upload ? null : job,
     });
   }
@@ -482,7 +490,7 @@ export class DocsService extends Service {
             ...(this.captureTopicId ? { topicId: this.captureTopicId } : {}),
           })
         : await createDocument({
-            contentMd: content,
+            contentJson: textToPmDoc(content),
             ...(this.captureTopicId ? { topicId: this.captureTopicId } : {}),
           });
       this.draft = '';
@@ -528,7 +536,7 @@ export class DocsService extends Service {
     this.importError = null;
     try {
       const created = await createDocument({
-        contentMd: '',
+        contentJson: EMPTY_PM_DOC,
         source: 'editor',
         ...(this.actionTopicId ? { topicId: this.actionTopicId } : {}),
       });
@@ -637,6 +645,7 @@ export class DocsService extends Service {
 
   closeDoc(): void {
     this.docLoadGen += 1;
+    this.editorHost = null;
     this.doc = null;
     this.annotations = [];
     this.annotationImageUrls = {};
@@ -713,6 +722,11 @@ export class DocsService extends Service {
     }
     this.activeCardId = id;
     this.activeAnnotationId = null;
+    const card = this.doc?.cards.find((item) => item.id === id);
+    if (card && this.isCardAnchorLost(card)) {
+      this.bodyFocusCardId = null;
+      return;
+    }
     this.bodyFocusCardId = id;
   }
 
@@ -721,6 +735,11 @@ export class DocsService extends Service {
     if (this.activeAnnotationId === id) {
       this.activeAnnotationId = null;
       this.bodyFocusAnnotationId = null;
+      return;
+    }
+    const item = this.annotations.find((note) => note.id === id);
+    if (item && this.isAnnotationAnchorLost(item)) {
+      this.showToast('原文已删除');
       return;
     }
     this.activeAnnotationId = id;
@@ -751,12 +770,44 @@ export class DocsService extends Service {
     this.bodyFocusAnnotationId = null;
   }
 
+  attachEditorHost(host: DocEditorHost | null): void {
+    this.editorHost = host;
+  }
+
+  contentJsonForAnchors(): PmDocJson {
+    return this.editorHost?.getJSON() ?? asPmJson(this.doc?.contentJson);
+  }
+
+  isCardAnchorLost(card: DocumentCard): boolean {
+    return isLostTextEntity(this.contentJsonForAnchors(), {
+      id: card.id,
+      kind: 'card',
+      quote: card.anchorText,
+      blockIndex: card.anchorBlockIndex,
+      hasImage: card.hasImage,
+    });
+  }
+
+  isAnnotationAnchorLost(item: Annotation): boolean {
+    return isLostTextEntity(this.contentJsonForAnchors(), {
+      id: item.id,
+      kind: 'annotation',
+      annotationKind: item.kind,
+      quote: item.quote,
+      blockIndex: item.anchorBlockIndex,
+      hasImage: Boolean(item.imageKey),
+    });
+  }
+
   openSelectionPop(input: {
     kind: 'annotate' | 'card';
     text: string;
     left: number;
     top: number;
     documentId: string;
+    blockIndex?: number;
+    from?: number;
+    to?: number;
     pdf?: {
       pageIndex: number;
       geometry: AnnotationGeometry;
@@ -774,7 +825,10 @@ export class DocsService extends Service {
     documentId: string,
     quote: string,
     note: string,
-    extra?: Pick<CreateAnnotationInput, 'kind' | 'pageIndex' | 'geometry' | 'imageKey'>,
+    extra?: Pick<
+      CreateAnnotationInput,
+      'kind' | 'pageIndex' | 'geometry' | 'imageKey' | 'anchorBlockIndex'
+    > & { from?: number; to?: number },
   ): Promise<boolean> {
     return this.annotationService.addAnnotation(documentId, quote, note, extra);
   }
@@ -821,7 +875,7 @@ export class DocsService extends Service {
         concept,
         example,
         ...(input.anchorText?.trim() ? { anchorText: input.anchorText.trim() } : {}),
-        ...(input.anchorBlock?.trim() ? { anchorBlock: input.anchorBlock.trim() } : {}),
+        ...(input.anchorBlockIndex != null ? { anchorBlockIndex: input.anchorBlockIndex } : {}),
         ...(input.imageKey ? { imageKey: input.imageKey } : {}),
       });
       if (this.doc?.id === input.documentId) {
@@ -833,6 +887,7 @@ export class DocsService extends Service {
         this.patchListFromDetail(this.doc);
       }
       this.showToast('已加入复习队列');
+      this.editorHost?.ensureEntityMarks(this.doc?.cards ?? [], this.annotations);
       this.openAnchors([card.id]);
       void this.refreshOne(input.documentId);
       return true;
@@ -846,16 +901,16 @@ export class DocsService extends Service {
     return this.annotationService.cardFromExcerpt(annotationId);
   }
 
-  async queueSelectionCards(documentId: string, text: string): Promise<boolean> {
+  async queueSelectionCards(documentId: string, text: string, blockIndex: number): Promise<boolean> {
     const clipped = text.trim();
-    if (!clipped) return false;
+    if (!clipped || !Number.isFinite(blockIndex) || blockIndex < 1) return false;
     this.selectionDigesting = true;
     this.selectionPollDocId = documentId;
     this.selectionCardCountAtStart =
       this.doc?.id === documentId ? this.doc.cards.length : 0;
     this.selectionPollUntil = Date.now() + SELECTION_POLL_FOR_MS;
     try {
-      await enqueueSelectionCards(documentId, { text: clipped });
+      await enqueueSelectionCards(documentId, { text: clipped, blockIndex });
       this.startSelectionPoll(documentId);
       return true;
     } catch (err) {
@@ -946,12 +1001,12 @@ export class DocsService extends Service {
     this.resolve(EditorService).applyRemoteMeta(doc);
   }
 
-  noteEditorSaved(id: string, title: string | null, contentMd: string): void {
+  noteEditorSaved(id: string, title: string | null, contentJson: PmDocJson): void {
     this.documents = this.documents.map((item) =>
-      item.id === id ? { ...item, title, contentMd, updatedAt: new Date().toISOString() } : item,
+      item.id === id ? { ...item, title, contentJson, updatedAt: new Date().toISOString() } : item,
     );
     if (this.doc?.id === id) {
-      this.doc = { ...this.doc, title, contentMd, updatedAt: new Date().toISOString() };
+      this.doc = { ...this.doc, title, contentJson, updatedAt: new Date().toISOString() };
     }
   }
 
