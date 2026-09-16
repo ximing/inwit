@@ -1466,6 +1466,12 @@ html[data-theme='dark'] .search-palette-body {
   place-items: center;
 }
 .doc-video-pending:empty::before { content: '视频载入中…'; }
+.doc-video-pending[hidden],
+.doc-video video[hidden],
+.doc-video-fallback[hidden],
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) video[hidden] {
+  display: none;
+}
 .doc-video-failed .doc-video-fallback {
   display: inline-block;
   margin-top: 8px;
