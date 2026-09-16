@@ -701,10 +701,15 @@ export class DocsService extends Service {
   }
 
   toggleCard(id: string): void {
-    if (this.expandedCardIds.includes(id)) {
-      this.expandedCardIds = this.expandedCardIds.filter((item) => item !== id);
-    } else {
-      this.expandedCardIds = [...this.expandedCardIds, id];
+    // 手风琴：同时只展开一张卡；再点一次当前卡 = 收起并取消选中
+    const wasOpen = this.expandedCardIds.includes(id);
+    this.expandedCardIds = wasOpen ? [] : [id];
+    if (wasOpen) {
+      if (this.activeCardId === id) {
+        this.activeCardId = null;
+        this.bodyFocusCardId = null;
+      }
+      return;
     }
     this.activeCardId = id;
     this.activeAnnotationId = null;
@@ -712,6 +717,12 @@ export class DocsService extends Service {
   }
 
   focusAnnotation(id: string): void {
+    // 再点一次当前批注 = 取消选中
+    if (this.activeAnnotationId === id) {
+      this.activeAnnotationId = null;
+      this.bodyFocusAnnotationId = null;
+      return;
+    }
     this.activeAnnotationId = id;
     this.activeCardId = null;
     this.bodyFocusAnnotationId = id;

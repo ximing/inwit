@@ -115,16 +115,17 @@ function highlightObject(item: OwnPdfAnnotation, rects: PdfRect[], rect: PdfRect
 }
 
 function excerptObject(item: OwnPdfAnnotation, rect: PdfRect): PdfAnnotationObject {
-  const color = item.geometry.color ?? PDF_EXCERPT_STROKE;
+  // The plugin's Square renderer applies `opacity` to fill AND stroke together,
+  // so transparency has to live in the fill color itself to keep the frame visible.
   return {
     id: item.id,
     type: PdfAnnotationSubtype.SQUARE,
     pageIndex: item.pageIndex,
     rect,
-    color: '#ffffff',
-    opacity: 0.08,
+    color: `${PDF_EXCERPT_STROKE}14`,
+    opacity: 1,
     strokeWidth: 1.5,
-    strokeColor: color,
+    strokeColor: PDF_EXCERPT_STROKE,
     strokeStyle: PdfAnnotationBorderStyle.SOLID,
     contents: item.note?.trim() || item.quote?.trim() || undefined,
     flags: ['print', 'readOnly', 'locked'],
