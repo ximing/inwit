@@ -1,5 +1,4 @@
-/** Same separator used when PDF extract/OCR writes `contentMd`. */
-export const PDF_PAGE_SEPARATOR = '\n\n---\n\n';
+import { PDF_PAGE_SEPARATOR } from '@inwit/dto';
 
 export function splitPdfPages(contentMd: string): string[] {
   const normalized = contentMd.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');

@@ -65,6 +65,7 @@ export const usageDaySchema = z.object({
   chatTokens: z.number().int().nonnegative(),
   embedTokens: z.number().int().nonnegative(),
   rerankTokens: z.number().int().nonnegative(),
+  ocrTokens: z.number().int().nonnegative(),
 });
 export type UsageDay = z.infer<typeof usageDaySchema>;
 
@@ -77,6 +78,7 @@ export const usageSummarySchema = z.object({
       chat: usageTotalsSchema,
       embed: usageTotalsSchema,
       rerank: usageTotalsSchema,
+      ocr: usageTotalsSchema,
     }),
   }),
   byModel: z.array(usageGroupSchema),

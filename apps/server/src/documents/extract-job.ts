@@ -1,4 +1,4 @@
-import { documentIdFromJobPayload } from '@inwit/dto';
+import { documentIdFromJobPayload, type ImportFormat } from '@inwit/dto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -14,12 +14,7 @@ import { logger } from '../utils/logger.js';
 import { isBlankDocumentContent } from './document-logic.js';
 import { extractImported } from './extract.js';
 import { followUpAfterExtract } from './extract-logic.js';
-import {
-  detectImportFormat,
-  formatFromSourceKey,
-  titleFromFilename,
-  type ImportFormat,
-} from './import-logic.js';
+import { detectImportFormat, formatFromSourceKey, titleFromFilename } from './import-logic.js';
 
 async function loadDocument(userId: string, documentId: string): Promise<DocumentRow | null> {
   const [row] = await getDb()
@@ -110,6 +105,7 @@ export async function processExtract(job: JobRow): Promise<void> {
       await tryIndexDocument({
         id: document.id,
         userId: document.userId,
+        topicId: document.topicId,
         title,
         description: document.description,
         contentMd,

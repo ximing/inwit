@@ -69,39 +69,143 @@ describe('validatePartNumbers', () => {
 });
 
 describe('validateCompleteParts', () => {
-  it('sorts, trims etags, and requires consecutive parts starting at 1', () => {
+  const P = MULTIPART_PART_SIZE;
+
+  it('sorts, trims etags, and accepts a short last part', () => {
     expect(
-      validateCompleteParts([
-        { partNumber: 2, etag: ' b ' },
-        { partNumber: 1, etag: 'a' },
-      ]),
+      validateCompleteParts(
+        [
+          { partNumber: 2, etag: ' b ', size: 10 },
+          { partNumber: 1, etag: 'a', size: P },
+        ],
+        P + 10,
+      ),
     ).toEqual([
-      { partNumber: 1, etag: 'a' },
-      { partNumber: 2, etag: 'b' },
+      { partNumber: 1, etag: 'a', size: P },
+      { partNumber: 2, etag: 'b', size: 10 },
     ]);
   });
 
-  it('rejects gaps, duplicates, empty etags, or an empty list', () => {
-    expectAppError(() => validateCompleteParts([]), 400, 'VALIDATION_ERROR');
+  it('accepts a single part equal to the whole file', () => {
+    expect(validateCompleteParts([{ partNumber: 1, etag: 'a', size: 100 }], 100)).toEqual([
+      { partNumber: 1, etag: 'a', size: 100 },
+    ]);
+    expect(validateCompleteParts([{ partNumber: 1, etag: 'a', size: P }], P)).toEqual([
+      { partNumber: 1, etag: 'a', size: P },
+    ]);
+  });
+
+  it('accepts an exact multiple of the part size (last part full)', () => {
+    expect(
+      validateCompleteParts(
+        [
+          { partNumber: 1, etag: 'a', size: P },
+          { partNumber: 2, etag: 'b', size: P },
+        ],
+        P * 2,
+      ),
+    ).toEqual([
+      { partNumber: 1, etag: 'a', size: P },
+      { partNumber: 2, etag: 'b', size: P },
+    ]);
+  });
+
+  it('rejects a truncated prefix (fewer parts than the registered size)', () => {
     expectAppError(
-      () => validateCompleteParts([{ partNumber: 1, etag: 'a' }, { partNumber: 3, etag: 'c' }]),
-      400,
-      'VALIDATION_ERROR',
+      () => validateCompleteParts([{ partNumber: 1, etag: 'a', size: P }], P + 1),
+      422,
+      'IMPORT_PARTS_MISMATCH',
     );
-    expectAppError(
-      () => validateCompleteParts([{ partNumber: 2, etag: 'a' }]),
-      400,
-      'VALIDATION_ERROR',
-    );
+  });
+
+  it('rejects extra parts beyond the registered size', () => {
     expectAppError(
       () =>
-        validateCompleteParts([
-          { partNumber: 1, etag: 'a' },
-          { partNumber: 1, etag: 'b' },
-        ]),
+        validateCompleteParts(
+          [
+            { partNumber: 1, etag: 'a', size: P },
+            { partNumber: 2, etag: 'b', size: 1 },
+          ],
+          P,
+        ),
+      422,
+      'IMPORT_PARTS_MISMATCH',
+    );
+  });
+
+  it('rejects a last part whose size does not match the remainder', () => {
+    expectAppError(
+      () =>
+        validateCompleteParts(
+          [
+            { partNumber: 1, etag: 'a', size: P },
+            { partNumber: 2, etag: 'b', size: 9 },
+          ],
+          P + 10,
+        ),
+      422,
+      'IMPORT_PARTS_MISMATCH',
+    );
+  });
+
+  it('rejects a non-last part that is not exactly 5MB even if totals match', () => {
+    expectAppError(
+      () =>
+        validateCompleteParts(
+          [
+            { partNumber: 1, etag: 'a', size: P - 1 },
+            { partNumber: 2, etag: 'b', size: 11 },
+          ],
+          P + 10,
+        ),
+      422,
+      'IMPORT_PARTS_MISMATCH',
+    );
+  });
+
+  it('rejects skipped part numbers', () => {
+    expectAppError(
+      () =>
+        validateCompleteParts(
+          [
+            { partNumber: 1, etag: 'a', size: P },
+            { partNumber: 3, etag: 'c', size: 10 },
+          ],
+          P * 2 + 10,
+        ),
+      422,
+      'IMPORT_PARTS_MISMATCH',
+    );
+    expectAppError(
+      () => validateCompleteParts([{ partNumber: 2, etag: 'a', size: 100 }], 100),
+      422,
+      'IMPORT_PARTS_MISMATCH',
+    );
+  });
+
+  it('rejects duplicates, empty etags, non-positive sizes, or an empty list', () => {
+    expectAppError(() => validateCompleteParts([], 100), 400, 'VALIDATION_ERROR');
+    expectAppError(
+      () =>
+        validateCompleteParts(
+          [
+            { partNumber: 1, etag: 'a', size: 50 },
+            { partNumber: 1, etag: 'b', size: 50 },
+          ],
+          100,
+        ),
       400,
       'VALIDATION_ERROR',
     );
-    expectAppError(() => validateCompleteParts([{ partNumber: 1, etag: '   ' }]), 400, 'VALIDATION_ERROR');
+    expectAppError(
+      () => validateCompleteParts([{ partNumber: 1, etag: '   ', size: 100 }], 100),
+      400,
+      'VALIDATION_ERROR',
+    );
+    expectAppError(
+      () => validateCompleteParts([{ partNumber: 1, etag: 'a', size: 0 }], 100),
+      400,
+      'VALIDATION_ERROR',
+    );
   });
 });

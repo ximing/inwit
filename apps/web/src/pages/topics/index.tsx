@@ -1,9 +1,10 @@
 import { agentDocumentMetaLabel, docDisplayTitle, type DocumentListItem } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { ChevronDown, ChevronRight, Tags } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { DocRowSummary } from '@/components/doc-row';
+import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { Tag } from '@/components/tag';
 import { formatRelativeTime, isSubmitHotkey } from '@/lib/format';
 import { ROUTES, docsPath, topicPath } from '@/routes';
@@ -12,9 +13,14 @@ import { TopicsService, type TopicListItem } from './topics.service';
 
 const TopicsPageContent = observer(function TopicsPageContent() {
   const service = useService(TopicsService);
+  const search = useService(SearchService);
   const [params] = useSearchParams();
   const raw = params.get('topic');
   const topicId = raw && raw.length > 0 ? raw : null;
+
+  useLayoutEffect(() => {
+    search.setTopicId(topicId);
+  }, [topicId, search]);
 
   useEffect(() => {
     void service.load();
@@ -416,39 +422,7 @@ const TopicPane = observer(function TopicPane({ topicId }: { topicId: string }) 
           <span>{lastAt ? `最近消化 ${formatRelativeTime(lastAt)}` : '还没有消化'}</span>
         </div>
 
-        <div className="topic-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={service.tab === 'docs'}
-            className={service.tab === 'docs' ? 'is-on' : undefined}
-            onClick={() => service.setTab('docs')}
-          >
-            文档
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={service.tab === 'map'}
-            className={service.tab === 'map' ? 'is-on' : undefined}
-            onClick={() => service.setTab('map')}
-          >
-            图谱
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={service.tab === 'feed'}
-            className={service.tab === 'feed' ? 'is-on' : undefined}
-            onClick={() => service.setTab('feed')}
-          >
-            动态
-          </button>
-        </div>
-
-        {service.tab === 'docs' ? <DocsTab /> : null}
-        {service.tab === 'map' ? <MapTab /> : null}
-        {service.tab === 'feed' ? <FeedTab /> : null}
+        <TopicSearch />
       </div>
     </div>
   );
@@ -566,4 +540,55 @@ function rowKindTag(
   return null;
 }
 
-export const TopicsPage = bindServices(TopicsPageContent, [TopicsService]);
+const TopicSearch = observer(function TopicSearch() {
+  const service = useService(TopicsService);
+  const search = useService(SearchService);
+
+  return (
+    <>
+      <div className="topic-search">
+        <SearchBox placeholder="搜索这个主题的文档和卡片…" />
+      </div>
+      {search.hasQuery ? (
+        <SearchResults />
+      ) : (
+        <>
+          <div className="topic-tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={service.tab === 'docs'}
+              className={service.tab === 'docs' ? 'is-on' : undefined}
+              onClick={() => service.setTab('docs')}
+            >
+              文档
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={service.tab === 'map'}
+              className={service.tab === 'map' ? 'is-on' : undefined}
+              onClick={() => service.setTab('map')}
+            >
+              图谱
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={service.tab === 'feed'}
+              className={service.tab === 'feed' ? 'is-on' : undefined}
+              onClick={() => service.setTab('feed')}
+            >
+              动态
+            </button>
+          </div>
+          {service.tab === 'docs' ? <DocsTab /> : null}
+          {service.tab === 'map' ? <MapTab /> : null}
+          {service.tab === 'feed' ? <FeedTab /> : null}
+        </>
+      )}
+    </>
+  );
+});
+
+export const TopicsPage = bindServices(TopicsPageContent, [TopicsService, SearchService]);

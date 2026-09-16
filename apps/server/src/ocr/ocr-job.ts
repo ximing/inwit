@@ -1,10 +1,10 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
-import { documents, jobs, type DocumentRow, type JobRow } from '../db/schema.js';
+import { documents, jobs, ocrPages, type DocumentRow, type JobRow } from '../db/schema.js';
 import { isBlankDocumentContent } from '../documents/document-logic.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
 import { enqueueJob } from '../jobs/queue.js';
@@ -17,6 +17,7 @@ import {
   applyPageFailure,
   applyPageSuccess,
   chunkPages,
+  mergeOcrResume,
   OCR_PAGE_CONCURRENCY,
   ocrIncompleteError,
   pagesToMarkdown,
@@ -25,6 +26,7 @@ import {
   pngToDataUrl,
   toOcrJobPayload,
   withTotalPages,
+  type CompletedOcrPage,
   type OcrProgress,
 } from './ocr-logic.js';
 import { resolveOcrFor } from './ocr.service.js';
@@ -46,7 +48,22 @@ async function markDocumentFailed(userId: string, documentId: string): Promise<v
     .where(and(eq(documents.id, documentId), eq(documents.userId, userId)));
 }
 
-async function persistOcrProgress(jobId: string, progress: OcrProgress): Promise<void> {
+async function loadCompletedPages(documentId: string): Promise<CompletedOcrPage[]> {
+  return getDb()
+    .select({
+      pageIndex: ocrPages.pageIndex,
+      pageText: ocrPages.pageText,
+    })
+    .from(ocrPages)
+    .where(eq(ocrPages.documentId, documentId))
+    .orderBy(desc(ocrPages.createdAt));
+}
+
+type PageOutcome =
+  | { pageIndex: number; ok: true; text: string; promptTokens: number; completionTokens: number; totalTokens: number }
+  | { pageIndex: number; ok: false };
+
+async function persistOcrCheckpoint(jobId: string, progress: OcrProgress): Promise<void> {
   await getDb()
     .update(jobs)
     .set({
@@ -54,6 +71,37 @@ async function persistOcrProgress(jobId: string, progress: OcrProgress): Promise
       updatedAt: new Date(),
     })
     .where(and(eq(jobs.id, jobId), eq(jobs.status, 'running')));
+}
+
+async function persistOcrOutcome(
+  jobId: string,
+  documentId: string,
+  progress: OcrProgress,
+  outcome: PageOutcome,
+): Promise<void> {
+  await getDb().transaction(async (tx) => {
+    if (outcome.ok) {
+      await tx
+        .insert(ocrPages)
+        .values({
+          jobId,
+          documentId,
+          pageIndex: outcome.pageIndex,
+          pageText: outcome.text,
+        })
+        .onConflictDoUpdate({
+          target: [ocrPages.jobId, ocrPages.pageIndex],
+          set: { pageText: outcome.text },
+        });
+    }
+    await tx
+      .update(jobs)
+      .set({
+        payload: toOcrJobPayload(progress),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(jobs.id, jobId), eq(jobs.status, 'running')));
+  });
 }
 
 async function mapPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
@@ -71,10 +119,6 @@ async function mapPool<T>(items: T[], limit: number, fn: (item: T) => Promise<vo
   await Promise.all(workers);
 }
 
-type PageOutcome =
-  | { pageIndex: number; ok: true; text: string; promptTokens: number; completionTokens: number; totalTokens: number }
-  | { pageIndex: number; ok: false };
-
 export async function processOcr(job: JobRow): Promise<void> {
   const parsed = parseOcrProgress(job.payload);
   if (!parsed) throw new Error('ocr job missing documentId');
@@ -89,7 +133,8 @@ export async function processOcr(job: JobRow): Promise<void> {
 
   const dir = await mkdtemp(path.join(tmpdir(), 'inwit-ocr-'));
   const dest = path.join(dir, 'source.pdf');
-  let progress = parsed;
+  const completed = await loadCompletedPages(documentId);
+  let progress = mergeOcrResume(job.payload, completed) ?? parsed;
 
   try {
     await getObjectToFile(document.fileKey, dest);
@@ -98,7 +143,7 @@ export async function processOcr(job: JobRow): Promise<void> {
     const pdf = await openPdf(dest);
     try {
       progress = withTotalPages(progress, pdf.pageCount);
-      await persistOcrProgress(job.id, progress);
+      await persistOcrCheckpoint(job.id, progress);
 
       const resolved = await resolveOcrFor(job.userId);
       const remaining = pendingPages(progress);
@@ -112,13 +157,13 @@ export async function processOcr(job: JobRow): Promise<void> {
             progress = outcome.ok
               ? applyPageSuccess(progress, outcome.pageIndex, outcome.text)
               : applyPageFailure(progress, outcome.pageIndex);
-            await persistOcrProgress(job.id, progress);
+            await persistOcrOutcome(job.id, documentId, progress, outcome);
             if (outcome.ok) {
               await logLlmUsage({
                 userId: job.userId,
                 provider: 'dashscope',
                 model: resolved.model,
-                capability: 'chat',
+                capability: 'ocr',
                 promptTokens: outcome.promptTokens,
                 completionTokens: outcome.completionTokens,
                 totalTokens: outcome.totalTokens,
@@ -196,6 +241,7 @@ export async function processOcr(job: JobRow): Promise<void> {
       await tryIndexDocument({
         id: document.id,
         userId: document.userId,
+        topicId: document.topicId,
         title: document.title,
         description: document.description,
         contentMd,

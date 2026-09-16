@@ -82,8 +82,8 @@ export async function ensureRetrievalStores(): Promise<void> {
     const cards = cardsStoreName();
     const docs = docsStoreName();
     await Promise.all([
-      qdrant.ensureCollection(cards, { payloadFields: ['user_id', 'card_id'] }),
-      qdrant.ensureCollection(docs, { payloadFields: ['user_id', 'doc_id'] }),
+      qdrant.ensureCollection(cards, { payloadFields: ['user_id', 'card_id', 'topic_id'] }),
+      qdrant.ensureCollection(docs, { payloadFields: ['user_id', 'doc_id', 'topic_id'] }),
       meili.ensureIndex(cards, CARD_INDEX_SETTINGS),
       meili.ensureIndex(docs, DOCS_INDEX_SETTINGS),
     ]);

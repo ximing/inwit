@@ -302,7 +302,7 @@ export async function updateDocument(
   });
   const titleChanged = input.title !== undefined && title !== existing.title;
   const contentChanged = input.contentMd !== undefined && input.contentMd !== existing.contentMd;
-  if (titleChanged || contentChanged) await tryIndexDocument(row);
+  if (titleChanged || contentChanged || topicChanged) await tryIndexDocument(row);
   return toPublicDocument(row);
 }
 

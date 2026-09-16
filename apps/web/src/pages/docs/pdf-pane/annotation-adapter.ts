@@ -3,9 +3,14 @@ import {
   PdfAnnotationBorderStyle,
   PdfAnnotationSubtype,
   type PdfAnnotationObject,
-  type Rect,
 } from '@embedpdf/models';
 import type { AnnotationTransferItem } from '@embedpdf/plugin-annotation';
+
+/** PDF user-space rect. Structurally matches EmbedPDF Rect; kept local so the type does not leak. */
+export type PdfRect = {
+  origin: { x: number; y: number };
+  size: { width: number; height: number };
+};
 
 export const PDF_HIGHLIGHT_COLOR = '#f5c542';
 export const PDF_EXCERPT_STROKE = '#c45c26';
@@ -28,7 +33,7 @@ function numbersOf(quad: unknown): number[] {
   return quad.filter(isFiniteNumber);
 }
 
-export function rectFromQuad(quad: number[]): Rect | null {
+export function rectFromQuad(quad: number[]): PdfRect | null {
   if (quad.length === 4) {
     const [x, y, width, height] = quad;
     if (x === undefined || y === undefined || width === undefined || height === undefined) {
@@ -50,7 +55,7 @@ export function rectFromQuad(quad: number[]): Rect | null {
   };
 }
 
-export function quadFromRect(rect: Rect): number[] {
+export function quadFromRect(rect: PdfRect): number[] {
   const x = rect.origin.x;
   const y = rect.origin.y;
   const w = rect.size.width;
@@ -58,7 +63,7 @@ export function quadFromRect(rect: Rect): number[] {
   return [x, y, x + w, y, x + w, y + h, x, y + h];
 }
 
-export function unionRects(rects: Rect[]): Rect | null {
+export function unionRects(rects: PdfRect[]): PdfRect | null {
   if (rects.length === 0) return null;
   let left = Infinity;
   let top = Infinity;
@@ -77,15 +82,15 @@ export function unionRects(rects: Rect[]): Rect | null {
   };
 }
 
-export function geometryFromRects(rects: Rect[], color = PDF_HIGHLIGHT_COLOR): AnnotationGeometry {
+export function geometryFromRects(rects: PdfRect[], color = PDF_HIGHLIGHT_COLOR): AnnotationGeometry {
   return {
     quads: rects.map(quadFromRect),
     color,
   };
 }
 
-export function rectsFromGeometry(geometry: AnnotationGeometry): Rect[] {
-  const rects: Rect[] = [];
+export function rectsFromGeometry(geometry: AnnotationGeometry): PdfRect[] {
+  const rects: PdfRect[] = [];
   for (const raw of geometry.quads) {
     const rect = rectFromQuad(numbersOf(raw));
     if (rect) rects.push(rect);
@@ -93,7 +98,7 @@ export function rectsFromGeometry(geometry: AnnotationGeometry): Rect[] {
   return rects;
 }
 
-function highlightObject(item: OwnPdfAnnotation, rects: Rect[], rect: Rect): PdfAnnotationObject {
+function highlightObject(item: OwnPdfAnnotation, rects: PdfRect[], rect: PdfRect): PdfAnnotationObject {
   const color = item.geometry.color ?? PDF_HIGHLIGHT_COLOR;
   return {
     id: item.id,
@@ -109,7 +114,7 @@ function highlightObject(item: OwnPdfAnnotation, rects: Rect[], rect: Rect): Pdf
   };
 }
 
-function excerptObject(item: OwnPdfAnnotation, rect: Rect): PdfAnnotationObject {
+function excerptObject(item: OwnPdfAnnotation, rect: PdfRect): PdfAnnotationObject {
   const color = item.geometry.color ?? PDF_EXCERPT_STROKE;
   return {
     id: item.id,

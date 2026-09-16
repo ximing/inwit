@@ -39,6 +39,7 @@ export const ERROR_MESSAGES = {
   IMPORT_UNSUPPORTED_TYPE: '不支持的文件类型',
   IMPORT_PARSE_FAILED: '无法解析该文件',
   IMPORT_EMPTY: '文件没有可提取的文本',
+  IMPORT_PARTS_MISMATCH: '上传分片与文件大小不一致',
   DOCUMENT_FILE_NOT_FOUND: '文档原件不存在',
   DOCUMENT_NOT_RETRYABLE: '当前文档无法重试',
   ANNOTATION_IMAGE_NOT_FOUND: '批注图片不存在',

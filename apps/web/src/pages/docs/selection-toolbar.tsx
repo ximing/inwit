@@ -292,3 +292,100 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
     document.body,
   );
 });
+
+export const ReadSelectionToolbar = observer(function ReadSelectionToolbar() {
+  const service = useService(DocsService);
+  const [pos, setPos] = useState<{
+    left: number;
+    top: number;
+    bottom: number;
+    text: string;
+  } | null>(null);
+  const posRef = useRef(pos);
+  posRef.current = pos;
+  const holdRef = useRef(false);
+
+  useEffect(() => {
+    const hide = () => {
+      if (holdRef.current) return;
+      if (service.selectionPop) return;
+      if (service.selectionDigesting && posRef.current) return;
+      setPos(null);
+    };
+    const update = () => {
+      if (holdRef.current) return;
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        hide();
+        return;
+      }
+      const text = sel.toString().trim();
+      if (!text) {
+        hide();
+        return;
+      }
+      const node = sel.anchorNode;
+      const el = node instanceof Element ? node : node?.parentElement;
+      if (!el?.closest('.pane-doc:not(.is-editing) .paper')) {
+        hide();
+        return;
+      }
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) {
+        hide();
+        return;
+      }
+      setPos({
+        left: rect.left + rect.width / 2,
+        top: rect.top,
+        bottom: rect.bottom,
+        text,
+      });
+    };
+    document.addEventListener('selectionchange', update);
+    window.addEventListener('scroll', hide, true);
+    return () => {
+      document.removeEventListener('selectionchange', update);
+      window.removeEventListener('scroll', hide, true);
+    };
+  }, [service]);
+
+  useEffect(() => {
+    if (service.selectionPop) {
+      setPos(null);
+      return;
+    }
+    if (service.selectionDigesting) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) setPos(null);
+  }, [service.selectionPop, service.selectionDigesting]);
+
+  if (!pos) return null;
+
+  return createPortal(
+    <div
+      className="float-toolbar"
+      role="toolbar"
+      aria-label="划线工具"
+      style={{
+        position: 'fixed',
+        left: pos.left,
+        top: pos.top,
+        transform: 'translate(-50%, calc(-100% - 12px))',
+      }}
+      onMouseEnter={() => {
+        holdRef.current = true;
+      }}
+      onMouseLeave={() => {
+        holdRef.current = false;
+      }}
+    >
+      <SelectionActions
+        text={pos.text}
+        documentId={service.doc?.id ?? null}
+        getRect={() => ({ left: pos.left, top: pos.top, bottom: pos.bottom })}
+      />
+    </div>,
+    document.body,
+  );
+});

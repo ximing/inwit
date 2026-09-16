@@ -1,7 +1,8 @@
+import { PDF_PAGE_SEPARATOR } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 import { pageIndexFromAnchor, splitPdfPages } from './page-logic';
 
-const md = ['第一页正文', '第二页正文', '第三页正文'].join('\n\n---\n\n');
+const md = ['第一页正文', '第二页正文', '第三页正文'].join(PDF_PAGE_SEPARATOR);
 
 describe('splitPdfPages', () => {
   it('splits contentMd on the PDF page separator', () => {

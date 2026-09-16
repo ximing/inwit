@@ -1,12 +1,9 @@
+import { type ImportFormat } from '@inwit/dto';
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import { extractText } from 'unpdf';
 import { AppError } from '../errors.js';
-import {
-  normalizeExtractedText,
-  PDF_PAGE_BREAK,
-  type ImportFormat,
-} from './import-logic.js';
+import { normalizeExtractedText, PDF_PAGE_BREAK } from './import-logic.js';
 
 export async function extractImported(
   buffer: Buffer,

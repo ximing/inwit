@@ -101,6 +101,7 @@ export async function getUsageSummary(
     chat: emptyTotals(),
     embed: emptyTotals(),
     rerank: emptyTotals(),
+    ocr: emptyTotals(),
   };
   for (const group of byModel) {
     addTotals(totals, group);
@@ -117,6 +118,7 @@ export async function getUsageSummary(
       chatTokens: sql<number>`coalesce(sum(${llmUsageLogs.totalTokens}) filter (where ${llmUsageLogs.capability} = 'chat'), 0)::int`,
       embedTokens: sql<number>`coalesce(sum(${llmUsageLogs.totalTokens}) filter (where ${llmUsageLogs.capability} = 'embed'), 0)::int`,
       rerankTokens: sql<number>`coalesce(sum(${llmUsageLogs.totalTokens}) filter (where ${llmUsageLogs.capability} = 'rerank'), 0)::int`,
+      ocrTokens: sql<number>`coalesce(sum(${llmUsageLogs.totalTokens}) filter (where ${llmUsageLogs.capability} = 'ocr'), 0)::int`,
     })
     .from(llmUsageLogs)
     .where(where)
@@ -134,6 +136,7 @@ export async function getUsageSummary(
       chatTokens: asNumber(row.chatTokens),
       embedTokens: asNumber(row.embedTokens),
       rerankTokens: asNumber(row.rerankTokens),
+      ocrTokens: asNumber(row.ocrTokens),
     })),
   );
 
@@ -147,6 +150,7 @@ export async function getUsageSummary(
         chat: byCapability.chat,
         embed: byCapability.embed,
         rerank: byCapability.rerank,
+        ocr: byCapability.ocr,
       },
     },
     byModel,

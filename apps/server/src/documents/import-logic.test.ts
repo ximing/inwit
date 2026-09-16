@@ -1,3 +1,4 @@
+import { MIME_BY_FORMAT } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../errors.js';
 import {
@@ -8,7 +9,6 @@ import {
   importSourceKey,
   isImportSourceKey,
   isPdfMime,
-  MIME_BY_FORMAT,
   normalizeExtractedText,
   PDF_PAGE_BREAK,
   titleFromFilename,

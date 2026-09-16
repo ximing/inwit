@@ -1,7 +1,6 @@
+import { EXCERPT_MAX_BYTES } from '@inwit/dto';
 import { randomUUID } from 'node:crypto';
 import { AppError } from '../errors.js';
-
-export const EXCERPT_MAX_BYTES = 5 * 1024 * 1024;
 
 export const EXCERPT_MIME_TO_EXT = {
   'image/png': 'png',
@@ -20,6 +19,13 @@ export function normalizeExcerptMime(contentType: string): string {
   return raw.trim().toLowerCase();
 }
 
+export function validateExcerptMime(contentType: string): { mime: ExcerptMime; ext: ExcerptExt } {
+  const mime = normalizeExcerptMime(contentType);
+  const ext = EXCERPT_MIME_TO_EXT[mime as ExcerptMime];
+  if (!ext) throw AppError.of(400, 'VALIDATION_ERROR');
+  return { mime: mime as ExcerptMime, ext };
+}
+
 export function validateExcerptUpload(
   contentType: string,
   sizeBytes: number,
@@ -27,10 +33,7 @@ export function validateExcerptUpload(
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0 || sizeBytes > EXCERPT_MAX_BYTES) {
     throw AppError.of(400, 'VALIDATION_ERROR');
   }
-  const mime = normalizeExcerptMime(contentType);
-  const ext = EXCERPT_MIME_TO_EXT[mime as ExcerptMime];
-  if (!ext) throw AppError.of(400, 'VALIDATION_ERROR');
-  return { mime: mime as ExcerptMime, ext };
+  return validateExcerptMime(contentType);
 }
 
 export function excerptKeyFor(
@@ -39,7 +42,7 @@ export function excerptKeyFor(
   contentType: string,
   id = randomUUID(),
 ): string {
-  const { ext } = validateExcerptUpload(contentType, 1);
+  const { ext } = validateExcerptMime(contentType);
   return `docs/${userId}/${documentId}/excerpts/${id}.${ext}`;
 }
 

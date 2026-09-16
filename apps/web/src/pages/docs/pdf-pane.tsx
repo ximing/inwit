@@ -54,15 +54,17 @@ const PdfPaneView = observer(function PdfPaneView() {
             <>
               <span className="sep">·</span>
               <span>失败</span>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={docs.retryingId === doc.id}
-                onClick={() => void docs.retryFailed(doc.id)}
-              >
-                {docs.retryingId === doc.id ? '重试中…' : '重试'}
-              </button>
             </>
+          ) : null}
+          {stage.canRetry ? (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={docs.retryingId === doc.id}
+              onClick={() => void docs.retryFailed(doc.id)}
+            >
+              {docs.retryingId === doc.id ? '重试中…' : '重试'}
+            </button>
           ) : null}
         </div>
       </div>

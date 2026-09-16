@@ -1,40 +1,17 @@
+import {
+  FORMAT_BY_EXT,
+  FORMAT_BY_MIME,
+  IMPORT_FORMATS,
+  MIME_BY_FORMAT,
+  PDF_PAGE_SEPARATOR,
+  type ImportFormat,
+} from '@inwit/dto';
 import { AppError } from '../errors.js';
-
-export const IMPORT_FORMATS = ['pdf', 'docx', 'epub', 'txt', 'md'] as const;
-export type ImportFormat = (typeof IMPORT_FORMATS)[number];
 
 /** Default technical ceiling (2 GiB). Prefer `config.IMPORT_MAX_FILE_BYTES` at the service layer. */
 export const DEFAULT_IMPORT_MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
 export const IMPORT_MAX_FILE_BYTES = DEFAULT_IMPORT_MAX_FILE_BYTES;
 export const PDF_PAGE_BREAK = '\f';
-export const PDF_PAGE_SEPARATOR = '\n\n---\n\n';
-
-const FORMAT_BY_EXT: Record<string, ImportFormat> = {
-  pdf: 'pdf',
-  docx: 'docx',
-  epub: 'epub',
-  txt: 'txt',
-  md: 'md',
-};
-
-const FORMAT_BY_MIME: Record<string, ImportFormat> = {
-  'application/pdf': 'pdf',
-  'application/x-pdf': 'pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'application/epub+zip': 'epub',
-  'application/epub': 'epub',
-  'text/plain': 'txt',
-  'text/markdown': 'md',
-  'text/x-markdown': 'md',
-};
-
-export const MIME_BY_FORMAT: Record<ImportFormat, string> = {
-  pdf: 'application/pdf',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  epub: 'application/epub+zip',
-  txt: 'text/plain',
-  md: 'text/markdown',
-};
 
 function basename(filename: string): string {
   const trimmed = filename.trim();

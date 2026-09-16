@@ -12,6 +12,7 @@ export const searchQuerySchema = z.object({
     emptyToUndef,
     z.coerce.number().int().min(1).max(50).default(SEARCH_DEFAULT_LIMIT),
   ),
+  topicId: z.preprocess(emptyToUndef, z.string().uuid().optional()),
 });
 export type SearchQuery = z.infer<typeof searchQuerySchema>;
 

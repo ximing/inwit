@@ -459,6 +459,26 @@ export const jobs = pgTable(
   ],
 );
 
+export const ocrPages = pgTable(
+  'ocr_pages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    pageIndex: integer('page_index').notNull(),
+    pageText: text('page_text').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('ocr_pages_job_page_uidx').on(t.jobId, t.pageIndex),
+    index('idx_ocr_pages_document').on(t.documentId),
+  ],
+);
+
 export const agentExecutions = pgTable(
   'agent_executions',
   {
@@ -522,7 +542,7 @@ export const llmUsageLogs = pgTable(
     index('idx_llm_usage_logs_capability_created').on(t.capability, t.createdAt),
     check(
       'llm_usage_logs_capability_check',
-      sql`${t.capability} IN ('chat', 'embed', 'rerank')`,
+      sql`${t.capability} IN ('chat', 'embed', 'rerank', 'ocr')`,
     ),
   ],
 );
@@ -591,6 +611,7 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
   mapNode: one(mapNodes, { fields: [documents.mapNodeId], references: [mapNodes.id] }),
   cards: many(cards),
   annotations: many(annotations),
+  ocrPages: many(ocrPages),
 }));
 
 export const annotationsRelations = relations(annotations, ({ one }) => ({
@@ -645,6 +666,12 @@ export const memoriesRelations = relations(memories, ({ one }) => ({
 export const jobsRelations = relations(jobs, ({ one, many }) => ({
   user: one(users, { fields: [jobs.userId], references: [users.id] }),
   executions: many(agentExecutions),
+  ocrPages: many(ocrPages),
+}));
+
+export const ocrPagesRelations = relations(ocrPages, ({ one }) => ({
+  job: one(jobs, { fields: [ocrPages.jobId], references: [jobs.id] }),
+  document: one(documents, { fields: [ocrPages.documentId], references: [documents.id] }),
 }));
 
 export const agentExecutionsRelations = relations(agentExecutions, ({ one, many }) => ({
@@ -692,6 +719,8 @@ export type MemoryRow = typeof memories.$inferSelect;
 export type NewMemory = typeof memories.$inferInsert;
 export type JobRow = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
+export type OcrPageRow = typeof ocrPages.$inferSelect;
+export type NewOcrPage = typeof ocrPages.$inferInsert;
 export type AgentExecutionRow = typeof agentExecutions.$inferSelect;
 export type NewAgentExecution = typeof agentExecutions.$inferInsert;
 export type LlmUsageLogRow = typeof llmUsageLogs.$inferSelect;

@@ -1,9 +1,10 @@
+import { EXCERPT_MAX_BYTES } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 import { AppError } from '../errors.js';
 import {
-  EXCERPT_MAX_BYTES,
   excerptKeyFor,
   isExcerptKeyFor,
+  validateExcerptMime,
   validateExcerptUpload,
 } from './excerpt-logic.js';
 
@@ -22,6 +23,22 @@ function expectAppError(fn: () => unknown, status: number, code: string): void {
   }
   expect.fail('expected AppError');
 }
+
+describe('validateExcerptMime', () => {
+  it('accepts png/jpeg/webp without a size', () => {
+    expect(validateExcerptMime('image/png')).toEqual({ mime: 'image/png', ext: 'png' });
+    expect(validateExcerptMime('image/jpeg; charset=binary')).toEqual({
+      mime: 'image/jpeg',
+      ext: 'jpg',
+    });
+    expect(validateExcerptMime('IMAGE/WEBP')).toEqual({ mime: 'image/webp', ext: 'webp' });
+  });
+
+  it('rejects disallowed mime', () => {
+    expectAppError(() => validateExcerptMime('image/gif'), 400, 'VALIDATION_ERROR');
+    expectAppError(() => validateExcerptMime('application/pdf'), 400, 'VALIDATION_ERROR');
+  });
+});
 
 describe('validateExcerptUpload', () => {
   it('accepts png/jpeg/webp within 5MB', () => {

@@ -13,7 +13,14 @@ const PIPELINE_JOB_RANK: Record<string, number> = {
   chat: 3,
 };
 
-export type DocPipelineKind = 'upload' | 'extract' | 'ocr' | 'digest' | 'failed' | 'idle';
+export type DocPipelineKind =
+  | 'upload'
+  | 'extract'
+  | 'ocr'
+  | 'digest'
+  | 'failed'
+  | 'interrupted'
+  | 'idle';
 
 export type DocPipelineStage = {
   kind: DocPipelineKind;
@@ -59,9 +66,11 @@ export function describeDocumentStage(input: {
   /** Local upload percent 0–100; null when not in an upload session. */
   uploadPercent: number | null;
   hasCheckpoint: boolean;
+  /** Caller-supplied: document has extractable/digestable text. */
+  hasContent: boolean;
   job: Job | null;
 }): DocPipelineStage {
-  const { status, source, uploadPercent, hasCheckpoint, job } = input;
+  const { status, source, uploadPercent, hasCheckpoint, hasContent, job } = input;
 
   if (status === 'failed') {
     return {
@@ -127,23 +136,25 @@ export function describeDocumentStage(input: {
     };
   }
 
-  if (source === 'import') {
+  // Init finished locally but CompleteMultipart has not run — resume/cancel still possible.
+  if (hasCheckpoint) {
     return {
       kind: 'upload',
       label: '上传中',
       pulse: true,
       percent: null,
-      canCancel: hasCheckpoint,
+      canCancel: true,
       canRetry: false,
     };
   }
 
+  // pending + no active job + no checkpoint: pipeline stalled (e.g. digest exhausted retries).
   return {
-    kind: 'digest',
-    label: '消化中…',
-    pulse: true,
+    kind: 'interrupted',
+    label: '中断',
+    pulse: false,
     percent: null,
     canCancel: false,
-    canRetry: false,
+    canRetry: hasContent || source === 'import',
   };
 }

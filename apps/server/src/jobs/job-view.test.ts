@@ -3,6 +3,7 @@ import {
   aggregateJobUsage,
   collectRelatedIds,
   computeQueueCounts,
+  publicJobPayload,
   relatedForJob,
   startedElapsedSec,
   summarizeJob,
@@ -127,6 +128,28 @@ describe('summarizeJob', () => {
     expect(() => summarizeJob('digest', { documentId: 1 as unknown as string })).not.toThrow();
     expect(summarizeJob('digest', { documentId: 1 as unknown as string }).summary).toBe('消化 · 一篇文档');
     expect(summarizeJob('chat', { question: '   ' }).summary).toBe('对话 · 一个问题');
+  });
+});
+
+describe('publicJobPayload', () => {
+  it('strips pageTexts from ocr jobs even if the row still has them', () => {
+    expect(
+      publicJobPayload('ocr', {
+        documentId: DOC_ID,
+        totalPages: 2,
+        donePages: [0],
+        pageTexts: ['secret page'],
+      }),
+    ).toEqual({
+      documentId: DOC_ID,
+      totalPages: 2,
+      donePages: [0],
+    });
+  });
+
+  it('leaves non-ocr payloads untouched', () => {
+    const payload = { documentId: DOC_ID, pageTexts: ['keep'] };
+    expect(publicJobPayload('digest', payload)).toBe(payload);
   });
 });
 
