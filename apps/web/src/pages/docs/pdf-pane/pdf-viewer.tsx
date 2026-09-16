@@ -45,10 +45,11 @@ import { observer, useService } from '@rabjs/react';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import wasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
+import { ThemeService } from '@/services/theme.service';
 import { DocsService } from '../docs.service';
 import { PdfPaneService } from '../pdf-pane.service';
 import { SelectionActions } from '../selection-toolbar';
-import { geometryFromRects, importAnnotationsFromOwn } from './annotation-adapter';
+import { geometryFromRects, importAnnotationsFromOwn, PDF_EXCERPT_STROKE } from './annotation-adapter';
 import { isEditableKeyTarget, pdfViewerKeyAction } from './chrome-logic.js';
 import { PdfSearchBar } from './pdf-search-bar.js';
 import { PdfThumbs } from './pdf-thumbs.js';
@@ -145,8 +146,8 @@ function PdfMarqueeCapture({
         top: rect.origin.y * scale,
         width: rect.size.width * scale,
         height: rect.size.height * scale,
-        border: '1px solid rgba(33,150,243,0.8)',
-        background: 'rgba(33,150,243,0.15)',
+        border: '1px solid rgba(196,92,38,0.9)',
+        background: 'rgba(196,92,38,0.12)',
         boxSizing: 'border-box',
       }}
     />
@@ -215,6 +216,8 @@ const PdfSelectionMenu = observer(function PdfSelectionMenu({
 const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { documentId: string }) {
   const pdf = useService(PdfPaneService);
   const docs = useService(DocsService);
+  const theme = useService(ThemeService);
+  const isDark = theme.resolved === 'dark';
   const annotation = useAnnotation(documentId);
   const selectionCap = useSelectionCapability();
   const capture = useCapture(documentId);
@@ -223,6 +226,7 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
   const scrollCap = useScrollCapability();
   const zoom = useZoom(documentId);
   const marqueeLastRef = useRef<MarqueePreview | null>(null);
+  const jumpSearchRef = useRef(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const prevThumbsOpen = useRef(pdf.thumbsOpen);
   const pdfAnnKey = docs.annotations
@@ -321,7 +325,7 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
       void (async () => {
         const key = await pdf.uploadExcerpt(docId, event.blob);
         if (!key) return;
-        const geometry = geometryFromRects([event.rect]);
+        const geometry = geometryFromRects([event.rect], PDF_EXCERPT_STROKE);
         await pdf.createExcerptAnnotation({
           documentId: docId,
           pageIndex: event.pageIndex,
@@ -349,17 +353,41 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
     const request = pdf.consumeJump();
     if (!request) return;
     const go = () => {
+      // pageCoordinates 把目标区域（而非页首）滚进视口；alignY 是视口高度百分比
       scroll.provides?.scrollToPage({
         pageNumber: request.pageIndex + 1,
         behavior: 'smooth',
         alignY: 30,
+        ...(request.rect
+          ? { pageCoordinates: { x: request.rect.origin.x, y: request.rect.origin.y } }
+          : {}),
       });
-      if (!request.quote || !search.provides) return;
+      if (!request.quote || !search.provides) {
+        // 跳到无引文的批注（如框选摘录）时，清掉上一次跳转留下的搜索高亮
+        if (jumpSearchRef.current) {
+          jumpSearchRef.current = false;
+          search.provides?.stopSearch();
+        }
+        return;
+      }
+      jumpSearchRef.current = true;
       search.provides.startSearch();
       search.provides.searchAllPages(request.quote).wait((result) => {
         const onPage = result.results.findIndex((hit) => hit.pageIndex === request.pageIndex);
         const index = onPage >= 0 ? onPage : 0;
-        if (result.results.length > 0) search.provides?.goToResult(index);
+        if (result.results.length === 0) return;
+        search.provides?.goToResult(index);
+        // 搜索命中的 rect 比页级滚动更准（卡片/纯引文跳转没有 geometry）
+        const hit = result.results[index];
+        const hitRect = hit?.rects[0];
+        if (hit && hitRect) {
+          scroll.provides?.scrollToPage({
+            pageNumber: hit.pageIndex + 1,
+            behavior: 'smooth',
+            alignY: 30,
+            pageCoordinates: { x: hitRect.origin.x, y: hitRect.origin.y },
+          });
+        }
       }, ignore);
     };
     if (scroll.provides && scroll.state.totalPages > 0) {
@@ -373,6 +401,20 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
     });
     return () => off?.();
   }, [jump, pdf, scroll.provides, scroll.state.totalPages, search.provides, scrollCap.provides, documentId]);
+
+  // 取消选中（点击空白/关闭高亮）或离开页面时，清掉跳转留下的搜索高亮
+  useEffect(() => {
+    if (activeAnnotationId || activeCardId) return;
+    if (!jumpSearchRef.current) return;
+    jumpSearchRef.current = false;
+    search.provides?.stopSearch();
+  }, [activeAnnotationId, activeCardId, search.provides]);
+
+  useEffect(() => {
+    return () => {
+      if (jumpSearchRef.current) search.provides?.stopSearch();
+    };
+  }, [search.provides]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -444,6 +486,7 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
                       <SelectionLayer
                         documentId={documentId}
                         pageIndex={pageIndex}
+                        {...(isDark ? { background: 'rgba(122,162,212,0.4)' } : {})}
                         selectionMenu={(props) => <PdfSelectionMenu {...props} />}
                       />
                       <AnnotationLayer documentId={documentId} pageIndex={pageIndex} />

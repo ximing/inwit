@@ -12,6 +12,8 @@ import { DocsService } from './docs.service';
 import {
   geometryFromRects,
   PDF_HIGHLIGHT_COLOR,
+  rectsFromGeometry,
+  unionRects,
   type OwnPdfAnnotation,
   type PdfRect,
 } from './pdf-pane/annotation-adapter';
@@ -21,6 +23,8 @@ export type PdfJumpRequest = {
   key: string;
   pageIndex: number;
   quote: string | null;
+  /** 批注在页面上的位置（PDF 用户空间），用于把跳转目标滚进视口 */
+  rect: PdfRect | null;
 };
 
 export class PdfPaneService extends Service {
@@ -116,6 +120,7 @@ export class PdfPaneService extends Service {
         key: `ann:${item.id}`,
         pageIndex: item.pageIndex,
         quote: this.jumpQuote(item.quote),
+        rect: item.geometry ? unionRects(rectsFromGeometry(item.geometry)) : null,
       });
       return;
     }
@@ -135,6 +140,7 @@ export class PdfPaneService extends Service {
       key: `card:${card.id}`,
       pageIndex,
       quote: this.jumpQuote(card.anchorText),
+      rect: null,
     });
   }
 
@@ -149,6 +155,7 @@ export class PdfPaneService extends Service {
       key: `${kind}:${id}`,
       pageIndex,
       quote: this.jumpQuote(quote),
+      rect: null,
     });
   }
 

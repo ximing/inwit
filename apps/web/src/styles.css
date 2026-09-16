@@ -3531,16 +3531,31 @@ html[data-theme='dark'] .float-toolbar {
   background: #fffdf8;
   box-shadow: 0 0 0 1px rgba(60, 48, 30, 0.12), var(--shadow-2);
 }
+/* 渲染层是 <img>，默认可被原生拖拽：拖出幽灵图并触发 pointercancel，划词/框选被打断 */
+.pdf-page img,
+.pdf-thumb-img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
 html[data-theme='dark'] .pdf-page {
-  background: #fffdf8;
+  background: #14120e;
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.4),
     0 2px 8px rgba(0, 0, 0, 0.4),
     0 12px 28px rgba(0, 0, 0, 0.32);
 }
+/* 暗色下反色渲染页面，hue-rotate 把色相翻回来，避免白纸刺眼 */
+html[data-theme='dark'] .pdf-page > img,
+html[data-theme='dark'] .pdf-thumb-img {
+  filter: invert(0.93) hue-rotate(180deg) brightness(1.02) contrast(0.92);
+}
+/* 划词高亮层是 multiply 混合，压在反色后的深底上会糊掉，暗色改回普通混合 */
+html[data-theme='dark'] .pdf-page [style*='mix-blend-mode'] {
+  mix-blend-mode: normal;
+}
 html[data-theme='dark'] .pdf-thumb-frame,
 html[data-theme='dark'] .pdf-thumb-img {
-  background: #fffdf8;
+  background: #14120e;
 }
 .pdf-sel-hint {
   margin: 0;
