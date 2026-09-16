@@ -1,9 +1,20 @@
 import type {
   CreateChatInput,
   CreateDocumentInput,
+  CreateSelectionCardsInput,
   Document,
   DocumentDetail,
+  DocumentFileResponse,
   DocumentListItem,
+  ExcerptUploadInput,
+  ExcerptUploadResponse,
+  ImportAbortInput,
+  ImportCompleteInput,
+  ImportInitInput,
+  ImportInitResponse,
+  ImportPartsInput,
+  ImportPartsResponse,
+  Job,
   Paginated,
   UpdateDocumentInput,
 } from '@inwit/dto';
@@ -31,6 +42,41 @@ export function createDocument(input: CreateDocumentInput): Promise<Document> {
   });
 }
 
+export function initImport(input: ImportInitInput): Promise<ImportInitResponse> {
+  return request<ImportInitResponse>('/api/documents/import/init', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function presignImportParts(
+  documentId: string,
+  input: ImportPartsInput,
+): Promise<ImportPartsResponse> {
+  return request<ImportPartsResponse>(`/api/documents/import/${documentId}/parts`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function completeImport(documentId: string, input: ImportCompleteInput): Promise<Document> {
+  return request<Document>(`/api/documents/import/${documentId}/complete`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function abortImport(documentId: string, input: ImportAbortInput): Promise<void> {
+  return request<void>(`/api/documents/import/${documentId}/abort`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function retryDocument(documentId: string): Promise<Job> {
+  return request<Job>(`/api/documents/${documentId}/retry`, { method: 'POST' });
+}
+
 export function createChat(input: CreateChatInput): Promise<Document> {
   return request<Document>('/api/chat', {
     method: 'POST',
@@ -42,9 +88,33 @@ export function getDocument(id: string): Promise<DocumentDetail> {
   return request<DocumentDetail>(`/api/documents/${id}`);
 }
 
+export function enqueueSelectionCards(
+  id: string,
+  input: CreateSelectionCardsInput,
+): Promise<Job> {
+  return request<Job>(`/api/documents/${id}/selection-cards`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export function updateDocument(id: string, input: UpdateDocumentInput): Promise<Document> {
   return request<Document>(`/api/documents/${id}`, {
     method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export function getDocumentFile(id: string): Promise<DocumentFileResponse> {
+  return request<DocumentFileResponse>(`/api/documents/${id}/file`);
+}
+
+export function requestExcerptUpload(
+  id: string,
+  input: ExcerptUploadInput,
+): Promise<ExcerptUploadResponse> {
+  return request<ExcerptUploadResponse>(`/api/documents/${id}/excerpts`, {
+    method: 'POST',
     body: JSON.stringify(input),
   });
 }

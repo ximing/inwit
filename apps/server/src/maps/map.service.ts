@@ -7,7 +7,7 @@ import type {
   ReviewFeedback,
   UpdateMapNodeInput,
 } from '@inwit/dto';
-import { MAP_MAX_DEPTH } from '@inwit/dto';
+import { MAP_MAX_DEPTH, docDisplayTitle } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { toCardSummary } from '../cards/card.mapper.js';
 import { getDb, type Database } from '../db/index.js';
@@ -243,7 +243,12 @@ export async function getMapNodeDetail(userId: string, nodeId: string): Promise<
   const db = getDb();
   const stats = await statsForNode(nodeId, db);
   const cardRows = await db
-    .select({ id: cards.id, concept: cards.concept, tags: cards.tags })
+    .select({
+      id: cards.id,
+      documentId: cards.documentId,
+      concept: cards.concept,
+      tags: cards.tags,
+    })
     .from(cards)
     .where(and(eq(cards.userId, userId), eq(cards.mapNodeId, nodeId)))
     .orderBy(asc(cards.createdAt), asc(cards.id));
@@ -251,6 +256,7 @@ export async function getMapNodeDetail(userId: string, nodeId: string): Promise<
     .select({
       id: documents.id,
       title: documents.title,
+      description: documents.description,
       status: documents.status,
       updatedAt: documents.updatedAt,
     })
@@ -262,7 +268,7 @@ export async function getMapNodeDetail(userId: string, nodeId: string): Promise<
     cards: cardRows.map((card) => toCardSummary(card)),
     documents: docRows.map((doc) => ({
       id: doc.id,
-      title: doc.title,
+      title: docDisplayTitle(doc),
       status: doc.status,
       updatedAt: doc.updatedAt.toISOString(),
     })),

@@ -298,7 +298,7 @@ export function weeklyWriteDocumentTool(
 
       session.documentId = row.id;
       session.wroteDocument = true;
-      session.title = row.title;
+      session.title = row.title ?? session.title;
 
       await upsertWeeklyMemory(session, { summary: defaultWeeklySummary(stats) });
 

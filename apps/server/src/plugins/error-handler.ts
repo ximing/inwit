@@ -26,7 +26,11 @@ export function registerErrorHandler(app: FastifyInstance): void {
     }
     const statusCode = 'statusCode' in error ? error.statusCode : undefined;
     const code = 'code' in error ? error.code : undefined;
-    if (statusCode === 413 || code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
+    if (
+      statusCode === 413 ||
+      code === 'FST_ERR_CTP_BODY_TOO_LARGE' ||
+      code === 'FST_REQ_FILE_TOO_LARGE'
+    ) {
       send(reply, 413, 'VALIDATION_ERROR', ERROR_MESSAGES.VALIDATION_ERROR);
       return;
     }

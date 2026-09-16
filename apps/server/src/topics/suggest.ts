@@ -160,7 +160,7 @@ export async function loadUnattributedPool(
   return {
     documents: docRows.map((row) => ({
       id: row.id,
-      title: row.title.slice(0, 80),
+      title: (row.title ?? '').slice(0, 80),
       createdAt: row.createdAt.toISOString(),
       concepts: conceptsByDoc.get(row.id) ?? [],
     })),

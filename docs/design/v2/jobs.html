@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 任务与用量</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  .jobs-col { max-width: 880px; margin: 0 auto; padding: 36px 40px 120px; }
+
+  /* 顶部状态条 */
+  .queue-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
+  .q-stat {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg); padding: 16px 20px 14px;
+  }
+  .q-stat-num { font-family: var(--serif); font-size: 28px; font-weight: 700; line-height: 1.1; display: flex; align-items: center; gap: 8px; }
+  .q-stat-label { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+  .q-stat.is-live { border-color: var(--gold-line); background: linear-gradient(150deg, var(--gold-soft), var(--surface) 75%); }
+  .q-stat.is-bad { border-color: #e2b8ac; }
+  .q-stat.is-bad .q-stat-num { color: var(--accent-deep); }
+
+  .jobs-sec { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3); margin: 30px 0 12px; display: flex; align-items: center; gap: 10px; }
+  .jobs-sec .line { flex: 1; height: 1px; background: var(--line-soft); }
+
+  /* 进行中的任务 */
+  .live-job {
+    background: var(--surface); border: 1px solid var(--gold-line);
+    border-radius: var(--r-lg); padding: 18px 22px; margin-bottom: 10px;
+    position: relative; overflow: hidden;
+  }
+  .live-job::after {
+    content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 40%;
+    background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    animation: sweep 1.8s linear infinite;
+  }
+  @keyframes sweep { from { left: -40%; } to { left: 100%; } }
+  .job-row { display: flex; align-items: center; gap: 14px; }
+  .job-ico {
+    width: 38px; height: 38px; border-radius: 10px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 17px;
+    background: var(--bg-sunken); border: 1px solid var(--line-soft);
+  }
+  .job-body { flex: 1; min-width: 0; }
+  .job-name { font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .job-desc { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .job-side { text-align: right; flex: none; }
+  .job-dur { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .job-sub { font-size: 11.5px; color: var(--ink-4); margin-top: 2px; }
+
+  /* 队列 */
+  .queue-job {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-md); padding: 13px 18px; margin-bottom: 8px;
+  }
+  .queue-when { flex: none; width: 92px; }
+  .queue-when b { display: block; font-size: 13px; font-weight: 600; }
+  .queue-when span { font-size: 11px; color: var(--ink-4); }
+
+  /* 用量 */
+  .usage-panel { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 22px 24px; }
+  .usage-grid { display: grid; grid-template-columns: 1fr 240px; gap: 32px; align-items: end; }
+  .bars { display: flex; align-items: flex-end; gap: 10px; height: 120px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+  .bar { width: 100%; max-width: 34px; border-radius: 5px 5px 2px 2px; background: linear-gradient(to top, var(--accent), #d0765a); min-height: 3px; }
+  .bar.is-dim { background: var(--line); }
+  .bar-day { font-size: 10.5px; color: var(--ink-4); }
+  .usage-legend-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); padding: 5px 0; }
+  .usage-legend-row .sw { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+  .usage-legend-row .v { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+
+  /* 历史表格 */
+  .hist { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); overflow: hidden; }
+  .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .hist-table th { text-align: left; font-weight: 500; color: var(--ink-4); font-size: 12px; padding: 12px 16px 10px; border-bottom: 1px solid var(--line-soft); }
+  .hist-table td { padding: 11px 16px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); vertical-align: middle; }
+  .hist-table tr:last-child td { border-bottom: none; }
+  .hist-table tr.is-err td { background: #fdf3f0; }
+  .err-detail { font-size: 12px; color: var(--accent-deep); margin-top: 4px; }
+  .retry { font-size: 12.5px; color: var(--accent-deep); font-weight: 600; }
+  .retry:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-name">Inwit</div>
+      <div class="brand-tag">扔进去，它来消化</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        首页
+      </a>
+      <a class="nav-item" href="docs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        文档
+      </a>
+      <a class="nav-item" href="review.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+        复习
+        <span class="nav-badge">7</span>
+      </a>
+      <a class="nav-item" href="topics.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7l10 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        主题
+      </a>
+      <a class="nav-item is-on" href="jobs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        任务
+      </a>
+      <a class="nav-item" href="settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z"/></svg>
+        设置
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <a class="rail-user" href="settings.html"><span class="avatar">R</span><span>regression@inwit.dev</span></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="jobs-col">
+      <div class="page-head">
+        <div class="page-title">任务与用量</div>
+        <div class="page-lede">Agent 系统此刻在做什么，一目了然。</div>
+      </div>
+
+      <!-- 队列概况 -->
+      <div class="queue-strip">
+        <div class="q-stat is-live">
+          <div class="q-stat-num"><span class="pulse"></span>1</div>
+          <div class="q-stat-label">正在进行</div>
+        </div>
+        <div class="q-stat">
+          <div class="q-stat-num">2</div>
+          <div class="q-stat-label">排队中</div>
+        </div>
+        <div class="q-stat">
+          <div class="q-stat-num">9</div>
+          <div class="q-stat-label">今日完成</div>
+        </div>
+        <div class="q-stat is-bad">
+          <div class="q-stat-num">1</div>
+          <div class="q-stat-label">失败待处理</div>
+        </div>
+      </div>
+
+      <!-- 正在进行 -->
+      <div class="jobs-sec">正在进行<span class="line"></span></div>
+      <div class="live-job">
+        <div class="job-row">
+          <span class="job-ico">🧠</span>
+          <div class="job-body">
+            <div class="job-name">消化 · 「学习率太大时梯度下降会在最优点附近震荡」</div>
+            <div class="job-desc">正在提取知识卡片并挂到「机器学习基础」的知识地图…</div>
+          </div>
+          <div class="job-side">
+            <div class="job-dur">12s</div>
+            <div class="job-sub">第 1 次尝试</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 排队中 -->
+      <div class="jobs-sec">排队中 · 2<span class="line"></span></div>
+      <div class="queue-job">
+        <div class="queue-when"><b>立即</b><span>等前面完成</span></div>
+        <span class="job-ico" style="width:32px;height:32px;font-size:14px;">💬</span>
+        <div class="job-body">
+          <div class="job-name" style="font-size:13.5px;">对话 · 「L1 和 L2 正则化到底啥区别？」</div>
+          <div class="job-desc">检索已有卡片后生成回答</div>
+        </div>
+        <button class="btn btn-ghost" style="height:28px; font-size:12.5px;">取消</button>
+      </div>
+      <div class="queue-job">
+        <div class="queue-when"><b>明天 03:00</b><span>定时</span></div>
+        <span class="job-ico" style="width:32px;height:32px;font-size:14px;">✨</span>
+        <div class="job-body">
+          <div class="job-name" style="font-size:13.5px;">主题进化 · 「机器学习基础」</div>
+          <div class="job-desc">根据今天的复习表现更新知识地图</div>
+        </div>
+        <button class="btn btn-ghost" style="height:28px; font-size:12.5px;">取消</button>
+      </div>
+
+      <!-- 用量 -->
+      <div class="jobs-sec">Token 用量 · 近 7 天<span class="line"></span></div>
+      <div class="usage-panel">
+        <div class="usage-grid">
+          <div class="bars">
+            <div class="bar-col"><div class="bar is-dim" style="height:22%"></div><span class="bar-day">一</span></div>
+            <div class="bar-col"><div class="bar is-dim" style="height:35%"></div><span class="bar-day">二</span></div>
+            <div class="bar-col"><div class="bar is-dim" style="height:18%"></div><span class="bar-day">三</span></div>
+            <div class="bar-col"><div class="bar is-dim" style="height:48%"></div><span class="bar-day">四</span></div>
+            <div class="bar-col"><div class="bar is-dim" style="height:30%"></div><span class="bar-day">五</span></div>
+            <div class="bar-col"><div class="bar is-dim" style="height:55%"></div><span class="bar-day">六</span></div>
+            <div class="bar-col"><div class="bar" style="height:82%"></div><span class="bar-day">日</span></div>
+          </div>
+          <div>
+            <div class="usage-legend-row"><span class="sw" style="background:var(--accent)"></span>消化<span class="v">42.1k</span></div>
+            <div class="usage-legend-row"><span class="sw" style="background:var(--gold)"></span>对话<span class="v">18.4k</span></div>
+            <div class="usage-legend-row"><span class="sw" style="background:var(--green)"></span>周报 / 进化<span class="v">9.2k</span></div>
+            <div class="usage-legend-row" style="border-top:1px solid var(--line-soft); padding-top:9px; margin-top:4px;"><b>合计</b><span class="v"><b>69.7k</b></span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 历史 -->
+      <div class="jobs-sec">执行历史<span class="line"></span></div>
+      <div class="hist">
+        <table class="hist-table">
+          <thead><tr><th>类型</th><th>内容</th><th>状态</th><th>时间</th><th>耗时</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td>🧠 消化</td><td>交叉验证入门</td><td><span class="tag tag-done">完成</span></td>
+              <td>13:05</td><td>27.9s</td><td></td>
+            </tr>
+            <tr class="is-err">
+              <td>💬 对话</td><td>L1 和 L2 正则化到底啥区别？</td>
+              <td><span class="tag" style="background:#f9ece6; color:var(--accent-deep);">失败</span></td>
+              <td>11:28</td><td>59.9s
+                <div class="err-detail">模型网关超时（第 3 次尝试）· 上游 504</div>
+              </td>
+              <td></td>
+              <td><button class="retry">重试</button></td>
+            </tr>
+            <tr>
+              <td>📖 周报</td><td>9/14–9/20 学习复盘</td><td><span class="tag tag-done">完成</span></td>
+              <td>11:40</td><td>8.8s</td><td></td>
+            </tr>
+            <tr>
+              <td>✨ 进化</td><td>机器学习基础</td><td><span class="tag tag-done">完成</span></td>
+              <td>02:48</td><td>858ms</td><td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

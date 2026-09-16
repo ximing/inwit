@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 复习</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  /* ===== 复习中心（hub） ===== */
+  .hub { max-width: 780px; margin: 0 auto; padding: 36px 40px 100px; }
+
+  .streak-hero {
+    display: flex; align-items: center; gap: 22px;
+    background: linear-gradient(140deg, #fdf3ec, var(--surface) 65%);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-xl); padding: 26px 30px; margin-bottom: 14px;
+  }
+  .streak-flame {
+    width: 64px; height: 64px; border-radius: 18px; flex: none;
+    background: linear-gradient(150deg, #d0765a, var(--accent));
+    display: flex; align-items: center; justify-content: center; font-size: 30px;
+    box-shadow: 0 6px 18px rgba(179, 64, 42, 0.3);
+  }
+  .streak-num { font-family: var(--serif); font-size: 34px; font-weight: 700; line-height: 1.1; }
+  .streak-num small { font-size: 15px; font-weight: 500; color: var(--ink-3); }
+  .streak-sub { font-size: 13px; color: var(--ink-3); margin-top: 3px; }
+  .streak-cta { margin-left: auto; text-align: right; }
+  .streak-cta .due { font-size: 13px; color: var(--ink-3); margin-bottom: 8px; }
+  .streak-cta .due b { color: var(--accent-deep); font-size: 16px; }
+
+  .hub-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+  .hub-stat {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg); padding: 16px 18px 14px;
+  }
+  .hub-stat-num { font-family: var(--serif); font-size: 26px; font-weight: 700; line-height: 1.15; }
+  .hub-stat-num small { font-size: 13px; font-weight: 500; color: var(--ink-3); }
+  .hub-stat-label { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+  .hub-panel { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 20px 24px; margin-bottom: 14px; }
+  .hub-panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+  .hub-panel-title { font-size: 14px; font-weight: 700; }
+  .hub-panel-sub { font-size: 12px; color: var(--ink-4); }
+
+  /* 近 7 天表现：堆叠条 */
+  .week-bars { display: flex; gap: 10px; }
+  .wb-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .wb-stack { width: 100%; max-width: 40px; height: 88px; display: flex; flex-direction: column-reverse; border-radius: 6px; overflow: hidden; background: var(--line-soft); }
+  .wb-stack i { display: block; width: 100%; }
+  .wb-good { background: var(--green); }
+  .wb-hazy { background: var(--gold); }
+  .wb-bad { background: #d0765a; }
+  .wb-day { font-size: 10.5px; color: var(--ink-4); }
+  .wb-legend { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--ink-3); }
+  .wb-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
+
+  /* 到期预报 */
+  .forecast { display: flex; gap: 8px; align-items: flex-end; height: 64px; }
+  .fc-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; justify-content: flex-end; }
+  .fc-bar { width: 100%; max-width: 34px; border-radius: 4px 4px 2px 2px; background: var(--accent-soft); border: 1px solid var(--accent-line); border-bottom: none; min-height: 4px; }
+  .fc-bar b { display: block; text-align: center; font-size: 11px; color: var(--accent-deep); font-weight: 600; margin-top: 3px; }
+  .fc-day { font-size: 10.5px; color: var(--ink-4); }
+
+  /* 复习设置 */
+  .cfg-head { display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; }
+  .cfg-head .arrow { margin-left: auto; color: var(--ink-4); transition: transform 0.2s; }
+  .cfg-body { display: none; }
+  .hub-panel.is-open .cfg-body { display: block; }
+  .hub-panel.is-open .arrow { transform: rotate(180deg); }
+  .cfg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 28px; margin-top: 16px; }
+  .cfg-item label { display: flex; align-items: baseline; font-size: 13.5px; font-weight: 600; }
+  .cfg-item label .val { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent-deep); font-weight: 700; }
+  .cfg-item .desc { font-size: 12px; color: var(--ink-4); margin-top: 2px; }
+  .cfg-item input[type="range"] { width: 100%; accent-color: var(--accent); margin-top: 8px; }
+  .cfg-steps { display: flex; gap: 6px; margin-top: 8px; }
+  .cfg-step {
+    flex: 1; height: 30px; border-radius: 7px; border: 1px solid var(--line);
+    font-size: 12.5px; color: var(--ink-3); background: var(--surface);
+  }
+  .cfg-step.is-on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-deep); font-weight: 600; }
+  .cfg-foot { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+  .cfg-note { font-size: 12px; color: var(--ink-4); margin-right: auto; }
+
+  /* ===== 复习 session ===== */
+  .review-stage { max-width: 680px; margin: 0 auto; padding: 40px 32px 60px; min-height: 100vh; display: flex; flex-direction: column; }
+  .review-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .review-title { font-family: var(--serif); font-size: 24px; font-weight: 700; }
+  .review-count { margin-left: auto; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .review-progress { height: 3px; border-radius: 2px; background: var(--line-soft); overflow: hidden; margin-bottom: 10px; }
+  .review-progress i { display: block; height: 100%; width: 14%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+  .review-crumb { font-size: 12.5px; color: var(--ink-4); margin-bottom: 40px; }
+
+  .flip-zone { flex: 1; display: flex; flex-direction: column; justify-content: center; perspective: 1600px; }
+  .flip-card { position: relative; width: 100%; min-height: 300px; transform-style: preserve-3d; transition: transform 0.55s cubic-bezier(0.34, 1.2, 0.5, 1); cursor: pointer; }
+  .flip-card.is-flipped { transform: rotateY(180deg); }
+  .flip-face {
+    position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl);
+    box-shadow: var(--shadow-2); padding: 30px 36px; display: flex; flex-direction: column;
+  }
+  .flip-back { transform: rotateY(180deg); background: var(--surface-2); }
+  .flip-kicker { font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; color: var(--ink-4); }
+  .flip-kicker.ans { color: var(--accent); }
+  .flip-q { font-family: var(--serif); font-size: 20px; font-weight: 600; line-height: 1.7; margin-top: 16px; flex: 1; }
+  .flip-a { font-family: var(--serif); font-size: 16.5px; line-height: 1.85; color: #2b251c; margin-top: 16px; flex: 1; overflow: auto; }
+  .flip-tip { font-size: 12px; color: var(--ink-4); text-align: center; margin-top: 18px; }
+
+  .grade-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 26px; visibility: hidden; opacity: 0; transform: translateY(6px); transition: all 0.25s; }
+  .grade-row.is-show { visibility: visible; opacity: 1; transform: none; }
+  .grade { border-radius: var(--r-md); border: 1.5px solid var(--line); background: var(--surface); padding: 13px 0 11px; text-align: center; transition: all 0.15s; }
+  .grade b { display: block; font-size: 15px; font-weight: 600; }
+  .grade span { display: block; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .grade .kbd { margin-top: 8px; }
+  .grade-again { border-color: #e2b8ac; color: var(--accent-deep); }
+  .grade-again:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .grade-hazy { border-color: var(--gold-line); color: var(--gold); }
+  .grade-hazy:hover { background: var(--gold-soft); border-color: var(--gold); }
+  .grade-good { border-color: var(--green-line); color: var(--green); }
+  .grade-good:hover { background: var(--green-soft); border-color: var(--green); }
+  .review-foot-tip { text-align: center; font-size: 12.5px; color: var(--ink-4); margin-top: 26px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-name">Inwit</div>
+      <div class="brand-tag">扔进去，它来消化</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        首页
+      </a>
+      <a class="nav-item" href="docs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        文档
+      </a>
+      <a class="nav-item is-on" href="review.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+        复习
+        <span class="nav-badge">7</span>
+      </a>
+      <a class="nav-item" href="topics.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7l10 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        主题
+      </a>
+      <a class="nav-item" href="jobs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        任务
+      </a>
+      <a class="nav-item" href="settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z"/></svg>
+        设置
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <a class="rail-user" href="settings.html"><span class="avatar">R</span><span>regression@inwit.dev</span></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- ===== Hub 态 ===== -->
+    <div class="hub" id="hub">
+      <div class="streak-hero">
+        <span class="streak-flame">🔥</span>
+        <div>
+          <div class="streak-num">5 <small>天连续复习</small></div>
+          <div class="streak-sub">最长纪录 12 天 · 保持住，别断。</div>
+        </div>
+        <div class="streak-cta">
+          <div class="due">今日待复习 <b>7</b> 张 · 约 3 分钟</div>
+          <button class="btn btn-primary" style="height:40px; padding:0 26px; font-size:14.5px;" id="btn-start">开始复习</button>
+        </div>
+      </div>
+
+      <div class="hub-grid">
+        <div class="hub-stat"><div class="hub-stat-num">15<small> 张</small></div><div class="hub-stat-label">总卡片</div></div>
+        <div class="hub-stat"><div class="hub-stat-num">6<small> 张</small></div><div class="hub-stat-label">已掌握（间隔 ≥ 21 天）</div></div>
+        <div class="hub-stat"><div class="hub-stat-num">80<small>%</small></div><div class="hub-stat-label">近 7 天想起率</div></div>
+        <div class="hub-stat"><div class="hub-stat-num">23<small> 次</small></div><div class="hub-stat-label">近 7 天复习次数</div></div>
+      </div>
+
+      <div class="hub-panel">
+        <div class="hub-panel-head"><span class="hub-panel-title">近 7 天表现</span><span class="hub-panel-sub">每天刷了多少、想起来多少</span></div>
+        <div class="week-bars">
+          <div class="wb-col"><div class="wb-stack"><i class="wb-good" style="height:70%"></i><i class="wb-hazy" style="height:20%"></i><i class="wb-bad" style="height:10%"></i></div><span class="wb-day">一</span></div>
+          <div class="wb-col"><div class="wb-stack"><i class="wb-good" style="height:45%"></i><i class="wb-hazy" style="height:15%"></i></div><span class="wb-day">二</span></div>
+          <div class="wb-col"><div class="wb-stack"><i class="wb-good" style="height:80%"></i><i class="wb-bad" style="height:10%"></i></div><span class="wb-day">三</span></div>
+          <div class="wb-col"><div class="wb-stack"><i class="wb-good" style="height:30%"></i></div><span class="wb-day">四</span></div>
+          <div class="wb-col"><div class="wb-stack"><i class="wb-good" style="height:55%"></i><i class="wb-hazy" style="height:25%"></i></div><span class="wb-day">五</span></div>
+          <div class="wb-col"><div class="wb-stack"><i class="wb-good" style="height:65%"></i><i class="wb-bad" style="height:15%"></i></div><span class="wb-day">六</span></div>
+          <div class="wb-col"><div class="wb-stack"><i class="wb-good" style="height:14%"></i></div><span class="wb-day">日</span></div>
+        </div>
+        <div class="wb-legend">
+          <span><span class="sw" style="background:var(--green)"></span>想起来了</span>
+          <span><span class="sw" style="background:var(--gold)"></span>模糊</span>
+          <span><span class="sw" style="background:#d0765a"></span>忘了</span>
+        </div>
+      </div>
+
+      <div class="hub-panel">
+        <div class="hub-panel-head"><span class="hub-panel-title">未来 7 天到期</span><span class="hub-panel-sub">提前知道哪天的复习量大</span></div>
+        <div class="forecast">
+          <div class="fc-col"><div class="fc-bar" style="height:70%"><b>7</b></div><span class="fc-day">今天</span></div>
+          <div class="fc-col"><div class="fc-bar" style="height:40%"><b>4</b></div><span class="fc-day">周一</span></div>
+          <div class="fc-col"><div class="fc-bar" style="height:20%"><b>2</b></div><span class="fc-day">周二</span></div>
+          <div class="fc-col"><div class="fc-bar" style="height:10%"><b>1</b></div><span class="fc-day">周三</span></div>
+          <div class="fc-col"><div class="fc-bar" style="height:4%"></div><span class="fc-day">周四</span></div>
+          <div class="fc-col"><div class="fc-bar" style="height:30%"><b>3</b></div><span class="fc-day">周五</span></div>
+          <div class="fc-col"><div class="fc-bar" style="height:50%"><b>5</b></div><span class="fc-day">周六</span></div>
+        </div>
+      </div>
+
+      <!-- 复习设置（SM-2 可调） -->
+      <div class="hub-panel" id="cfg-panel">
+        <div class="cfg-head" id="cfg-head">
+          <span class="hub-panel-title">复习设置</span>
+          <span class="hub-panel-sub">记忆算法（SM-2）参数，默认适合大多数人</span>
+          <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="cfg-body">
+          <div class="cfg-grid">
+            <div class="cfg-item">
+              <label>每日复习上限 <span class="val">20 张</span></label>
+              <input type="range" min="5" max="100" value="20" />
+              <div class="desc">超过的到期卡会顺延到明天</div>
+            </div>
+            <div class="cfg-item">
+              <label>每日新卡上限 <span class="val">5 张</span></label>
+              <input type="range" min="0" max="30" value="5" />
+              <div class="desc">从没刷过的卡，每天最多混入多少</div>
+            </div>
+            <div class="cfg-item">
+              <label>起始难度（ease）<span class="val">2.5×</span></label>
+              <input type="range" min="130" max="300" value="250" />
+              <div class="desc">越大间隔涨得越快，别轻易调高</div>
+            </div>
+            <div class="cfg-item">
+              <label>"模糊"的后果 <span class="val">间隔 ×1.2</span></label>
+              <input type="range" min="10" max="15" value="12" />
+              <div class="desc">往左更严格（接近重来），往右更宽松</div>
+            </div>
+            <div class="cfg-item" style="grid-column: 1 / -1;">
+              <label>学习步长</label>
+              <div class="cfg-steps">
+                <button class="cfg-step is-on">1 天</button>
+                <button class="cfg-step is-on">3 天</button>
+                <button class="cfg-step is-on">6 天</button>
+                <button class="cfg-step">10 天</button>
+              </div>
+              <div class="desc">新卡连续答对时，间隔按这个阶梯走，之后按 ease 倍增</div>
+            </div>
+          </div>
+          <div class="cfg-foot">
+            <span class="cfg-note">改动只影响之后的调度，不会重排已有卡片</span>
+            <button class="btn btn-ghost" style="height:30px; font-size:12.5px;">恢复默认</button>
+            <button class="btn btn-primary" style="height:32px;">保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Session 态 ===== -->
+    <div class="review-stage" id="session" style="display:none;">
+      <div class="review-head">
+        <button class="btn btn-ghost" id="btn-exit">← 返回</button>
+        <span class="review-title">今日复习</span>
+        <span class="review-count">1 / 7</span>
+      </div>
+      <div class="review-progress"><i></i></div>
+      <div class="review-crumb">机器学习基础 · 模型评估与验证 / 交叉验证</div>
+
+      <div class="flip-zone">
+        <div class="flip-card" id="card">
+          <div class="flip-face flip-front">
+            <span class="flip-kicker">先自己想</span>
+            <div class="flip-q">比较 k=5 与 k=10 的 k 折交叉验证：在计算开销、估计稳定性、对数据划分敏感性三方面有何差异？</div>
+            <div class="flip-tip">点击卡片或按空格翻面</div>
+          </div>
+          <div class="flip-face flip-back">
+            <span class="flip-kicker ans">答案</span>
+            <div class="flip-a">k=5：计算开销更小（只训练 5 次），估计稳定性略低于 k=10，对单次划分的敏感性更高；k=10：评估更精细、方差更小，但训练次数翻倍。两者都是常用默认值；k 过小易受划分影响，k=n（留一法）方差小但偏差大且耗时剧增。</div>
+            <div class="flip-tip">想起来了吗？诚实打分，间隔才会准</div>
+          </div>
+        </div>
+
+        <div class="grade-row" id="grades">
+          <button class="grade grade-again"><b>忘了</b><span>明天再见</span><span class="kbd">1</span></button>
+          <button class="grade grade-hazy"><b>模糊</b><span>间隔 ×1.2</span><span class="kbd">2</span></button>
+          <button class="grade grade-good"><b>想起来了</b><span>间隔 ×2.5</span><span class="kbd">3</span></button>
+        </div>
+      </div>
+
+      <div class="review-foot-tip">先自己想，想起来了再翻。不要偷看。</div>
+    </div>
+  </main>
+</div>
+<script>
+  const hub = document.getElementById('hub');
+  const session = document.getElementById('session');
+  document.getElementById('btn-start').addEventListener('click', () => { hub.style.display = 'none'; session.style.display = ''; });
+  document.getElementById('btn-exit').addEventListener('click', () => { session.style.display = 'none'; hub.style.display = ''; });
+
+  const card = document.getElementById('card');
+  const grades = document.getElementById('grades');
+  function flip() {
+    card.classList.toggle('is-flipped');
+    grades.classList.toggle('is-show', card.classList.contains('is-flipped'));
+  }
+  card.addEventListener('click', flip);
+  document.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); flip(); } });
+
+  document.getElementById('cfg-head').addEventListener('click', () =>
+    document.getElementById('cfg-panel').classList.toggle('is-open'));
+  document.querySelectorAll('.cfg-step').forEach((s) =>
+    s.addEventListener('click', () => s.classList.toggle('is-on')));
+</script>
+</body>
+</html>

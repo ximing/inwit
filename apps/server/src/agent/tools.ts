@@ -12,6 +12,8 @@ import { deleteCard, indexCard, searchCards } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
 import { parseAnchorBlock, resolveAnchor, splitMarkdownBlocks } from './anchors.js';
+import { persistDocumentMeta } from './doc-meta.js';
+import { isUserOwnedTitle } from './doc-meta-logic.js';
 
 export interface DigestSession {
   userId: string;
@@ -23,6 +25,7 @@ export interface DigestSession {
   mapNodeId?: string | null;
   documentWritten?: boolean;
   mapUpdated?: boolean;
+  documentMetaWritten?: boolean;
 }
 
 export function asToolError(err: unknown): never {
@@ -74,6 +77,8 @@ export function readDocumentTool(session: DigestSession): AgentTool<typeof readD
       const payload = {
         id: row.id,
         title: row.title,
+        description: row.description,
+        titleLocked: isUserOwnedTitle(row.title),
         topicId: row.topicId,
         source: row.source,
         status: row.status,
@@ -566,6 +571,43 @@ export function placeOnMapTool(session: DigestSession): AgentTool<typeof placeOn
   };
 }
 
+export const setDocumentMetaSchema = Type.Object({
+  title: Type.Optional(Type.String({ maxLength: 80 })),
+  description: Type.Optional(Type.String({ maxLength: 200 })),
+});
+export type SetDocumentMetaArgs = Static<typeof setDocumentMetaSchema>;
+
+export function setDocumentMetaTool(session: DigestSession): AgentTool<typeof setDocumentMetaSchema> {
+  return {
+    name: 'set_document_meta',
+    label: '写入文档标题和摘要',
+    description:
+      '切卡完成后调用。title 为不超过 20 字的名词短语（不要复读原文第一句）；description 为不超过 60 字的一两句摘要。若 read_document 返回 titleLocked=true，只写 description，不要改 title。内容太短无从概括时可省略字段。',
+    parameters: setDocumentMetaSchema,
+    execute: async (_id, params) => {
+      const [row] = await getDb()
+        .select({ title: documents.title, description: documents.description })
+        .from(documents)
+        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId)))
+        .limit(1);
+      if (!row) throw new Error('document not found');
+      const written = await persistDocumentMeta({
+        userId: session.userId,
+        documentId: session.documentId,
+        existingTitle: row.title,
+        existingDescription: row.description,
+        proposedTitle: params.title,
+        proposedDescription: params.description,
+      });
+      if (written.wroteTitle || written.wroteDescription) {
+        session.documentMetaWritten = true;
+      }
+      const payload = { ok: true, ...written };
+      return toolResult(JSON.stringify(payload), payload);
+    },
+  };
+}
+
 export function digestTools(session: DigestSession): AgentTool[] {
   return [
     readDocumentTool(session),
@@ -576,6 +618,7 @@ export function digestTools(session: DigestSession): AgentTool[] {
     attributeTopicTool(session),
     readTopicMapTool(session),
     placeOnMapTool(session),
+    setDocumentMetaTool(session),
   ];
 }
 
@@ -601,5 +644,6 @@ export function chatTools(session: DigestSession): AgentTool[] {
     chatWriteCardsTool(session),
     writeQuestionsTool(session),
     linkCardsTool(session),
+    setDocumentMetaTool(session),
   ];
 }

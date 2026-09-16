@@ -19,8 +19,12 @@ export interface QdrantScoredPoint {
   payload: Record<string, unknown>;
 }
 
+export interface EnsureCollectionOptions {
+  payloadFields?: readonly string[];
+}
+
 export interface QdrantClient {
-  ensureCollection(name: string): Promise<void>;
+  ensureCollection(name: string, options?: EnsureCollectionOptions): Promise<void>;
   upsertPoints(name: string, points: QdrantPoint[]): Promise<void>;
   queryPoints(
     name: string,
@@ -56,7 +60,7 @@ export function createQdrantClient(options: QdrantClientOptions): QdrantClient {
   }
 
   return {
-    async ensureCollection(name) {
+    async ensureCollection(name, collectionOptions) {
       const existing = await call('GET', `/collections/${name}`);
       if (existing.status === 404) {
         ensure2xx(
@@ -68,7 +72,8 @@ export function createQdrantClient(options: QdrantClientOptions): QdrantClient {
       } else {
         ensure2xx(existing, 'qdrant get collection');
       }
-      for (const field of PAYLOAD_INDEX_FIELDS) {
+      const fields = collectionOptions?.payloadFields ?? PAYLOAD_INDEX_FIELDS;
+      for (const field of fields) {
         const res = await call('PUT', `/collections/${name}/index`, {
           field_name: field,
           field_schema: 'keyword',

@@ -1,8 +1,14 @@
-import { submitReviewFeedbackSchema } from '@inwit/dto';
+import { reviewSettingsSchema, submitReviewFeedbackSchema } from '@inwit/dto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/authenticate.js';
-import { getReviewStats, getReviewToday, submitReviewFeedback } from './review.service.js';
+import {
+  getReviewSettings,
+  getReviewStats,
+  getReviewToday,
+  submitReviewFeedback,
+  updateReviewSettings,
+} from './review.service.js';
 
 const cardIdParamsSchema = z.object({ cardId: z.string().uuid() });
 
@@ -15,6 +21,15 @@ export function registerReviewRoutes(app: FastifyInstance): void {
 
   app.get('/api/review/stats', auth, async (req) => {
     return getReviewStats(requireUser(req).id);
+  });
+
+  app.get('/api/review/settings', auth, async (req) => {
+    return getReviewSettings(requireUser(req).id);
+  });
+
+  app.put('/api/review/settings', auth, async (req) => {
+    const input = reviewSettingsSchema.parse(req.body);
+    return updateReviewSettings(requireUser(req).id, input);
   });
 
   app.post('/api/review/:cardId/feedback', auth, async (req) => {

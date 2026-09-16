@@ -1,6 +1,7 @@
 export * from './common.js';
 export * from './user.js';
 export * from './document.js';
+export * from './annotation.js';
 export * from './capture.js';
 export * from './card.js';
 export * from './topic.js';
@@ -9,6 +10,8 @@ export * from './review.js';
 export * from './memory.js';
 export * from './job.js';
 export * from './llm.js';
+export * from './ocr.js';
 export * from './agent.js';
 export * from './admin.js';
 export * from './report.js';
+export * from './search.js';

@@ -5,6 +5,85 @@
 
 ---
 
+# V2 UI/UX 重构回归（2026-09-14，rewrite T1–T8）
+
+范围：路由收敛、复习设置/统计、任务队列接口、设计系统重写。本轮 API 冒烟自带独立 server（3030–3033），不依赖、也不改动已在跑的 vite:5190 + server:3020。
+
+## 路由表
+
+| 路径 | 页面 |
+|---|---|
+| `/` | 首页 Today |
+| `/login` | 登录 / 注册（无需登录） |
+| `/docs` | 文档工作台（`?doc=` / `&edit=1` / `&anchor=`） |
+| `/review` | 复习中心 |
+| `/topics` | 主题列表 |
+| `/topics/:id` | 主题详情（知识地图 + 资料流） |
+| `/jobs` | 任务与用量 |
+| `/settings` | 设置 |
+
+| 旧路径 | 重定向到 |
+|---|---|
+| `/doc/:id` | `/docs?doc=:id` |
+| `/editor/new` | `/docs?edit=1` |
+| `/editor/:id` | `/docs?doc=:id&edit=1` |
+| `/card/:id`、`/cards/:id` | `/review` |
+| `/admin`、`/captures` | `/jobs` |
+
+## 页面清单
+
+与 `apps/web/src/routes.ts` 的 `PAGE_LIST` 一致：
+
+| path | title | auth |
+|---|---|---|
+| `/login` | 登录 / 注册 | 否 |
+| `/` | 首页 | 是 |
+| `/docs` | 文档 | 是 |
+| `/review` | 复习 | 是 |
+| `/topics` | 主题 | 是 |
+| `/jobs` | 任务 | 是 |
+| `/settings` | 设置 | 是 |
+
+侧栏六项：首页 / 文档 / 复习 / 主题 / 任务 / 设置。复习 badge 为今日待复习数。
+
+## 新接口清单
+
+| 方法 | 路径 | 说明 | 冒烟 |
+|---|---|---|---|
+| GET | `/api/review/settings` | 无记录返回默认值 | ✅ |
+| PUT | `/api/review/settings` | 整体替换；非法值 `400 VALIDATION_ERROR`（仓库统一校验码，不是 422） | ✅ |
+| GET | `/api/review/stats` | 保留 `last7Days` / `overdueCount`；新增 `streak`、`totalCards`、`masteredCount`、`retention7d`、`reviews7d`、`daily[7]`、`forecast[7]` | ✅ |
+| GET | `/api/jobs/queue` | `{ running, pending, counts }`；pending 带 `summary` / `description` / `scheduledFor` | ✅ |
+| GET | `/api/jobs/usage` | `{ daily[7], byType, total }` | ✅ |
+
+相关 DTO：`ReviewToday.truncated`；`Job.summary` / `Job.description`。`GET /api/jobs`、retry、cancel 行为不变。
+
+## 已验证项
+
+| # | 场景 | 结果 |
+|---|---|---|
+| 1 | 路由收敛：canonical 六页 + 旧 `/doc` `/editor` `/card` `/cards` `/admin` `/captures` 重定向 | ✅ 代码（`App.tsx` / `routes.ts`） |
+| 2 | GET settings 默认值；PUT 持久化；越界 / 缺字段 / 非递增 learningSteps → 400 | ✅ smoke-t24 21/21 |
+| 3 | stats 新字段存在且空用户形状合法 | ✅ smoke-t24 |
+| 4 | jobs/queue、jobs/usage 不被 `/:id` 吃掉；pending digest 有摘要 | ✅ smoke-t24 |
+| 5 | fuzzy evolve 换题型 + forgot×2 拆卡 | ✅ smoke-t21 19/19 |
+| 6 | 混淆对 analyze_patterns + 对比专题 30 天幂等 | ✅ smoke-t22 22/22 |
+| 7 | 周报复盘文档 + `/cards/:id` 链接（前端重定向到 `/review`）+ worker 自动补建 | ✅ smoke-t23 22/22 |
+| 8 | `pnpm typecheck` | ✅ |
+
+冒烟脚本自起 Fastify（不碰 5190/3020）：
+
+```
+smoke-t21.sh  PASS=19 FAIL=0   @ :3030
+smoke-t22.sh  PASS=22 FAIL=0   @ :3031
+smoke-t23.sh  PASS=22 FAIL=0   @ :3032
+smoke-t24.sh  PASS=21 FAIL=0   @ :3033
+```
+
+T23 修复：无残留 worker 时 `pgrep` 在 `set -o pipefail` 下退出 1，已在杀进程管道末尾加 `|| true`。
+
+---
+
 # V1.1 进化飞轮回归（2026-09-14，T21–T23）
 
 范围：进化 Agent 完整版——反馈写 Memory、模糊换讲法、反复忘拆卡、混淆对专题、周报复盘。

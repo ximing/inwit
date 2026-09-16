@@ -1,5 +1,6 @@
 import { relations, sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
   check,
   foreignKey,
@@ -20,6 +21,8 @@ import type {
   AgentExecutionStatus,
   AgentExecutionStep,
   AgentType,
+  AnnotationGeometry,
+  AnnotationKind,
   CardLinkOrigin,
   CardLinkType,
   CardQuestionType,
@@ -36,6 +39,7 @@ import type {
   MemoryLayer,
   MemoryScope,
   ReviewFeedback,
+  ReviewSettings,
   TopicStatus,
 } from '@inwit/dto';
 
@@ -45,6 +49,10 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  displayName: varchar('display_name', { length: 64 }),
+  /** Object storage key (not a URL). */
+  avatarKey: varchar('avatar_key', { length: 255 }),
+  reviewSettings: jsonb('review_settings').$type<ReviewSettings>(),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
   updatedAt: timestamptz('updated_at').notNull().defaultNow(),
 });
@@ -74,6 +82,63 @@ export const llmConfigs = pgTable(
       sql`${t.provider} IN ('openai', 'deepseek', 'claude', 'zhipu', 'dashscope')`,
     ),
   ],
+);
+
+export const accessTokens = pgTable(
+  'access_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 64 }).notNull(),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    tokenEncrypted: text('token_encrypted').notNull(),
+    tokenPreview: varchar('token_preview', { length: 32 }).notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_access_tokens_user').on(t.userId),
+    uniqueIndex('access_tokens_hash_uidx').on(t.tokenHash),
+  ],
+);
+
+export const accessTokenLogs = pgTable(
+  'access_token_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    accessTokenId: uuid('access_token_id')
+      .notNull()
+      .references(() => accessTokens.id, { onDelete: 'cascade' }),
+    method: varchar('method', { length: 16 }).notNull(),
+    path: varchar('path', { length: 512 }).notNull(),
+    status: integer('status').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_access_token_logs_user_created').on(t.userId, t.createdAt),
+    index('idx_access_token_logs_token_created').on(t.accessTokenId, t.createdAt),
+    index('idx_access_token_logs_created').on(t.createdAt),
+  ],
+);
+
+export const ocrConfigs = pgTable(
+  'ocr_configs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    apiKeyEncrypted: text('api_key_encrypted').notNull(),
+    model: varchar('model', { length: 128 }).notNull().default('qwen-vl-ocr'),
+    baseUrl: varchar('base_url', { length: 512 }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('ocr_configs_user_uidx').on(t.userId)],
 );
 
 export const topics = pgTable(
@@ -137,12 +202,18 @@ export const documents = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     topicId: uuid('topic_id').references(() => topics.id, { onDelete: 'set null' }),
     mapNodeId: uuid('map_node_id').references(() => mapNodes.id, { onDelete: 'set null' }),
-    title: text('title').notNull(),
+    title: text('title'),
+    description: text('description'),
     contentMd: text('content_md').notNull(),
     source: varchar('source', { length: 16 }).$type<DocumentSource>().notNull(),
     status: varchar('status', { length: 16 }).$type<DocumentStatus>().notNull().default('pending'),
     answer: text('answer'),
     linkHint: text('link_hint'),
+    /** Object storage key (not a URL). */
+    fileKey: text('file_key'),
+    fileMime: varchar('file_mime', { length: 64 }),
+    fileSize: bigint('file_size', { mode: 'number' }),
+    pageCount: integer('page_count'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
   },
@@ -151,8 +222,39 @@ export const documents = pgTable(
     index('idx_documents_user_status').on(t.userId, t.status),
     index('idx_documents_topic').on(t.topicId),
     index('idx_documents_map_node').on(t.mapNodeId),
-    check('documents_source_check', sql`${t.source} IN ('editor', 'paste', 'chat', 'agent')`),
+    check(
+      'documents_source_check',
+      sql`${t.source} IN ('editor', 'paste', 'chat', 'agent', 'import')`,
+    ),
     check('documents_status_check', sql`${t.status} IN ('pending', 'digested', 'failed')`),
+  ],
+);
+
+export const annotations = pgTable(
+  'annotations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    quote: text('quote').notNull(),
+    note: text('note').notNull().default(''),
+    kind: varchar('kind', { length: 16 }).$type<AnnotationKind>().notNull().default('text'),
+    pageIndex: integer('page_index'),
+    geometry: jsonb('geometry').$type<AnnotationGeometry>(),
+    /** Object storage key (not a URL). */
+    imageKey: text('image_key'),
+    positionMs: integer('position_ms'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_annotations_user').on(t.userId),
+    index('idx_annotations_document').on(t.documentId),
+    check('annotations_kind_check', sql`${t.kind} IN ('text', 'pdf', 'media')`),
   ],
 );
 
@@ -176,6 +278,8 @@ export const cards = pgTable(
     source: varchar('source', { length: 16 }).$type<CardSource>().notNull().default('agent'),
     anchorText: text('anchor_text'),
     anchorBlock: text('anchor_block'),
+    /** Object storage key (not a URL). */
+    imageKey: text('image_key'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
   },
@@ -349,7 +453,7 @@ export const jobs = pgTable(
     index('idx_jobs_user_type').on(t.userId, t.type),
     check(
       'jobs_type_check',
-      sql`${t.type} IN ('digest', 'evolve', 'weekly_report', 'topic', 'chat')`,
+      sql`${t.type} IN ('digest', 'evolve', 'weekly_report', 'topic', 'chat', 'selection', 'extract', 'ocr')`,
     ),
     check('jobs_status_check', sql`${t.status} IN ('pending', 'running', 'done', 'failed')`),
   ],
@@ -384,7 +488,7 @@ export const agentExecutions = pgTable(
     index('idx_agent_executions_type_status').on(t.agentType, t.status),
     check(
       'agent_executions_agent_type_check',
-      sql`${t.agentType} IN ('digest', 'evolve', 'weekly_report', 'topic', 'chat')`,
+      sql`${t.agentType} IN ('digest', 'evolve', 'weekly_report', 'topic', 'chat', 'selection')`,
     ),
     check(
       'agent_executions_status_check',
@@ -425,8 +529,12 @@ export const llmUsageLogs = pgTable(
 
 export const usersRelations = relations(users, ({ many }) => ({
   llmConfigs: many(llmConfigs),
+  ocrConfigs: many(ocrConfigs),
+  accessTokens: many(accessTokens),
+  accessTokenLogs: many(accessTokenLogs),
   topics: many(topics),
   documents: many(documents),
+  annotations: many(annotations),
   cards: many(cards),
   cardLinks: many(cardLinks),
   reviewStates: many(reviewStates),
@@ -437,8 +545,25 @@ export const usersRelations = relations(users, ({ many }) => ({
   llmUsageLogs: many(llmUsageLogs),
 }));
 
+export const accessTokensRelations = relations(accessTokens, ({ one, many }) => ({
+  user: one(users, { fields: [accessTokens.userId], references: [users.id] }),
+  logs: many(accessTokenLogs),
+}));
+
+export const accessTokenLogsRelations = relations(accessTokenLogs, ({ one }) => ({
+  user: one(users, { fields: [accessTokenLogs.userId], references: [users.id] }),
+  accessToken: one(accessTokens, {
+    fields: [accessTokenLogs.accessTokenId],
+    references: [accessTokens.id],
+  }),
+}));
+
 export const llmConfigsRelations = relations(llmConfigs, ({ one }) => ({
   user: one(users, { fields: [llmConfigs.userId], references: [users.id] }),
+}));
+
+export const ocrConfigsRelations = relations(ocrConfigs, ({ one }) => ({
+  user: one(users, { fields: [ocrConfigs.userId], references: [users.id] }),
 }));
 
 export const topicsRelations = relations(topics, ({ one, many }) => ({
@@ -465,6 +590,12 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
   topic: one(topics, { fields: [documents.topicId], references: [topics.id] }),
   mapNode: one(mapNodes, { fields: [documents.mapNodeId], references: [mapNodes.id] }),
   cards: many(cards),
+  annotations: many(annotations),
+}));
+
+export const annotationsRelations = relations(annotations, ({ one }) => ({
+  user: one(users, { fields: [annotations.userId], references: [users.id] }),
+  document: one(documents, { fields: [annotations.documentId], references: [documents.id] }),
 }));
 
 export const cardsRelations = relations(cards, ({ one, many }) => ({
@@ -532,14 +663,21 @@ export const llmUsageLogsRelations = relations(llmUsageLogs, ({ one }) => ({
 
 export type UserRow = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type AccessTokenRow = typeof accessTokens.$inferSelect;
+export type NewAccessToken = typeof accessTokens.$inferInsert;
+export type AccessTokenLogRow = typeof accessTokenLogs.$inferSelect;
 export type LlmConfigRow = typeof llmConfigs.$inferSelect;
 export type NewLlmConfig = typeof llmConfigs.$inferInsert;
+export type OcrConfigRow = typeof ocrConfigs.$inferSelect;
+export type NewOcrConfig = typeof ocrConfigs.$inferInsert;
 export type TopicRow = typeof topics.$inferSelect;
 export type NewTopic = typeof topics.$inferInsert;
 export type MapNodeRow = typeof mapNodes.$inferSelect;
 export type NewMapNode = typeof mapNodes.$inferInsert;
 export type DocumentRow = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;
+export type AnnotationRow = typeof annotations.$inferSelect;
+export type NewAnnotation = typeof annotations.$inferInsert;
 export type CardRow = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CardLinkRow = typeof cardLinks.$inferSelect;

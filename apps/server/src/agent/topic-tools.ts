@@ -119,7 +119,7 @@ export function readTopicContextTool(session: DigestSession): AgentTool<typeof r
           })),
           documents: docRows.map((row) => ({
             id: row.id,
-            title: row.title.slice(0, 80),
+            title: (row.title ?? '').slice(0, 80),
             mapNodeId: row.mapNodeId,
           })),
           map,

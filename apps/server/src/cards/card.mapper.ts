@@ -33,14 +33,18 @@ export function toPublicCardBase(row: CardRow): Card {
     source: row.source,
     anchorText: row.anchorText ?? null,
     anchorBlock: row.anchorBlock ?? null,
+    hasImage: Boolean(row.imageKey),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-export function toCardSummary(row: Pick<CardRow, 'id' | 'concept' | 'tags'>): CardSummary {
+export function toCardSummary(
+  row: Pick<CardRow, 'id' | 'documentId' | 'concept' | 'tags'>,
+): CardSummary {
   return {
     id: row.id,
+    documentId: row.documentId ?? null,
     concept: row.concept,
     tags: row.tags,
   };

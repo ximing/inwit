@@ -1,6 +1,11 @@
 import { config } from '../config.js';
 import { createEmbeddingClient, type EmbeddingClient } from './embedding.js';
-import { createMeiliClient, type MeiliClient } from './meili.js';
+import {
+  CARD_INDEX_SETTINGS,
+  createMeiliClient,
+  DOCS_INDEX_SETTINGS,
+  type MeiliClient,
+} from './meili.js';
 import { createQdrantClient, type QdrantClient } from './qdrant.js';
 import { createRerankClient, type RerankClient } from './rerank.js';
 
@@ -18,6 +23,10 @@ export interface RetrievalClients {
 
 export function cardsStoreName(): string {
   return config.NODE_ENV === 'production' ? 'inwit_cards_prod' : 'inwit_cards_dev';
+}
+
+export function docsStoreName(): string {
+  return config.NODE_ENV === 'production' ? 'inwit_docs_prod' : 'inwit_docs_dev';
 }
 
 function buildClients(): RetrievalClients {
@@ -47,6 +56,7 @@ function buildClients(): RetrievalClients {
 
 let cached: RetrievalClients | null = null;
 let testOverride: Partial<RetrievalClients> | null = null;
+let storesReady: Promise<void> | null = null;
 
 export function getRetrievalClients(): RetrievalClients {
   cached ??= buildClients();
@@ -56,16 +66,30 @@ export function getRetrievalClients(): RetrievalClients {
 /** Test seam. Do not call from product code. */
 export function setRetrievalClientsForTest(clients: Partial<RetrievalClients>): void {
   testOverride = clients;
+  storesReady = null;
 }
 
 /** Test seam. Do not call from product code. */
 export function resetRetrievalClientsForTest(): void {
   testOverride = null;
   cached = null;
+  storesReady = null;
 }
 
 export async function ensureRetrievalStores(): Promise<void> {
-  const { qdrant, meili } = getRetrievalClients();
-  const name = cardsStoreName();
-  await Promise.all([qdrant.ensureCollection(name), meili.ensureIndex(name)]);
+  storesReady ??= (async () => {
+    const { qdrant, meili } = getRetrievalClients();
+    const cards = cardsStoreName();
+    const docs = docsStoreName();
+    await Promise.all([
+      qdrant.ensureCollection(cards, { payloadFields: ['user_id', 'card_id'] }),
+      qdrant.ensureCollection(docs, { payloadFields: ['user_id', 'doc_id'] }),
+      meili.ensureIndex(cards, CARD_INDEX_SETTINGS),
+      meili.ensureIndex(docs, DOCS_INDEX_SETTINGS),
+    ]);
+  })().catch((err: unknown) => {
+    storesReady = null;
+    throw err;
+  });
+  return storesReady;
 }

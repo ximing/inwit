@@ -5,6 +5,10 @@ export const ERROR_MESSAGES = {
   INVALID_TOKEN: '登录已过期',
   INTERNAL_ERROR: '服务器内部错误',
   EMAIL_ALREADY_REGISTERED: '邮箱已注册',
+  EMAIL_TAKEN: '该邮箱已被使用',
+  ACCESS_TOKEN_NOT_FOUND: '接口令牌不存在',
+  ACCESS_TOKEN_LIMIT: '最多 20 个接口令牌',
+  STORAGE_NOT_CONFIGURED: '对象存储未配置',
   LLM_NOT_CONFIGURED: '还没有配置大模型',
   LLM_PROVIDER_NOT_FOUND: '模型配置不存在',
   LLM_OUTPUT_TRUNCATED: '模型输出被截断',
@@ -13,6 +17,7 @@ export const ERROR_MESSAGES = {
   LLM_AUTH_FAILED: '模型身份验证失败，请检查密钥',
   LLM_REQUEST_INVALID: '模型配置或请求参数无效',
   DOCUMENT_NOT_FOUND: '文档不存在',
+  ANNOTATION_NOT_FOUND: '批注不存在',
   CARD_LINK_NOT_FOUND: '卡片关联不存在',
   TOPIC_NOT_FOUND: '主题不存在',
   TOPIC_ARCHIVED: '主题已归档，无法写入',
@@ -31,6 +36,13 @@ export const ERROR_MESSAGES = {
   JOB_NOT_CANCELABLE: '只有等待中的任务可以取消',
   CARD_NOT_FOUND: '卡片不存在',
   EXECUTION_NOT_FOUND: '执行记录不存在',
+  IMPORT_UNSUPPORTED_TYPE: '不支持的文件类型',
+  IMPORT_PARSE_FAILED: '无法解析该文件',
+  IMPORT_EMPTY: '文件没有可提取的文本',
+  DOCUMENT_FILE_NOT_FOUND: '文档原件不存在',
+  DOCUMENT_NOT_RETRYABLE: '当前文档无法重试',
+  ANNOTATION_IMAGE_NOT_FOUND: '批注图片不存在',
+  CARD_IMAGE_NOT_FOUND: '卡片图片不存在',
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_MESSAGES;

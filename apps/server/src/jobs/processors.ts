@@ -1,9 +1,12 @@
 import { ChatTerminalError, processChat } from '../agent/chat.js';
 import { DigestTerminalError, processDigest } from '../agent/digest.js';
 import { EvolveTerminalError, processEvolve } from '../agent/evolve.js';
+import { SelectionTerminalError, processSelection } from '../agent/selection.js';
 import { TopicTerminalError, processTopic } from '../agent/topic.js';
 import { WeeklyTerminalError, processWeeklyReport } from '../agent/weekly.js';
 import type { JobRow } from '../db/schema.js';
+import { processExtract } from '../documents/extract-job.js';
+import { processOcr } from '../ocr/ocr-job.js';
 import { logger } from '../utils/logger.js';
 
 export async function processJob(job: JobRow): Promise<void> {
@@ -62,6 +65,23 @@ export async function processJob(job: JobRow): Promise<void> {
         }
         throw err;
       }
+      return;
+    case 'selection':
+      try {
+        await processSelection(job);
+      } catch (err) {
+        if (err instanceof SelectionTerminalError) {
+          logger.warn('selection.terminal', { jobId: job.id, error: err.message });
+          return;
+        }
+        throw err;
+      }
+      return;
+    case 'extract':
+      await processExtract(job);
+      return;
+    case 'ocr':
+      await processOcr(job);
       return;
     default: {
       const exhaustive: never = job.type;

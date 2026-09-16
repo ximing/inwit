@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Database } from './db/index.js';
 
-export type AuthPrincipal = { id: string };
+export type AuthPrincipal = { id: string; accessTokenId?: string };
 
 declare module 'fastify' {
   interface FastifyInstance {

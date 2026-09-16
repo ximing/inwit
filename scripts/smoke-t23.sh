@@ -161,9 +161,12 @@ echo "== T23 smoke @ $BASE_URL =="
 
 echo "stopping leftover inwit workers (same DB queue)..."
 # cmdline is `tsx src/worker.ts` (relative); the inwit path is in node_modules.
+# pgrep exits 1 when nothing matches; keep going under `set -o pipefail`.
 pgrep -fl 'src/worker.ts|dist/worker.js' | grep '/inwit/' | awk '{print $1}' | while read -r pid; do
+  [[ "$pid" =~ ^[0-9]+$ ]] || continue
+  [[ "$pid" == "$$" || "$pid" == "$PPID" ]] && continue
   kill_tree "$pid"
-done
+done || true
 if command -v lsof >/dev/null 2>&1; then
   for pid in $(lsof -t -nP -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true); do
     kill_tree "$pid"
@@ -322,6 +325,7 @@ BODY_EVAL=$(printf '%s' "$RECAP" | CARD_A="$CARD_A" CARD_B="$CARD_B" CARD_C="$CA
 echo "body=$BODY_EVAL"
 check "document source=agent" "$([[ "$(printf '%s' "$BODY_EVAL" | json_field source)" == "\"agent\"" || "$(printf '%s' "$BODY_EVAL" | json_field source)" == "agent" ]] && echo 1 || echo 0)"
 check "body has 三档分布" "$([[ "$(printf '%s' "$BODY_EVAL" | json_field remembered)" == "1" && "$(printf '%s' "$BODY_EVAL" | json_field fuzzy)" == "1" && "$(printf '%s' "$BODY_EVAL" | json_field forgot)" == "1" ]] && echo 1 || echo 0)"
+# 周报正文仍写 [概念](/cards/:id)；前端 /cards/:id 已重定向到 /review。
 check "body has /cards/ links" "$([[ "$(printf '%s' "$BODY_EVAL" | json_field hasCardsPath)" == "1" ]] && echo 1 || echo 0)"
 check "body links at least 3 recap cards" "$([[ "$(printf '%s' "$BODY_EVAL" | json_field linked)" -ge 3 ]] && echo 1 || echo 0)"
 

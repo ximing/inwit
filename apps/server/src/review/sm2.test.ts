@@ -28,30 +28,40 @@ describe('scheduleReview', () => {
     expect(next.dueAt.getTime()).toBe(now.getTime() + MS_PER_DAY);
   });
 
-  it('second remembered: interval 6 days, reps 2', () => {
+  it('second remembered: interval 3 days (default steps [1,3,6]), reps 2', () => {
     const first = scheduleReview(INITIAL, 'remembered', now);
     const second = scheduleReview(first, 'remembered', now);
-    expect(second.intervalDays).toBe(6);
+    expect(second.intervalDays).toBe(3);
     expect(second.reps).toBe(2);
     expect(second.lapses).toBe(0);
     expect(second.ease).toBeCloseTo(first.ease + easeDelta(5), 8);
-    expect(second.dueAt.getTime()).toBe(now.getTime() + 6 * MS_PER_DAY);
+    expect(second.dueAt.getTime()).toBe(now.getTime() + 3 * MS_PER_DAY);
   });
 
-  it('third remembered: interval = round(prev * ease before this review)', () => {
+  it('third remembered: interval 6 days, reps 3', () => {
     const first = scheduleReview(INITIAL, 'remembered', now);
     const second = scheduleReview(first, 'remembered', now);
     const third = scheduleReview(second, 'remembered', now);
-    expect(third.intervalDays).toBe(Math.round(second.intervalDays * second.ease));
+    expect(third.intervalDays).toBe(6);
     expect(third.reps).toBe(3);
     expect(third.ease).toBeCloseTo(second.ease + easeDelta(5), 8);
   });
 
-  it('fuzzy is a pass (quality 3): no lapse, same 1→6 interval ladder', () => {
+  it('fourth remembered: interval = round(prev * ease before this review)', () => {
+    const first = scheduleReview(INITIAL, 'remembered', now);
+    const second = scheduleReview(first, 'remembered', now);
+    const third = scheduleReview(second, 'remembered', now);
+    const fourth = scheduleReview(third, 'remembered', now);
+    expect(fourth.intervalDays).toBe(Math.round(third.intervalDays * third.ease));
+    expect(fourth.reps).toBe(4);
+    expect(fourth.ease).toBeCloseTo(third.ease + easeDelta(5), 8);
+  });
+
+  it('fuzzy keeps reps, interval = max(1, round(old × 1.2))', () => {
     const next = scheduleReview(INITIAL, 'fuzzy', now);
     expect(next.quality).toBe(3);
     expect(next.intervalDays).toBe(1);
-    expect(next.reps).toBe(1);
+    expect(next.reps).toBe(0);
     expect(next.lapses).toBe(0);
     expect(next.ease).toBeCloseTo(2.5 + easeDelta(3), 8);
     expect(next.ease).toBeCloseTo(2.36, 8);
@@ -96,5 +106,53 @@ describe('scheduleReview', () => {
     expect(recovered.intervalDays).toBe(1);
     expect(recovered.reps).toBe(1);
     expect(recovered.lapses).toBe(1);
+  });
+
+  it('fuzzy on a learned card scales interval and does not advance reps', () => {
+    const learned: Sm2State = { ease: 2.6, intervalDays: 6, reps: 2, lapses: 0 };
+    const next = scheduleReview(learned, 'fuzzy', now);
+    expect(next.reps).toBe(2);
+    expect(next.lapses).toBe(0);
+    expect(next.intervalDays).toBe(Math.round(6 * 1.2));
+    expect(next.ease).toBeCloseTo(learned.ease + easeDelta(3), 8);
+  });
+
+  it('custom learningSteps: 1 → 6 ladder, then ease', () => {
+    const steps = { learningSteps: [1, 6] };
+    const first = scheduleReview(INITIAL, 'remembered', now, steps);
+    const second = scheduleReview(first, 'remembered', now, steps);
+    const third = scheduleReview(second, 'remembered', now, steps);
+    expect(first.intervalDays).toBe(1);
+    expect(second.intervalDays).toBe(6);
+    expect(second.reps).toBe(2);
+    expect(third.intervalDays).toBe(Math.round(second.intervalDays * second.ease));
+    expect(third.reps).toBe(3);
+  });
+
+  it('forgot uses learningSteps[0] as the reset interval', () => {
+    const learned: Sm2State = { ease: 2.6, intervalDays: 10, reps: 3, lapses: 1 };
+    const next = scheduleReview(learned, 'forgot', now, { learningSteps: [2, 5, 9] });
+    expect(next.reps).toBe(0);
+    expect(next.lapses).toBe(2);
+    expect(next.intervalDays).toBe(2);
+    expect(next.dueAt.getTime()).toBe(now.getTime() + 2 * MS_PER_DAY);
+  });
+
+  it('custom startingEase is the ease used after the learning ladder', () => {
+    const started: Sm2State = { ease: 1.8, intervalDays: 0, reps: 0, lapses: 0 };
+    const first = scheduleReview(started, 'remembered', now);
+    const second = scheduleReview(first, 'remembered', now);
+    const third = scheduleReview(second, 'remembered', now);
+    const fourth = scheduleReview(third, 'remembered', now);
+    expect(first.ease).toBeCloseTo(1.8 + easeDelta(5), 8);
+    expect(third.intervalDays).toBe(6);
+    expect(fourth.intervalDays).toBe(Math.round(third.intervalDays * third.ease));
+  });
+
+  it('custom fuzzyScale 1.0 keeps a 1-day interval (near restart)', () => {
+    const learned: Sm2State = { ease: 2.5, intervalDays: 8, reps: 3, lapses: 0 };
+    const next = scheduleReview(learned, 'fuzzy', now, { fuzzyScale: 1.0 });
+    expect(next.reps).toBe(3);
+    expect(next.intervalDays).toBe(8);
   });
 });

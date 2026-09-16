@@ -30,8 +30,8 @@ MVP 面向技术学习者 / 备考人群。对话框里可以粘贴笔记，也�
 │         React Native App (二期)             │
 ├────────────────────────────────────────────┤
 │ 服务端 (Fastify + drizzle-orm)：            │
-│   用户系统 / BYOK LLM 配置 / 捕捉 inbox     │
-│   复习队列 / 任务队列管理后台 / 周报         │
+│   用户系统 / BYOK LLM 配置 / 文档 inbox     │
+│   复习队列 / 任务与用量 / 周报               │
 ├────────────────────────────────────────────┤
 │ Agent 层 (全部收敛于 pi-agent-core)：        │
 │   消化 Agent：扫描 inbox→切卡→出题→关联     │
@@ -77,18 +77,24 @@ pnpm --filter @inwit/server worker     # 消化 / 问答 / 进化 / 周报 Agent
 
 | 路径 | 页面 |
 |---|---|
-| `/` | 文档列表 + 快捷捕捉条；未归属资料成簇时顶部提示开主题；本周复盘生成后顶部提示条可跳进文档 |
+| `/` | 首页（Today）：今日复习入口、捕捉、连续天数与统计 |
 | `/login` | 登录 / 注册 |
-| `/editor/new` | 新文档 |
-| `/editor/:id` | 编辑文档 |
-| `/doc/:id` | 阅读文档（`?anchor=<cardId>` 滚动并闪一次对应锚点） |
-| `/cards/:id` | 卡片详情（出处、相关卡片、复习状态） |
-| `/review` | 今日复习 |
+| `/docs` | 文档工作台（左列表 + 右阅读/编辑同 pane；`?doc=` 打开文档，`&edit=1` 进入编辑，`&anchor=` 滚动到卡片锚点） |
+| `/review` | 复习中心（Hub 统计 + SM-2 设置 + 翻卡 Session） |
 | `/topics` | 学习主题 |
 | `/topics/:id` | 主题详情（知识地图 + 资料流；accept 开题后在这里看地图长出来） |
+| `/jobs` | 任务与用量（队列实况、Token 趋势、执行历史） |
 | `/settings` | 外观与 BYOK 模型 |
-| `/admin` | 任务与用量 |
-| `/captures` | 重定向到 `/` |
+
+旧路径由前端跳到新地址，书签不用改：
+
+| 旧路径 | 现在 |
+|---|---|
+| `/doc/:id` | `/docs?doc=:id` |
+| `/editor/new` | `/docs?edit=1` |
+| `/editor/:id` | `/docs?doc=:id&edit=1` |
+| `/card/:id`、`/cards/:id` | `/review` |
+| `/admin`、`/captures` | `/jobs` |
 
 其它常用命令：
 

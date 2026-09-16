@@ -7,6 +7,13 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  assetsInclude: ['**/*.wasm'],
+  optimizeDeps: {
+    exclude: ['@embedpdf/pdfium'],
+  },
+  worker: {
+    format: 'es',
+  },
   resolve: {
     alias: {
       '@': path.resolve(rootDir, './src'),

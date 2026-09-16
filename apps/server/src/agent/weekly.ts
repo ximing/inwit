@@ -180,7 +180,7 @@ async function assertWeeklyOutcome(userId: string, session: WeeklySession): Prom
     .limit(1);
   if (!doc) throw new Error('weekly report document missing');
   if (doc.source !== 'agent') throw new Error('weekly report document source must be agent');
-  if (!doc.title.includes('学习复盘')) throw new Error('weekly report title must include 学习复盘');
+  if (!doc.title?.includes('学习复盘')) throw new Error('weekly report title must include 学习复盘');
   if (!/想起来了/.test(doc.contentMd) || !/模糊/.test(doc.contentMd) || !/忘了/.test(doc.contentMd)) {
     throw new Error('weekly report document missing 三档分布');
   }

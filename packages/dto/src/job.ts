@@ -1,7 +1,16 @@
 import { z } from 'zod';
 import { paginationQuerySchema } from './common.js';
 
-export const JOB_TYPES = ['digest', 'evolve', 'weekly_report', 'topic', 'chat'] as const;
+export const JOB_TYPES = [
+  'digest',
+  'evolve',
+  'weekly_report',
+  'topic',
+  'chat',
+  'selection',
+  'extract',
+  'ocr',
+] as const;
 export const jobTypeSchema = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof jobTypeSchema>;
 
@@ -24,6 +33,12 @@ export const jobSchema = z.object({
   lastError: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  summary: z.string(),
+  description: z.string(),
+  /** Present on running items from `GET /api/jobs/queue`. */
+  startedElapsedSec: z.number().int().nonnegative().optional(),
+  /** Present on pending items from `GET /api/jobs/queue` (`runAt` ISO). */
+  scheduledFor: z.string().optional(),
 });
 export type Job = z.infer<typeof jobSchema>;
 
@@ -32,8 +47,37 @@ export const digestJobPayloadSchema = z.object({
 });
 export type DigestJobPayload = z.infer<typeof digestJobPayloadSchema>;
 
-export const chatJobPayloadSchema = digestJobPayloadSchema;
-export type ChatJobPayload = DigestJobPayload;
+export const extractJobPayloadSchema = digestJobPayloadSchema;
+export type ExtractJobPayload = DigestJobPayload;
+
+export const ocrJobPayloadSchema = z.object({
+  documentId: z.string().uuid(),
+  totalPages: z.number().int().nonnegative().optional(),
+  donePages: z.array(z.number().int().nonnegative()).optional(),
+  failedPages: z.array(z.number().int().nonnegative()).optional(),
+});
+export type OcrJobPayload = z.infer<typeof ocrJobPayloadSchema>;
+
+export function ocrJobPayloadFrom(payload: JobPayload): OcrJobPayload | undefined {
+  const parsed = ocrJobPayloadSchema.safeParse(payload);
+  return parsed.success ? parsed.data : undefined;
+}
+
+export const chatJobPayloadSchema = digestJobPayloadSchema.extend({
+  question: z.string().optional(),
+});
+export type ChatJobPayload = z.infer<typeof chatJobPayloadSchema>;
+
+export const selectionJobPayloadSchema = z.object({
+  documentId: z.string().uuid(),
+  selectionText: z.string().min(1),
+});
+export type SelectionJobPayload = z.infer<typeof selectionJobPayloadSchema>;
+
+export function selectionJobPayloadFrom(payload: JobPayload): SelectionJobPayload | undefined {
+  const parsed = selectionJobPayloadSchema.safeParse(payload);
+  return parsed.success ? parsed.data : undefined;
+}
 
 /** New jobs store `documentId`. Historical digest/chat jobs used `captureId` (same uuid after T11). */
 export function documentIdFromJobPayload(payload: JobPayload): string | undefined {
@@ -142,3 +186,37 @@ export const listJobsQuerySchema = paginationQuerySchema.extend({
   type: z.preprocess(emptyToUndef, jobTypeSchema.optional()),
 });
 export type ListJobsQuery = z.infer<typeof listJobsQuerySchema>;
+
+export const jobQueueCountsSchema = z.object({
+  running: z.number().int().nonnegative(),
+  pending: z.number().int().nonnegative(),
+  doneToday: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+});
+export type JobQueueCounts = z.infer<typeof jobQueueCountsSchema>;
+
+export const jobQueueSchema = z.object({
+  running: z.array(jobSchema),
+  pending: z.array(jobSchema),
+  counts: jobQueueCountsSchema,
+});
+export type JobQueue = z.infer<typeof jobQueueSchema>;
+
+export const jobUsageDaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  tokens: z.number().int().nonnegative(),
+});
+export type JobUsageDay = z.infer<typeof jobUsageDaySchema>;
+
+export const jobUsageByTypeSchema = z.object({
+  type: z.string().min(1),
+  tokens: z.number().int().nonnegative(),
+});
+export type JobUsageByType = z.infer<typeof jobUsageByTypeSchema>;
+
+export const jobUsageSchema = z.object({
+  daily: z.array(jobUsageDaySchema),
+  byType: z.array(jobUsageByTypeSchema),
+  total: z.number().int().nonnegative(),
+});
+export type JobUsage = z.infer<typeof jobUsageSchema>;

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 主题</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  .topic-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  .topic-card {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    padding: 20px 22px 18px;
+    transition: all 0.16s;
+    display: flex;
+    flex-direction: column;
+    min-height: 150px;
+  }
+  .topic-card:hover { box-shadow: var(--shadow-2); transform: translateY(-1px); border-color: var(--line); }
+  .topic-name { font-family: var(--serif); font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .topic-goal { font-size: 13px; color: var(--ink-3); margin-top: 6px; line-height: 1.6; flex: 1; }
+  .topic-goal.is-empty { color: var(--ink-4); font-style: italic; }
+  .topic-stats { display: flex; align-items: center; gap: 12px; margin-top: 16px; font-size: 12px; color: var(--ink-4); }
+  .topic-mastery { flex: 1; height: 4px; border-radius: 2px; background: var(--line-soft); overflow: hidden; }
+  .topic-mastery i { display: block; height: 100%; background: var(--green); border-radius: 2px; }
+  .topic-more {
+    width: 28px; height: 28px; border-radius: 7px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink-4); font-size: 16px; letter-spacing: 1px;
+  }
+  .topic-more:hover { background: var(--bg-sunken); color: var(--ink); }
+  .topic-new {
+    border: 1.5px dashed var(--line);
+    background: none;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-3);
+    font-size: 14px;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .topic-new:hover { border-color: var(--accent-line); color: var(--accent-deep); background: var(--accent-soft); }
+  .archive-head {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-4);
+    margin: 36px 0 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .archive-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: var(--r-md);
+    font-size: 14px; color: var(--ink-3);
+  }
+  .archive-row:hover { background: var(--surface); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-name">Inwit</div>
+      <div class="brand-tag">扔进去，它来消化</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        首页
+      </a>
+      <a class="nav-item" href="docs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        文档
+      </a>
+      <a class="nav-item" href="review.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+        复习
+        <span class="nav-badge">7</span>
+      </a>
+      <a class="nav-item is-on" href="topics.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7l10 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        主题
+      </a>
+      <a class="nav-item" href="jobs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        任务
+      </a>
+      <a class="nav-item" href="settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z"/></svg>
+        设置
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <a class="rail-user" href="settings.html"><span class="avatar">R</span><span>regression@inwit.dev</span></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="column" style="max-width: 860px;">
+      <div class="page-head">
+        <div class="page-title">学习主题</div>
+        <div class="page-lede">主题不是文件夹。每个主题是一段持续生长的上下文。</div>
+      </div>
+
+      <div class="topic-grid">
+        <a class="topic-card" href="docs.html">
+          <div class="topic-name">机器学习基础 <span style="flex:1"></span><button class="topic-more">···</button></div>
+          <div class="topic-goal is-empty">还没写学习目标 —— 一句话锚定这个专题的消化方式</div>
+          <div class="topic-stats">
+            <span>15 张卡</span><span>7 篇文档</span>
+            <span class="topic-mastery"><i style="width:62%"></i></span>
+            <span>62%</span>
+          </div>
+        </a>
+        <button class="topic-card topic-new">＋ 新建主题</button>
+      </div>
+
+      <div class="archive-head">已归档 · 1</div>
+      <div class="archive-row">
+        <span style="flex:1">T16 验收主题</span>
+        <span style="font-size:12px; color:var(--ink-4)">0 张卡 · 1 篇文档</span>
+        <button class="btn btn-ghost" style="height:28px; font-size:12.5px;">取消归档</button>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -21,6 +21,11 @@ export const DIGEST_SYSTEM_PROMPT = `你是 Inwit 的消化 Agent。用户丢来
    - 只有没有合适节点时才传 newNode 新建（可挂到已有 parentId 下）。地图最多三级。
    - 章节结构保持稳定：不要每次消化都重排、改名或大改大纲。小步挂载即可。
    - 软归属之后同样必须 place_on_map，不能只改 topicId 就结束。
+8. 切卡完成后调用 set_document_meta：
+   - title：不超过 20 字的名词短语，概括主题，不要复读原文第一句。
+   - description：不超过 60 字，一两句说清这篇讲了什么。
+   - 若 read_document 返回 titleLocked=true（用户已有标题，含导入文件名），只写 description，不要改 title。
+   - 内容太短、无从概括时可以不写 description。
 
 约束：
 - 必须通过工具落库；不要只输出卡片草稿而不调用 write_cards / write_questions。
@@ -43,6 +48,7 @@ export const CHAT_SYSTEM_PROMPT = `你是 Inwit 的问答 Agent。用户在对�
    - anchor_block：问题段落序号，从 1 计（通常是 1）。
 4. 对 write_cards 返回的每一张卡调用 write_questions：每卡 1-2 道题，题型只能是 cloze（填空）、compare（对比）、judge（判断这句话哪里错了）。
 5. 若回答引用了已有卡片，或检索到高度相关的旧卡，用 link_cards 建边（same_concept / confusable / prerequisite / related）。只对置信度高的关联建边，每张新卡最多 3 条，reason 写人话。不要把本次新卡互相连接。
+6. 回答并写卡后调用 set_document_meta：title 不超过 20 字的名词短语（不要用整句问题当标题）；description 不超过 60 字，说清这问什么、答了什么。若已有非空标题且不是「未命名文档」，只写 description。
 
 约束：
 - 必须通过工具落库；不要只输出卡片草稿而不调用 write_cards / write_questions。
