@@ -6,8 +6,9 @@ import { cards, documents, memories, topics } from '../db/schema.js';
 import { applyTopicOutline } from '../maps/apply.js';
 import { getOwnedMapNode, getTopicMapFlat, updateMapNode } from '../maps/map.service.js';
 import { TOPIC_MAP_SNAPSHOT_AFTER } from '../maps/snapshot.js';
-import { titleFromContent } from '@inwit/dto';
-import { splitMarkdownBlocks } from './anchors.js';
+import { titleFromDoc } from '@inwit/dto';
+import { asPmJson, markdownToContentJson } from '../documents/content-json.js';
+import { numberedBlocksFromDoc } from './card-anchor-logic.js';
 import {
   asToolError,
   cardDraftSchema,
@@ -228,27 +229,30 @@ export function writeFillDocumentTool(session: DigestSession): AgentTool<typeof 
     name: 'write_document',
     label: '写入入门文档',
     description:
-      '把空白概念的入门讲解写入当前文档。必须先写文档再 write_cards。用 markdown，分段清楚，返回值 blocks 的 index 从 1 计，供 anchor_block 使用。',
+      '把空白概念的入门讲解写入当前文档。必须先写文档再 write_cards。用 markdown，分段清楚，返回值含 numberedView 编号块视图，供 blockIndex + quote 引用。',
     parameters: writeDocumentSchema,
     execute: async (_id, params) => {
       if (!session.documentId) throw new Error('missing documentId');
       const contentMd = params.contentMd.trim();
-      const title = params.title?.trim() || titleFromContent(contentMd);
+      const contentJson = markdownToContentJson(contentMd);
+      const title = params.title?.trim() || titleFromDoc(contentJson);
       const [row] = await getDb()
         .update(documents)
         .set({
           title,
-          contentMd,
+          contentJson,
           updatedAt: new Date(),
         })
         .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId)))
         .returning();
       if (!row) throw new Error('document not found');
       session.documentWritten = true;
+      const { blocks, numberedView } = numberedBlocksFromDoc(asPmJson(row.contentJson));
       const payload = {
         id: row.id,
         title: row.title,
-        blocks: splitMarkdownBlocks(row.contentMd),
+        blocks,
+        numberedView,
       };
       return toolResult(JSON.stringify(payload), payload);
     },
@@ -265,7 +269,7 @@ export function fillWriteCardsTool(session: DigestSession): AgentTool<typeof fil
     name: base.name,
     label: base.label,
     description:
-      '为本空白概念写入 1-2 张入门卡片。必须先 write_document。每张卡要有概念、例子、易混点、标签，以及从入门文逐字引用的 anchor_text / anchor_block。',
+      '为本空白概念写入 1-2 张入门卡片。必须先 write_document。每张卡要有概念、例子、易混点、标签，以及从入门文对应块内逐字引用的 blockIndex / quote。',
     parameters: fillWriteCardsSchema,
     execute: async (id, params) => {
       if (!session.documentWritten) {

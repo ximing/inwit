@@ -2,6 +2,9 @@ node_modules/
 dist/
 .env
 .env.local
+.env.*
+!.env.example
+!.env.production.example
 *.log
 .DS_Store
 .turbo/
@@ -9,3 +12,6 @@ coverage/
 *.tsbuildinfo
 .vite/
 .tmp/
+
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/

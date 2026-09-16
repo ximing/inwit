@@ -1,0 +1,15 @@
+.git
+.github
+**/.turbo
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+.env
+.env.*
+!.env.example
+!.env.production.example
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
+.tmp
+docs

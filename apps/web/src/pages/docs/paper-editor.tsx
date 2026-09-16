@@ -1,4 +1,4 @@
-import { parseMarkdownToPmJSON, serializePmJSONToMarkdown } from '@inwit/markdown';
+import type { Annotation, DocumentCard } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor } from '@tiptap/react';
@@ -37,7 +37,15 @@ import {
   signAssetMultipart,
 } from '@/api/assets';
 import { createDocExtensions } from '@/components/doc/extensions';
-import type { AnchorSpec } from '@/lib/anchors';
+import { docEntities } from '@/lib/anchors';
+import {
+  createDocEditorHost,
+  ensureEntityMarksOnEditor,
+  selectionAnchorFromEditor,
+  stripEntityMarksFromSlice,
+  type DocEditorHost,
+} from '@/lib/entity-marks';
+import { asPmJson, clonePmJson } from '@/lib/pm-doc';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { AnchorHighlight } from './anchor-highlight';
 import { SelectionActions } from './selection-toolbar';
@@ -67,10 +75,11 @@ const assetApi: UploadDocAssetApi = {
   put: putViaFetch,
 };
 
-function contentFromSeed(seedMarkdown: string | null) {
-  if (seedMarkdown === null) return NEW_DOC_JSON;
-  const json = parseMarkdownToPmJSON(seedMarkdown);
-  if (!json.content || json.content.length === 0) return NEW_DOC_JSON;
+function contentFromSeed(seedDoc: unknown | null) {
+  if (seedDoc === null) return NEW_DOC_JSON;
+  const json = asPmJson(seedDoc);
+  const content = json.content;
+  if (!Array.isArray(content) || content.length === 0) return NEW_DOC_JSON;
   return json;
 }
 
@@ -107,35 +116,42 @@ function ToolButton({
 
 type PaperEditorProps = {
   seedKey: string;
-  seedMarkdown: string | null;
+  seedDoc: unknown | null;
   documentId?: string | null;
-  anchors?: AnchorSpec[];
+  cards?: DocumentCard[];
+  annotations?: Annotation[];
   activeCardId?: string | null;
   activeAnnotationId?: string | null;
-  onChange: (markdown: string) => void;
+  onChange: (json: ReturnType<typeof asPmJson>) => void;
   onSave: () => void;
   onAnchorClick?: (cardIds: string[]) => void;
   onAnnotationClick?: (ids: string[]) => void;
+  bindHost?: (host: DocEditorHost | null) => void;
 };
 
 export const PaperEditor = observer(function PaperEditor({
   seedKey,
-  seedMarkdown,
+  seedDoc,
   documentId = null,
-  anchors = [],
+  cards = [],
+  annotations = [],
   activeCardId = null,
   activeAnnotationId = null,
   onChange,
   onSave,
   onAnchorClick,
   onAnnotationClick,
+  bindHost,
 }: PaperEditorProps) {
   const assetUrls = useService(AssetUrlsService);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
   const onAnchorClickRef = useRef(onAnchorClick);
   const onAnnotationClickRef = useRef(onAnnotationClick);
-  const anchorsRef = useRef(anchors);
+  const entities = useMemo(() => docEntities(cards, annotations), [cards, annotations]);
+  const entitiesRef = useRef(entities);
+  const cardsRef = useRef(cards);
+  const annotationsRef = useRef(annotations);
   const activeCardIdRef = useRef(activeCardId);
   const activeAnnotationIdRef = useRef(activeAnnotationId);
   const editorRef = useRef<Editor | null>(null);
@@ -147,7 +163,9 @@ export const PaperEditor = observer(function PaperEditor({
   onSaveRef.current = onSave;
   onAnchorClickRef.current = onAnchorClick;
   onAnnotationClickRef.current = onAnnotationClick;
-  anchorsRef.current = anchors;
+  entitiesRef.current = entities;
+  cardsRef.current = cards;
+  annotationsRef.current = annotations;
   activeCardIdRef.current = activeCardId;
   activeAnnotationIdRef.current = activeAnnotationId;
   const [, setTick] = useState(0);
@@ -192,7 +210,7 @@ export const PaperEditor = observer(function PaperEditor({
   const anchorHighlight = useMemo(
     () =>
       AnchorHighlight.configure({
-        getAnchors: () => anchorsRef.current,
+        getEntities: () => entitiesRef.current,
         getActiveCardId: () => activeCardIdRef.current,
         getActiveAnnotationId: () => activeAnnotationIdRef.current,
         onAnchorClick: (ids) => onAnchorClickRef.current?.(ids),
@@ -216,12 +234,13 @@ export const PaperEditor = observer(function PaperEditor({
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
     extensions,
-    content: contentFromSeed(seedMarkdown),
+    content: contentFromSeed(seedDoc),
     editorProps: {
       attributes: {
         class: 'paper-body prose',
         spellcheck: 'false',
       },
+      transformPasted: (slice) => stripEntityMarksFromSlice(slice),
       handlePaste: (_view, event) => {
         const files = event.clipboardData?.files;
         if (files && files.length > 0) {
@@ -242,16 +261,31 @@ export const PaperEditor = observer(function PaperEditor({
       },
     },
     onUpdate: ({ editor: instance }) => {
-      onChangeRef.current(serializePmJSONToMarkdown(instance.getJSON()));
+      onChangeRef.current(clonePmJson(instance.getJSON()));
     },
   });
   editorRef.current = editor ?? null;
 
   useEffect(() => {
     if (!editor) return;
-    editor.commands.setContent(contentFromSeed(seedMarkdown), { emitUpdate: false });
+    editor.commands.setContent(contentFromSeed(seedDoc), { emitUpdate: false });
     editor.commands.focus('end');
+    ensureEntityMarksOnEditor(editor, cardsRef.current, annotationsRef.current);
   }, [editor, seedKey]);
+
+  const bindHostRef = useRef(bindHost);
+  bindHostRef.current = bindHost;
+  useEffect(() => {
+    if (!editor) return;
+    const host = createDocEditorHost(editor);
+    bindHostRef.current?.(host);
+    return () => bindHostRef.current?.(null);
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    ensureEntityMarksOnEditor(editor, cards, annotations);
+  }, [editor, cards, annotations]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -276,7 +310,7 @@ export const PaperEditor = observer(function PaperEditor({
   useEffect(() => {
     if (!editor) return;
     editor.commands.updateDecorations('anchorHighlight');
-  }, [editor, anchors, activeCardId, activeAnnotationId]);
+  }, [editor, entities, activeCardId, activeAnnotationId]);
 
   const onPickFiles = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -463,6 +497,7 @@ export const PaperEditor = observer(function PaperEditor({
             ' ',
           )}
           documentId={documentId}
+          getSelection={() => selectionAnchorFromEditor(editor)}
           getRect={() => {
             const { from, to } = editor.state.selection;
             const start = editor.view.coordsAtPos(from);

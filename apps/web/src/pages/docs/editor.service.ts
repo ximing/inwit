@@ -1,20 +1,11 @@
 import { Service } from '@rabjs/react';
-import type { Document, UpdateDocumentInput } from '@inwit/dto';
+import { EMPTY_PM_DOC, type Document, type PmDocJson, type UpdateDocumentInput } from '@inwit/dto';
 import { createDocument, getDocument, updateDocument } from '@/api/documents';
 import { errorMessage } from '@/api/client';
 import { formatTimeHm } from '@/lib/format';
+import { asPmJson, clonePmJson, isBlankPmDoc, jsonEqual } from '@/lib/pm-doc';
 
 const SAVE_DEBOUNCE_MS = 2000;
-/** ZWSP empty-paragraph placeholder used by the editor; treated as blank content. */
-export const EMPTY_DOC_PARAGRAPH = '\u200b';
-
-function hasSubstance(markdown: string): boolean {
-  return markdown.replace(/[#*_>`~\-[\]()]/g, '').trim().length > 0;
-}
-
-function isBlankMarkdown(markdown: string): boolean {
-  return markdown.replaceAll(EMPTY_DOC_PARAGRAPH, '').trim().length === 0;
-}
 
 export class EditorService extends Service {
   phase: 'idle' | 'new' | 'loading' | 'ready' | 'missing' = 'idle';
@@ -22,10 +13,10 @@ export class EditorService extends Service {
   topicId: string | null = null;
   draftTitle = '';
   lastSavedTitle = '';
-  draftMd = '';
-  lastSavedMd = '';
+  draftJson: PmDocJson = clonePmJson(EMPTY_PM_DOC);
+  lastSavedJson: PmDocJson = clonePmJson(EMPTY_PM_DOC);
   seedKey = 'new';
-  seedMarkdown: string | null = null;
+  seedDoc: PmDocJson | null = null;
   saveState: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
   savedAt: Date | null = null;
   error: string | null = null;
@@ -33,7 +24,7 @@ export class EditorService extends Service {
   saveTimer: ReturnType<typeof setTimeout> | null = null;
   saveInflight: Promise<void> | null = null;
   onCreated: ((doc: Document) => void) | null = null;
-  onSaved: ((doc: { id: string; title: string | null; contentMd: string }) => void) | null = null;
+  onSaved: ((doc: { id: string; title: string | null; contentJson: PmDocJson }) => void) | null = null;
 
   get saveLabel(): string {
     if (this.saveState === 'saving') return '保存中…';
@@ -45,7 +36,10 @@ export class EditorService extends Service {
   }
 
   get dirty(): boolean {
-    return this.draftMd !== this.lastSavedMd || this.draftTitle.trim() !== this.lastSavedTitle.trim();
+    return (
+      !jsonEqual(this.draftJson, this.lastSavedJson) ||
+      this.draftTitle.trim() !== this.lastSavedTitle.trim()
+    );
   }
 
   /** Digest/poll rewrite: apply remote title only if the input is not dirty. */
@@ -82,10 +76,10 @@ export class EditorService extends Service {
     this.topicId = topicId;
     this.draftTitle = '';
     this.lastSavedTitle = '';
-    this.draftMd = '';
-    this.lastSavedMd = '';
+    this.draftJson = clonePmJson(EMPTY_PM_DOC);
+    this.lastSavedJson = clonePmJson(EMPTY_PM_DOC);
     this.seedKey = 'new';
-    this.seedMarkdown = null;
+    this.seedDoc = null;
     this.saveState = 'idle';
     this.savedAt = null;
     this.error = null;
@@ -107,14 +101,15 @@ export class EditorService extends Service {
     this.error = null;
     try {
       const doc = await getDocument(id);
-      const blank = isBlankMarkdown(doc.contentMd);
+      const json = clonePmJson(doc.contentJson);
+      const blank = isBlankPmDoc(json);
       this.id = doc.id;
       this.topicId = doc.topicId;
       this.draftTitle = doc.title ?? '';
       this.lastSavedTitle = doc.title ?? '';
-      this.draftMd = blank ? '' : doc.contentMd;
-      this.lastSavedMd = blank ? '' : doc.contentMd;
-      this.seedMarkdown = blank ? null : doc.contentMd;
+      this.draftJson = json;
+      this.lastSavedJson = clonePmJson(json);
+      this.seedDoc = blank ? null : clonePmJson(json);
       this.seedKey = `${doc.id}:${doc.updatedAt}`;
       this.savedAt = new Date(doc.updatedAt);
       this.saveState = 'saved';
@@ -130,8 +125,8 @@ export class EditorService extends Service {
     this.noteDirty();
   }
 
-  noteChange(markdown: string): void {
-    this.draftMd = markdown;
+  noteChange(json: unknown): void {
+    this.draftJson = asPmJson(json);
     this.noteDirty();
   }
 
@@ -178,19 +173,19 @@ export class EditorService extends Service {
 
   private async persist(): Promise<void> {
     this.clearTimer();
-    const contentMd = this.draftMd;
+    const contentJson = this.draftJson;
     const draftTitle = this.draftTitle.trim();
     const titleValue = draftTitle.length > 0 ? draftTitle : null;
     const lastTitle = this.lastSavedTitle.trim() || null;
-    if (!this.id && !hasSubstance(contentMd)) return;
-    if (this.id && contentMd === this.lastSavedMd && titleValue === lastTitle) return;
+    if (!this.id && isBlankPmDoc(contentJson)) return;
+    if (this.id && jsonEqual(contentJson, this.lastSavedJson) && titleValue === lastTitle) return;
 
     this.saveState = 'saving';
     this.error = null;
     try {
       if (!this.id) {
         const created = await createDocument({
-          contentMd,
+          contentJson,
           source: 'editor',
           ...(titleValue ? { title: titleValue } : {}),
           ...(this.topicId ? { topicId: this.topicId } : {}),
@@ -198,20 +193,20 @@ export class EditorService extends Service {
         this.id = created.id;
         this.justCreated = true;
         this.phase = 'ready';
-        this.lastSavedMd = created.contentMd;
+        this.lastSavedJson = clonePmJson(created.contentJson);
         this.lastSavedTitle = created.title ?? '';
         this.draftTitle = created.title ?? this.draftTitle;
         this.onCreated?.(created);
       } else {
         const patch: UpdateDocumentInput = {};
         if (titleValue !== lastTitle) patch.title = titleValue;
-        if (contentMd !== this.lastSavedMd) patch.contentMd = contentMd;
-        if (patch.title === undefined && patch.contentMd === undefined) {
+        if (!jsonEqual(contentJson, this.lastSavedJson)) patch.contentJson = contentJson;
+        if (patch.title === undefined && patch.contentJson === undefined) {
           this.saveState = 'saved';
           return;
         }
         const updated = await updateDocument(this.id, patch);
-        this.lastSavedMd = updated.contentMd;
+        this.lastSavedJson = clonePmJson(updated.contentJson);
         this.lastSavedTitle = updated.title ?? '';
       }
       this.savedAt = new Date();
@@ -220,7 +215,7 @@ export class EditorService extends Service {
         this.onSaved?.({
           id: this.id,
           title: this.lastSavedTitle.trim() || null,
-          contentMd: this.lastSavedMd,
+          contentJson: this.lastSavedJson,
         });
       }
       if (this.dirty) this.scheduleSave();

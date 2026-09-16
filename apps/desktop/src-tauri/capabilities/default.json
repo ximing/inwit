@@ -1,0 +1,25 @@
+{
+  "identifier": "default",
+  "description": "Main window: plugin-http (API + S3), plugin-store, window-state, notification, global-shortcut",
+  "windows": ["main"],
+  "local": true,
+  "remote": {
+    "urls": ["http://localhost:5190/*", "http://127.0.0.1:5190/*"]
+  },
+  "permissions": [
+    "core:default",
+    "store:default",
+    "window-state:default",
+    "notification:default",
+    "global-shortcut:default",
+    {
+      "identifier": "http:default",
+      "allow": [
+        { "url": "http://127.0.0.1:3020/*" },
+        { "url": "http://localhost:3020/*" },
+        { "url": "https://*/*" },
+        { "url": "https://*:*/*" }
+      ]
+    }
+  ]
+}

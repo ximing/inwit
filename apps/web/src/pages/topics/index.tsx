@@ -7,6 +7,7 @@ import { docSummaryLine } from '@/components/doc-row';
 import { ReaderOverlay } from '@/components/reader/ReaderOverlay';
 import { ReaderService } from '@/components/reader/reader.service';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
+import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
 import { formatRelativeTime, isSubmitHotkey, summarizeAnswer } from '@/lib/format';
 import { ROUTES, topicPath } from '@/routes';
@@ -475,6 +476,7 @@ const DocsTab = observer(function DocsTab() {
           />
           <div className="capture-bar">
             <div className="capture-actions">
+              <ScreenshotButton topicId={service.topic?.id} />
               <button
                 type="button"
                 className={askClass}

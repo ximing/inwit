@@ -127,6 +127,20 @@
       "when": 1789531471914,
       "tag": "0017_yellow_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1789565835258,
+      "tag": "0018_lonely_hairball",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1789569000000,
+      "tag": "0019_document_source_screenshot",
+      "breakpoints": true
     }
   ]
 }

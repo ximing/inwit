@@ -40,6 +40,7 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
   const [draft, setDraft] = useState(item.note);
   const [saving, setSaving] = useState(false);
   const on = service.activeAnnotationId === item.id;
+  const lost = service.isAnnotationAnchorLost(item);
 
   useEffect(() => {
     if (!editing) setDraft(item.note);
@@ -55,16 +56,18 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
   return (
     <div
       data-annotation-id={item.id}
-      className={`note-item${on ? ' is-on' : ''}${editing ? ' is-editing' : ''}`}
+      className={`note-item${on ? ' is-on' : ''}${editing ? ' is-editing' : ''}${lost ? ' is-lost' : ''}`}
     >
       <button
         type="button"
         className="note-item-main"
+        title={lost ? '原文已删除' : undefined}
         onClick={() => service.focusAnnotation(item.id)}
       >
         {item.kind === 'pdf' && item.imageKey ? <AnnotationThumb annotationId={item.id} /> : null}
         <p className="note-quote">{item.quote}</p>
         {!editing && item.note.trim() ? <p className="note-body">{item.note}</p> : null}
+        {lost ? <p className="anchor-lost">原文已删除</p> : null}
       </button>
       {editing ? (
         <div className="note-edit">
@@ -154,11 +157,13 @@ const DocCardButton = observer(function DocCardButton({ card }: { card: Document
   const service = useService(DocsService);
   const open = service.expandedCardIds.includes(card.id);
   const active = service.activeCardId === card.id;
+  const lost = service.isCardAnchorLost(card);
   return (
     <MiniCard
       card={card}
       open={open}
       active={active}
+      lost={lost}
       onClick={() => service.toggleCard(card.id)}
       thumb={card.hasImage ? <DocCardThumb cardId={card.id} /> : null}
     />

@@ -12,7 +12,7 @@ export async function tryIndexOwnedDocument(userId: string, documentId: string):
       topicId: documents.topicId,
       title: documents.title,
       description: documents.description,
-      contentMd: documents.contentMd,
+      contentJson: documents.contentJson,
     })
     .from(documents)
     .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))

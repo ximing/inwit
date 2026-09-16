@@ -49,7 +49,7 @@ export class PdfPaneService extends Service {
   }
 
   get ocrPending(): boolean {
-    return isPdfOcrPending(this.docs.doc?.contentMd ?? '');
+    return isPdfOcrPending(this.docs.doc?.contentJson);
   }
 
   get ownPdfAnnotations(): OwnPdfAnnotation[] {
@@ -130,9 +130,9 @@ export class PdfPaneService extends Service {
   requestJumpFromCard(card: DocumentCard): void {
     const doc = this.docs.doc;
     const pageIndex = pageIndexFromAnchor({
-      contentMd: doc?.contentMd ?? '',
+      contentJson: doc?.contentJson,
       pageIndex: null,
-      anchorBlock: card.anchorBlock,
+      anchorBlockIndex: card.anchorBlockIndex,
       quote: card.anchorText,
       pageCount: doc?.pageCount,
     });
@@ -147,7 +147,7 @@ export class PdfPaneService extends Service {
   requestJumpFromQuote(quote: string, id: string, kind: 'ann' | 'card'): void {
     const doc = this.docs.doc;
     const pageIndex = pageIndexFromAnchor({
-      contentMd: doc?.contentMd ?? '',
+      contentJson: doc?.contentJson,
       quote,
       pageCount: doc?.pageCount,
     });

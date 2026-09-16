@@ -3,7 +3,7 @@
  * Prefer importing Document types from `./document.js`.
  *
  * `Capture` is a type alias for `Document` (V0 fields `type` / `rawContent` / `lastError`
- * no longer exist; use `source` / `contentMd`).
+ * no longer exist; use `source` / `contentJson`).
  */
 export type {
   Document as Capture,

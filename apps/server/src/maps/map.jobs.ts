@@ -1,8 +1,9 @@
 import type { Job } from '@inwit/dto';
-import { titleFromContent } from '@inwit/dto';
+import { titleFromDoc } from '@inwit/dto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents, jobs } from '../db/schema.js';
+import { markdownToContentJson } from '../documents/content-json.js';
 import { AppError } from '../errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { toPublicJob } from '../jobs/jobs.service.js';
@@ -48,8 +49,8 @@ export async function enqueueFillMapNodeJob(userId: string, nodeId: string): Pro
   const existing = await findActiveTopicJob(userId, node.topicId);
   if (existing) throw AppError.of(409, 'TOPIC_JOB_IN_PROGRESS', { jobId: existing.id });
 
-  const title = titleFromContent(`入门：${node.title}`);
-  const contentMd = `# 入门：${node.title}\n\n（待生成）`;
+  const contentJson = markdownToContentJson(`# 入门：${node.title}\n\n（待生成）`);
+  const title = titleFromDoc(contentJson);
 
   return getDb().transaction(async (tx) => {
     const [document] = await tx
@@ -59,7 +60,7 @@ export async function enqueueFillMapNodeJob(userId: string, nodeId: string): Pro
         topicId: node.topicId,
         mapNodeId: node.id,
         title,
-        contentMd,
+        contentJson,
         source: 'editor',
         status: 'pending',
       })

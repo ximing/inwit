@@ -1,8 +1,9 @@
+import { blocksFromPmJSON, type PmJson } from '@inwit/doc-schema';
 import { z } from 'zod';
 import { cardReviewSummarySchema, cardWithQuestionsSchema } from './card.js';
 import { paginationQuerySchema } from './common.js';
 
-export const DOCUMENT_SOURCES = ['editor', 'paste', 'chat', 'agent', 'import'] as const;
+export const DOCUMENT_SOURCES = ['editor', 'paste', 'chat', 'agent', 'import', 'screenshot'] as const;
 export const documentSourceSchema = z.enum(DOCUMENT_SOURCES);
 export type DocumentSource = z.infer<typeof documentSourceSchema>;
 
@@ -17,8 +18,14 @@ export const WEEKLY_REPORT_TITLE_MARK = '学习复盘';
 export const AGENT_DOC_LABEL_REPORT = 'AI 复盘';
 export const AGENT_DOC_LABEL_CONTRAST = '对比专题';
 
-/** Page separator written into `contentMd` by PDF extract / OCR. */
-export const PDF_PAGE_SEPARATOR = '\n\n---\n\n';
+/** Loose PM doc: enough to round-trip JSON, not a structural validator. */
+export const pmDocSchema = z.object({ type: z.literal('doc') }).passthrough();
+export type PmDocJson = z.infer<typeof pmDocSchema>;
+
+export const EMPTY_PM_DOC = {
+  type: 'doc' as const,
+  content: [{ type: 'paragraph' }],
+};
 
 export const IMPORT_FORMATS = ['pdf', 'docx', 'epub', 'txt', 'md'] as const;
 export type ImportFormat = (typeof IMPORT_FORMATS)[number];
@@ -74,9 +81,29 @@ function clipUnicode(text: string, max: number): string {
   return chars.slice(0, max).join('');
 }
 
-/** First non-empty line (ATX heading marks stripped), then at most 40 Unicode characters. */
-export function titleFromContent(contentMd: string): string {
-  const firstLine = firstNonEmptyLine(contentMd);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function contentJsonOf(doc: unknown): unknown {
+  if (isRecord(doc) && 'contentJson' in doc) return doc.contentJson;
+  return doc;
+}
+
+/** First non-empty top-level block (ATX heading marks stripped), then at most 40 Unicode characters. */
+export function titleFromDoc(doc: { contentJson: unknown } | unknown): string {
+  const raw = contentJsonOf(doc);
+  let blockText = '';
+  if (isRecord(raw) && raw.type === 'doc') {
+    try {
+      const blocks = blocksFromPmJSON(raw as PmJson);
+      blockText =
+        (blocks.find((block) => block.text.replaceAll('\u200b', '').trim().length > 0)?.text ?? '').trim();
+    } catch {
+      blockText = '';
+    }
+  }
+  const firstLine = firstNonEmptyLine(blockText);
   const trimmed = firstLine.replace(/^#{1,6}(?:\s+|$)/, '').trim();
   if (trimmed.length === 0) return UNNAMED_DOCUMENT_TITLE;
   return clipUnicode(trimmed, DOCUMENT_TITLE_MAX);
@@ -101,7 +128,7 @@ export const documentSchema = z.object({
   mapNodeId: z.string().uuid().nullable(),
   title: z.string().nullable(),
   description: z.string().nullable(),
-  contentMd: z.string(),
+  contentJson: pmDocSchema,
   source: documentSourceSchema,
   status: documentStatusSchema,
   answer: z.string().nullable(),
@@ -115,7 +142,7 @@ export type Document = z.infer<typeof documentSchema>;
 
 export const createDocumentInputSchema = z.object({
   title: z.string().trim().min(1).max(500).optional(),
-  contentMd: z.string().trim().max(100_000),
+  contentJson: pmDocSchema,
   topicId: z.string().uuid().optional(),
   source: z.enum(['editor', 'paste']).optional(),
 });
@@ -124,14 +151,14 @@ export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>;
 export const updateDocumentInputSchema = z
   .object({
     title: z.string().trim().min(1).max(500).nullable().optional(),
-    contentMd: z.string().max(100_000).optional(),
+    contentJson: pmDocSchema.optional(),
     topicId: z.string().uuid().nullable().optional(),
   })
   .refine(
     (value) =>
-      value.title !== undefined || value.contentMd !== undefined || value.topicId !== undefined,
+      value.title !== undefined || value.contentJson !== undefined || value.topicId !== undefined,
     {
-      message: 'title, contentMd, or topicId required',
+      message: 'title, contentJson, or topicId required',
     },
   );
 export type UpdateDocumentInput = z.infer<typeof updateDocumentInputSchema>;
@@ -144,6 +171,7 @@ export type CreateChatInput = z.infer<typeof createChatInputSchema>;
 
 export const createSelectionCardsInputSchema = z.object({
   text: z.string().trim().min(1).max(100_000),
+  blockIndex: z.number().int().positive(),
 });
 export type CreateSelectionCardsInput = z.infer<typeof createSelectionCardsInputSchema>;
 
@@ -176,6 +204,25 @@ export const documentDetailSchema = documentSchema.extend({
   topicTitle: z.string().nullable(),
 });
 export type DocumentDetail = z.infer<typeof documentDetailSchema>;
+
+export const SCREENSHOT_MAX_BYTES = 10 * 1024 * 1024;
+export const SCREENSHOT_MIMES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+export type ScreenshotMime = (typeof SCREENSHOT_MIMES)[number];
+
+export const screenshotInitInputSchema = z.object({
+  contentType: z.enum(SCREENSHOT_MIMES),
+  sizeBytes: z.number().int().positive().max(SCREENSHOT_MAX_BYTES),
+  title: z.string().trim().min(1).max(DOCUMENT_TITLE_MAX).optional(),
+  topicId: z.string().uuid().optional(),
+});
+export type ScreenshotInitInput = z.infer<typeof screenshotInitInputSchema>;
+
+export const screenshotInitResponseSchema = z.object({
+  document: documentSchema,
+  uploadUrl: z.string().url(),
+  key: z.string().min(1),
+});
+export type ScreenshotInitResponse = z.infer<typeof screenshotInitResponseSchema>;
 
 export const importInitInputSchema = z.object({
   filename: z.string().trim().min(1).max(500),

@@ -16,7 +16,8 @@ import {
 } from '../db/schema.js';
 import { loadUserMasteryMemory, upsertUserMasteryMemory } from '../review/mastery-memory.js';
 import { getOwnedTopic } from '../topics/topic.service.js';
-import { splitMarkdownBlocks } from './anchors.js';
+import { asPmJson, markdownToContentJson } from '../documents/content-json.js';
+import { numberedBlocksFromDoc } from './card-anchor-logic.js';
 import {
   ANALYZE_DOC_COOLDOWN_DAYS,
   ANALYZE_LOOKBACK_DAYS,
@@ -440,7 +441,7 @@ export function analyzeWriteDocumentTool(
     name: 'write_document',
     label: '写入对比专题文档',
     description:
-      '为最强的一对混淆概念写一篇对比专题（source=agent）。标题默认「对比专题：A vs B」。正文用表格或对照段落讲清区别，并写 2-3 句可被逐字引用的对比句，供随后 write_cards 做 anchor_text。同一对 30 天内已出过专题则返回已有文档，不要再写。本轮最多 1 篇。两卡同主题时会自动挂到该主题。',
+      '为最强的一对混淆概念写一篇对比专题（source=agent）。标题默认「对比专题：A vs B」。正文用表格或对照段落讲清区别，并写 2-3 句可被逐字引用的对比句，供随后 write_cards 做 blockIndex + quote。同一对 30 天内已出过专题则返回已有文档，不要再写。本轮最多 1 篇。两卡同主题时会自动挂到该主题。',
     parameters: analyzeWriteDocumentSchema,
     execute: async (_id, params) => {
       if (params.cardIdA === params.cardIdB) {
@@ -508,7 +509,7 @@ export function analyzeWriteDocumentTool(
           userId: session.userId,
           topicId,
           title,
-          contentMd,
+          contentJson: markdownToContentJson(contentMd),
           source: 'agent',
           status: 'digested',
         })
@@ -558,7 +559,7 @@ export function analyzeWriteDocumentTool(
         source: row.source,
         status: row.status,
         key,
-        blocks: splitMarkdownBlocks(row.contentMd),
+        ...numberedBlocksFromDoc(asPmJson(row.contentJson)),
       };
       return toolResult(JSON.stringify(payload), payload);
     },
@@ -578,7 +579,7 @@ export function analyzeWriteCardsTool(
     name: 'write_cards',
     label: '写入对比卡片',
     description:
-      '把 2-3 张对比卡挂到刚写入的专题文档。anchor_text 必须是文档里的原句。每张卡随后必须 write_questions 出 1 道 compare 或 judge。卡片会进入今日复习队列。',
+      '把 2-3 张对比卡挂到刚写入的专题文档。quote 必须是文档某块内的原句，并给出 blockIndex。每张卡随后必须 write_questions 出 1 道 compare 或 judge。卡片会进入今日复习队列。',
     parameters: analyzeWriteCardsSchema,
     execute: async (id, params, signal, onUpdate) => {
       if (!session.digest.documentId) {

@@ -2,6 +2,7 @@ import { docDisplayTitle, documentIdFromJobPayload, selectionJobPayloadFrom } fr
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { cards, documents, type JobRow } from '../db/schema.js';
+import { asPmJson } from '../documents/content-json.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
 import { completeChat } from '../llm/usage.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
@@ -9,11 +10,10 @@ import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
 import { deleteCard, indexCard } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
-import { resolveAnchor } from './anchors.js';
+import { inheritSelectionAnchor } from './card-anchor-logic.js';
 import { finishExecution, startExecution } from './executions.js';
 import { runWithAgentContext } from './run-context.js';
 import {
-  isAnchorInSelection,
   parseSelectionCards,
   SELECTION_MIN_CARDS,
   SELECTION_SYSTEM_PROMPT,
@@ -45,15 +45,17 @@ async function persistDrafts(input: {
   documentId: string;
   topicId: string | null;
   mapNodeId: string | null;
-  contentMd: string;
+  contentJson: unknown;
   selectionText: string;
+  blockIndex: number | undefined;
   drafts: SelectionCardDraft[];
 }): Promise<string[]> {
   const written: string[] = [];
+  const resolved = inheritSelectionAnchor(asPmJson(input.contentJson), {
+    blockIndex: input.blockIndex,
+    quote: input.selectionText,
+  });
   for (const draft of input.drafts) {
-    const resolved = resolveAnchor(input.contentMd, draft.anchorText, 1);
-    if (resolved.matched === 'none' || resolved.matched === 'block') continue;
-    if (!isAnchorInSelection(resolved.anchorText, input.selectionText)) continue;
     const now = new Date();
     const [row] = await getDb()
       .insert(cards)
@@ -68,7 +70,7 @@ async function persistDrafts(input: {
         tags: draft.tags,
         source: 'agent',
         anchorText: resolved.anchorText,
-        anchorBlock: resolved.anchorBlock,
+        anchorBlockIndex: resolved.anchorBlockIndex,
       })
       .returning();
     if (!row) throw new Error('failed to insert card');
@@ -146,7 +148,7 @@ export async function processSelection(job: JobRow): Promise<void> {
           { executionId },
         );
 
-        const drafts = parseSelectionCards(text, selectionText);
+        const drafts = parseSelectionCards(text);
         if (drafts.length < SELECTION_MIN_CARDS) {
           await finishExecution({
             executionId,
@@ -162,8 +164,9 @@ export async function processSelection(job: JobRow): Promise<void> {
           documentId,
           topicId: document.topicId,
           mapNodeId: document.mapNodeId,
-          contentMd: document.contentMd,
+          contentJson: document.contentJson,
           selectionText,
+          blockIndex: payload?.blockIndex,
           drafts,
         });
         if (written.length < SELECTION_MIN_CARDS) {

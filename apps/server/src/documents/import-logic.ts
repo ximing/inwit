@@ -3,10 +3,10 @@ import {
   FORMAT_BY_MIME,
   IMPORT_FORMATS,
   MIME_BY_FORMAT,
-  PDF_PAGE_SEPARATOR,
   type ImportFormat,
 } from '@inwit/dto';
 import { AppError } from '../errors.js';
+import { MARKDOWN_PAGE_SEPARATOR } from './content-json.js';
 
 /** Default technical ceiling (2 GiB). Prefer `config.IMPORT_MAX_FILE_BYTES` at the service layer. */
 export const DEFAULT_IMPORT_MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -58,7 +58,7 @@ export function normalizeExtractedText(text: string, format: ImportFormat): stri
       .split(PDF_PAGE_BREAK)
       .map((page) => page.trim())
       .filter((page) => page.length > 0)
-      .join(PDF_PAGE_SEPARATOR);
+      .join(MARKDOWN_PAGE_SEPARATOR);
   }
   return unified.replace(/\n{3,}/g, '\n\n').trim();
 }

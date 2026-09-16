@@ -27,7 +27,7 @@ try {
       topicId: documents.topicId,
       title: documents.title,
       description: documents.description,
-      contentMd: documents.contentMd,
+      contentJson: documents.contentJson,
     })
     .from(documents);
 

@@ -1,7 +1,6 @@
-import { ASSET_IMAGE_MAX_BYTES, ASSET_VIDEO_MAX_BYTES } from '@inwit/dto';
-import { serializePmJSONToMarkdown } from '@inwit/markdown';
+import { ASSET_IMAGE_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, EMPTY_PM_DOC } from '@inwit/dto';
 import { describe, expect, it, vi } from 'vitest';
-import { EMPTY_DOC_PARAGRAPH } from './editor.service';
+import { isBlankPmDoc } from '@/lib/pm-doc';
 import {
   AssetUploadError,
   classifyAssetFile,
@@ -11,10 +10,6 @@ import {
   type UploadDocAssetApi,
   type UploadDocAssetEditor,
 } from './upload-asset';
-
-function isBlankMarkdown(markdown: string): boolean {
-  return markdown.replaceAll(EMPTY_DOC_PARAGRAPH, '').trim().length === 0;
-}
 
 function fileOf(name: string, type: string, body: string): File {
   return new File([body], name, { type });
@@ -213,18 +208,14 @@ describe('ingestAssetFiles', () => {
   });
 });
 
-describe('empty editor serialization vs isBlankMarkdown', () => {
+describe('empty editor JSON vs isBlankPmDoc', () => {
   it('treats an empty paragraph and a ZWSP placeholder as blank', () => {
+    expect(isBlankPmDoc(EMPTY_PM_DOC)).toBe(true);
     expect(
-      isBlankMarkdown(serializePmJSONToMarkdown({ type: 'doc', content: [{ type: 'paragraph' }] })),
-    ).toBe(true);
-    expect(
-      isBlankMarkdown(
-        serializePmJSONToMarkdown({
-          type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: EMPTY_DOC_PARAGRAPH }] }],
-        }),
-      ),
+      isBlankPmDoc({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: '\u200b' }] }],
+      }),
     ).toBe(true);
   });
 });

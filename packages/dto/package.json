@@ -18,6 +18,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@inwit/doc-schema": "workspace:*",
     "zod": "^3.24.2"
   },
   "devDependencies": {

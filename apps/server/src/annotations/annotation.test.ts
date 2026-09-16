@@ -81,6 +81,28 @@ describe('createAnnotationInputSchema', () => {
     expect(parsed.kind).toBe('media');
     expect(parsed.positionMs).toBe(1500);
   });
+
+  it('allows optional anchorBlockIndex on text annotations only', () => {
+    const parsed = createAnnotationInputSchema.parse({ ...base, anchorBlockIndex: 2 });
+    expect(parsed.anchorBlockIndex).toBe(2);
+    expect(
+      createAnnotationInputSchema.safeParse({
+        ...base,
+        kind: 'pdf',
+        pageIndex: 0,
+        geometry: { quads: [[0, 0, 1, 1]] },
+        anchorBlockIndex: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      createAnnotationInputSchema.safeParse({
+        ...base,
+        kind: 'media',
+        positionMs: 100,
+        anchorBlockIndex: 1,
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('excerptUploadInputSchema', () => {

@@ -4,6 +4,7 @@ import type { MemoryContent } from '@inwit/dto';
 import { and, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { cardLinks, cards, documents, mapNodes, reviewLogs, reviewStates, topics } from '../db/schema.js';
+import { markdownToContentJson } from '../documents/content-json.js';
 import { loadUserMasteryMemory, upsertUserMasteryMemory } from '../review/mastery-memory.js';
 import {
   WEEKLY_RELEARN_LIMIT,
@@ -289,7 +290,7 @@ export function weeklyWriteDocumentTool(
         .values({
           userId: session.userId,
           title: session.title,
-          contentMd,
+          contentJson: markdownToContentJson(contentMd),
           source: 'agent',
           status: 'digested',
         })

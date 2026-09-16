@@ -12,13 +12,14 @@ import {
 } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { Loader2, X } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import { DocView } from '@/components/doc/DocView';
 import { Tag } from '@/components/tag';
 import { scrollFlashCardAnchor } from '@/lib/anchor-scroll';
-import { docAnchors, type AnchorSpec } from '@/lib/anchors';
+import { pmJsonToText } from '@inwit/doc-schema';
+import { asSchemaJson, textToPmDoc } from '@/lib/pm-doc';
 import { formatRelativeTime } from '@/lib/format';
 import { ROUTES, docAnchorPath, docPath } from '@/routes';
 import {
@@ -89,11 +90,6 @@ export const ReaderOverlay = observer(function ReaderOverlay() {
       : doc
         ? docPath(doc.id)
         : null;
-
-  const anchors = useMemo(
-    () => (doc ? docAnchors(doc.cards, []) : []),
-    [doc],
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -190,7 +186,7 @@ export const ReaderOverlay = observer(function ReaderOverlay() {
               </p>
             ) : null}
             {service.error && !doc ? <p className="empty">{service.error}</p> : null}
-            {doc ? <ReaderDocBody doc={doc} anchors={anchors} /> : null}
+            {doc ? <ReaderDocBody doc={doc} /> : null}
           </div>
           {doc ? (
             <aside className="reader-overlay-rail" aria-label={cardMode ? '卡片详情' : '本文卡片'}>
@@ -206,23 +202,27 @@ export const ReaderOverlay = observer(function ReaderOverlay() {
 
 const ReaderDocBody = observer(function ReaderDocBody({
   doc,
-  anchors,
 }: {
   doc: DocumentDetail;
-  anchors: AnchorSpec[];
 }) {
   const service = useService(ReaderService);
   const chatAnswer = doc.source === 'chat' ? (doc.answer?.trim() ?? '') : '';
   const description = chatAnswer ? '' : (doc.description?.trim() ?? '');
-  const contentMd = doc.contentMd.trim();
-  // chat 文档的锚点在 answer 里；contentMd 常常只剩一行标题，避免盖住回答。
-  const showContentMd = contentMd.length > 0 && (!chatAnswer || contentMd.length > 80);
+  const contentText = (() => {
+    try {
+      return pmJsonToText(asSchemaJson(doc.contentJson)).replaceAll('\u200b', '').trim();
+    } catch {
+      return '';
+    }
+  })();
+  // chat 文档的正文常常只剩问题；有回答时只在正文较长时再展示。
+  const showContent = contentText.length > 0 && (!chatAnswer || contentText.length > 80);
   const onAnchorClick = (ids: string[]) => {
     const id = ids[0];
     if (id) void service.openCard(id, doc.id);
   };
 
-  if (!chatAnswer && !description && !showContentMd) {
+  if (!chatAnswer && !description && !showContent) {
     return <p className="empty">这篇还没有正文。</p>;
   }
 
@@ -230,8 +230,8 @@ const ReaderDocBody = observer(function ReaderDocBody({
     <>
       {chatAnswer ? (
         <DocView
-          source={chatAnswer}
-          anchors={anchors}
+          source={textToPmDoc(chatAnswer)}
+          cards={doc.cards}
           activeCardId={service.activeCardId}
           className="reader-overlay-prose"
           onAnchorClick={onAnchorClick}
@@ -240,13 +240,13 @@ const ReaderDocBody = observer(function ReaderDocBody({
       {description ? (
         <aside className="reader-overlay-summary">
           <p className="reader-overlay-summary-k">AI 摘要</p>
-          <DocView source={description} />
+          <DocView source={textToPmDoc(description)} />
         </aside>
       ) : null}
-      {showContentMd ? (
+      {showContent ? (
         <DocView
-          source={contentMd}
-          anchors={anchors}
+          source={doc.contentJson}
+          cards={doc.cards}
           activeCardId={service.activeCardId}
           className="reader-overlay-prose"
           onAnchorClick={onAnchorClick}

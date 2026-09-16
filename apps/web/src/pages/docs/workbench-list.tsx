@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router';
 import { Chip } from '@/components/chip';
 import { DocRowSummary } from '@/components/doc-row';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
+import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
 import { formatRelativeTime, isSubmitHotkey } from '@/lib/format';
 import { docsPath } from '@/routes';
@@ -57,6 +58,7 @@ const DocStreamRow = observer(function DocStreamRow({
         <DocRowSummary doc={doc} />
         <div className="row-meta">
           {doc.source === 'import' ? <Tag className="tag-import">导入</Tag> : null}
+          {doc.source === 'screenshot' ? <Tag className="tag-import">截图</Tag> : null}
           {doc.topicTitle ? <Tag tone="topic">{doc.topicTitle}</Tag> : null}
           {doc.cardCount > 0 ? <span>{doc.cardCount} 卡</span> : null}
           {doc.cardCount > 0 ? <span>·</span> : null}
@@ -226,6 +228,7 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
               onNew={() => service.openNewTopic('capture')}
             />
             <div className="capture-actions">
+              <ScreenshotButton topicId={service.captureTopicId} />
               <button
                 type="button"
                 className={askClass}

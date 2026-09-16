@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
+import { documentPlainText } from '../documents/content-json.js';
 import { completeChat } from '../llm/usage.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -68,14 +69,15 @@ export async function ensureDocumentMeta(input: {
     .select({
       title: documents.title,
       description: documents.description,
-      contentMd: documents.contentMd,
+      contentJson: documents.contentJson,
     })
     .from(documents)
     .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)))
     .limit(1);
   if (!row) return;
   if (!needsDocumentMeta(row)) return;
-  if (isTooShortForDocumentMeta(row.contentMd)) return;
+  const contentText = documentPlainText(row.contentJson);
+  if (isTooShortForDocumentMeta(contentText)) return;
 
   let text: string;
   try {
@@ -87,7 +89,7 @@ export async function ensureDocumentMeta(input: {
           {
             role: 'user',
             content: documentMetaUserPrompt({
-              contentMd: clipChars(row.contentMd, CONTENT_CLIP),
+              contentMd: clipChars(contentText, CONTENT_CLIP),
               keepTitle: isUserOwnedTitle(row.title),
               existingTitle: row.title,
             }),

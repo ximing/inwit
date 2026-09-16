@@ -29,7 +29,7 @@ export const cardSchema = z.object({
   tags: z.array(z.string()),
   source: cardSourceSchema,
   anchorText: z.string().nullable(),
-  anchorBlock: z.string().nullable(),
+  anchorBlockIndex: z.number().int().nullable(),
   hasImage: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -100,7 +100,7 @@ export const createCardInputSchema = z.object({
   concept: z.string().trim().min(1).max(2000),
   example: z.string().max(4000),
   anchorText: z.string().trim().min(1).max(4000).optional(),
-  anchorBlock: z.string().trim().min(1).max(8).optional(),
+  anchorBlockIndex: z.number().int().positive().optional(),
   /** Excerpt object key from POST /api/documents/:id/excerpts; never a URL. */
   imageKey: z.string().min(1).max(500).optional(),
 });
@@ -121,12 +121,6 @@ function firstNonEmptyLine(text: string): string {
   return (normalized.split('\n').find((line) => line.trim().length > 0) ?? '').trim();
 }
 
-/** 0-based PDF page → 1-based `anchorBlock` (same convention as extract/OCR pages). */
-export function pageIndexToAnchorBlock(pageIndex: number): string {
-  if (!Number.isFinite(pageIndex)) return '1';
-  return String(Math.max(0, Math.floor(pageIndex)) + 1);
-}
-
 /** Manual card payload for a screenshot annotation. Null when there is no excerpt key. */
 export function excerptCardInputFromAnnotation(input: {
   documentId: string;
@@ -138,15 +132,11 @@ export function excerptCardInputFromAnnotation(input: {
   if (!imageKey) return null;
   const note = input.note ?? '';
   const concept = clipChars(firstNonEmptyLine(note), 2000) || IMAGE_EXCERPT_QUOTE;
-  const draft: CreateCardInput = {
+  return {
     documentId: input.documentId,
     concept,
     example: clipChars(note, 4000),
     anchorText: IMAGE_EXCERPT_QUOTE,
     imageKey,
   };
-  if (typeof input.pageIndex === 'number' && Number.isFinite(input.pageIndex) && input.pageIndex >= 0) {
-    return { ...draft, anchorBlock: pageIndexToAnchorBlock(input.pageIndex) };
-  }
-  return draft;
 }

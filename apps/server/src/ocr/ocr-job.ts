@@ -5,7 +5,9 @@ import { and, desc, eq } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { documents, jobs, ocrPages, type DocumentRow, type JobRow } from '../db/schema.js';
+import { markdownToContentJson } from '../documents/content-json.js';
 import { isBlankDocumentContent } from '../documents/document-logic.js';
+import { isOcrImageMime } from '../documents/screenshot-logic.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { logLlmUsage } from '../llm/usage.js';
@@ -29,6 +31,7 @@ import {
   type CompletedOcrPage,
   type OcrProgress,
 } from './ocr-logic.js';
+import { rasterImageFileToPng } from './ocr-image.js';
 import { resolveOcrFor } from './ocr.service.js';
 import { openPdf } from './rasterize.js';
 
@@ -132,7 +135,8 @@ export async function processOcr(job: JobRow): Promise<void> {
   if (!document.fileKey) throw new Error('ocr job missing fileKey');
 
   const dir = await mkdtemp(path.join(tmpdir(), 'inwit-ocr-'));
-  const dest = path.join(dir, 'source.pdf');
+  const image = isOcrImageMime(document.fileMime);
+  const dest = path.join(dir, image ? 'source.bin' : 'source.pdf');
   const completed = await loadCompletedPages(documentId);
   let progress = mergeOcrResume(job.payload, completed) ?? parsed;
 
@@ -140,6 +144,55 @@ export async function processOcr(job: JobRow): Promise<void> {
     await getObjectToFile(document.fileKey, dest);
     await heartbeatJob(job.id);
 
+    if (image) {
+      progress = withTotalPages(progress, 1);
+      await persistOcrCheckpoint(job.id, progress);
+      const resolved = await resolveOcrFor(job.userId);
+      const remaining = pendingPages(progress);
+      if (remaining.includes(0)) {
+        let outcome: PageOutcome;
+        try {
+          const png = await rasterImageFileToPng(dest);
+          const result = await completeOcrPage({
+            apiKey: resolved.apiKey,
+            model: resolved.model,
+            baseUrl: resolved.baseUrl,
+            imageDataUrl: pngToDataUrl(png),
+          });
+          outcome = {
+            pageIndex: 0,
+            ok: true,
+            text: result.text,
+            promptTokens: result.promptTokens,
+            completionTokens: result.completionTokens,
+            totalTokens: result.totalTokens,
+          };
+        } catch (err) {
+          logger.warn('ocr.page_failed', {
+            jobId: job.id,
+            documentId,
+            pageIndex: 0,
+            err: err instanceof Error ? err.message : String(err),
+          });
+          outcome = { pageIndex: 0, ok: false };
+        }
+        progress = outcome.ok
+          ? applyPageSuccess(progress, outcome.pageIndex, outcome.text)
+          : applyPageFailure(progress, outcome.pageIndex);
+        await persistOcrOutcome(job.id, documentId, progress, outcome);
+        if (outcome.ok) {
+          await logLlmUsage({
+            userId: job.userId,
+            provider: 'dashscope',
+            model: resolved.model,
+            capability: 'ocr',
+            promptTokens: outcome.promptTokens,
+            completionTokens: outcome.completionTokens,
+            totalTokens: outcome.totalTokens,
+          });
+        }
+      }
+    } else {
     const pdf = await openPdf(dest);
     try {
       progress = withTotalPages(progress, pdf.pageCount);
@@ -207,20 +260,21 @@ export async function processOcr(job: JobRow): Promise<void> {
     } finally {
       await pdf.destroy();
     }
+    }
 
     if (progress.failedPages.length > 0) {
       await markDocumentFailed(job.userId, documentId);
       throw new Error(ocrIncompleteError(progress.failedPages));
     }
 
-    const contentMd = pagesToMarkdown(progress.pageTexts);
-    const blank = isBlankDocumentContent(contentMd);
+    const contentJson = markdownToContentJson(pagesToMarkdown(progress.pageTexts));
+    const blank = isBlankDocumentContent(contentJson);
 
     await getDb().transaction(async (tx) => {
       const [updated] = await tx
         .update(documents)
         .set({
-          contentMd,
+          contentJson,
           pageCount: progress.totalPages,
           status: blank ? 'digested' : 'pending',
           updatedAt: new Date(),
@@ -244,7 +298,7 @@ export async function processOcr(job: JobRow): Promise<void> {
         topicId: document.topicId,
         title: document.title,
         description: document.description,
-        contentMd,
+        contentJson,
       });
     }
   } catch (err) {

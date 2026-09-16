@@ -15,6 +15,7 @@ import {
 import { and, count, desc, eq, gte, sql, type SQL } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { agentExecutions, documents, jobs, llmUsageLogs, users } from '../db/schema.js';
+import { documentPlainText } from '../documents/content-json.js';
 import { AppError } from '../errors.js';
 import { listJobs, retryJob } from '../jobs/jobs.service.js';
 import {
@@ -172,7 +173,7 @@ type ExecutionJoinRow = {
   stepCount: unknown;
   jobType: AdminExecutionListItem['jobType'];
   documentId: string | null;
-  documentRaw: string | null;
+  documentRaw: unknown;
 };
 
 const executionSelect = {
@@ -189,7 +190,7 @@ const executionSelect = {
   stepCount: sql<number>`coalesce(jsonb_array_length(${agentExecutions.steps}), 0)::int`,
   jobType: jobs.type,
   documentId: documents.id,
-  documentRaw: documents.contentMd,
+  documentRaw: documents.contentJson,
 };
 
 function executionWhere(userId: string, query: ListAdminExecutionsQuery): SQL {
@@ -215,7 +216,9 @@ function toListItem(row: ExecutionJoinRow, now = new Date()): AdminExecutionList
     error: row.error,
     jobType: row.jobType ?? null,
     documentId: row.documentId ?? null,
-    documentPreview: previewText(row.documentRaw),
+    documentPreview: previewText(
+      typeof row.documentRaw === 'string' ? row.documentRaw : documentPlainText(row.documentRaw),
+    ),
   };
 }
 

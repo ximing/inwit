@@ -8,6 +8,7 @@ import {
   importInitInputSchema,
   importPartsInputSchema,
   listDocumentsQuerySchema,
+  screenshotInitInputSchema,
   updateDocumentInputSchema,
 } from '@inwit/dto';
 import type { FastifyInstance } from 'fastify';
@@ -26,6 +27,7 @@ import {
   updateDocument,
 } from './document.service.js';
 import { abortImport, completeImport, initImport, presignImportParts } from './import.service.js';
+import { completeScreenshot, initScreenshot } from './screenshot.service.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -65,6 +67,17 @@ export function registerDocumentRoutes(app: FastifyInstance): void {
     const input = importAbortInputSchema.parse(req.body);
     await abortImport(requireUser(req).id, id, input);
     return reply.code(204).send();
+  });
+
+  app.post('/api/documents/screenshot/init', auth, async (req, reply) => {
+    const input = screenshotInitInputSchema.parse(req.body);
+    const created = await initScreenshot(requireUser(req).id, input);
+    return reply.code(201).send(created);
+  });
+
+  app.post('/api/documents/screenshot/:id/complete', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    return completeScreenshot(requireUser(req).id, id);
   });
 
   app.post('/api/chat', auth, async (req, reply) => {

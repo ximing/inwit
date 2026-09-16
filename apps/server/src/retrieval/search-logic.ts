@@ -1,3 +1,5 @@
+import { documentPlainText } from '../documents/content-json.js';
+
 export const DOCUMENT_EMBEDDING_CONTENT_CHARS = 500;
 
 export function clipChars(value: string, max: number): string {
@@ -6,15 +8,15 @@ export function clipChars(value: string, max: number): string {
   return chars.slice(0, Math.max(0, max)).join('');
 }
 
-/** Vector / rerank text: title + description + first 500 chars of content. */
+/** Vector / rerank text: title + description + first 500 chars of derived content text. */
 export function documentEmbeddingText(doc: {
   title?: string | null;
   description?: string | null;
-  contentMd?: string | null;
+  contentJson?: unknown;
 }): string {
   const title = (doc.title ?? '').trim();
   const description = (doc.description ?? '').trim();
-  const head = clipChars(doc.contentMd ?? '', DOCUMENT_EMBEDDING_CONTENT_CHARS).trim();
+  const head = clipChars(documentPlainText(doc.contentJson), DOCUMENT_EMBEDDING_CONTENT_CHARS).trim();
   return [title, description, head].filter((part) => part.length > 0).join('\n');
 }
 

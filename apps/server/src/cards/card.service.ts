@@ -61,7 +61,7 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
   }
   const now = new Date();
   const anchorText = input.anchorText !== undefined ? input.anchorText : null;
-  const anchorBlock = input.anchorBlock !== undefined ? input.anchorBlock : null;
+  const anchorBlockIndex = input.anchorBlockIndex !== undefined ? input.anchorBlockIndex : null;
   const imageKey = input.imageKey !== undefined ? input.imageKey : null;
 
   return getDb().transaction(async (tx) => {
@@ -77,7 +77,7 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
         tags: [],
         source: 'manual',
         anchorText,
-        anchorBlock,
+        anchorBlockIndex,
         imageKey,
       })
       .returning();

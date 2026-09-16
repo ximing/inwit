@@ -1,7 +1,5 @@
 import { observer, useService } from '@rabjs/react';
-import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { docAnchors } from '@/lib/anchors';
 import { ROUTES } from '@/routes';
 import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
@@ -14,10 +12,6 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
   const service = useService(DocsService);
   const editor = useService(EditorService);
   const navigate = useNavigate();
-  const anchors = useMemo(
-    () => docAnchors(service.doc?.cards ?? [], service.annotations),
-    [service.doc, service.annotations],
-  );
 
   if (editor.phase === 'missing') {
     return (
@@ -64,13 +58,15 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
                 {editor.phase === 'new' || editor.phase === 'ready' ? (
                   <PaperEditor
                     seedKey={editor.seedKey}
-                    seedMarkdown={editor.seedMarkdown}
+                    seedDoc={editor.seedDoc}
                     documentId={editor.id ?? service.doc?.id ?? null}
-                    anchors={anchors}
+                    cards={service.doc?.cards ?? []}
+                    annotations={service.annotations}
                     activeCardId={service.activeCardId}
                     activeAnnotationId={service.activeAnnotationId}
-                    onChange={(markdown) => editor.noteChange(markdown)}
+                    onChange={(json) => editor.noteChange(json)}
                     onSave={() => void editor.save()}
+                    bindHost={(host) => service.attachEditorHost(host)}
                     onAnchorClick={(ids) => service.openAnchors(ids)}
                     onAnnotationClick={(ids) => {
                       const id = ids[0];

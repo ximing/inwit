@@ -16,6 +16,8 @@ import type {
   ImportPartsResponse,
   Job,
   Paginated,
+  ScreenshotInitInput,
+  ScreenshotInitResponse,
   UpdateDocumentInput,
 } from '@inwit/dto';
 import { request } from './client';
@@ -70,6 +72,19 @@ export function abortImport(documentId: string, input: ImportAbortInput): Promis
   return request<void>(`/api/documents/import/${documentId}/abort`, {
     method: 'POST',
     body: JSON.stringify(input),
+  });
+}
+
+export function initScreenshot(input: ScreenshotInitInput): Promise<ScreenshotInitResponse> {
+  return request<ScreenshotInitResponse>('/api/documents/screenshot/init', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function completeScreenshot(documentId: string): Promise<Document> {
+  return request<Document>(`/api/documents/screenshot/${documentId}/complete`, {
+    method: 'POST',
   });
 }
 

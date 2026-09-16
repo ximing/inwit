@@ -31,7 +31,7 @@ const DocsPageContent = observer(function DocsPageContent() {
   const listed = docId ? service.documents.find((item) => item.id === docId) : undefined;
   const fileMime = service.doc?.id === docId ? service.doc.fileMime : (listed?.fileMime ?? null);
   const isPdf = fileMime === 'application/pdf';
-  // PDF 编辑 contentMd 会打乱页分隔锚点；预览是唯一有意义的视图。
+  // PDF 编辑正文会打乱分页节点；预览是唯一有意义的视图。
   const editing = isPdf ? false : prefs.editing;
   const editingRef = useRef(editing);
   const paneRef = useRef<HTMLDivElement>(null);
@@ -60,7 +60,7 @@ const DocsPageContent = observer(function DocsPageContent() {
 
   useEffect(() => {
     editor.onCreated = (created) => service.ingestCreated(created);
-    editor.onSaved = (saved) => service.noteEditorSaved(saved.id, saved.title, saved.contentMd);
+    editor.onSaved = (saved) => service.noteEditorSaved(saved.id, saved.title, saved.contentJson);
     return () => {
       editor.onCreated = null;
       editor.onSaved = null;
@@ -142,7 +142,7 @@ const DocsPageContent = observer(function DocsPageContent() {
           service.noteEditorSaved(
             editor.id,
             editor.draftTitle.trim() || editor.lastSavedTitle.trim() || null,
-            editor.draftMd,
+            editor.draftJson,
           );
         }
         editor.idle();

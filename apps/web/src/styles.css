@@ -899,6 +899,15 @@ html[data-theme='dark'] .recent-row:hover .tag-topic {
   border: 1px solid var(--line-soft);
 }
 
+.shot-error {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+  z-index: 40;
+  max-width: 420px;
+}
+
 /* ---------- 捕获框 ---------- */
 .capture {
   background: var(--surface);
@@ -1603,7 +1612,8 @@ html[data-theme='dark'] .search-palette-body {
 .prose mark:hover:not(.anchor):not(.anchor-note),
 .prose mark.is-active:not(.anchor):not(.anchor-note),
 .ProseMirror .anchor:hover,
-.ProseMirror .anchor.is-on {
+.ProseMirror .anchor.is-on,
+.ProseMirror .anchor.is-active {
   background: linear-gradient(to top, #f0d489 62%, transparent 62%);
 }
 [data-theme='dark'] .md-body mark:hover:not(.anchor):not(.anchor-note),
@@ -1612,7 +1622,8 @@ html[data-theme='dark'] .search-palette-body {
 [data-theme='dark'] .prose mark:hover:not(.anchor):not(.anchor-note),
 [data-theme='dark'] .prose mark.is-active:not(.anchor):not(.anchor-note),
 [data-theme='dark'] .ProseMirror .anchor:hover,
-[data-theme='dark'] .ProseMirror .anchor.is-on {
+[data-theme='dark'] .ProseMirror .anchor.is-on,
+[data-theme='dark'] .ProseMirror .anchor.is-active {
   background: linear-gradient(to top, #6a5720 62%, transparent 62%);
 }
 
@@ -1672,12 +1683,16 @@ mark.anchor-note,
 }
 mark.anchor-note:hover,
 mark.anchor-note.is-on,
+mark.anchor-note.is-active,
 .ProseMirror .anchor-note:hover,
 .ProseMirror .anchor-note.is-on,
+.ProseMirror .anchor-note.is-active,
 .prose mark.anchor-note:hover,
 .prose mark.anchor-note.is-on,
+.prose mark.anchor-note.is-active,
 .md-body mark.anchor-note:hover,
-.md-body mark.anchor-note.is-on {
+.md-body mark.anchor-note.is-on,
+.md-body mark.anchor-note.is-active {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .anchor-note-block {
@@ -2337,6 +2352,8 @@ label.check {
   margin-left: auto;
 }
 .pane-capture .btn { height: 30px; font-size: 12.5px; padding: 0 12px; }
+.capture-actions .btn svg,
+.capture-bar .btn svg { margin-right: 4px; }
 .pane-capture.is-disabled .capture { opacity: 0.55; }
 .topic-docs .row { margin-bottom: 2px; }
 .topic-docs .row-title .t { flex: 0 1 auto; }
@@ -3370,6 +3387,22 @@ button.doc-row {
 .note-item.is-on {
   background: var(--accent-soft);
   border-color: var(--accent-line);
+}
+.note-item.is-lost,
+.mini-card.is-lost {
+  opacity: 0.55;
+}
+.note-item.is-lost {
+  border-left-color: var(--line);
+}
+.anchor-lost {
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-4);
+}
+.mini-foot .anchor-lost {
+  margin-top: 0;
 }
 .note-item-main {
   display: block;

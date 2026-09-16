@@ -34,7 +34,10 @@ export class DocsAnnotationsService extends Service {
     documentId: string,
     quote: string,
     note: string,
-    extra?: Pick<CreateAnnotationInput, 'kind' | 'pageIndex' | 'geometry' | 'imageKey'>,
+    extra?: Pick<
+      CreateAnnotationInput,
+      'kind' | 'pageIndex' | 'geometry' | 'imageKey' | 'anchorBlockIndex'
+    > & { from?: number; to?: number },
   ): Promise<boolean> {
     const clipped = quote.trim();
     if (!clipped) return false;
@@ -47,9 +50,18 @@ export class DocsAnnotationsService extends Service {
         ...(extra?.pageIndex !== undefined ? { pageIndex: extra.pageIndex } : {}),
         ...(extra?.geometry ? { geometry: extra.geometry } : {}),
         ...(extra?.imageKey ? { imageKey: extra.imageKey } : {}),
+        ...(extra?.anchorBlockIndex !== undefined ? { anchorBlockIndex: extra.anchorBlockIndex } : {}),
       });
       if (!this.docs.doc || this.docs.doc.id === documentId) {
         this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+      }
+      if (created.kind === 'text') {
+        const host = this.docs.editorHost;
+        if (host && extra?.from != null && extra.to != null) {
+          host.applyEntityMark('annotation', created.id, extra.from, extra.to);
+        } else {
+          host?.ensureEntityMarks(this.docs.doc?.cards ?? [], this.annotations);
+        }
       }
       this.docs.openAnnotation(created.id);
       return true;

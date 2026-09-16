@@ -4,7 +4,7 @@ export const SELECTION_MAX_CARDS = 3;
 export const SELECTION_SYSTEM_PROMPT = `你是 Inwit 的选段写卡 Agent。用户从一篇学习材料里划了一段原文，你只根据这段原文写出 1–3 张可复习的原子卡片。
 
 只输出 JSON，不要解释。输出形如：
-{"cards":[{"concept":"...","example":"...","confusion_point":"...","tags":["..."],"anchor_text":"..."}]}
+{"cards":[{"concept":"...","example":"...","confusion_point":"...","tags":["..."]}]}
 
 约束：
 - 1 到 3 张卡。每张卡只讲一个概念。
@@ -12,15 +12,14 @@ export const SELECTION_SYSTEM_PROMPT = `你是 Inwit 的选段写卡 Agent。用
 - example：一个具体例子
 - confusion_point：一个易混点；没有就给空字符串
 - tags：0-5 个短标签
-- anchor_text：必须是用户选中原文里的逐字子串，不允许改写、补字或删字。
-- 不要编造选段里没有的知识点。`;
+- 不要编造选段里没有的知识点。
+- 不必给出原文位置；锚点由系统按用户划词写入。`;
 
 export interface SelectionCardDraft {
   concept: string;
   example: string;
   confusionPoint: string;
   tags: string[];
-  anchorText: string;
 }
 
 export function selectionUserPrompt(input: { title: string; selectionText: string }): string {
@@ -30,25 +29,6 @@ export function selectionUserPrompt(input: { title: string; selectionText: strin
 ${input.selectionText}
 
 请根据选中原文写出 1–3 张卡片。`;
-}
-
-function collapseWs(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
-}
-
-function foldWs(value: string): string {
-  return value.replace(/\s+/g, '');
-}
-
-/** True when `anchor` appears in the selection, allowing collapsed whitespace. */
-export function isAnchorInSelection(anchor: string, selectionText: string): boolean {
-  const needle = anchor.trim();
-  if (needle.length === 0) return false;
-  if (selectionText.includes(needle)) return true;
-  const collapsedNeedle = collapseWs(needle);
-  if (collapsedNeedle.length > 0 && collapseWs(selectionText).includes(collapsedNeedle)) return true;
-  const folded = foldWs(needle);
-  return folded.length > 0 && foldWs(selectionText).includes(folded);
 }
 
 function asString(value: unknown): string | undefined {
@@ -63,26 +43,19 @@ function asStringArray(value: unknown): string[] {
     .filter((item) => item.length > 0);
 }
 
-export function normalizeSelectionDraft(
-  raw: unknown,
-  selectionText: string,
-): SelectionCardDraft | null {
+export function normalizeSelectionDraft(raw: unknown): SelectionCardDraft | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const record = raw as Record<string, unknown>;
   const concept = asString(record.concept)?.trim() ?? '';
   const example = asString(record.example)?.trim() ?? '';
   const confusionPoint =
     asString(record.confusionPoint)?.trim() ?? asString(record.confusion_point)?.trim() ?? '';
-  const anchorText =
-    asString(record.anchorText)?.trim() ?? asString(record.anchor_text)?.trim() ?? '';
   if (concept.length === 0 || example.length === 0) return null;
-  if (!isAnchorInSelection(anchorText, selectionText)) return null;
   return {
     concept,
     example,
     confusionPoint,
     tags: asStringArray(record.tags).slice(0, 5),
-    anchorText,
   };
 }
 
@@ -116,12 +89,12 @@ function asDraftList(value: unknown): unknown[] {
   return [];
 }
 
-/** Parse LLM JSON into at most 3 drafts whose anchor is a substring of the selection. */
-export function parseSelectionCards(rawText: string, selectionText: string): SelectionCardDraft[] {
+/** Parse LLM JSON into at most 3 drafts. Anchors are inherited from the user selection. */
+export function parseSelectionCards(rawText: string): SelectionCardDraft[] {
   const parsed = extractJsonValue(rawText);
   const drafts: SelectionCardDraft[] = [];
   for (const item of asDraftList(parsed)) {
-    const draft = normalizeSelectionDraft(item, selectionText);
+    const draft = normalizeSelectionDraft(item);
     if (!draft) continue;
     drafts.push(draft);
     if (drafts.length >= SELECTION_MAX_CARDS) break;

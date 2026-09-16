@@ -2,91 +2,161 @@ import { Decoration, Extension } from '@tiptap/core';
 import type { Node as PmNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import {
-  annotationIdsFromAnchor,
-  cardIdsFromAnchor,
-  findSubstringRanges,
-  groupAnchorsByText,
-  noteSummary,
-  type AnchorSpec,
+  collectHitIds,
+  type EntityMeta,
 } from '@/lib/anchors';
 
 export type AnchorHighlightOptions = {
-  getAnchors: () => AnchorSpec[];
+  getEntities: () => EntityMeta[];
   getActiveCardId: () => string | null;
   getActiveAnnotationId: () => string | null;
   onAnchorClick: (cardIds: string[]) => void;
   onAnnotationClick: (ids: string[]) => void;
 };
 
-function collectTextIndex(doc: PmNode): { haystack: string; indexToPos: number[] } {
-  let haystack = '';
-  const indexToPos: number[] = [];
+type MarkSpan = {
+  kind: 'card' | 'annotation';
+  id: string;
+  from: number;
+  to: number;
+};
+
+type Edge = {
+  pos: number;
+  delta: number;
+  kind: 'card' | 'annotation';
+  id: string;
+};
+
+function collectKnownMarkSpans(doc: PmNode, known: Set<string>): MarkSpan[] {
+  const spans: MarkSpan[] = [];
   doc.descendants((node, pos) => {
     if (!node.isText) return;
-    const value = node.text ?? '';
-    for (let i = 0; i < value.length; i += 1) {
-      haystack += value[i]!;
-      indexToPos.push(pos + i);
+    const from = pos;
+    const to = pos + (node.text?.length ?? 0);
+    if (from >= to) return;
+    for (const mark of node.marks) {
+      if (mark.type.name === 'cardAnchor') {
+        const ids = Array.isArray(mark.attrs['cardIds']) ? mark.attrs['cardIds'] : [];
+        for (const id of ids) {
+          if (typeof id === 'string' && known.has(id)) {
+            spans.push({ kind: 'card', id, from, to });
+          }
+        }
+      } else if (mark.type.name === 'annotationMark') {
+        const id = mark.attrs['annotationId'];
+        if (typeof id === 'string' && known.has(id)) {
+          spans.push({ kind: 'annotation', id, from, to });
+        }
+      }
     }
   });
-  return { haystack, indexToPos };
+  return spans;
+}
+
+export type HighlightSegment = {
+  from: number;
+  to: number;
+  cardIds: string[];
+  annotationIds: string[];
+  active: boolean;
+};
+
+export function collectHighlightSegments(
+  doc: PmNode,
+  entities: EntityMeta[],
+  activeCardId: string | null,
+  activeAnnotationId: string | null,
+): HighlightSegment[] {
+  const known = new Set(entities.map((item) => item.id));
+  const spans = collectKnownMarkSpans(doc, known);
+  if (spans.length === 0) return [];
+
+  const edges: Edge[] = [];
+  for (const span of spans) {
+    edges.push({ pos: span.from, delta: 1, kind: span.kind, id: span.id });
+    edges.push({ pos: span.to, delta: -1, kind: span.kind, id: span.id });
+  }
+  edges.sort((a, b) => a.pos - b.pos || a.delta - b.delta);
+
+  const activeCards = new Map<string, number>();
+  const activeNotes = new Map<string, number>();
+  const segments: HighlightSegment[] = [];
+  let cursor = -1;
+  let i = 0;
+
+  const emit = (from: number, to: number) => {
+    if (from >= to) return;
+    const cardIds = [...activeCards.keys()];
+    const annotationIds = [...activeNotes.keys()];
+    if (cardIds.length === 0 && annotationIds.length === 0) return;
+    const active =
+      Boolean(activeCardId && activeCards.has(activeCardId)) ||
+      Boolean(activeAnnotationId && activeNotes.has(activeAnnotationId));
+    segments.push({ from, to, cardIds, annotationIds, active });
+  };
+
+  while (i < edges.length) {
+    const pos = edges[i]!.pos;
+    if (cursor >= 0) emit(cursor, pos);
+    while (i < edges.length && edges[i]!.pos === pos) {
+      const edge = edges[i]!;
+      const map = edge.kind === 'card' ? activeCards : activeNotes;
+      const next = (map.get(edge.id) ?? 0) + edge.delta;
+      if (next <= 0) map.delete(edge.id);
+      else map.set(edge.id, next);
+      i += 1;
+    }
+    cursor = pos;
+  }
+
+  return segments;
 }
 
 export function buildAnchorDecorations(
   doc: PmNode,
-  anchors: AnchorSpec[],
+  entities: EntityMeta[],
   activeCardId: string | null,
   activeAnnotationId: string | null,
 ): Decoration[] {
-  const grouped = groupAnchorsByText(anchors);
-  if (grouped.length === 0) return [];
-  const { haystack, indexToPos } = collectTextIndex(doc);
-  if (!haystack) return [];
-
+  const noteById = new Map(
+    entities.filter((item) => item.kind === 'annotation' && item.note).map((item) => [item.id, item.note!]),
+  );
   const decorations: Decoration[] = [];
-  for (const { text, ids, kind, note } of grouped) {
-    for (const range of findSubstringRanges(haystack, text)) {
-      const from = indexToPos[range.start];
-      const last = indexToPos[range.end - 1];
-      if (from === undefined || last === undefined) continue;
-      const to = last + 1;
-      if (from >= to || to > doc.content.size) continue;
-      const $from = doc.resolve(from);
-      const $end = doc.resolve(to - 1);
-      if ($from.parent !== $end.parent) continue;
-      const on =
-        kind === 'annotation'
-          ? Boolean(activeAnnotationId && ids.includes(activeAnnotationId))
-          : Boolean(activeCardId && ids.includes(activeCardId));
-      const isNote = kind === 'annotation';
-      const cls = isNote ? (on ? 'anchor-note is-on' : 'anchor-note') : on ? 'anchor is-on' : 'anchor';
-      const attrs: Record<string, string> = { class: cls };
-      if (isNote) {
-        attrs['data-annotation-id'] = ids[0] ?? '';
-        attrs['data-annotation-ids'] = ids.join(',');
-        if (note) {
-          const summary = noteSummary(note);
-          attrs['data-note'] = summary;
-          attrs['aria-label'] = `批注：${summary}`;
-        }
-      } else {
-        attrs['data-card-id'] = ids[0] ?? '';
-        attrs['data-card-ids'] = ids.join(',');
-      }
-      decorations.push(
-        Decoration.Inline(from, to, attrs, { inclusiveStart: false, inclusiveEnd: false }),
-      );
+  for (const segment of collectHighlightSegments(doc, entities, activeCardId, activeAnnotationId)) {
+    const classes: string[] = [];
+    if (segment.cardIds.length > 0) classes.push('anchor');
+    if (segment.annotationIds.length > 0) classes.push('anchor-note');
+    if (segment.active) classes.push('is-on', 'is-active');
+    const attrs: Record<string, string> = { class: classes.join(' ') };
+    if (segment.cardIds.length > 0) {
+      attrs['data-card-ids'] = JSON.stringify(segment.cardIds);
+      attrs['data-card-id'] = segment.cardIds[0] ?? '';
     }
+    if (segment.annotationIds.length > 0) {
+      attrs['data-annotation-ids'] = JSON.stringify(segment.annotationIds);
+      attrs['data-annotation-id'] = segment.annotationIds[0] ?? '';
+      const note = noteById.get(segment.annotationIds[0] ?? '');
+      if (note) {
+        attrs['data-note'] = note;
+        attrs['aria-label'] = `批注：${note}`;
+      }
+    }
+    decorations.push(
+      Decoration.Inline(segment.from, segment.to, attrs, { inclusiveStart: false, inclusiveEnd: false }),
+    );
   }
   return decorations;
 }
+
+const pluginKey = new PluginKey('anchorHighlightClick');
 
 export const AnchorHighlight = Extension.create<AnchorHighlightOptions>({
   name: 'anchorHighlight',
 
   addOptions() {
     return {
-      getAnchors: () => [],
+      getEntities: () => [],
       getActiveCardId: () => null,
       getActiveAnnotationId: () => null,
       onAnchorClick: () => undefined,
@@ -101,7 +171,7 @@ export const AnchorHighlight = Extension.create<AnchorHighlightOptions>({
         try {
           return buildAnchorDecorations(
             state.doc,
-            this.options.getAnchors(),
+            this.options.getEntities(),
             this.options.getActiveCardId(),
             this.options.getActiveAnnotationId(),
           );
@@ -115,26 +185,33 @@ export const AnchorHighlight = Extension.create<AnchorHighlightOptions>({
   addProseMirrorPlugins() {
     return [
       new Plugin({
-        key: new PluginKey('anchorHighlightClick'),
+        key: pluginKey,
+        state: {
+          init: () => ({
+            activeCardId: this.options.getActiveCardId(),
+            activeAnnotationId: this.options.getActiveAnnotationId(),
+          }),
+          apply: () => ({
+            activeCardId: this.options.getActiveCardId(),
+            activeAnnotationId: this.options.getActiveAnnotationId(),
+          }),
+        },
         props: {
           handleDOMEvents: {
             click: (view, event) => {
               const target = event.target;
-              if (!(target instanceof Element)) return false;
-              const note = target.closest('.anchor-note');
-              if (note && view.dom.contains(note)) {
-                const ids = annotationIdsFromAnchor(note);
-                if (ids.length > 0) {
-                  this.options.onAnnotationClick(ids);
-                  return true;
-                }
+              if (!(target instanceof Element) || !view.dom.contains(target)) return false;
+              const { cardIds, annotationIds } = collectHitIds(target, view.dom);
+              let handled = false;
+              if (annotationIds.length > 0) {
+                this.options.onAnnotationClick(annotationIds);
+                handled = true;
               }
-              const hit = target.closest('.anchor');
-              if (!hit || !view.dom.contains(hit)) return false;
-              const ids = cardIdsFromAnchor(hit);
-              if (ids.length === 0) return false;
-              this.options.onAnchorClick(ids);
-              return true;
+              if (cardIds.length > 0) {
+                this.options.onAnchorClick(cardIds);
+                handled = true;
+              }
+              return handled;
             },
           },
         },

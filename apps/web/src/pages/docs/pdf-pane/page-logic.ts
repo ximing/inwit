@@ -1,30 +1,32 @@
-import { PDF_PAGE_SEPARATOR } from '@inwit/dto';
+import { blocksFromPmJSON } from '@inwit/doc-schema';
+import { asSchemaJson, isBlankPmDoc } from '@/lib/pm-doc';
 
-export function splitPdfPages(contentMd: string): string[] {
-  const normalized = contentMd.replace(/\r\n/g, '\n').replace(/^\uFEFF/, '');
-  if (normalized.trim().length === 0) return [];
-  return normalized.split(PDF_PAGE_SEPARATOR);
-}
-
-function parseBlockIndex(value: string | number | null | undefined): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.max(1, Math.round(value));
+export function pageTextsFromContent(contentJson: unknown): string[] {
+  try {
+    const blocks = blocksFromPmJSON(asSchemaJson(contentJson));
+    if (blocks.length === 0) return [];
+    const lastPage = blocks[blocks.length - 1]?.pageIndex ?? 1;
+    const pages = Array.from({ length: lastPage }, () => '');
+    for (const block of blocks) {
+      if (!block.text) continue;
+      const i = block.pageIndex - 1;
+      if (i < 0 || i >= pages.length) continue;
+      pages[i] = pages[i] ? `${pages[i]}\n\n${block.text}` : block.text;
+    }
+    return pages;
+  } catch {
+    return [];
   }
-  if (typeof value === 'string') {
-    const n = Number.parseInt(value.trim(), 10);
-    if (Number.isFinite(n)) return Math.max(1, n);
-  }
-  return null;
 }
 
 /**
- * 0-based PDF page. `pageIndex` wins; otherwise map `anchorBlock` / `quote`
- * through the `\n\n---\n\n` page separator in `contentMd`.
+ * 0-based PDF page. `pageIndex` wins; otherwise map `anchorBlockIndex` / `quote`
+ * through numbered blocks in `contentJson`.
  */
 export function pageIndexFromAnchor(input: {
-  contentMd: string;
+  contentJson: unknown;
   pageIndex?: number | null;
-  anchorBlock?: string | number | null;
+  anchorBlockIndex?: number | null;
   quote?: string | null;
   pageCount?: number | null;
 }): number {
@@ -32,28 +34,38 @@ export function pageIndexFromAnchor(input: {
     return Math.floor(input.pageIndex);
   }
 
-  const pages = splitPdfPages(input.contentMd);
-  const quote = input.quote?.trim() ?? '';
-  if (quote.length > 0 && pages.length > 0) {
-    const hit = pages.findIndex((page) => page.includes(quote));
-    if (hit >= 0) return hit;
-  }
-
-  const block = parseBlockIndex(input.anchorBlock);
-  if (block !== null) {
-    const zero = block - 1;
-    if (pages.length > 0) {
-      return Math.min(Math.max(0, zero), pages.length - 1);
-    }
+  const clamp = (zero: number): number => {
     if (typeof input.pageCount === 'number' && input.pageCount > 0) {
       return Math.min(Math.max(0, zero), input.pageCount - 1);
     }
     return Math.max(0, zero);
+  };
+
+  try {
+    const blocks = blocksFromPmJSON(asSchemaJson(input.contentJson));
+    const quote = input.quote?.trim() ?? '';
+    if (quote.length > 0 && blocks.length > 0) {
+      const hit = blocks.find((block) => block.text.includes(quote));
+      if (hit) return clamp(hit.pageIndex - 1);
+    }
+
+    if (typeof input.anchorBlockIndex === 'number' && Number.isFinite(input.anchorBlockIndex)) {
+      const index = Math.round(input.anchorBlockIndex);
+      const block = blocks.find((item) => item.index === index);
+      if (block) return clamp(block.pageIndex - 1);
+      const last = blocks[blocks.length - 1];
+      if (last) return clamp(last.pageIndex - 1);
+      return clamp(index - 1);
+    }
+  } catch {
+    if (typeof input.anchorBlockIndex === 'number' && Number.isFinite(input.anchorBlockIndex)) {
+      return clamp(Math.round(input.anchorBlockIndex) - 1);
+    }
   }
 
   return 0;
 }
 
-export function isPdfOcrPending(contentMd: string): boolean {
-  return contentMd.trim().length === 0;
+export function isPdfOcrPending(contentJson: unknown): boolean {
+  return isBlankPmDoc(contentJson);
 }

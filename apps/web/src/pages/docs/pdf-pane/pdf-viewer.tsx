@@ -48,6 +48,7 @@ import wasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import { ThemeService } from '@/services/theme.service';
 import { DocsService } from '../docs.service';
 import { PdfPaneService } from '../pdf-pane.service';
+import { blockIndexForQuoteOnPage } from '@/lib/entity-marks';
 import { SelectionActions } from '../selection-toolbar';
 import { geometryFromRects, importAnnotationsFromOwn, PDF_EXCERPT_STROKE } from './annotation-adapter';
 import { isEditableKeyTarget, pdfViewerKeyAction } from './chrome-logic.js';
@@ -196,6 +197,13 @@ const PdfSelectionMenu = observer(function PdfSelectionMenu({
           text={pdf.selectionText}
           documentId={docs.doc?.id ?? null}
           pdf={pdf.pdfSelection ?? undefined}
+          blockIndex={
+            blockIndexForQuoteOnPage(
+              docs.doc?.contentJson,
+              pdf.selectionPageIndex,
+              pdf.selectionText,
+            ) ?? undefined
+          }
           getRect={() => {
             const box = boxRef.current?.getBoundingClientRect();
             if (!box) {

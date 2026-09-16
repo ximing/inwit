@@ -8,14 +8,14 @@ import { normalizeExtractedText, PDF_PAGE_BREAK } from './import-logic.js';
 export async function extractImported(
   buffer: Buffer,
   format: ImportFormat,
-): Promise<{ contentMd: string; pageCount: number | null }> {
+): Promise<{ markdown: string; pageCount: number | null }> {
   try {
     if (format === 'pdf') {
       const { raw, pageCount } = await extractPdf(buffer);
-      return { contentMd: normalizeExtractedText(raw, format), pageCount };
+      return { markdown: normalizeExtractedText(raw, format), pageCount };
     }
     const raw = await extractRaw(buffer, format);
-    return { contentMd: normalizeExtractedText(raw, format), pageCount: null };
+    return { markdown: normalizeExtractedText(raw, format), pageCount: null };
   } catch (err) {
     if (err instanceof AppError) throw err;
     throw AppError.of(422, 'IMPORT_PARSE_FAILED');
@@ -27,8 +27,8 @@ export async function extractImportedMarkdown(
   buffer: Buffer,
   format: ImportFormat,
 ): Promise<string> {
-  const { contentMd } = await extractImported(buffer, format);
-  return contentMd;
+  const { markdown } = await extractImported(buffer, format);
+  return markdown;
 }
 
 async function extractRaw(buffer: Buffer, format: Exclude<ImportFormat, 'pdf'>): Promise<string> {

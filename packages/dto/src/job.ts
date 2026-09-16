@@ -71,6 +71,7 @@ export type ChatJobPayload = z.infer<typeof chatJobPayloadSchema>;
 export const selectionJobPayloadSchema = z.object({
   documentId: z.string().uuid(),
   selectionText: z.string().min(1),
+  blockIndex: z.number().int().positive().optional(),
 });
 export type SelectionJobPayload = z.infer<typeof selectionJobPayloadSchema>;
 

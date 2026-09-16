@@ -41,12 +41,14 @@ export function MiniCard({
   card,
   open,
   active,
+  lost,
   onClick,
   thumb,
 }: {
   card: DocumentCard;
   open: boolean;
   active: boolean;
+  lost?: boolean;
   onClick: () => void;
   thumb?: ReactNode;
 }) {
@@ -56,7 +58,8 @@ export function MiniCard({
     <button
       type="button"
       data-card-id={card.id}
-      className={`mini-card${open ? ' is-open' : ''}${active ? ' is-on' : ''}`}
+      className={`mini-card${open ? ' is-open' : ''}${active ? ' is-on' : ''}${lost ? ' is-lost' : ''}`}
+      title={lost ? '原文已删除' : undefined}
       onClick={onClick}
     >
       {thumb}
@@ -70,6 +73,7 @@ export function MiniCard({
         <MasteryDots level={cardMasteryLevel(card)} />
         <span>{cardNextReviewLabel(card)}</span>
         {card.source === 'manual' ? <span className="hand-tag">手写</span> : null}
+        {lost ? <span className="anchor-lost">原文已删除</span> : null}
       </div>
     </button>
   );

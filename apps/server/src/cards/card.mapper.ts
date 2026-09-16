@@ -32,7 +32,7 @@ export function toPublicCardBase(row: CardRow): Card {
     tags: row.tags,
     source: row.source,
     anchorText: row.anchorText ?? null,
-    anchorBlock: row.anchorBlock ?? null,
+    anchorBlockIndex: row.anchorBlockIndex ?? null,
     hasImage: Boolean(row.imageKey),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

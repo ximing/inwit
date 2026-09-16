@@ -204,7 +204,10 @@ export const documents = pgTable(
     mapNodeId: uuid('map_node_id').references(() => mapNodes.id, { onDelete: 'set null' }),
     title: text('title'),
     description: text('description'),
-    contentMd: text('content_md').notNull(),
+    contentJson: jsonb('content_json')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{"type":"doc","content":[{"type":"paragraph"}]}'::jsonb`),
     source: varchar('source', { length: 16 }).$type<DocumentSource>().notNull(),
     status: varchar('status', { length: 16 }).$type<DocumentStatus>().notNull().default('pending'),
     answer: text('answer'),
@@ -224,7 +227,7 @@ export const documents = pgTable(
     index('idx_documents_map_node').on(t.mapNodeId),
     check(
       'documents_source_check',
-      sql`${t.source} IN ('editor', 'paste', 'chat', 'agent', 'import')`,
+      sql`${t.source} IN ('editor', 'paste', 'chat', 'agent', 'import', 'screenshot')`,
     ),
     check('documents_status_check', sql`${t.status} IN ('pending', 'digested', 'failed')`),
   ],
@@ -244,6 +247,7 @@ export const annotations = pgTable(
     note: text('note').notNull().default(''),
     kind: varchar('kind', { length: 16 }).$type<AnnotationKind>().notNull().default('text'),
     pageIndex: integer('page_index'),
+    anchorBlockIndex: integer('anchor_block_index'),
     geometry: jsonb('geometry').$type<AnnotationGeometry>(),
     /** Object storage key (not a URL). */
     imageKey: text('image_key'),
@@ -277,7 +281,7 @@ export const cards = pgTable(
       .default(sql`'{}'::text[]`),
     source: varchar('source', { length: 16 }).$type<CardSource>().notNull().default('agent'),
     anchorText: text('anchor_text'),
-    anchorBlock: text('anchor_block'),
+    anchorBlockIndex: integer('anchor_block_index'),
     /** Object storage key (not a URL). */
     imageKey: text('image_key'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
