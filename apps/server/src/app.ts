@@ -6,6 +6,7 @@ import { authenticate } from './auth/authenticate.js';
 import { registerAccessTokenLogHook } from './auth/access-tokens.js';
 import { registerAdminRoutes } from './admin/admin.routes.js';
 import { registerAnnotationRoutes } from './annotations/annotation.routes.js';
+import { registerAssetRoutes } from './assets/asset.routes.js';
 import { registerAuthRoutes } from './auth/auth.routes.js';
 import { registerCardRoutes } from './cards/card.routes.js';
 import { registerDocumentRoutes } from './documents/document.routes.js';
@@ -64,6 +65,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerLlmRoutes(app);
   registerOcrRoutes(app);
   registerDocumentRoutes(app);
+  registerAssetRoutes(app);
   registerSearchRoutes(app);
   registerAnnotationRoutes(app);
   registerCardRoutes(app);
