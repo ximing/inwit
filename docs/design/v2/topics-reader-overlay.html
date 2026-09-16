@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>主题页改版示意 v2 · Inwit</title>
+<style>
+  :root {
+    --serif: "Source Han Serif SC", "Noto Serif SC", "Songti SC", "SimSun", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+    --mono: "SF Mono", ui-monospace, Menlo, monospace;
+    --bg: #1c1915;
+    --bg-sunken: #15120e;
+    --surface: #23201a;
+    --ink: #f0e8d8;
+    --ink-2: #c9bfae;
+    --ink-3: #9a8f7d;
+    --ink-4: #6e6558;
+    --line: #3f372c;
+    --line-soft: #332c24;
+    --accent: #e06a52;
+    --accent-deep: #f08a74;
+    --accent-soft: #3a2420;
+    --accent-line: #6b3d32;
+    --ok: #7ba889;
+    --warn: #c9a25e;
+    --r-md: 10px;
+    --r-lg: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0e0c09; color: var(--ink); font-family: var(--sans); font-size: 14px; padding: 32px; }
+  .frame-label {
+    font-family: var(--mono); font-size: 12px; color: var(--ink-3);
+    margin: 0 auto 10px; max-width: 1440px; letter-spacing: 0.04em;
+  }
+  .frame-label b { color: var(--accent-deep); font-weight: 600; }
+  .screen {
+    max-width: 1440px; margin: 0 auto 56px; background: var(--bg);
+    border: 1px solid var(--line-soft); border-radius: 16px; overflow: hidden;
+    display: grid; grid-template-columns: 260px minmax(0, 1fr); height: 860px; position: relative;
+  }
+
+  /* ===== 左侧主题列表（不变） ===== */
+  .side { border-right: 1px solid var(--line-soft); padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+  .new-topic { height: 34px; border: 1.5px dashed var(--line); color: var(--ink-3); border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; font-size: 13px; }
+  .topic-item { border: 1px solid transparent; border-radius: var(--r-md); padding: 10px 12px; }
+  .topic-item.on { background: var(--surface); border-color: var(--line); }
+  .topic-item h3 { font-family: var(--serif); font-size: 15px; font-weight: 600; }
+  .topic-item p { font-size: 12px; color: var(--ink-3); margin-top: 3px; font-style: italic; }
+  .topic-item .meta { font-size: 11.5px; color: var(--ink-4); margin-top: 6px; font-style: normal; }
+  .bar { height: 4px; border-radius: 2px; background: var(--line-soft); margin-top: 8px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--ok); border-radius: 2px; }
+
+  /* ===== 主栏 ===== */
+  .main { overflow-y: auto; padding: 28px 36px 80px; min-width: 0; }
+  .head { display: flex; align-items: baseline; gap: 14px; }
+  .head h1 { font-family: var(--serif); font-size: 26px; font-weight: 700; }
+  .head .goal { font-size: 13px; color: var(--ink-3); font-style: italic; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .head .more { color: var(--ink-3); font-size: 18px; padding: 2px 8px; }
+  .meta-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12.5px; color: var(--ink-3); flex-wrap: wrap; }
+  .meta-row .sep { color: var(--ink-4); opacity: .55; }
+  .mini-bar { width: 56px; height: 4px; border-radius: 2px; background: var(--line-soft); display: inline-block; vertical-align: middle; overflow: hidden; }
+  .mini-bar i { display: block; height: 100%; background: var(--ok); }
+  .cov-chip { font-size: 11.5px; color: var(--ok); border: 1px solid var(--line); padding: 2px 8px; border-radius: 99px; cursor: pointer; }
+
+  /* 工具行：tabs + 搜索同行 */
+  .tool-row { display: flex; align-items: center; gap: 16px; margin-top: 18px; border-bottom: 1px solid var(--line-soft); }
+  .tabs { display: flex; gap: 4px; }
+  .tabs button { font-size: 14px; padding: 8px 14px; color: var(--ink-3); border-bottom: 2px solid transparent; background: none; }
+  .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .tabs button .cnt { font-size: 11px; color: var(--ink-4); margin-left: 4px; font-family: var(--mono); }
+  .search { margin-left: auto; margin-bottom: 6px; width: 260px; display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 8px; padding: 6px 10px; color: var(--ink-4); font-size: 12.5px; }
+  .search kbd { margin-left: auto; font-family: var(--mono); font-size: 10.5px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--ink-3); }
+
+  /* 捕捉条 */
+  .capture { display: flex; gap: 10px; align-items: center; margin-top: 16px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 10px 12px; }
+  .capture .ph { flex: 1; color: var(--ink-4); font-size: 13.5px; }
+  .btn { font-size: 13px; padding: 6px 14px; border-radius: 8px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-ghost { color: var(--ink-3); border: 1px solid var(--line); }
+
+  /* 文档栅格 */
+  .doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; margin-top: 16px; }
+  .doc-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 14px 16px; cursor: pointer; transition: border-color .15s; }
+  .doc-card:hover { border-color: var(--accent-line); }
+  .doc-card h3 { font-family: var(--serif); font-size: 15.5px; font-weight: 600; line-height: 1.4; display: flex; gap: 8px; align-items: baseline; }
+  .badge { font-family: var(--sans); font-size: 10.5px; font-weight: 500; color: var(--warn); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; white-space: nowrap; }
+  .doc-card .excerpt { font-size: 12.5px; color: var(--ink-3); line-height: 1.6; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .doc-card .meta { font-size: 11.5px; color: var(--ink-4); margin-top: 8px; }
+  .hang { font-size: 11px; color: var(--ink-3); margin-top: 6px; }
+  .hang b { color: var(--ok); font-weight: 500; }
+
+  /* 动态时间轴 */
+  .feed { margin-top: 20px; position: relative; padding-left: 86px; }
+  .feed::before { content: ""; position: absolute; left: 70px; top: 6px; bottom: 6px; width: 1px; background: var(--line-soft); }
+  .feed-item { position: relative; padding: 0 0 22px; }
+  .feed-item::before { content: ""; position: absolute; left: -20.5px; top: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+  .feed-time { position: absolute; left: -86px; top: 2px; width: 60px; text-align: right; font-size: 11px; color: var(--ink-4); font-family: var(--mono); }
+  .feed-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 12px 16px; cursor: pointer; }
+  .feed-card:hover { border-color: var(--accent-line); }
+  .feed-card h3 { font-family: var(--serif); font-size: 15px; font-weight: 600; }
+  .feed-card .excerpt { font-size: 12.5px; color: var(--ink-3); margin-top: 4px; line-height: 1.6; }
+  .feed-card .meta { font-size: 11.5px; color: var(--ink-4); margin-top: 6px; }
+
+  /* 图谱泳道 */
+  .map-head { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  .map-head .cov { font-size: 12.5px; color: var(--ink-3); }
+  .legend { display: flex; gap: 12px; font-size: 11.5px; color: var(--ink-3); margin-left: auto; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  .dot.ok { background: var(--ok); } .dot.learning { background: var(--warn); } .dot.todo { background: var(--ink-4); }
+  .lanes { display: flex; gap: 14px; margin-top: 14px; overflow-x: auto; padding-bottom: 12px; align-items: flex-start; }
+  .lane { flex: 1 1 0; min-width: 250px; background: var(--bg-sunken); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 12px; }
+  .lane-head { display: flex; align-items: baseline; gap: 8px; padding: 2px 4px 10px; }
+  .lane-head h3 { font-family: var(--serif); font-size: 15px; font-weight: 700; flex: 1; }
+  .lane-head .n { font-size: 11px; color: var(--ink-4); font-family: var(--mono); }
+  .lane .bar { margin: 0 4px 10px; }
+  .concept { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 8px; cursor: pointer; }
+  .concept:hover { border-color: var(--accent-line); }
+  .concept .t { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 500; line-height: 1.45; }
+  .concept .meta { font-size: 11px; color: var(--ink-4); margin-top: 5px; font-family: var(--mono); }
+  .concept.todo { opacity: .75; border-style: dashed; }
+  .concept.todo .fill { color: var(--accent-deep); font-size: 11px; margin-top: 5px; }
+
+  /* ===== ReaderOverlay：唯一弹层 ===== */
+  .mask { position: absolute; inset: 0; background: rgba(10,8,6,.5); }
+  .reader {
+    position: absolute; inset: 24px 24px 24px 280px; background: var(--bg);
+    border: 1px solid var(--line); border-radius: var(--r-lg);
+    box-shadow: 0 32px 80px rgba(0,0,0,.55); display: flex; flex-direction: column; overflow: hidden;
+  }
+  .reader-head { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line-soft); }
+  .reader-head .kicker { font-size: 11px; color: var(--ink-3); letter-spacing: .08em; }
+  .reader-title { font-family: var(--serif); font-size: 15px; font-weight: 600; }
+  .reader-head .meta { font-size: 11.5px; color: var(--ink-4); }
+  .reader-head .spacer { flex: 1; }
+  .reader-main { flex: 1; display: flex; min-height: 0; }
+  .reader-scroll { flex: 1; overflow-y: auto; padding: 20px 32px 60px; }
+  .reader-prose { max-width: 560px; margin: 0 auto; font-size: 14px; line-height: 1.9; color: var(--ink-2); }
+  .reader-prose p { margin-bottom: 14px; }
+  .anchor-flash { background: var(--accent-soft); border-radius: 6px; padding: 4px 6px; margin-left: -6px; margin-right: -6px; box-shadow: 0 0 0 1px var(--accent-line); color: var(--ink); }
+  .anchor-mark { color: var(--accent-deep); font-size: 11px; cursor: pointer; }
+
+  .summary-box { max-width: 560px; margin: 0 auto 18px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 12px 16px; font-size: 13px; line-height: 1.7; color: var(--ink-2); }
+  .summary-box .k { font-size: 11px; color: var(--ink-3); letter-spacing: .08em; margin-bottom: 6px; }
+
+  /* 右栏：mini 卡列表 / 卡片详情 两态 */
+  .rail { width: 300px; flex: none; border-left: 1px solid var(--line-soft); overflow-y: auto; padding: 14px; background: var(--bg-sunken); }
+  .rail-head { font-size: 11.5px; color: var(--ink-3); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .rail-head .back { cursor: pointer; color: var(--accent-deep); }
+  .rail-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 8px; cursor: pointer; font-size: 12.5px; }
+  .rail-card:hover { border-color: var(--accent-line); }
+  .rail-card .rq { font-weight: 600; line-height: 1.5; font-family: var(--serif); }
+  .rail-card .rfoot { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 10.5px; color: var(--ink-4); }
+  .rail-note { font-size: 12px; color: var(--ink-3); border-left: 2px solid var(--warn); padding: 4px 8px; }
+
+  .rail-detail .qa { background: var(--surface); border: 1px solid var(--accent-line); border-radius: var(--r-md); padding: 12px 14px; }
+  .rail-detail .k { font-size: 10.5px; color: var(--ink-3); letter-spacing: .08em; margin-bottom: 4px; }
+  .rail-detail .q { font-family: var(--serif); font-size: 14px; font-weight: 600; line-height: 1.55; }
+  .rail-detail .a { font-size: 12.5px; color: var(--ink-2); line-height: 1.7; margin-top: 8px; }
+  .rail-detail .card-meta { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 10.5px; color: var(--ink-4); flex-wrap: wrap; }
+  .mastery-dots { display: inline-flex; gap: 3px; }
+  .mastery-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .mastery-dots i.on { background: var(--ok); }
+  .tag-chip { border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-size: 10px; color: var(--ink-3); }
+  .rail-sub { font-size: 11.5px; color: var(--ink-3); margin: 14px 0 6px; }
+  .link-card { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 8px 12px; margin-bottom: 6px; cursor: pointer; }
+  .link-card:hover { border-color: var(--accent-line); }
+  .link-card b { font-family: var(--serif); font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .link-card span { font-size: 11px; color: var(--ink-3); display: block; margin-top: 2px; line-height: 1.5; }
+  .link-card .rel { font-size: 10px; font-style: normal; }
+  .rel.conf { color: var(--warn); } .rel.pre { color: var(--ok); } .rel.rel { color: var(--ink-3); }
+  .link-card .ext { font-size: 10px; color: var(--ink-4); margin-left: auto; font-family: var(--mono); }
+  .rail-foot { margin-top: 14px; display: flex; gap: 8px; }
+
+  .anno { position: absolute; background: var(--accent); color: #fff; font-size: 11px; font-family: var(--mono); border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; z-index: 5; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .note { max-width: 1440px; margin: -44px auto 56px; font-size: 12.5px; color: var(--ink-3); line-height: 1.8; padding: 0 4px; }
+  .note b { color: var(--ink-2); }
+  .note code { font-family: var(--mono); font-size: 11.5px; color: var(--accent-deep); }
+</style>
+</head>
+<body>
+
+<!-- ===================== A · 文档 tab ===================== -->
+<p class="frame-label"><b>A · 文档 tab</b> — 紧凑头部 / tabs 与搜索同行 / 文档栅格；点文档卡 → 画面 D 的阅读弹层</p>
+<div class="screen">
+  <aside class="side">
+    <div class="new-topic">+ 新建主题</div>
+    <div class="topic-item on">
+      <h3>T4 验证主题</h3>
+      <p>一句话锚定这个专题的消化方式</p>
+      <p class="meta">4 卡 · 2 篇文档</p>
+      <div class="bar"><i style="width:100%"></i></div>
+    </div>
+    <div class="topic-item">
+      <h3>机器学习基础</h3>
+      <p>一句话锚定这个专题的消化方式</p>
+      <p class="meta">34 卡 · 16 篇文档</p>
+      <div class="bar"><i style="width:38%"></i></div>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="head">
+      <h1>T4 验证主题</h1>
+      <p class="goal">一句话锚定这个专题的消化方式</p>
+      <span class="more">···</span>
+    </div>
+    <div class="meta-row">
+      <span>4 张卡</span><span class="sep">·</span><span>2 篇文档</span><span class="sep">·</span>
+      <span>掌握度 100% <span class="mini-bar"><i style="width:100%"></i></span></span><span class="sep">·</span>
+      <span>最近消化 3 小时前</span><span class="sep">·</span>
+      <span class="cov-chip">地图覆盖 4/11 →</span>
+    </div>
+    <div class="tool-row">
+      <div class="tabs">
+        <button class="on">文档<span class="cnt">2</span></button>
+        <button>图谱<span class="cnt">11</span></button>
+        <button>动态</button>
+      </div>
+      <div class="search">🔍 搜索这个主题的文档和卡片… <kbd>⌘K</kbd></div>
+    </div>
+
+    <div class="capture">
+      <span class="ph">扔一句话进来，或以问号结尾问 AI…</span>
+      <button class="btn btn-ghost">问 AI</button>
+      <button class="btn btn-primary">扔进去</button>
+    </div>
+
+    <div class="doc-grid">
+      <div class="doc-card">
+        <h3>温度参数是什么？ <span class="badge">AI 回答</span></h3>
+        <p class="excerpt">我先检索一下你是否已有相关卡片，避免重复制卡。你目前的卡片库中没有关于"温度参数"(temperature) 的…</p>
+        <p class="meta">2 张卡 · 3 小时前</p>
+        <p class="hang">挂在：<b>温度缩放机制</b></p>
+      </div>
+      <div class="doc-card">
+        <h3>softmax 把向量变成概率分布。</h3>
+        <p class="excerpt">softmax 函数将任意实数向量映射为概率分布：先对每个分量取指数，再归一化…</p>
+        <p class="meta">2 张卡 · 3 小时前</p>
+        <p class="hang">挂在：<b>从 logits 到概率分布：概念直觉</b></p>
+      </div>
+      <div class="doc-card">
+        <h3>数值稳定性：减去 max 的技巧</h3>
+        <p class="excerpt">直接计算 exp(x) 在 x 较大时会溢出，实践中先减去向量最大值再取指数，数学上等价…</p>
+        <p class="meta">3 张卡 · 昨天</p>
+      </div>
+      <div class="doc-card">
+        <h3>知识蒸馏中的温度</h3>
+        <p class="excerpt">Hinton 2015：教师与学生 logits 同除以 T，软化分布以传递"暗知识"…</p>
+        <p class="meta">4 张卡 · 2 天前</p>
+      </div>
+    </div>
+  </main>
+  <span class="anno" style="top:52px;right:330px">1</span>
+  <span class="anno" style="top:238px;right:600px">2</span>
+</div>
+<p class="note">
+  <b>1</b> 头部压缩：目标与标题同行；statbar 降为一行 meta，「地图覆盖」chip 点击切到图谱 tab　·
+  <b>2</b> 搜索收进 tab 行右侧　·
+  文档单列列表 → 自适应栅格；<b>点击文档卡不再跳页</b>，打开画面 D 的阅读弹层（PDF 文档例外：仍跳文档页，弹层只支持 markdown 正文）。
+</p>
+
+<!-- ===================== B · 图谱泳道 ===================== -->
+<p class="frame-label"><b>B · 图谱 tab</b> — 章节泳道卡片化；点概念 → 现有节点抽屉；抽屉里的卡片/资料链接 → 阅读弹层</p>
+<div class="screen">
+  <aside class="side">
+    <div class="new-topic">+ 新建主题</div>
+    <div class="topic-item on"><h3>T4 验证主题</h3><p>一句话锚定这个专题的消化方式</p><p class="meta">4 卡 · 2 篇文档</p><div class="bar"><i style="width:100%"></i></div></div>
+  </aside>
+  <main class="main">
+    <div class="head"><h1>T4 验证主题</h1><p class="goal">一句话锚定这个专题的消化方式</p></div>
+    <div class="tool-row">
+      <div class="tabs">
+        <button>文档<span class="cnt">2</span></button>
+        <button class="on">图谱<span class="cnt">11</span></button>
+        <button>动态</button>
+      </div>
+      <div class="search">🔍 搜索… <kbd>⌘K</kbd></div>
+    </div>
+    <div class="map-head">
+      <span class="cov">已覆盖 <b style="color:var(--ok)">4/11</b> 概念</span>
+      <span class="mini-bar" style="width:120px"><i style="width:36%"></i></span>
+      <button class="btn btn-ghost" style="margin-left:8px">整理地图</button>
+      <div class="legend">
+        <span><i class="dot ok"></i>已覆盖</span>
+        <span><i class="dot learning"></i>学习中</span>
+        <span><i class="dot todo"></i>未覆盖</span>
+      </div>
+    </div>
+    <div class="lanes">
+      <div class="lane">
+        <div class="lane-head"><h3>Softmax 基础</h3><span class="n">2卡 · 1资料</span></div>
+        <div class="bar"><i style="width:66%"></i></div>
+        <div class="concept"><div class="t"><i class="dot ok"></i>从 logits 到概率分布：概念直觉</div><div class="meta">1卡 · 掌握 80%</div></div>
+        <div class="concept"><div class="t"><i class="dot ok"></i>数学定义：exp 归一化</div><div class="meta">1卡 · 掌握 100%</div></div>
+        <div class="concept todo"><div class="t"><i class="dot todo"></i>数值稳定性技巧</div><div class="fill">✦ 让 AI 补</div></div>
+      </div>
+      <div class="lane">
+        <div class="lane-head"><h3>温度参数</h3><span class="n">2卡 · 1资料</span></div>
+        <div class="bar"><i style="width:66%"></i></div>
+        <div class="concept"><div class="t"><i class="dot ok"></i>温度缩放机制</div><div class="meta">1卡 · 掌握 60%</div></div>
+        <div class="concept"><div class="t"><i class="dot learning"></i>温度与输出熵</div><div class="meta">1卡 · 掌握 20%</div></div>
+        <div class="concept todo"><div class="t"><i class="dot todo"></i>温度在知识蒸馏与采样中的应用</div><div class="fill">✦ 让 AI 补</div></div>
+      </div>
+      <div class="lane">
+        <div class="lane-head"><h3>关联与扩展</h3><span class="n">0卡</span></div>
+        <div class="bar"><i style="width:0%"></i></div>
+        <div class="concept todo"><div class="t"><i class="dot todo"></i>softmax 与交叉熵损失</div><div class="fill">✦ 让 AI 补</div></div>
+        <div class="concept todo"><div class="t"><i class="dot todo"></i>应用场景：多分类输出与注意力</div><div class="fill">✦ 让 AI 补</div></div>
+      </div>
+    </div>
+  </main>
+  <span class="anno" style="top:250px;left:290px">1</span>
+</div>
+<p class="note">
+  <b>1</b> 章节改等宽泳道列，每列自带覆盖率进度条；概念卡片化，状态点 + 掌握度数字；未覆盖用虚线卡弱化 + 「让 AI 补」　·
+  点概念卡仍开<b>现有节点抽屉</b>（NodeDrawer 保留，不重复造）；抽屉里的「卡片」点击 → 画面 E，「资料」点击 → 画面 D。
+</p>
+
+<!-- ===================== C · 动态时间轴 ===================== -->
+<p class="frame-label"><b>C · 动态 tab</b> — 左侧时间轴；点条目 → 画面 D 阅读弹层</p>
+<div class="screen">
+  <aside class="side">
+    <div class="new-topic">+ 新建主题</div>
+    <div class="topic-item on"><h3>T4 验证主题</h3><p>一句话锚定这个专题的消化方式</p><p class="meta">4 卡 · 2 篇文档</p><div class="bar"><i style="width:100%"></i></div></div>
+  </aside>
+  <main class="main">
+    <div class="head"><h1>T4 验证主题</h1><p class="goal">一句话锚定这个专题的消化方式</p></div>
+    <div class="tool-row">
+      <div class="tabs">
+        <button>文档<span class="cnt">2</span></button>
+        <button>图谱<span class="cnt">11</span></button>
+        <button class="on">动态</button>
+      </div>
+      <div class="search">🔍 搜索… <kbd>⌘K</kbd></div>
+    </div>
+    <div class="feed">
+      <div class="feed-item">
+        <span class="feed-time">3 小时前</span>
+        <div class="feed-card">
+          <h3>温度参数是什么？ <span class="badge">AI 回答</span></h3>
+          <p class="excerpt">我先检索一下你是否已有相关卡片，避免重复制卡…</p>
+          <p class="meta">2 张卡 · 挂在：温度缩放机制</p>
+        </div>
+      </div>
+      <div class="feed-item">
+        <span class="feed-time">3 小时前</span>
+        <div class="feed-card">
+          <h3>softmax 把向量变成概率分布。</h3>
+          <p class="meta">2 张卡 · 挂在：从 logits 到概率分布：概念直觉</p>
+        </div>
+      </div>
+      <div class="feed-item">
+        <span class="feed-time">昨天</span>
+        <div class="feed-card">
+          <h3>数值稳定性：减去 max 的技巧</h3>
+          <p class="meta">3 张卡</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ===================== D · ReaderOverlay 文档模式 ===================== -->
+<p class="frame-label"><b>D · 阅读弹层 · 文档模式</b> — 点文档进来：AI 摘要 + 全文 + 右栏卡片/批注；唯一跳走出口是「打开完整页面」</p>
+<div class="screen">
+  <aside class="side">
+    <div class="new-topic">+ 新建主题</div>
+    <div class="topic-item on"><h3>T4 验证主题</h3><p>一句话锚定这个专题的消化方式</p><p class="meta">4 卡 · 2 篇文档</p><div class="bar"><i style="width:100%"></i></div></div>
+  </aside>
+  <main class="main" style="opacity:.45">
+    <div class="head"><h1>T4 验证主题</h1></div>
+    <div class="tool-row"><div class="tabs"><button class="on">文档<span class="cnt">2</span></button><button>图谱</button><button>动态</button></div></div>
+    <div class="doc-grid">
+      <div class="doc-card"><h3>温度参数是什么？</h3></div>
+      <div class="doc-card"><h3>softmax 把向量变成概率分布。</h3></div>
+    </div>
+  </main>
+
+  <div class="mask"></div>
+  <div class="reader">
+    <div class="reader-head">
+      <span class="kicker">阅读</span>
+      <span class="reader-title">温度参数是什么？</span>
+      <span class="badge">AI 回答</span>
+      <span class="meta">2 张卡 · 3 小时前 · 挂在：温度缩放机制</span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost">打开完整页面 ↗</button>
+      <button class="btn btn-ghost">✕</button>
+    </div>
+    <div class="reader-main">
+      <div class="reader-scroll">
+        <div class="summary-box">
+          <p class="k">AI 摘要</p>
+          温度参数 T 是 softmax 前的缩放因子：T 越大分布越平滑（熵增），T→0 退化为 argmax。常用于采样多样性控制与知识蒸馏。
+        </div>
+        <article class="reader-prose">
+          <p>我先检索一下你是否已有相关卡片，避免重复制卡。你目前的卡片库中没有关于"温度参数"（temperature）的内容，下面是完整解释。</p>
+          <p>温度参数是 softmax 函数中的一个超参数，写作 T。在计算 softmax 之前，logits 会先除以 T：</p>
+          <p>pᵢ = exp(zᵢ/T) / Σⱼ exp(zⱼ/T)。当 T = 1 时退化为标准 softmax；T → 0 时分布趋向 one-hot，等价于 argmax；T → ∞ 时趋向均匀分布。<sup class="anchor-mark">▣2</sup></p>
+          <p>从信息论角度看，T 直接调节输出分布的熵：T 越大熵越高，采样结果越多样但质量方差越大；T 越小越确定，但可能陷入重复。</p>
+          <p>工程上还有一个配套技巧：计算 exp 前先减去 logits 的最大值，避免数值溢出，数学上与原式等价。</p>
+        </article>
+      </div>
+      <aside class="rail">
+        <div class="rail-head">本文卡片 · 2</div>
+        <div class="rail-card">
+          <div class="rq">温度参数 T 如何影响 softmax 输出分布？</div>
+          <div class="rfoot"><span class="mastery-dots"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span><span>明天复习</span></div>
+        </div>
+        <div class="rail-card">
+          <div class="rq">温度与输出熵的关系？</div>
+          <div class="rfoot"><span class="mastery-dots"><i class="on"></i><i></i><i></i><i></i></span><span>今天复习</span></div>
+        </div>
+        <div class="rail-head" style="margin-top:14px">批注 · 1</div>
+        <div class="rail-note">"T→0 等价 argmax" — 采样代码里就是 greedy 分支</div>
+      </aside>
+    </div>
+  </div>
+  <span class="anno" style="top:70px;right:120px">1</span>
+  <span class="anno" style="top:200px;right:230px">2</span>
+</div>
+<p class="note">
+  <b>1</b> 头部含标题 / meta / 「打开完整页面 ↗」（跳 docs 页并带上当前 anchor，编辑、批注、PDF 在那边做）　·
+  <b>2</b> 右栏 mini 卡与 docs 页 CardRail 同一套渲染；点 mini 卡 → 切到画面 E 的卡片模式。AI 摘要在正文顶部常驻（chat 文档显示回答、普通文档显示 description），不再单造预览抽屉。
+</p>
+
+<!-- ===================== E · ReaderOverlay 卡片模式 ===================== -->
+<p class="frame-label"><b>E · 阅读弹层 · 卡片模式</b> — 任意入口点卡片：正文定位锚点并闪烁，右栏切为卡片详情 + 脉络；点关联卡继续在弹层内跳转</p>
+<div class="screen">
+  <aside class="side">
+    <div class="new-topic">+ 新建主题</div>
+    <div class="topic-item on"><h3>T4 验证主题</h3><p>一句话锚定这个专题的消化方式</p><p class="meta">4 卡 · 2 篇文档</p><div class="bar"><i style="width:100%"></i></div></div>
+  </aside>
+  <main class="main" style="opacity:.45">
+    <div class="head"><h1>T4 验证主题</h1></div>
+    <div class="tool-row"><div class="tabs"><button>文档</button><button class="on">图谱<span class="cnt">11</span></button><button>动态</button></div></div>
+    <div class="lanes">
+      <div class="lane"><div class="lane-head"><h3>温度参数</h3></div>
+        <div class="concept"><div class="t"><i class="dot ok"></i>温度缩放机制</div></div>
+      </div>
+    </div>
+  </main>
+
+  <div class="mask"></div>
+  <div class="reader">
+    <div class="reader-head">
+      <span class="kicker">阅读</span>
+      <span class="reader-title">温度参数是什么？</span>
+      <span class="badge">AI 回答</span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost">打开完整页面 ↗</button>
+      <button class="btn btn-ghost">✕</button>
+    </div>
+    <div class="reader-main">
+      <div class="reader-scroll">
+        <article class="reader-prose">
+          <p>我先检索一下你是否已有相关卡片，避免重复制卡。你目前的卡片库中没有关于"温度参数"（temperature）的内容，下面是完整解释。</p>
+          <p>温度参数是 softmax 函数中的一个超参数，写作 T。在计算 softmax 之前，logits 会先除以 T：</p>
+          <p class="anchor-flash">pᵢ = exp(zᵢ/T) / Σⱼ exp(zⱼ/T)。当 T = 1 时退化为标准 softmax；T → 0 时分布趋向 one-hot，等价于 argmax；T → ∞ 时趋向均匀分布。<sup class="anchor-mark">▣1</sup></p>
+          <p>从信息论角度看，T 直接调节输出分布的熵：T 越大熵越高，采样结果越多样但质量方差越大；T 越小越确定，但可能陷入重复。</p>
+          <p>工程上还有一个配套技巧：计算 exp 前先减去 logits 的最大值，避免数值溢出，数学上与原式等价。</p>
+          <p>在知识蒸馏（Hinton 2015）中，教师和学生的 logits 同除以一个较高的 T，软化后的分布携带类别间的相似度信息——即"暗知识"。</p>
+        </article>
+      </div>
+      <aside class="rail rail-detail">
+        <div class="rail-head"><span class="back">← 卡片列表</span></div>
+        <div class="qa">
+          <p class="k">问</p>
+          <p class="q">温度参数 T 如何影响 softmax 输出分布？</p>
+          <p class="k" style="margin-top:10px">答</p>
+          <p class="a">logits 先除以 T 再归一化。T&gt;1 分布变平（熵增、采样更随机）；T&lt;1 变锐；T→0 退化为 argmax。</p>
+          <div class="card-meta">
+            <span class="mastery-dots"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span>
+            <span>明天复习</span><span class="tag-chip">softmax</span><span class="tag-chip">采样</span>
+          </div>
+        </div>
+        <p class="rail-sub">脉络 · 来自知识关联</p>
+        <div class="link-card">
+          <b><span class="rel conf">⚡ 易混淆</span><span class="ext">跨文档</span></b>
+          <b>温度与输出熵</b>
+          <span>同样是"温度"，一个调分布形状、一个是度量 — AI 标注</span>
+        </div>
+        <div class="link-card">
+          <b><span class="rel pre">↳ 前置</span></b>
+          <b>数学定义：exp 归一化</b>
+          <span>先理解 softmax 本身，再看 T 的作用</span>
+        </div>
+        <div class="link-card">
+          <b><span class="rel rel">∿ 相关</span></b>
+          <b>知识蒸馏中的温度</b>
+          <span>T 的经典应用场景</span>
+        </div>
+        <div class="rail-foot">
+          <button class="btn btn-primary" style="flex:1">去复习这张卡</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <span class="anno" style="top:305px;left:26%">1</span>
+  <span class="anno" style="top:200px;right:330px">2</span>
+</div>
+<p class="note">
+  <b>1</b> 正文滚动到该卡锚点段落并闪烁高亮（复用 docs 页 <code>?anchor=</code> 同款机制：<code>AnchoredMarkdown</code> + <code>docAnchors</code>）　·
+  <b>2</b> 右栏从「卡片列表」切为「卡片详情」：完整问答 + 掌握度 + <b>脉络区</b>——按 <code>card_links</code> 关系分组（⚡易混淆 / ↳前置 / ∿相关 / ＝同概念），关联卡标出是否跨文档；点击 → 弹层内切换到那张卡（必要时换文档），左上「← 卡片列表」返回　·
+  数据全部现成：<code>getDocument</code>（含 cards + anchorText/anchorBlock）+ <code>GET /api/cards/:id/links</code>，<b>零后端改动</b>。
+</p>
+
+</body>
+</html>

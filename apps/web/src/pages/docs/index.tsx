@@ -2,11 +2,8 @@ import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { SearchService } from '@/components/search';
-import {
-  ANCHOR_HIT_SELECTOR,
-  annotationIdsFromAnchor,
-  cardIdsFromAnchor,
-} from '@/lib/anchors';
+import { ANCHOR_HIT_SELECTOR } from '@/lib/anchors';
+import { scrollFlashAnnotationAnchor, scrollFlashCardAnchor } from '@/lib/anchor-scroll';
 import { ROUTES, docsPath } from '@/routes';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { DocsAnnotationsService } from './docs-annotations.service';
@@ -215,18 +212,8 @@ const DocsPageContent = observer(function DocsPageContent() {
     const noteId = service.bodyFocusAnnotationId;
     if (!cardId && !noteId) return;
     const root = document.querySelector('.pane-scroll');
-    const nodes = root ? [...root.querySelectorAll(ANCHOR_HIT_SELECTOR)] : [];
-    const hit = cardId
-      ? nodes.find((el) => cardIdsFromAnchor(el).includes(cardId))
-      : nodes.find((el) => noteId !== null && annotationIdsFromAnchor(el).includes(noteId));
-    if (hit instanceof HTMLElement) {
-      const reduce =
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      hit.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
-      hit.classList.add('is-flash');
-      window.setTimeout(() => hit.classList.remove('is-flash'), 1100);
-    }
+    if (cardId) scrollFlashCardAnchor(root, cardId);
+    else if (noteId) scrollFlashAnnotationAnchor(root, noteId);
     service.clearBodyFocus();
   }, [service, service.bodyFocusCardId, service.bodyFocusAnnotationId]);
 

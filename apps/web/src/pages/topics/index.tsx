@@ -3,17 +3,20 @@ import { bindServices, observer, useService } from '@rabjs/react';
 import { ChevronDown, ChevronRight, Tags } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { DocRowSummary } from '@/components/doc-row';
+import { docSummaryLine } from '@/components/doc-row';
+import { ReaderOverlay } from '@/components/reader/ReaderOverlay';
+import { ReaderService } from '@/components/reader/reader.service';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { Tag } from '@/components/tag';
-import { formatRelativeTime, isSubmitHotkey } from '@/lib/format';
-import { ROUTES, docsPath, topicPath } from '@/routes';
+import { formatRelativeTime, isSubmitHotkey, summarizeAnswer } from '@/lib/format';
+import { ROUTES, topicPath } from '@/routes';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
 import { TopicsService, type TopicListItem } from './topics.service';
 
 const TopicsPageContent = observer(function TopicsPageContent() {
   const service = useService(TopicsService);
   const search = useService(SearchService);
+  const reader = useService(ReaderService);
   const [params] = useSearchParams();
   const raw = params.get('topic');
   const topicId = raw && raw.length > 0 ? raw : null;
@@ -37,6 +40,7 @@ const TopicsPageContent = observer(function TopicsPageContent() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      if (reader.isOpen) return;
       if (service.editing) {
         service.cancelEdit();
         return;
@@ -60,7 +64,7 @@ const TopicsPageContent = observer(function TopicsPageContent() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('mousedown', onPointer);
     };
-  }, [service]);
+  }, [service, reader]);
 
   return (
     <div className="ws ws-topics">
@@ -74,6 +78,7 @@ const TopicsPageContent = observer(function TopicsPageContent() {
           {service.toast}
         </p>
       ) : null}
+      <ReaderOverlay />
     </div>
   );
 });
@@ -420,6 +425,14 @@ const TopicPane = observer(function TopicPane({ topicId }: { topicId: string }) 
           </span>
           <span className="sep">·</span>
           <span>{lastAt ? `最近消化 ${formatRelativeTime(lastAt)}` : '还没有消化'}</span>
+          <span className="sep">·</span>
+          <button
+            type="button"
+            className="topic-cov-chip"
+            onClick={() => service.setTab('map')}
+          >
+            {`地图覆盖 ${String(service.coveredCount)}/${String(service.mapNodeCount)} →`}
+          </button>
         </div>
 
         <TopicSearch />
@@ -485,9 +498,13 @@ const DocsTab = observer(function DocsTab() {
       {service.documents.length === 0 && !service.$model.openTopic.loading ? (
         <p className="hint">这张纸还是空的。扔一句话进来。</p>
       ) : null}
-      {service.documents.map((doc) => (
-        <TopicDocRow key={doc.id} doc={doc} />
-      ))}
+      {service.documents.length > 0 ? (
+        <div className="topic-doc-grid">
+          {service.documents.map((doc) => (
+            <TopicDocCard key={doc.id} doc={doc} />
+          ))}
+        </div>
+      ) : null}
       {service.hasMoreDocs ? (
         <div className="ws-more">
           <button
@@ -504,12 +521,30 @@ const DocsTab = observer(function DocsTab() {
   );
 });
 
-function TopicDocRow({ doc }: { doc: DocumentListItem }) {
+function cardExcerpt(doc: DocumentListItem): string | null {
+  const summary = docSummaryLine(doc);
+  if (summary) return summary;
+  if (doc.source === 'chat' && doc.answer) return summarizeAnswer(doc.answer, 96);
+  return null;
+}
+
+const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentListItem }) {
+  const service = useService(TopicsService);
+  const navigate = useNavigate();
   const kind = rowKindTag(doc);
+  const excerpt = cardExcerpt(doc);
+  const hanging = service.hangingTitle(doc);
   return (
-    <Link to={docsPath(doc.id)} className="row">
-      <div className="row-title">
-        <span className="t">{docDisplayTitle(doc)}</span>
+    <button
+      type="button"
+      className="topic-doc-card"
+      onClick={() => {
+        const to = service.readerNavForDoc(doc.id, doc.fileMime);
+        if (to) navigate(to);
+      }}
+    >
+      <h3>
+        {docDisplayTitle(doc)}
         {kind ? (
           <Tag tone={kind.tone}>
             {kind.pulse ? <span className="pulse" /> : null}
@@ -518,17 +553,19 @@ function TopicDocRow({ doc }: { doc: DocumentListItem }) {
           </Tag>
         ) : null}
         {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
-      </div>
-      <DocRowSummary doc={doc} />
-      <div className="row-meta">
-        {doc.source === 'import' ? <Tag className="tag-import">导入</Tag> : null}
-        {doc.cardCount > 0 ? <span>{doc.cardCount} 卡</span> : null}
-        {doc.cardCount > 0 ? <span>·</span> : null}
-        <span>{formatRelativeTime(doc.updatedAt)}</span>
-      </div>
-    </Link>
+      </h3>
+      {excerpt ? <p className="excerpt">{excerpt}</p> : null}
+      <p className="meta">
+        {`${String(doc.cardCount)} 张卡 · ${formatRelativeTime(doc.updatedAt)}`}
+      </p>
+      {hanging ? (
+        <p className="hang">
+          挂在：<b>{hanging}</b>
+        </p>
+      ) : null}
+    </button>
   );
-}
+});
 
 function rowKindTag(
   doc: DocumentListItem,
@@ -546,42 +583,48 @@ const TopicSearch = observer(function TopicSearch() {
 
   return (
     <>
-      <div className="topic-search">
-        <SearchBox placeholder="搜索这个主题的文档和卡片…" />
+      <div className="topic-tool-row">
+        <div className="topic-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={service.tab === 'docs'}
+            className={service.tab === 'docs' ? 'is-on' : undefined}
+            onClick={() => service.setTab('docs')}
+          >
+            文档
+            <span className="cnt">{String(service.documentCount)}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={service.tab === 'map'}
+            className={service.tab === 'map' ? 'is-on' : undefined}
+            onClick={() => service.setTab('map')}
+          >
+            图谱
+            <span className="cnt">{String(service.mapNodeCount)}</span>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={service.tab === 'feed'}
+            className={service.tab === 'feed' ? 'is-on' : undefined}
+            onClick={() => service.setTab('feed')}
+          >
+            动态
+          </button>
+        </div>
+        <div className="topic-search">
+          <SearchBox placeholder="搜索这个主题的文档和卡片…" />
+        </div>
       </div>
       {search.hasQuery ? (
-        <SearchResults />
+        <div className="topic-search-results">
+          <SearchResults />
+        </div>
       ) : (
         <>
-          <div className="topic-tabs" role="tablist">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={service.tab === 'docs'}
-              className={service.tab === 'docs' ? 'is-on' : undefined}
-              onClick={() => service.setTab('docs')}
-            >
-              文档
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={service.tab === 'map'}
-              className={service.tab === 'map' ? 'is-on' : undefined}
-              onClick={() => service.setTab('map')}
-            >
-              图谱
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={service.tab === 'feed'}
-              className={service.tab === 'feed' ? 'is-on' : undefined}
-              onClick={() => service.setTab('feed')}
-            >
-              动态
-            </button>
-          </div>
           {service.tab === 'docs' ? <DocsTab /> : null}
           {service.tab === 'map' ? <MapTab /> : null}
           {service.tab === 'feed' ? <FeedTab /> : null}
@@ -591,4 +634,8 @@ const TopicSearch = observer(function TopicSearch() {
   );
 });
 
-export const TopicsPage = bindServices(TopicsPageContent, [TopicsService, SearchService]);
+export const TopicsPage = bindServices(TopicsPageContent, [
+  TopicsService,
+  SearchService,
+  ReaderService,
+]);

@@ -224,6 +224,11 @@ export class PdfPaneService extends Service {
     this.jump = null;
   }
 
+  /** 取消选中后允许同一条批注再次触发跳转 */
+  clearJumpKey(): void {
+    this.lastJumpKey = null;
+  }
+
   resetChrome(): void {
     this.searchOpen = false;
     this.zoomMenuOpen = false;

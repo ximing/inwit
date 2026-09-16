@@ -1,4 +1,4 @@
-import { IMAGE_EXCERPT_QUOTE, type Annotation, type DocumentCard } from '@inwit/dto';
+import type { Annotation, DocumentCard } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import {
   PanelRight,
@@ -9,30 +9,13 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { MiniCard } from '@/components/reader/mini-card';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
-import { parseCloze } from '@/lib/cloze';
-import { formatNextReview, masteryLevel } from '@/lib/format';
 import { ROUTES } from '@/routes';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { DocsService } from './docs.service';
-
-function ClozeText({ text }: { text: string }) {
-  return (
-    <>
-      {parseCloze(text).map((part, index) =>
-        part.type === 'cloze' ? (
-          <span key={index} className="cloze">
-            {part.value}
-          </span>
-        ) : (
-          <Fragment key={index}>{part.value}</Fragment>
-        ),
-      )}
-    </>
-  );
-}
 
 const AnnotationThumb = observer(function AnnotationThumb({
   annotationId,
@@ -169,35 +152,16 @@ const DocCardThumb = observer(function DocCardThumb({ cardId }: { cardId: string
 
 const DocCardButton = observer(function DocCardButton({ card }: { card: DocumentCard }) {
   const service = useService(DocsService);
-  const question = card.questions[0]?.question ?? card.concept;
-  const answer = card.questions[0]?.answer ?? card.example;
   const open = service.expandedCardIds.includes(card.id);
-  const on = service.activeCardId === card.id;
-  const level = card.review ? masteryLevel(card.review.intervalDays) : 0;
+  const active = service.activeCardId === card.id;
   return (
-    <button
-      type="button"
-      data-card-id={card.id}
-      className={`mini-card${open ? ' is-open' : ''}${on ? ' is-on' : ''}`}
+    <MiniCard
+      card={card}
+      open={open}
+      active={active}
       onClick={() => service.toggleCard(card.id)}
-    >
-      {card.hasImage ? <DocCardThumb cardId={card.id} /> : null}
-      {question.trim() !== IMAGE_EXCERPT_QUOTE ? (
-        <div className="mini-q">
-          <ClozeText text={question} />
-        </div>
-      ) : null}
-      {open && answer ? <div className="mini-a">{answer}</div> : null}
-      <div className="mini-foot">
-        <span className="mastery" aria-hidden>
-          {[0, 1, 2, 3].map((slot) => (
-            <i key={slot} className={slot < level ? 'on' : undefined} />
-          ))}
-        </span>
-        <span>{card.review ? formatNextReview(card.review.dueAt) : '还没进复习队列'}</span>
-        {card.source === 'manual' ? <span className="hand-tag">手写</span> : null}
-      </div>
-    </button>
+      thumb={card.hasImage ? <DocCardThumb cardId={card.id} /> : null}
+    />
   );
 });
 
