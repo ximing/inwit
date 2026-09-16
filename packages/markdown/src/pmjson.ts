@@ -108,7 +108,26 @@ function phrasingToPm(nodes: PhrasingContent[], marks: PmMark[]): PmNode[] {
   return out;
 }
 
+function isTaskList(node: List): boolean {
+  return node.children.some((item) => item.checked !== null && item.checked !== undefined);
+}
+
+function listItemContent(node: ListItem): PmNode[] {
+  return node.children.flatMap((child) => {
+    const flow = flowToPm(child);
+    return flow ? [flow] : [];
+  });
+}
+
 function listToPm(node: List): PmNode {
+  if (isTaskList(node)) {
+    return withContent(
+      'taskList',
+      node.children.map((item) =>
+        withContent('taskItem', listItemContent(item), { checked: item.checked === true }),
+      ),
+    );
+  }
   const type = node.ordered === true ? 'orderedList' : 'bulletList';
   const attrs =
     node.ordered === true && node.start !== null && node.start !== undefined && node.start !== 1
@@ -116,18 +135,8 @@ function listToPm(node: List): PmNode {
       : undefined;
   return withContent(
     type,
-    node.children.map((item) => listItemToPm(item)),
+    node.children.map((item) => withContent('listItem', listItemContent(item))),
     attrs,
-  );
-}
-
-function listItemToPm(node: ListItem): PmNode {
-  return withContent(
-    'listItem',
-    node.children.flatMap((child) => {
-      const flow = flowToPm(child);
-      return flow ? [flow] : [];
-    }),
   );
 }
 
@@ -325,13 +334,14 @@ function pmPhrasing(nodes: PmNode[]): PhrasingContent[] {
   return out;
 }
 
-function pmListItem(node: PmNode): ListItem {
+function pmListItem(node: PmNode, checked?: boolean): ListItem {
   const children: BlockContent[] = [];
   for (const child of asPmNodes(node.content)) {
     const flow = pmFlow(child);
     if (flow) children.push(flow);
   }
   const item: ListItem = { type: 'listItem', spread: false, children };
+  if (checked !== undefined) item.checked = checked;
   return item;
 }
 
@@ -377,6 +387,17 @@ function pmFlow(node: PmNode): BlockContent | null {
         const start = node.attrs?.start;
         list.start = typeof start === 'number' ? start : 1;
       }
+      return list;
+    }
+    case 'taskList': {
+      const list: List = {
+        type: 'list',
+        ordered: false,
+        spread: false,
+        children: asPmNodes(node.content).map((item) =>
+          pmListItem(item, item.attrs?.checked === true),
+        ),
+      };
       return list;
     }
     case 'codeBlock': {
