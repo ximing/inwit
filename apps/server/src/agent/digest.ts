@@ -120,5 +120,7 @@ export async function processDigest(job: JobRow): Promise<void> {
     tools: digestTools(session),
     context: { documentId },
     verify: ({ executionId }) => verifyDigest(job, documentId, session, executionId),
+    nudgePrompt: (err) =>
+      `流程验收未通过：${err instanceof Error ? err.message : String(err)}。请继续按工作流程执行——write_cards 写入至少 2 张卡片、对每张卡 write_questions、read_topic_map 后对每张卡 place_on_map、最后 set_document_meta。必须调用工具落库，不要只回复文字。`,
   });
 }

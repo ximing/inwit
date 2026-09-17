@@ -126,6 +126,8 @@ async function processFill(
         produced.reduce((sum, card) => sum + card.questionCount, 0),
       )}`;
     },
+    nudgePrompt: (err) =>
+      `流程验收未通过：${err instanceof Error ? err.message : String(err)}。请继续：调用 write_cards 写 1-2 张入门卡、对每张卡 write_questions、对每张卡 place_on_map（挂到当前空白节点）。必须调用工具落库，不要只回复文字。`,
   });
 }
 

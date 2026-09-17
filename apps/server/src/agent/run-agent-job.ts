@@ -6,7 +6,7 @@ import { modelResponseError, resolveModelFor } from '../llm/pi.js';
 import { logLlmUsage } from '../llm/usage.js';
 import { logger } from '../utils/logger.js';
 import { finishExecution, saveExecutionSteps, startExecution, summarizeValue } from './executions.js';
-import { isAssistantMessage } from './messages.js';
+import { extractAssistantText, isAssistantMessage } from './messages.js';
 import { runWithAgentContext, type AgentRunContext } from './run-context.js';
 import { AgentTerminalError } from './terminal-error.js';
 
@@ -15,6 +15,16 @@ export { AgentTerminalError } from './terminal-error.js';
 const RUN_TIMEOUT_MS = 600_000;
 const HEARTBEAT_MS = 15_000;
 const DEFAULT_MAX_TURNS = 24;
+const CLOSING_TAIL_MAX = 300;
+
+/** The model's closing prose (truncated) — recorded when verify fails, so
+ * "只说不做" failures show what the model said instead of calling tools. */
+function closingTextTail(messages: readonly unknown[], max = CLOSING_TAIL_MAX): string | null {
+  const text = extractAssistantText(messages).replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const tail = text.length > max ? text.slice(-max) : text;
+  return text.length > max ? `…${tail}` : tail;
+}
 
 export interface AgentJobRun {
   job: JobRow;
@@ -35,6 +45,12 @@ export interface AgentJobRun {
    * Throw to fail the execution (AgentTerminalError carries its own summary).
    */
   verify?: (input: { agent: Agent; executionId: string }) => Promise<string | null>;
+  /**
+   * Sent once when the agent loop ends normally but verify fails — gives the
+   * model one chance to finish the job in the same conversation (it still has
+   * the document in context) instead of failing the run outright.
+   */
+  nudgePrompt?: string | ((err: unknown) => string);
 }
 
 /**
@@ -50,6 +66,7 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
     agentType: run.agentType,
   });
   const steps: AgentExecutionStep[] = [];
+  let closingTail: string | null = null;
 
   try {
     await runWithAgentContext(
@@ -172,22 +189,59 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
           throw modelResponseError(failed.stopReason, failed.errorMessage ?? '');
         }
 
-        const resultSummary = (await run.verify?.({ agent, executionId })) ?? null;
+        const verifyOnce = async () => (await run.verify?.({ agent, executionId })) ?? null;
+        let resultSummary: string | null;
+        try {
+          try {
+            resultSummary = await verifyOnce();
+          } catch (firstErr) {
+            const nudge =
+              run.nudgePrompt === undefined
+                ? null
+                : typeof run.nudgePrompt === 'function'
+                  ? run.nudgePrompt(firstErr)
+                  : run.nudgePrompt;
+            if (!nudge) throw firstErr;
+            logger.info('agent.verify_nudge', {
+              jobId: job.id,
+              agentType: run.agentType,
+              error: firstErr instanceof Error ? firstErr.message : String(firstErr),
+            });
+            const nudgeTimeout = setTimeout(() => {
+              agent.abort();
+            }, RUN_TIMEOUT_MS);
+            try {
+              await agent.prompt(nudge);
+            } finally {
+              clearTimeout(nudgeTimeout);
+            }
+            const nudgedFail = agent.state.messages
+              .filter(isAssistantMessage)
+              .find((m) => m.stopReason === 'error' || m.stopReason === 'aborted');
+            if (nudgedFail) throw modelResponseError(nudgedFail.stopReason, nudgedFail.errorMessage ?? '');
+            resultSummary = await verifyOnce();
+          }
+        } catch (err) {
+          closingTail = closingTextTail(agent.state.messages);
+          throw err;
+        }
         await finishExecution({ executionId, status: 'done', resultSummary });
       },
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const audit: string[] = [];
+    if (err instanceof AgentTerminalError && err.resultSummary !== null) {
+      audit.push(err.resultSummary);
+    } else if (steps.length > 0) {
+      audit.push(`steps=${String(steps.length)}`);
+    }
+    if (closingTail) audit.push(`tail=${closingTail}`);
     await finishExecution({
       executionId,
       status: 'failed',
       error: message.slice(0, 2000),
-      resultSummary:
-        err instanceof AgentTerminalError && err.resultSummary !== null
-          ? err.resultSummary
-          : steps.length > 0
-            ? `steps=${String(steps.length)}`
-            : null,
+      resultSummary: audit.length > 0 ? audit.join(' ') : null,
     });
     throw err;
   }

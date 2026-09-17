@@ -108,5 +108,7 @@ export async function processChat(job: JobRow): Promise<void> {
         produced.reduce((sum, card) => sum + card.questionCount, 0),
       )} links=${String(linkN)}${hint ? ' same_concept_hint=1' : ''}`;
     },
+    nudgePrompt: (err) =>
+      `流程验收未通过：${err instanceof Error ? err.message : String(err)}。请继续：确保回答已写在消息正文，并调用 write_cards（1-3 张）、对每张卡 write_questions、最后 set_document_meta。必须调用工具落库，不要只回复文字。`,
   });
 }
