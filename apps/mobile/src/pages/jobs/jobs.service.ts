@@ -1,7 +1,7 @@
 import { Service } from '@rabjs/react';
-import type { Job, JobQueue, JobQueueCounts, JobStatus, JobType, JobUsage } from '@inwit/dto';
+import type { AgentExecution, Job, JobQueue, JobQueueCounts, JobStatus, JobType, JobUsage } from '@inwit/dto';
 import { errorMessage } from '@/api/client';
-import { cancelJob, getJobQueue, getJobUsage, listJobs, retryJob } from '@/api/jobs';
+import { cancelJob, getJobQueue, getJobUsage, listJobExecutions, listJobs, retryJob } from '@/api/jobs';
 import { formatTimeHm } from '@/lib/format';
 import type { ColorTokens } from '@/theme';
 
@@ -212,6 +212,33 @@ export class JobsService extends Service {
 
   toggleError(id: string): void {
     this.expandedErrorId = this.expandedErrorId === id ? null : id;
+  }
+
+  /** Job whose execution drill-down is expanded; empty array = 加载中. */
+  executionsJobId: string | null = null;
+  executions: AgentExecution[] = [];
+  executionsLoaded = false;
+
+  async toggleExecutions(jobId: string): Promise<void> {
+    if (this.executionsJobId === jobId) {
+      this.executionsJobId = null;
+      this.executions = [];
+      this.executionsLoaded = false;
+      return;
+    }
+    this.executionsJobId = jobId;
+    this.executions = [];
+    this.executionsLoaded = false;
+    try {
+      const items = await listJobExecutions(jobId);
+      if (this.executionsJobId !== jobId) return;
+      this.executions = items;
+      this.executionsLoaded = true;
+    } catch (err) {
+      if (this.executionsJobId !== jobId) return;
+      this.executionsJobId = null;
+      this.error = errorMessage(err, '加载执行明细失败');
+    }
   }
 
   async load(): Promise<void> {

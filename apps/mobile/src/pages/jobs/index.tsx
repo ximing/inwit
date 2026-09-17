@@ -251,6 +251,7 @@ const HistoryRow = observer(function HistoryRow({
   const duration = formatDuration(jobDurationMs(job));
   const time = formatJobTime(job.finishedAt ?? job.createdAt);
   const expanded = service.expandedErrorId === job.id;
+  const detailOpen = service.executionsJobId === job.id;
   return (
     <Pressable
       style={[styles.histRow, job.status === 'failed' && styles.histFail]}
@@ -268,20 +269,80 @@ const HistoryRow = observer(function HistoryRow({
       <Text style={styles.metaText}>
         {time} · {duration}
       </Text>
-      {job.status === 'failed' ? (
+      <View style={styles.histOps}>
+        {job.status === 'failed' ? (
+          <Pressable
+            disabled={service.retryingId === job.id}
+            onPress={() => void service.retry(job.id)}
+            style={styles.retry}
+            hitSlop={8}
+          >
+            <Text style={styles.retryText}>{service.retryingId === job.id ? '重试中…' : '重试'}</Text>
+          </Pressable>
+        ) : null}
         <Pressable
-          disabled={service.retryingId === job.id}
-          onPress={() => void service.retry(job.id)}
+          onPress={() => void service.toggleExecutions(job.id)}
           style={styles.retry}
+          hitSlop={8}
         >
-          <Text style={styles.retryText}>{service.retryingId === job.id ? '重试中…' : '重试'}</Text>
+          <Text style={styles.detailText}>{detailOpen ? '收起明细' : '执行明细'}</Text>
         </Pressable>
-      ) : null}
+      </View>
       {expanded && job.lastError ? <Text style={styles.errDetail}>{job.lastError}</Text> : null}
       {job.status === 'failed' && job.lastError && !expanded ? (
         <Text style={styles.expandHint}>点按展开错误详情</Text>
       ) : null}
+      {detailOpen ? <ExecutionDetail styles={styles} /> : null}
     </Pressable>
+  );
+});
+
+const ExecutionDetail = observer(function ExecutionDetail({
+  styles,
+}: {
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  const service = useService(JobsService);
+  if (!service.executionsLoaded) {
+    return <Text style={styles.expandHint}>读取执行明细…</Text>;
+  }
+  if (service.executions.length === 0) {
+    return <Text style={styles.expandHint}>没有执行记录（该任务早于执行审计）。</Text>;
+  }
+  return (
+    <View style={styles.execList}>
+      {service.executions.map((execution, index) => {
+        const duration = execution.finishedAt
+          ? formatDuration(
+              new Date(execution.finishedAt).getTime() - new Date(execution.startedAt).getTime(),
+            )
+          : '进行中';
+        return (
+          <View style={styles.execItem} key={execution.id}>
+            <Text style={styles.execHead}>
+              {`第 ${String(index + 1)} 次 · ${formatJobTime(execution.startedAt)} · ${duration}`}
+            </Text>
+            {execution.resultSummary ? (
+              <Text style={styles.execSummary}>{execution.resultSummary}</Text>
+            ) : null}
+            {execution.error ? <Text style={styles.errDetail}>{execution.error}</Text> : null}
+            {execution.steps.map((step, stepIndex) => (
+              <View key={stepIndex} style={styles.execStep}>
+                <Text style={styles.execTool}>
+                  {step.tool}
+                  <Text style={styles.execMs}>{` ${String(step.duration_ms)}ms`}</Text>
+                </Text>
+                {step.output_summary ? (
+                  <Text style={styles.execIo} numberOfLines={3}>
+                    {step.output_summary}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
+          </View>
+        );
+      })}
+    </View>
   );
 });
 
@@ -457,6 +518,20 @@ function makeStyles(theme: ThemeTokens) {
     retryText: { color: theme.colors.accentDeep, fontWeight: '600', fontSize: 13 },
     errDetail: { fontSize: 12.5, color: theme.colors.accent, marginTop: 8, lineHeight: 18 },
     expandHint: { fontSize: 11, color: theme.colors.ink4, marginTop: 4 },
+    histOps: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+    detailText: { color: theme.colors.ink3, fontWeight: '600', fontSize: 13 },
+    execList: { marginTop: 10, gap: 10 },
+    execItem: {
+      borderLeftWidth: 2,
+      borderLeftColor: theme.colors.line,
+      paddingLeft: 10,
+    },
+    execHead: { fontSize: 12, color: theme.colors.ink3, fontWeight: '600' },
+    execSummary: { fontSize: 12, color: theme.colors.ink4, marginTop: 2 },
+    execStep: { marginTop: 6 },
+    execTool: { fontSize: 12, color: theme.colors.ink2, fontWeight: '600' },
+    execMs: { color: theme.colors.ink4, fontWeight: '400' },
+    execIo: { fontSize: 12, color: theme.colors.ink4, marginTop: 2, lineHeight: 17 },
     pager: {
       flexDirection: 'row',
       alignItems: 'center',

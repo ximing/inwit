@@ -8,20 +8,24 @@
 <style>
   .jobs-col { max-width: 880px; margin: 0 auto; padding: 36px 40px 120px; }
 
-  /* 顶部状态条 */
-  .queue-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
-  .q-stat {
-    background: var(--surface); border: 1px solid var(--line-soft);
-    border-radius: var(--r-lg); padding: 16px 20px 14px;
-  }
-  .q-stat-num { font-family: var(--serif); font-size: 28px; font-weight: 700; line-height: 1.1; display: flex; align-items: center; gap: 8px; }
-  .q-stat-label { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
-  .q-stat.is-live { border-color: var(--gold-line); background: linear-gradient(150deg, var(--gold-soft), var(--surface) 75%); }
-  .q-stat.is-bad { border-color: #e2b8ac; }
-  .q-stat.is-bad .q-stat-num { color: var(--accent-deep); }
-
   .jobs-sec { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3); margin: 30px 0 12px; display: flex; align-items: center; gap: 10px; }
   .jobs-sec .line { flex: 1; height: 1px; background: var(--line-soft); }
+
+  /* 失败待处理 */
+  .fail-card {
+    background: var(--surface); border: 1px solid #e2b8ac;
+    border-radius: var(--r-lg); padding: 16px 20px 13px; margin-bottom: 10px;
+  }
+  .fail-top { display: flex; align-items: center; gap: 12px; }
+  .fail-body { flex: 1; min-width: 0; }
+  .fail-name { font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .fail-err { font-size: 12.5px; color: var(--accent-deep); margin-top: 5px; line-height: 1.55; }
+  .fail-meta { font-size: 12px; color: var(--ink-4); margin-top: 6px; display: flex; gap: 6px; align-items: center; font-variant-numeric: tabular-nums; }
+  .fail-ops { flex: none; display: flex; gap: 14px; align-items: center; }
+  .retry { font-size: 12.5px; color: var(--accent-deep); font-weight: 600; }
+  .retry:hover { text-decoration: underline; }
+  .detail-toggle { font-size: 12.5px; color: var(--ink-3); font-weight: 600; }
+  .detail-toggle:hover { color: var(--ink); text-decoration: underline; }
 
   /* 进行中的任务 */
   .live-job {
@@ -58,6 +62,34 @@
   .queue-when b { display: block; font-size: 13px; font-weight: 600; }
   .queue-when span { font-size: 11px; color: var(--ink-4); }
 
+  /* 历史 */
+  .hist-filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .hist { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); overflow: hidden; }
+  .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .hist-table th { text-align: left; font-weight: 500; color: var(--ink-4); font-size: 12px; padding: 12px 16px 10px; border-bottom: 1px solid var(--line-soft); }
+  .hist-table td { padding: 11px 16px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); vertical-align: middle; }
+  .hist-table tr:last-child td { border-bottom: none; }
+  .hist-table tr.is-err td { background: #fdf3f0; }
+  .err-detail { font-size: 12px; color: var(--accent-deep); margin-top: 4px; }
+  .hist-pager { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; font-size: 12.5px; color: var(--ink-3); }
+
+  /* 执行明细（整宽展开卡） */
+  .exec-card {
+    background: var(--bg); border: 1px solid var(--line-soft);
+    border-radius: var(--r-md); padding: 14px 18px; margin: 2px 10px 12px;
+  }
+  .exec-block + .exec-block { border-top: 1px solid var(--line-soft); margin-top: 12px; padding-top: 12px; }
+  .exec-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .exec-no { color: var(--ink-2); font-weight: 600; }
+  .exec-model { color: var(--ink-4); }
+  .exec-summary { font-size: 12px; color: var(--ink-4); margin-top: 5px; }
+  .exec-err { font-size: 12.5px; color: var(--accent-deep); margin-top: 6px; line-height: 1.55; }
+  .exec-steps { list-style: none; margin: 8px 0 0; padding: 0; font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+  .exec-steps li { padding: 3px 0; }
+  .exec-tool { color: var(--ink-2); font-weight: 600; margin-right: 8px; }
+  .exec-ms { color: var(--ink-4); margin-right: 8px; }
+  .exec-io { color: var(--ink-4); }
+
   /* 用量 */
   .usage-panel { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 22px 24px; }
   .usage-grid { display: grid; grid-template-columns: 1fr 240px; gap: 32px; align-items: end; }
@@ -69,17 +101,6 @@
   .usage-legend-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); padding: 5px 0; }
   .usage-legend-row .sw { width: 9px; height: 9px; border-radius: 3px; flex: none; }
   .usage-legend-row .v { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink-3); }
-
-  /* 历史表格 */
-  .hist { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); overflow: hidden; }
-  .hist-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .hist-table th { text-align: left; font-weight: 500; color: var(--ink-4); font-size: 12px; padding: 12px 16px 10px; border-bottom: 1px solid var(--line-soft); }
-  .hist-table td { padding: 11px 16px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); vertical-align: middle; }
-  .hist-table tr:last-child td { border-bottom: none; }
-  .hist-table tr.is-err td { background: #fdf3f0; }
-  .err-detail { font-size: 12px; color: var(--accent-deep); margin-top: 4px; }
-  .retry { font-size: 12.5px; color: var(--accent-deep); font-weight: 600; }
-  .retry:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -128,33 +149,44 @@
         <div class="page-lede">Agent 系统此刻在做什么，一目了然。</div>
       </div>
 
-      <!-- 队列概况 -->
-      <div class="queue-strip">
-        <div class="q-stat is-live">
-          <div class="q-stat-num"><span class="pulse"></span>1</div>
-          <div class="q-stat-label">正在进行</div>
+      <!-- 失败待处理 -->
+      <div class="jobs-sec">失败待处理 · 2<span class="line"></span></div>
+      <div class="fail-card">
+        <div class="fail-top">
+          <span class="job-ico">🧠</span>
+          <div class="fail-body">
+            <div class="fail-name">消化 · 「学习率太大时梯度下降会在最优点附近震荡」<span class="tag" style="background:#f9ece6; color:var(--accent-deep);">失败</span></div>
+            <div class="fail-err">digest produced no cards</div>
+            <div class="fail-meta"><span>今天 11:28</span><span>·</span><span>59.9s</span><span>·</span><span>qwen3-max</span></div>
+          </div>
+          <div class="fail-ops">
+            <button class="retry">重试</button>
+            <button class="detail-toggle">明细</button>
+          </div>
         </div>
-        <div class="q-stat">
-          <div class="q-stat-num">2</div>
-          <div class="q-stat-label">排队中</div>
-        </div>
-        <div class="q-stat">
-          <div class="q-stat-num">9</div>
-          <div class="q-stat-label">今日完成</div>
-        </div>
-        <div class="q-stat is-bad">
-          <div class="q-stat-num">1</div>
-          <div class="q-stat-label">失败待处理</div>
+      </div>
+      <div class="fail-card">
+        <div class="fail-top">
+          <span class="job-ico">💬</span>
+          <div class="fail-body">
+            <div class="fail-name">对话 · 「L1 和 L2 正则化到底啥区别？」<span class="tag" style="background:#f9ece6; color:var(--accent-deep);">失败</span></div>
+            <div class="fail-err">模型网关超时（第 3 次尝试）· 上游 504</div>
+            <div class="fail-meta"><span>今天 09:12</span><span>·</span><span>2m 04s</span><span>·</span><span>qwen3-max</span></div>
+          </div>
+          <div class="fail-ops">
+            <button class="retry">重试</button>
+            <button class="detail-toggle">明细</button>
+          </div>
         </div>
       </div>
 
       <!-- 正在进行 -->
-      <div class="jobs-sec">正在进行<span class="line"></span></div>
+      <div class="jobs-sec">正在进行 · 1<span class="line"></span></div>
       <div class="live-job">
         <div class="job-row">
           <span class="job-ico">🧠</span>
           <div class="job-body">
-            <div class="job-name">消化 · 「学习率太大时梯度下降会在最优点附近震荡」</div>
+            <div class="job-name">消化 · 「交叉验证入门」</div>
             <div class="job-desc">正在提取知识卡片并挂到「机器学习基础」的知识地图…</div>
           </div>
           <div class="job-side">
@@ -185,8 +217,89 @@
         <button class="btn btn-ghost" style="height:28px; font-size:12.5px;">取消</button>
       </div>
 
+      <!-- 历史 -->
+      <div class="jobs-sec">执行历史<span class="line"></span></div>
+      <div class="hist-filters">
+        <button class="chip is-on">全部</button>
+        <button class="chip">失败</button>
+        <button class="chip">完成</button>
+        <button class="chip">进行中</button>
+        <button class="chip">排队</button>
+      </div>
+      <div class="hist">
+        <table class="hist-table">
+          <thead><tr><th>类型</th><th>内容</th><th>状态</th><th>时间</th><th>耗时</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td>🧠 消化</td><td>交叉验证入门</td><td><span class="tag tag-done">完成</span></td>
+              <td>13:05</td><td>27.9s</td><td><button class="detail-toggle">明细</button></td>
+            </tr>
+            <tr class="is-err">
+              <td>💬 对话</td><td>L1 和 L2 正则化到底啥区别？</td>
+              <td><span class="tag" style="background:#f9ece6; color:var(--accent-deep);">失败</span></td>
+              <td>11:28</td><td>59.9s
+                <div class="err-detail">模型网关超时（第 3 次尝试）· 上游 504</div>
+              </td>
+              <td>
+                <button class="retry" style="margin-right:14px;">重试</button><button class="detail-toggle">收起</button>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="6" style="padding:0; border-bottom:1px solid var(--line-soft);">
+                <div class="exec-card">
+                  <div class="exec-block">
+                    <div class="exec-head">
+                      <span class="exec-no">第 1 次</span>
+                      <span class="tag" style="background:#f9ece6; color:var(--accent-deep);">失败</span>
+                      <span>11:26</span><span>48.2s</span><span class="exec-model">qwen3-max</span>
+                    </div>
+                    <div class="exec-err">模型网关超时 · 上游 504</div>
+                    <ul class="exec-steps">
+                      <li><span class="exec-tool">search_cards</span><span class="exec-ms">812ms</span><span class="exec-io">正则化 相关卡片 6 张</span></li>
+                    </ul>
+                  </div>
+                  <div class="exec-block">
+                    <div class="exec-head">
+                      <span class="exec-no">第 2 次</span>
+                      <span class="tag" style="background:#f9ece6; color:var(--accent-deep);">失败</span>
+                      <span>11:27</span><span>11.7s</span><span class="exec-model">qwen3-max</span>
+                    </div>
+                    <div class="exec-err">模型网关超时 · 上游 504</div>
+                  </div>
+                  <div class="exec-block">
+                    <div class="exec-head">
+                      <span class="exec-no">第 3 次</span>
+                      <span class="tag" style="background:#f9ece6; color:var(--accent-deep);">失败</span>
+                      <span>11:28</span><span>59.9s</span><span class="exec-model">qwen3-max</span>
+                    </div>
+                    <div class="exec-err">模型网关超时 · 上游 504</div>
+                    <ul class="exec-steps">
+                      <li><span class="exec-tool">search_cards</span><span class="exec-ms">704ms</span><span class="exec-io">正则化 相关卡片 6 张</span></li>
+                      <li><span class="exec-tool">write_answer</span><span class="exec-ms">—</span><span class="exec-io">error: 上游 504</span></li>
+                    </ul>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>📖 周报</td><td>9/14–9/20 学习复盘</td><td><span class="tag tag-done">完成</span></td>
+              <td>11:40</td><td>8.8s</td><td><button class="detail-toggle">明细</button></td>
+            </tr>
+            <tr>
+              <td>✨ 进化</td><td>机器学习基础</td><td><span class="tag tag-done">完成</span></td>
+              <td>02:48</td><td>858ms</td><td><button class="detail-toggle">明细</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="hist-pager">
+        <button class="btn btn-ghost" style="height:28px; font-size:12.5px;">上一页</button>
+        <span>1–20 / 63</span>
+        <button class="btn btn-ghost" style="height:28px; font-size:12.5px;">下一页</button>
+      </div>
+
       <!-- 用量 -->
-      <div class="jobs-sec">Token 用量 · 近 7 天<span class="line"></span></div>
+      <div class="jobs-sec">Token 用量 · 近 7 天 · 今日完成 9 任务<span class="line"></span></div>
       <div class="usage-panel">
         <div class="usage-grid">
           <div class="bars">
@@ -205,37 +318,6 @@
             <div class="usage-legend-row" style="border-top:1px solid var(--line-soft); padding-top:9px; margin-top:4px;"><b>合计</b><span class="v"><b>69.7k</b></span></div>
           </div>
         </div>
-      </div>
-
-      <!-- 历史 -->
-      <div class="jobs-sec">执行历史<span class="line"></span></div>
-      <div class="hist">
-        <table class="hist-table">
-          <thead><tr><th>类型</th><th>内容</th><th>状态</th><th>时间</th><th>耗时</th><th></th></tr></thead>
-          <tbody>
-            <tr>
-              <td>🧠 消化</td><td>交叉验证入门</td><td><span class="tag tag-done">完成</span></td>
-              <td>13:05</td><td>27.9s</td><td></td>
-            </tr>
-            <tr class="is-err">
-              <td>💬 对话</td><td>L1 和 L2 正则化到底啥区别？</td>
-              <td><span class="tag" style="background:#f9ece6; color:var(--accent-deep);">失败</span></td>
-              <td>11:28</td><td>59.9s
-                <div class="err-detail">模型网关超时（第 3 次尝试）· 上游 504</div>
-              </td>
-              <td></td>
-              <td><button class="retry">重试</button></td>
-            </tr>
-            <tr>
-              <td>📖 周报</td><td>9/14–9/20 学习复盘</td><td><span class="tag tag-done">完成</span></td>
-              <td>11:40</td><td>8.8s</td><td></td>
-            </tr>
-            <tr>
-              <td>✨ 进化</td><td>机器学习基础</td><td><span class="tag tag-done">完成</span></td>
-              <td>02:48</td><td>858ms</td><td></td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </div>
   </main>

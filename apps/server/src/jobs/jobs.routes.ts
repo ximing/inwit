@@ -2,7 +2,7 @@ import { listJobsQuerySchema } from '@inwit/dto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/authenticate.js';
-import { cancelJob, getJob, getJobQueue, getJobUsage, listJobs, retryJob } from './jobs.service.js';
+import { cancelJob, getJob, getJobQueue, getJobUsage, listJobExecutions, listJobs, retryJob } from './jobs.service.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -24,6 +24,11 @@ export function registerJobRoutes(app: FastifyInstance): void {
   app.get('/api/jobs/:id', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     return getJob(requireUser(req).id, id);
+  });
+
+  app.get('/api/jobs/:id/executions', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    return listJobExecutions(requireUser(req).id, id);
   });
 
   app.post('/api/jobs/:id/retry', auth, async (req) => {

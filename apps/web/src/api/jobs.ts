@@ -1,4 +1,4 @@
-import type { Job, JobQueue, JobStatus, JobType, JobUsage, Paginated } from '@inwit/dto';
+import type { AgentExecution, Job, JobQueue, JobStatus, JobType, JobUsage, Paginated } from '@inwit/dto';
 import { request } from './client';
 
 export function listJobs(query: {
@@ -18,6 +18,11 @@ export function listJobs(query: {
 
 export function getJob(id: string): Promise<Job> {
   return request<Job>(`/api/jobs/${id}`);
+}
+
+/** Per-attempt execution audit (agent_executions) for one job. */
+export function listJobExecutions(id: string): Promise<AgentExecution[]> {
+  return request<AgentExecution[]>(`/api/jobs/${id}/executions`);
 }
 
 export function getJobQueue(): Promise<JobQueue> {

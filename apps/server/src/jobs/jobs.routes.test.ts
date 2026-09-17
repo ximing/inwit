@@ -15,6 +15,7 @@ vi.mock('./jobs.service.js', () => ({
   getJob: vi.fn(),
   getJobQueue: vi.fn(),
   getJobUsage: vi.fn(),
+  listJobExecutions: vi.fn(),
   retryJob: vi.fn(),
   cancelJob: vi.fn(),
 }));
@@ -24,6 +25,7 @@ import {
   getJob,
   getJobQueue,
   getJobUsage,
+  listJobExecutions,
   listJobs,
   retryJob,
 } from './jobs.service.js';
@@ -66,6 +68,32 @@ describe('job routes', () => {
     vi.mocked(getJobUsage).mockReset();
     vi.mocked(retryJob).mockReset();
     vi.mocked(cancelJob).mockReset();
+    vi.mocked(listJobExecutions).mockReset();
+  });
+
+  it('GET /api/jobs/:id/executions returns the per-attempt audit', async () => {
+    const executions = [
+      {
+        id: '33333333-3333-4333-8333-333333333333',
+        jobId: JOB_ID,
+        userId: USER_ID,
+        agentType: 'digest' as const,
+        status: 'failed' as const,
+        startedAt: '2026-09-14T02:10:00.000Z',
+        finishedAt: '2026-09-14T02:11:00.000Z',
+        steps: [{ tool: 'write_cards', input_summary: '{}', output_summary: 'ok', duration_ms: 12 }],
+        error: 'digest produced no cards',
+        resultSummary: 'cards=0',
+        createdAt: '2026-09-14T02:10:00.000Z',
+      },
+    ];
+    vi.mocked(listJobExecutions).mockResolvedValue(executions);
+    const app = await buildTestApp();
+    const res = await app.inject({ method: 'GET', url: `/api/jobs/${JOB_ID}/executions` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(executions);
+    expect(listJobExecutions).toHaveBeenCalledWith(USER_ID, JOB_ID);
+    await app.close();
   });
 
   it('GET /api/jobs/queue is not captured by /:id', async () => {

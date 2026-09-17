@@ -1,4 +1,4 @@
-import type { Job, JobQueue, JobUsage, ListJobsQuery, Paginated } from '@inwit/dto';
+import type { AgentExecution, Job, JobQueue, JobUsage, ListJobsQuery, Paginated } from '@inwit/dto';
 import { and, asc, count, desc, eq, gte, inArray, isNull, lte, type SQL } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import {
@@ -138,6 +138,33 @@ async function getOwned(userId: string, id: string): Promise<JobRow> {
 
 export async function getJob(userId: string, id: string): Promise<Job> {
   return toHydratedJob(userId, await getOwned(userId, id));
+}
+
+function toPublicExecution(row: typeof agentExecutions.$inferSelect): AgentExecution {
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    userId: row.userId,
+    agentType: row.agentType,
+    status: row.status,
+    startedAt: row.startedAt.toISOString(),
+    finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
+    steps: row.steps,
+    error: row.error,
+    resultSummary: row.resultSummary,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/** Per-attempt execution audit for one job (owning user only). */
+export async function listJobExecutions(userId: string, jobId: string): Promise<AgentExecution[]> {
+  await getOwned(userId, jobId);
+  const rows = await getDb()
+    .select()
+    .from(agentExecutions)
+    .where(and(eq(agentExecutions.userId, userId), eq(agentExecutions.jobId, jobId)))
+    .orderBy(asc(agentExecutions.startedAt), asc(agentExecutions.id));
+  return rows.map(toPublicExecution);
 }
 
 export async function listJobs(userId: string, query: ListJobsQuery): Promise<Paginated<Job>> {

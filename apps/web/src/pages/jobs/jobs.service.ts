@@ -1,12 +1,13 @@
 import { Service } from '@rabjs/react';
-import type { Job, JobQueue, JobQueueCounts, JobStatus, JobType, JobUsage } from '@inwit/dto';
+import type { AgentExecution, Job, JobQueue, JobQueueCounts, JobStatus, JobType, JobUsage } from '@inwit/dto';
 import { errorMessage } from '@/api/client';
-import { cancelJob, getJobQueue, getJobUsage, listJobs, retryJob } from '@/api/jobs';
+import { cancelJob, getJobQueue, getJobUsage, listJobExecutions, listJobs, retryJob } from '@/api/jobs';
 import { formatTimeHm } from '@/lib/format';
 
 const POLL_MS = 5000;
 const TICK_MS = 1000;
 const HISTORY_LIMIT = 20;
+const FAILED_LIMIT = 5;
 
 export const JOB_TYPES: JobType[] = [
   'digest',
@@ -147,13 +148,19 @@ export class JobsService extends Service {
   error: string | null = null;
 
   jobStatus: JobStatus | '' = '';
-  jobType: JobType | '' = '';
   jobs: Job[] = [];
   jobsTotal = 0;
   jobsPage = 1;
   jobsLimit = HISTORY_LIMIT;
+  /** 失败待处理区（首屏主角）：最近几条失败 job。 */
+  failedJobs: Job[] = [];
+  failedTotal = 0;
   retryingId: string | null = null;
   cancellingId: string | null = null;
+  /** Job whose execution drill-down is expanded; empty array = 加载中. */
+  executionsJobId: string | null = null;
+  executions: AgentExecution[] = [];
+  executionsLoaded = false;
 
   pollTimer: ReturnType<typeof setInterval> | null = null;
   tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -189,7 +196,7 @@ export class JobsService extends Service {
 
   async load(): Promise<void> {
     this.error = null;
-    await Promise.all([this.loadQueue(), this.loadUsage(), this.loadHistory()]);
+    await Promise.all([this.loadQueue(), this.loadUsage(), this.loadHistory(), this.loadFailed()]);
     this.syncPolling();
   }
 
@@ -216,7 +223,6 @@ export class JobsService extends Service {
         limit: this.jobsLimit,
         offset: (this.jobsPage - 1) * this.jobsLimit,
         ...(this.jobStatus !== '' ? { status: this.jobStatus } : {}),
-        ...(this.jobType !== '' ? { type: this.jobType } : {}),
       });
       this.jobs = page.items;
       this.jobsTotal = page.total;
@@ -225,14 +231,18 @@ export class JobsService extends Service {
     }
   }
 
-  setJobStatus(value: JobStatus | ''): void {
-    this.jobStatus = value;
-    this.jobsPage = 1;
-    void this.loadHistory();
+  async loadFailed(): Promise<void> {
+    try {
+      const page = await listJobs({ status: 'failed', limit: FAILED_LIMIT, offset: 0 });
+      this.failedJobs = page.items;
+      this.failedTotal = page.total;
+    } catch (err) {
+      if (this.failedJobs.length === 0) this.error = errorMessage(err, '加载任务失败');
+    }
   }
 
-  setJobType(value: JobType | ''): void {
-    this.jobType = value;
+  setJobStatus(value: JobStatus | ''): void {
+    this.jobStatus = value;
     this.jobsPage = 1;
     void this.loadHistory();
   }
@@ -261,7 +271,7 @@ export class JobsService extends Service {
     this.error = null;
     try {
       await retryJob(id);
-      await Promise.all([this.loadQueue(), this.loadHistory()]);
+      await Promise.all([this.loadQueue(), this.loadHistory(), this.loadFailed()]);
       this.syncPolling();
     } catch (err) {
       this.error = errorMessage(err, '重试失败');
@@ -277,10 +287,32 @@ export class JobsService extends Service {
     return `${running}|${pending}|${String(r)}:${String(p)}:${String(doneToday)}:${String(failed)}`;
   }
 
+  async toggleExecutions(jobId: string): Promise<void> {
+    if (this.executionsJobId === jobId) {
+      this.executionsJobId = null;
+      this.executions = [];
+      this.executionsLoaded = false;
+      return;
+    }
+    this.executionsJobId = jobId;
+    this.executions = [];
+    this.executionsLoaded = false;
+    try {
+      const items = await listJobExecutions(jobId);
+      if (this.executionsJobId !== jobId) return;
+      this.executions = items;
+      this.executionsLoaded = true;
+    } catch (err) {
+      if (this.executionsJobId !== jobId) return;
+      this.executionsJobId = null;
+      this.error = errorMessage(err, '加载执行明细失败');
+    }
+  }
+
   async tickQueue(): Promise<void> {
     const prev = this.queueSignature();
     await this.loadQueue();
-    if (this.queueSignature() !== prev) await this.loadHistory();
+    if (this.queueSignature() !== prev) await Promise.all([this.loadHistory(), this.loadFailed()]);
     this.syncPolling();
   }
 
