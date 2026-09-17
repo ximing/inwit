@@ -28,6 +28,26 @@ RUN pnpm --filter @inwit/dto build \
  && pnpm --filter @inwit/doc-schema build \
  && pnpm --filter @inwit/server build
 
+# web 构建需要 web 自己的 devDependencies（vite 等），单独装一份
+FROM base AS web-build
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/dto/package.json packages/dto/
+COPY packages/markdown/package.json packages/markdown/
+COPY packages/doc-schema/package.json packages/doc-schema/
+COPY packages/brand/package.json packages/brand/
+COPY packages/doc-engine/package.json packages/doc-engine/
+COPY apps/server/package.json apps/server/
+COPY apps/web/package.json apps/web/
+COPY apps/desktop/package.json apps/desktop/
+COPY apps/mobile/package.json apps/mobile/
+RUN pnpm install --frozen-lockfile --filter=@inwit/web...
+COPY packages/dto packages/dto
+COPY packages/doc-schema packages/doc-schema
+COPY apps/web apps/web
+RUN pnpm --filter @inwit/doc-schema build \
+ && pnpm --filter @inwit/dto build \
+ && pnpm --filter @inwit/web build
+
 FROM base AS prod-deps
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
@@ -60,6 +80,7 @@ COPY --from=build /app/packages/doc-schema/dist ./packages/doc-schema/dist
 COPY --from=build /app/apps/server/dist ./apps/server/dist
 COPY --from=build /app/apps/server/drizzle ./apps/server/drizzle
 COPY --from=build /app/apps/server/package.json ./apps/server/package.json
+COPY --from=web-build /app/apps/web/dist ./apps/web/dist
 WORKDIR /app/apps/server
 EXPOSE 3020
 CMD ["node", "dist/index.js"]

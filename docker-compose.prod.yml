@@ -35,6 +35,9 @@ services:
     <<: *app
     image: ghcr.io/ximing/inwit-server:${INWIT_IMAGE_TAG:-stable}
     container_name: inwit-server
+    # 入口 nginx（39.96.159.212）反代 https://inwit.aimo.plus → 这里；server 同时托管 SPA 静态资产
+    ports:
+      - '13005:3020'
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -72,19 +75,3 @@ services:
       http_proxy: ''
       https_proxy: ''
       all_proxy: ''
-
-  web:
-    <<: *app
-    image: ghcr.io/ximing/inwit-web:${INWIT_IMAGE_TAG:-stable}
-    container_name: inwit-web
-    ports:
-      - '${INWIT_WEB_BIND:-0.0.0.0}:${INWIT_WEB_PORT:-13005}:80'
-    depends_on:
-      server:
-        condition: service_healthy
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1/api/health']
-      interval: 10s
-      timeout: 3s
-      retries: 10
-      start_period: 10s

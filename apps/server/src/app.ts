@@ -17,6 +17,7 @@ import { registerLlmRoutes } from './llm/llm.routes.js';
 import { registerOcrRoutes } from './ocr/ocr.routes.js';
 import { registerMapRoutes } from './maps/map.routes.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
+import { registerWebStatic } from './web-static.js';
 import { registerEvolveRoutes } from './agent/evolve.routes.js';
 import { registerWeeklyRoutes } from './agent/weekly.routes.js';
 import { registerReviewRoutes } from './review/review.routes.js';
@@ -76,6 +77,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerWeeklyRoutes(app);
   registerJobRoutes(app);
   registerAdminRoutes(app);
+
+  await registerWebStatic(app);
 
   return app;
 }
