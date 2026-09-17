@@ -18,7 +18,16 @@
   "pnpm": {
     "overrides": {
       "react": "19.1.0",
-      "react-dom": "19.1.0"
+      "react-dom": "19.1.0",
+      "@inwit/mobile>react": "19.2.3"
+    },
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "react": "19",
+        "react-dom": "19",
+        "@types/react": "19"
+      },
+      "ignoreMissing": ["@expo/metro-runtime", "react-native-web"]
     }
   }
 }
