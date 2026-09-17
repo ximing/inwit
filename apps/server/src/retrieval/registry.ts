@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { createEmbeddingClient, type EmbeddingClient } from './embedding.js';
 import {
+  ANNOTATION_INDEX_SETTINGS,
   CARD_INDEX_SETTINGS,
   createMeiliClient,
   DOCS_INDEX_SETTINGS,
@@ -27,6 +28,10 @@ export function cardsStoreName(): string {
 
 export function docsStoreName(): string {
   return config.NODE_ENV === 'production' ? 'inwit_docs_prod' : 'inwit_docs_dev';
+}
+
+export function annotationsStoreName(): string {
+  return config.NODE_ENV === 'production' ? 'inwit_annotations_prod' : 'inwit_annotations_dev';
 }
 
 function buildClients(): RetrievalClients {
@@ -81,11 +86,16 @@ export async function ensureRetrievalStores(): Promise<void> {
     const { qdrant, meili } = getRetrievalClients();
     const cards = cardsStoreName();
     const docs = docsStoreName();
+    const annotations = annotationsStoreName();
     await Promise.all([
       qdrant.ensureCollection(cards, { payloadFields: ['user_id', 'card_id', 'topic_id'] }),
       qdrant.ensureCollection(docs, { payloadFields: ['user_id', 'doc_id', 'topic_id'] }),
+      qdrant.ensureCollection(annotations, {
+        payloadFields: ['user_id', 'annotation_id', 'doc_id'],
+      }),
       meili.ensureIndex(cards, CARD_INDEX_SETTINGS),
       meili.ensureIndex(docs, DOCS_INDEX_SETTINGS),
+      meili.ensureIndex(annotations, ANNOTATION_INDEX_SETTINGS),
     ]);
   })().catch((err: unknown) => {
     storesReady = null;

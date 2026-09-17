@@ -6,11 +6,16 @@ import {
   getReviewSettings,
   getReviewStats,
   getReviewToday,
+  getStrugglingCards,
+  getReviewTopicStats,
   submitReviewFeedback,
   updateReviewSettings,
 } from './review.service.js';
 
 const cardIdParamsSchema = z.object({ cardId: z.string().uuid() });
+const strugglingQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(20).optional(),
+});
 
 export function registerReviewRoutes(app: FastifyInstance): void {
   const auth = { preHandler: [app.authenticate] };
@@ -21,6 +26,15 @@ export function registerReviewRoutes(app: FastifyInstance): void {
 
   app.get('/api/review/stats', auth, async (req) => {
     return getReviewStats(requireUser(req).id);
+  });
+
+  app.get('/api/review/stats/topics', auth, async (req) => {
+    return getReviewTopicStats(requireUser(req).id);
+  });
+
+  app.get('/api/review/struggling', auth, async (req) => {
+    const { limit } = strugglingQuerySchema.parse(req.query);
+    return getStrugglingCards(requireUser(req).id, limit ?? 5);
   });
 
   app.get('/api/review/settings', auth, async (req) => {

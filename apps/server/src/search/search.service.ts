@@ -1,6 +1,7 @@
 import {
   docDisplayTitle,
   type DocumentListItem,
+  type SearchAnnotation,
   type SearchCard,
   type SearchQuery,
   type SearchResult,
@@ -9,16 +10,20 @@ import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 import { toPublicCardBase } from '../cards/card.mapper.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
-import { cards, documents } from '../db/schema.js';
+import { annotations, cards, documents } from '../db/schema.js';
 import { getDocumentListItemsByIds } from '../documents/document.service.js';
-import { searchCards, searchDocuments } from '../retrieval/pipeline.js';
+import { searchAnnotations, searchCards, searchDocuments } from '../retrieval/pipeline.js';
 import {
+  clipChars,
   ilikeContainsPattern,
   intersectOrdered,
   orderByIds,
   withSearchFallback,
 } from '../retrieval/search-logic.js';
 import { logger } from '../utils/logger.js';
+
+const SEARCH_ANNOTATION_QUOTE_CHARS = 140;
+const SEARCH_ANNOTATION_NOTE_CHARS = 200;
 
 function topicEq(
   column: typeof documents.topicId | typeof cards.topicId,
@@ -75,13 +80,50 @@ async function searchCardIdsIlike(
   return rows.map((row) => row.id);
 }
 
+async function searchAnnotationIdsIlike(
+  userId: string,
+  query: string,
+  limit: number,
+  topicId?: string,
+): Promise<string[]> {
+  const pattern = ilikeContainsPattern(query);
+  const rows = await getDb()
+    .select({ id: annotations.id })
+    .from(annotations)
+    .innerJoin(documents, eq(documents.id, annotations.documentId))
+    .where(
+      and(
+        eq(annotations.userId, userId),
+        topicEq(documents.topicId, topicId),
+        or(ilike(annotations.note, pattern), ilike(annotations.quote, pattern)),
+      ),
+    )
+    .orderBy(desc(annotations.updatedAt), desc(annotations.id))
+    .limit(limit);
+  return rows.map((row) => row.id);
+}
+
 async function idsInTopic(
-  kind: 'documents' | 'cards',
+  kind: 'documents' | 'cards' | 'annotations',
   userId: string,
   ids: string[],
   topicId: string,
 ): Promise<string[]> {
   if (ids.length === 0) return [];
+  if (kind === 'annotations') {
+    const rows = await getDb()
+      .select({ id: annotations.id })
+      .from(annotations)
+      .innerJoin(documents, eq(documents.id, annotations.documentId))
+      .where(
+        and(
+          eq(annotations.userId, userId),
+          eq(documents.topicId, topicId),
+          inArray(annotations.id, ids),
+        ),
+      );
+    return intersectOrdered(ids, new Set(rows.map((row) => row.id)));
+  }
   const table = kind === 'documents' ? documents : cards;
   const rows = await getDb()
     .select({ id: table.id })
@@ -120,6 +162,36 @@ async function loadDocumentsByIds(userId: string, ids: string[]): Promise<Docume
   return orderByIds(ids, await getDocumentListItemsByIds(userId, ids));
 }
 
+/** Display-ready annotation rows in the given id order; also used by agent tools. */
+export async function loadAnnotationsByIds(userId: string, ids: string[]): Promise<SearchAnnotation[]> {  if (ids.length === 0) return [];
+  const rows = await getDb()
+    .select({
+      annotation: annotations,
+      docTitle: documents.title,
+      docDescription: documents.description,
+    })
+    .from(annotations)
+    .innerJoin(documents, eq(documents.id, annotations.documentId))
+    .where(and(eq(annotations.userId, userId), inArray(annotations.id, ids)));
+  const byId = new Map(rows.map((row) => [row.annotation.id, row]));
+  const ordered: SearchAnnotation[] = [];
+  for (const id of ids) {
+    const row = byId.get(id);
+    if (!row) continue;
+    ordered.push({
+      id: row.annotation.id,
+      documentId: row.annotation.documentId,
+      documentTitle: docDisplayTitle({ title: row.docTitle, description: row.docDescription }),
+      kind: row.annotation.kind,
+      quote: clipChars(row.annotation.quote, SEARCH_ANNOTATION_QUOTE_CHARS),
+      note: clipChars(row.annotation.note, SEARCH_ANNOTATION_NOTE_CHARS),
+      pageIndex: row.annotation.pageIndex ?? null,
+      createdAt: row.annotation.createdAt.toISOString(),
+    });
+  }
+  return ordered;
+}
+
 function fallbackOpts(scope: string) {
   return {
     forceFallback: config.INWIT_SEARCH_FALLBACK,
@@ -149,7 +221,10 @@ export async function search(userId: string, query: SearchQuery): Promise<Search
   const cardScope = topicId
     ? { topicId, filterIds: (ids: string[]) => idsInTopic('cards', userId, ids, topicId) }
     : undefined;
-  const [documentIds, cardIds] = await Promise.all([
+  const annotationScope = topicId
+    ? { filterIds: (ids: string[]) => idsInTopic('annotations', userId, ids, topicId) }
+    : undefined;
+  const [documentIds, cardIds, annotationIds] = await Promise.all([
     retrieveSearchIds(
       () => searchDocuments(userId, q, limit, docScope),
       () => searchDocumentIdsIlike(userId, q, limit, topicId),
@@ -162,11 +237,18 @@ export async function search(userId: string, query: SearchQuery): Promise<Search
       'cards',
       scoped,
     ),
+    retrieveSearchIds(
+      () => searchAnnotations(userId, q, limit, annotationScope),
+      () => searchAnnotationIdsIlike(userId, q, limit, topicId),
+      'annotations',
+      scoped,
+    ),
   ]);
 
-  const [docs, cardRows] = await Promise.all([
+  const [docs, cardRows, annotationRows] = await Promise.all([
     loadDocumentsByIds(userId, documentIds),
     loadCardsByIds(userId, cardIds),
+    loadAnnotationsByIds(userId, annotationIds),
   ]);
-  return { documents: docs, cards: cardRows };
+  return { documents: docs, cards: cardRows, annotations: annotationRows };
 }

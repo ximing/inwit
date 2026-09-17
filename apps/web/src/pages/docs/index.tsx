@@ -27,6 +27,7 @@ const DocsPageContent = observer(function DocsPageContent() {
   const docId = params.get('doc');
   const editParam = params.get('edit') === '1';
   const urlAnchor = params.get('anchor');
+  const urlAnnotation = params.get('annotation');
   const newTopicId = params.get('topicId');
   const listed = docId ? service.documents.find((item) => item.id === docId) : undefined;
   const fileMime = service.doc?.id === docId ? service.doc.fileMime : (listed?.fileMime ?? null);
@@ -167,9 +168,10 @@ const DocsPageContent = observer(function DocsPageContent() {
         return;
       }
       if (service.doc?.id !== docId || leavingEdit) {
-        await service.loadDoc(docId, urlAnchor);
+        await service.loadDoc(docId, urlAnchor, urlAnnotation);
       } else {
         service.applyUrlAnchor(urlAnchor);
+        service.applyUrlAnnotation(urlAnnotation);
       }
       if (cancelled) return;
       if (editing) {
@@ -180,7 +182,7 @@ const DocsPageContent = observer(function DocsPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [docId, editing, urlAnchor, newTopicId, service, editor, service.composingNew]);
+  }, [docId, editing, urlAnchor, urlAnnotation, newTopicId, service, editor, service.composingNew]);
 
   useEffect(() => {
     if (!docId && editor.justCreated && editor.id) {

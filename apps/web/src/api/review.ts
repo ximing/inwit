@@ -3,7 +3,9 @@ import type {
   ReviewFeedbackResult,
   ReviewSettings,
   ReviewStats,
+  ReviewStrugglingCard,
   ReviewToday,
+  ReviewTopicStat,
 } from '@inwit/dto';
 import { request } from './client';
 
@@ -23,6 +25,14 @@ export function submitReviewFeedback(
 
 export function getReviewStats(): Promise<ReviewStats> {
   return request<ReviewStats>('/api/review/stats');
+}
+
+export function getReviewTopicStats(): Promise<ReviewTopicStat[]> {
+  return request<ReviewTopicStat[]>('/api/review/stats/topics');
+}
+
+export function getStrugglingCards(limit = 5): Promise<ReviewStrugglingCard[]> {
+  return request<ReviewStrugglingCard[]>(`/api/review/struggling?limit=${String(limit)}`);
 }
 
 export function getReviewSettings(): Promise<ReviewSettings> {

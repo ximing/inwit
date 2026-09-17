@@ -12,6 +12,7 @@ import { OutlineError, parsePlaceOnMapTarget } from '../maps/outline.js';
 import { deleteCard, indexCard, searchCards } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
+import { readDocumentAnnotationsTool, searchAnnotationsTool } from './annotation-tools.js';
 import { numberedBlocksFromDoc, resolveQuoteAnchor } from './card-anchor-logic.js';
 import { persistDocumentMeta } from './doc-meta.js';
 import { isUserOwnedTitle } from './doc-meta-logic.js';
@@ -609,6 +610,7 @@ export function setDocumentMetaTool(session: DigestSession): AgentTool<typeof se
 export function digestTools(session: DigestSession): AgentTool[] {
   return [
     readDocumentTool(session),
+    readDocumentAnnotationsTool(session),
     writeCardsTool(session),
     writeQuestionsTool(session),
     searchUserMemoriesTool(session),
@@ -639,6 +641,7 @@ export function chatWriteCardsTool(session: DigestSession): AgentTool<typeof cha
 export function chatTools(session: DigestSession): AgentTool[] {
   return [
     searchCardsTool(session),
+    searchAnnotationsTool(session),
     chatWriteCardsTool(session),
     writeQuestionsTool(session),
     linkCardsTool(session),

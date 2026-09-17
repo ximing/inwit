@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>inwit icon 方案对比</title>
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --surface: #fffdf8;
+    --ink: #221d16;
+    --ink-2: #574e41;
+    --ink-3: #8b8172;
+    --line: #e6dfd0;
+    --accent: #b3402a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--bg); color: var(--ink);
+    padding: 48px 32px 80px; -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-family: "Songti SC", "Noto Serif SC", serif; font-size: 26px; margin-bottom: 6px; }
+  .sub { color: var(--ink-3); font-size: 13px; margin-bottom: 40px; }
+  .option {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 28px 32px 32px; margin-bottom: 28px;
+  }
+  .option-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .option-head .no { font-size: 13px; color: var(--accent); font-weight: 700; letter-spacing: .08em; }
+  .option-head h2 { font-family: "Songti SC", serif; font-size: 20px; }
+  .meaning { color: var(--ink-2); font-size: 13.5px; margin-bottom: 24px; max-width: 640px; line-height: 1.7; }
+  .row { display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap; }
+  .cell { text-align: center; }
+  .cell .label { font-size: 11px; color: var(--ink-3); margin-top: 8px; }
+  .cell svg { display: block; margin: 0 auto; }
+  .darkbox { background: #221d16; padding: 10px; border-radius: 12px; display: inline-block; }
+  .divider { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  .note { font-size: 12.5px; color: var(--ink-3); line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<h1>inwit 应用图标 · 方案对比</h1>
+<p class="sub">暖纸底 #F6F3EC / 朱砂红 #B3402A，与设计稿 v2 同色系 · 2026-09</p>
+
+<!-- ============ 共享 tile ============ -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F7F3EC"/>
+    </linearGradient>
+    <linearGradient id="tileDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A332A"/>
+      <stop offset="1" stop-color="#2A241D"/>
+    </linearGradient>
+    <clipPath id="squircle"><rect x="1" y="1" width="30" height="30" rx="7"/></clipPath>
+    <clipPath id="circle"><circle cx="16" cy="16" r="15"/></clipPath>
+    <!-- 纸底板 -->
+    <path id="tilepath" d="M8.68 1.5h14.64c4.39 0 6.76 2.37 6.76 6.76v14.64c0 4.39-2.37 6.76-6.76 6.76H8.68C4.29 29.66 1.92 27.29 1.92 22.9V8.26c0-4.39 2.37-6.76 6.76-6.76Z"/>
+  </defs>
+</svg>
+
+<!-- ============ 方案 A：i 上发芽 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="iconA">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <!-- 芽叶 -->
+  <path d="M16 16.5 Q 17 10 24 10.5 Q 23 16.5 16 16.5 Z" fill="#B3402A"/>
+  <!-- 茎（i 的竖画） -->
+  <path d="M16 16.5 V 25" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+  <!-- 种子（i 的点） -->
+  <circle cx="16" cy="6.6" r="2.5" fill="#B3402A"/>
+</g>
+<g id="iconA-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M16 16.5 Q 17 10 24 10.5 Q 23 16.5 16 16.5 Z" fill="#E06B4E"/>
+  <path d="M16 16.5 V 25" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.6" r="2.5" fill="#E06B4E"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">A</span><h2>i 上发芽</h2></div>
+  <p class="meaning">小写 i：点是一颗落下的种子，竖画抽出一枚新芽。in（投进去）→ wit（长出来）——「扔进去，AI 消化，长成你的智慧」。图形极简，16px 下依然可辨，记忆点最强。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#iconA"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#iconA"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#iconA"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#iconA"/></svg><div class="label">16 favicon</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#iconA"/></g></svg><div class="label">iOS 遮罩</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#iconA"/></g></svg><div class="label">Android 圆形</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#iconA-dark"/></svg></span><div class="label">深色底</div></div>
+  </div>
+</div>
+
+<!-- ============ 方案 B：页上逗号 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="iconB">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <rect x="7.6" y="6.4" width="16.8" height="19.2" rx="2.6" fill="#FFFDF8" stroke="rgba(34,29,22,0.14)" stroke-width="0.6"/>
+  <path d="M18.4 11.6c1.7 1 2.3 2.7 2 4.6-.4 2.3-2.1 4-4.6 5l-1-1.7c1.5-.7 2.4-1.8 2.6-3-.2.1-.5.1-.8.1-1.7 0-2.9-1.2-2.9-2.7 0-1.6 1.4-2.7 3-2.7.7 0 1.2.2 1.7.4z" fill="#B3402A"/>
+</g>
+<g id="iconB-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <rect x="7.6" y="6.4" width="16.8" height="19.2" rx="2.6" fill="#F6F3EC"/>
+  <path d="M18.4 11.6c1.7 1 2.3 2.7 2 4.6-.4 2.3-2.1 4-4.6 5l-1-1.7c1.5-.7 2.4-1.8 2.6-3-.2.1-.5.1-.8.1-1.7 0-2.9-1.2-2.9-2.7 0-1.6 1.4-2.7 3-2.7.7 0 1.2.2 1.7.4z" fill="#B3402A"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">B</span><h2>页上逗号</h2></div>
+  <p class="meaning">一张纸卡，只印一枚衬线逗号。逗号 = 摘录、停顿、一句话没说完还要回来复习——呼应卡片与划线高亮，书卷气最足，和 UI 里的衬线标题气质一脉相承。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#iconB"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#iconB"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#iconB"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#iconB"/></svg><div class="label">16 favicon</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#iconB"/></g></svg><div class="label">iOS 遮罩</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#iconB"/></g></svg><div class="label">Android 圆形</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#iconB-dark"/></svg></span><div class="label">深色底</div></div>
+  </div>
+</div>
+
+<!-- ============ 方案 C：w 叠卡 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="iconC">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <!-- 背后探出的卡片 -->
+  <rect x="12.8" y="4.8" width="6.6" height="8.8" rx="1.3" transform="rotate(14 16.1 9.2)" fill="#FFFDF8" stroke="#B3402A" stroke-width="1.1"/>
+  <!-- w 字形 -->
+  <path d="M6.8 10.5 L11.4 24 L16 14.4 L20.6 24 L25.2 10.5" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g id="iconC-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <rect x="12.8" y="4.8" width="6.6" height="8.8" rx="1.3" transform="rotate(14 16.1 9.2)" fill="#F6F3EC" stroke="#B3402A" stroke-width="1.1"/>
+  <path d="M6.8 10.5 L11.4 24 L16 14.4 L20.6 24 L25.2 10.5" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">C</span><h2>w 叠卡</h2></div>
+  <p class="meaning">inwit 的 w，背后探出一张微微倾斜的知识卡片——字标与产品核心（卡片）一体。几何、现代，w 本身在小尺寸下辨识度极高；也是四个方案里唯一「自报家门」的。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#iconC"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#iconC"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#iconC"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#iconC"/></svg><div class="label">16 favicon</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#iconC"/></g></svg><div class="label">iOS 遮罩</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#iconC"/></g></svg><div class="label">Android 圆形</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#iconC-dark"/></svg></span><div class="label">深色底</div></div>
+  </div>
+</div>
+
+<!-- ============ 方案 D：书页回环 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="iconD">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <!-- 翻开的书 -->
+  <path d="M6.4 11.4 C 9.5 9.8 12.8 9.8 15.2 11.6 L15.2 22.4 C 12.8 20.6 9.5 20.6 6.4 22.2 Z" fill="#FFFDF8" stroke="#574E41" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M25.6 11.4 C 22.5 9.8 19.2 9.8 16.8 11.6 L16.8 22.4 C 19.2 20.6 22.5 20.6 25.6 22.2 Z" fill="#FFFDF8" stroke="#574E41" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M16 11.6 V 22.4" stroke="#574E41" stroke-width="1.1"/>
+  <!-- 复习回环 -->
+  <circle cx="23.4" cy="8.4" r="4.6" fill="#B3402A"/>
+  <path d="M21.2 8.4 a2.2 2.2 0 1 1 2.2 2.2" fill="none" stroke="#F6F3EC" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M21.9 9.4 l -0.9 1.2 l 1.5 0.1 z" fill="#F6F3EC"/>
+</g>
+<g id="iconD-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M6.4 11.4 C 9.5 9.8 12.8 9.8 15.2 11.6 L15.2 22.4 C 12.8 20.6 9.5 20.6 6.4 22.2 Z" fill="#F6F3EC" stroke="#221D16" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M25.6 11.4 C 22.5 9.8 19.2 9.8 16.8 11.6 L16.8 22.4 C 19.2 20.6 22.5 20.6 25.6 22.2 Z" fill="#F6F3EC" stroke="#221D16" stroke-width="1.5" stroke-linejoin="round"/>
+  <path d="M16 11.6 V 22.4" stroke="#221D16" stroke-width="1.1"/>
+  <circle cx="23.4" cy="8.4" r="4.6" fill="#B3402A"/>
+  <path d="M21.2 8.4 a2.2 2.2 0 1 1 2.2 2.2" fill="none" stroke="#F6F3EC" stroke-width="1.1" stroke-linecap="round"/>
+  <path d="M21.9 9.4 l -0.9 1.2 l 1.5 0.1 z" fill="#F6F3EC"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">D</span><h2>书页回环</h2></div>
+  <p class="meaning">现有「笔记本」方案的进化：翻开的书（墨色）+ 右上角一枚朱红复习回环徽章。识别度延续老图标，同时把「催你复习」这个差异点直接画出来；代价是元素偏多，16px 下略显复杂。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#iconD"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#iconD"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#iconD"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#iconD"/></svg><div class="label">16 favicon</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#iconD"/></g></svg><div class="label">iOS 遮罩</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#iconD"/></g></svg><div class="label">Android 圆形</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#iconD-dark"/></svg></span><div class="label">深色底</div></div>
+  </div>
+</div>
+
+<hr class="divider">
+<p class="note">
+  对比基准：现行图标（纸张底 + 朱红笔记本）。四个方案共用暖纸底与朱砂红，均可无损导出为 SVG 及各尺寸 PNG。<br>
+  选定后可微调：芽叶角度 / 逗号字形 / 卡片倾角 / 徽章位置，再统一产出 web（favicon.svg/.ico、apple-touch-icon）、mobile（Expo icon/splash）、desktop（Tauri icns/ico）各端资源。
+</p>
+
+</body>
+</html>

@@ -20,6 +20,7 @@ import { and, asc, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { toPublicCard, toPublicQuestion } from '../cards/card.mapper.js';
 import { getDb } from '../db/index.js';
 import {
+  annotations,
   cardQuestions,
   cards,
   documents,
@@ -34,7 +35,11 @@ import { toPublicJob } from '../jobs/jobs.service.js';
 import { cancelPendingDocumentJobs, enqueueJob } from '../jobs/queue.js';
 import { requireWritableMapNode } from '../maps/map.service.js';
 import { ocrPayloadForRetry } from '../ocr/ocr-logic.js';
-import { tryDeleteDocumentFromIndex, tryIndexDocument } from '../retrieval/pipeline.js';
+import {
+  tryDeleteAnnotationFromIndex,
+  tryDeleteDocumentFromIndex,
+  tryIndexDocument,
+} from '../retrieval/pipeline.js';
 import { deletePrefix, isStorageConfigured, presignGet, presignPut } from '../storage/client.js';
 import { getOwnedTopic } from '../topics/topic.service.js';
 import { logger } from '../utils/logger.js';
@@ -395,11 +400,18 @@ export async function getDocument(userId: string, id: string): Promise<DocumentD
  */
 export async function deleteDocument(userId: string, id: string): Promise<void> {
   await getOwnedDocument(userId, id);
+  const annotationRows = await getDb()
+    .select({ id: annotations.id })
+    .from(annotations)
+    .where(and(eq(annotations.documentId, id), eq(annotations.userId, userId)));
   await getDb().transaction(async (tx) => {
     await cancelPendingDocumentJobs(tx, userId, id);
     await tx.delete(documents).where(and(eq(documents.id, id), eq(documents.userId, userId)));
   });
   await tryDeleteDocumentFromIndex(id);
+  for (const row of annotationRows) {
+    await tryDeleteAnnotationFromIndex(row.id);
+  }
   if (isStorageConfigured()) {
     try {
       await deletePrefix(documentObjectPrefix(userId, id));

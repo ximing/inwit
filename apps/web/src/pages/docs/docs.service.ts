@@ -574,7 +574,7 @@ export class DocsService extends Service {
     }
   }
 
-  async loadDoc(id: string, urlAnchor?: string | null): Promise<void> {
+  async loadDoc(id: string, urlAnchor?: string | null, urlAnnotation?: string | null): Promise<void> {
     this.docError = null;
     this.composingNew = false;
     if (this.doc?.id !== id) {
@@ -601,6 +601,7 @@ export class DocsService extends Service {
       if (detail.status === 'pending' || detail.status === 'failed') await this.refreshJobs();
       this.syncPolling();
       this.applyUrlAnchor(urlAnchor ?? null);
+      this.applyUrlAnnotation(urlAnnotation ?? null);
     } catch (err) {
       if (gen !== this.docLoadGen) return;
       this.docError = errorMessage(err, '打不开这份文档');
@@ -634,6 +635,15 @@ export class DocsService extends Service {
     if (!this.doc.cards.some((card) => card.id === cardId)) return;
     this.appliedUrlAnchor = key;
     this.openAnchors([cardId]);
+  }
+
+  applyUrlAnnotation(annotationId: string | null): void {
+    if (!annotationId || !this.doc) return;
+    const key = `${this.doc.id}:ann:${annotationId}`;
+    if (this.appliedUrlAnchor === key) return;
+    if (!this.annotations.some((item) => item.id === annotationId)) return;
+    this.appliedUrlAnchor = key;
+    this.openAnnotation(annotationId);
   }
 
   async refreshDoc(): Promise<void> {

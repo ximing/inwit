@@ -67,6 +67,7 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
         {item.kind === 'pdf' && item.imageKey ? <AnnotationThumb annotationId={item.id} /> : null}
         <p className="note-quote">{item.quote}</p>
         {!editing && item.note.trim() ? <p className="note-body">{item.note}</p> : null}
+        {item.hasConvertedCard ? <p className="anchor-lost note-converted">已转成卡片</p> : null}
         {lost ? <p className="anchor-lost">原文已删除</p> : null}
       </button>
       {editing ? (
@@ -94,13 +95,18 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
         </div>
       ) : (
         <div className="note-item-ops">
-          {item.imageKey ? (
+          {!item.hasConvertedCard ? (
             <button
               type="button"
               className="note-op"
               aria-label="转为卡片"
-              title="转为卡片"
-              disabled={service.convertingAnnotationId === item.id}
+              title={
+                !item.imageKey && !item.note.trim() ? '先写点笔记再转卡片' : '转为卡片'
+              }
+              disabled={
+                service.convertingAnnotationId === item.id ||
+                (!item.imageKey && !item.note.trim())
+              }
               onClick={(event) => {
                 event.stopPropagation();
                 void service.cardFromExcerpt(item.id);

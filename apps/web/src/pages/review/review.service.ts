@@ -5,6 +5,7 @@ import {
   type ReviewQueueItem,
   type ReviewSettings,
   type ReviewStats,
+  type ReviewStrugglingCard,
   type ReviewToday,
 } from '@inwit/dto';
 import { errorMessage } from '@/api/client';
@@ -20,6 +21,7 @@ import {
   getReviewSettings,
   getReviewStats,
   getReviewToday,
+  getStrugglingCards,
   submitReviewFeedback,
   updateReviewSettings,
 } from '@/api/review';
@@ -46,6 +48,7 @@ export class ReviewService extends Service {
   ready = false;
   error: string | null = null;
   stats: ReviewStats | null = null;
+  struggling: ReviewStrugglingCard[] = [];
   settings: ReviewSettings = cloneSettings(DEFAULT_REVIEW_SETTINGS);
   lastFeedback: ReviewFeedback | null = null;
   toast: string | null = null;
@@ -70,6 +73,12 @@ export class ReviewService extends Service {
 
   get dueCount(): number {
     return Math.max(0, this.total - this.reviewedToday);
+  }
+
+  /** 超出每日上限、会被顺延的积压卡片数。 */
+  get backlogCount(): number {
+    const overdue = this.stats?.overdueCount ?? 0;
+    return Math.max(0, overdue - this.dueCount);
   }
 
   get cardOrdinal(): number {
@@ -174,6 +183,16 @@ export class ReviewService extends Service {
       this.error = errorMessage(err, '复习中心加载失败');
     } finally {
       this.ready = true;
+    }
+    void this.loadStruggling();
+  }
+
+  /** 薄弱卡片是锦上添花，失败时静默保留旧列表。 */
+  private async loadStruggling(): Promise<void> {
+    try {
+      this.struggling = await getStrugglingCards();
+    } catch {
+      // keep last snapshot
     }
   }
 

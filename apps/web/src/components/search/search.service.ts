@@ -34,7 +34,11 @@ export class SearchService extends Service {
 
   get isEmpty(): boolean {
     if (!this.hasQuery || this.searching || this.error || !this.results) return false;
-    return this.results.documents.length === 0 && this.results.cards.length === 0;
+    return (
+      this.results.documents.length === 0 &&
+      this.results.cards.length === 0 &&
+      (this.results.annotations ?? []).length === 0
+    );
   }
 
   bindInput(el: HTMLInputElement | null): void {

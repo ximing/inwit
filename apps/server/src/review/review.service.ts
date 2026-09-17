@@ -7,6 +7,8 @@ import type {
   ReviewQueueItem,
   ReviewState,
   ReviewStats,
+  ReviewStrugglingCard,
+  ReviewTopicStat,
   ReviewToday,
 } from '@inwit/dto';
 import { and, asc, count, eq, gte, inArray, lte, sql } from 'drizzle-orm';
@@ -24,14 +26,16 @@ import {
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { maybeEnqueueAnalyzePatterns } from '../agent/analyze-enqueue.js';
+import { loadStrugglingCards } from '../agent/analyze-tools.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
 import { logger } from '../utils/logger.js';
-import { addLocalDays, endOfLocalDay, localDateKey, startOfLocalDay } from '../utils/date.js';
+import { addLocalDays, endOfLocalDay, localDateKey, startOfLocalDay, startOfLocalDayDaysAgo } from '../utils/date.js';
 import { evolveReasonFor } from './evolve-reason.js';
 import { upsertCardMasteryRecent } from './mastery-memory.js';
 import {
   aggregateLast7Days,
+  aggregateTopicStats,
   applyReviewQueueLimits,
   buildDailyDistribution,
   buildForecast,
@@ -364,4 +368,44 @@ export async function getReviewStats(userId: string, now = new Date()): Promise<
     daily,
     forecast: buildForecast(forecastDue, now),
   };
+}
+
+/** 近 30 天忘记/模糊 ≥2 次的卡片，按挣扎次数倒序。 */
+export async function getStrugglingCards(
+  userId: string,
+  limit = 5,
+  now = new Date(),
+): Promise<ReviewStrugglingCard[]> {
+  const views = await loadStrugglingCards(userId, now, limit);
+  return views.map((view) => ({
+    id: view.id,
+    concept: view.concept,
+    struggleCount: view.struggleCount,
+    forgotCount: view.forgotCount,
+    fuzzyCount: view.fuzzyCount,
+    topicId: view.topicId,
+    documentId: view.documentId,
+  }));
+}
+
+/** 每个主题近 7 天的复习量与想起率（只含这 7 天内有复习的主题）。 */
+export async function getReviewTopicStats(
+  userId: string,
+  now = new Date(),
+): Promise<ReviewTopicStat[]> {
+  const from = startOfLocalDayDaysAgo(now, 6);
+  const rows = await getDb()
+    .select({
+      topicId: topics.id,
+      title: topics.title,
+      remembered: sql<number>`count(*) filter (where ${reviewLogs.feedback} = 'remembered')::int`,
+      fuzzy: sql<number>`count(*) filter (where ${reviewLogs.feedback} = 'fuzzy')::int`,
+      forgot: sql<number>`count(*) filter (where ${reviewLogs.feedback} = 'forgot')::int`,
+    })
+    .from(reviewLogs)
+    .innerJoin(cards, and(eq(cards.id, reviewLogs.cardId), eq(cards.userId, userId)))
+    .innerJoin(topics, eq(topics.id, cards.topicId))
+    .where(and(eq(reviewLogs.userId, userId), gte(reviewLogs.reviewedAt, from)))
+    .groupBy(topics.id, topics.title);
+  return aggregateTopicStats(rows);
 }

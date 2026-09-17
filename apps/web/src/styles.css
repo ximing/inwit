@@ -610,6 +610,18 @@ img.avatar { background: var(--bg-sunken); }
 .fc-bar b { display: block; text-align: center; font-size: 11px; color: var(--accent-deep); font-weight: 600; margin-top: 3px; }
 .fc-day { font-size: 10.5px; color: var(--ink-4); }
 
+.due-backlog { font-size: 12px; color: var(--ink-4); margin-top: -4px; margin-bottom: 8px; }
+
+.weak-list { display: flex; flex-direction: column; }
+.weak-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 10px 6px; font-size: 13.5px; border-radius: var(--r-sm);
+  color: inherit; text-decoration: none;
+}
+.weak-row:hover { background: var(--surface-2); }
+.weak-concept { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.weak-meta { flex: none; font-size: 12px; color: var(--ink-3); }
+
 .cfg-head { display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; }
 .cfg-head .arrow { margin-left: auto; color: var(--ink-4); transition: transform 0.2s; flex: none; }
 .cfg-body { display: none; }
@@ -3404,6 +3416,9 @@ button.doc-row {
   font-size: 11px;
   line-height: 1.4;
   color: var(--ink-4);
+}
+.note-converted {
+  color: var(--accent-ink, var(--ink-3));
 }
 .mini-foot .anchor-lost {
   margin-top: 0;

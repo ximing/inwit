@@ -11,6 +11,7 @@ import type {
 import { and, asc, desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import {
+  annotations,
   cardLinks,
   cardQuestions,
   cards,
@@ -23,6 +24,7 @@ import { getOwnedDocument } from '../documents/document.service.js';
 import { isExcerptKeyFor } from '../documents/excerpt-logic.js';
 import { AppError } from '../errors.js';
 import { recalculateMapNodeStatus, requireWritableMapNode } from '../maps/map.service.js';
+import { tryIndexCard } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { presignGet } from '../storage/client.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
@@ -59,12 +61,22 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
   if (input.imageKey && !isExcerptKeyFor(input.imageKey, userId, document.id)) {
     throw AppError.of(400, 'VALIDATION_ERROR');
   }
+  if (input.annotationId) {
+    const [annotation] = await getDb()
+      .select({ id: annotations.id, documentId: annotations.documentId })
+      .from(annotations)
+      .where(and(eq(annotations.id, input.annotationId), eq(annotations.userId, userId)))
+      .limit(1);
+    if (!annotation || annotation.documentId !== document.id) {
+      throw AppError.of(400, 'VALIDATION_ERROR');
+    }
+  }
   const now = new Date();
   const anchorText = input.anchorText !== undefined ? input.anchorText : null;
   const anchorBlockIndex = input.anchorBlockIndex !== undefined ? input.anchorBlockIndex : null;
   const imageKey = input.imageKey !== undefined ? input.imageKey : null;
 
-  return getDb().transaction(async (tx) => {
+  const created = await getDb().transaction(async (tx) => {
     const [row] = await tx
       .insert(cards)
       .values({
@@ -83,8 +95,16 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
       .returning();
     if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
     await insertInitialReviewState(userId, row.id, now, tx, now);
-    return toPublicCardBase(row);
+    if (input.annotationId) {
+      await tx
+        .update(annotations)
+        .set({ convertedCardId: row.id, updatedAt: now })
+        .where(and(eq(annotations.id, input.annotationId), eq(annotations.userId, userId)));
+    }
+    return row;
   });
+  await tryIndexCard(created);
+  return toPublicCardBase(created);
 }
 
 export async function getCardImage(userId: string, id: string): Promise<CardImageResponse> {

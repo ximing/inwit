@@ -10,6 +10,7 @@ export const JOB_TYPES = [
   'selection',
   'extract',
   'ocr',
+  'annotation_resurface',
 ] as const;
 export const jobTypeSchema = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof jobTypeSchema>;
@@ -179,6 +180,23 @@ export function weeklyReportJobPayloadFrom(
   payload: JobPayload,
 ): WeeklyReportJobPayload | undefined {
   const parsed = weeklyReportJobPayloadSchema.safeParse(payload);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** Local date `YYYY-MM-DD` used to dedupe one annotation_resurface job per user per day. */
+export const annotationResurfaceDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD');
+
+export const annotationResurfaceJobPayloadSchema = z.object({
+  date: annotationResurfaceDateSchema,
+});
+export type AnnotationResurfaceJobPayload = z.infer<typeof annotationResurfaceJobPayloadSchema>;
+
+export function annotationResurfaceJobPayloadFrom(
+  payload: JobPayload,
+): AnnotationResurfaceJobPayload | undefined {
+  const parsed = annotationResurfaceJobPayloadSchema.safeParse(payload);
   return parsed.success ? parsed.data : undefined;
 }
 

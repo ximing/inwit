@@ -8,8 +8,8 @@ import { Resvg } from '@resvg/resvg-js';
 import pngToIco from 'png-to-ico';
 
 const VERMILION = '#B3402A';
-const WHITE = '#FFFFFF';
-const MARK_RATIO = 0.58;
+// 字形与纸砖等比：inset 0.06 时字形按原尺寸（32 网格）铺满画布，inset 变化时随纸砖等比缩放
+const BASE_TILE_SPAN = 0.88;
 
 const brandDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(brandDir, '..', '..');
@@ -37,14 +37,8 @@ function markGroup(size, ratio, markInner = inner) {
   return `<g fill="none" transform="translate(${offset} ${offset}) scale(${innerPx / 32})">${markInner}</g>`;
 }
 
-function fullBleedSvg(size) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-  <rect width="${size}" height="${size}" fill="${WHITE}"/>
-  ${markGroup(size, MARK_RATIO)}
-</svg>`;
-}
-
 function roundedSvg(size, insetPct = 0.06) {
+  const markRatio = (1 - insetPct * 2) / BASE_TILE_SPAN;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
@@ -53,16 +47,23 @@ function roundedSvg(size, insetPct = 0.06) {
     </linearGradient>
   </defs>
   <path d="${squirclePath(size, size * insetPct)}" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="${size * 0.006}"/>
-  ${markGroup(size, MARK_RATIO)}
+  ${markGroup(size, markRatio)}
 </svg>`;
 }
 
 function traySvg(size) {
   const mark = inner.replaceAll(VERMILION, '#000000');
-  const innerPx = size * 0.82;
+  const innerPx = size * 0.9;
   const offset = (size - innerPx) / 2;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <g fill="none" transform="translate(${offset} ${offset}) scale(${innerPx / 32})">${mark}</g>
+</svg>`;
+}
+
+/** Android adaptive icon 前景：透明底，字形缩进安全区（mask 最大直径约 61%）。 */
+function foregroundSvg(size) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  ${markGroup(size, 0.78)}
 </svg>`;
 }
 
@@ -119,17 +120,23 @@ function writeIcns(path) {
 
 const webPublic = join(repoRoot, 'apps/web/public');
 const desktopIcons = join(repoRoot, 'apps/desktop/src-tauri/icons');
+const mobileAssets = join(repoRoot, 'apps/mobile/assets');
 
 mkdirSync(webPublic, { recursive: true });
 writeFileSync(join(webPublic, 'favicon.svg'), `${roundedSvg(32)}\n`);
-writePng(join(webPublic, 'apple-touch-icon.png'), 180, fullBleedSvg(180), WHITE);
+writePng(join(webPublic, 'apple-touch-icon.png'), 180, roundedSvg(180));
+
+// iOS：1024 纸砖透明底；Android adaptive：前景透明字形 + app.json 的 #f6f3ec 背景
+mkdirSync(mobileAssets, { recursive: true });
+writePng(join(mobileAssets, 'icon.png'), 1024, roundedSvg(1024));
+writePng(join(mobileAssets, 'adaptive-icon.png'), 1024, foregroundSvg(1024));
 
 writePng(join(desktopIcons, '16x16.png'), 16, roundedSvg(16));
 writePng(join(desktopIcons, '32x32.png'), 32, roundedSvg(32));
 writePng(join(desktopIcons, '128x128.png'), 128, roundedSvg(128));
 writePng(join(desktopIcons, '128x128@2x.png'), 256, roundedSvg(256));
 writePng(join(desktopIcons, '256x256.png'), 256, roundedSvg(256));
-writePng(join(desktopIcons, 'icon.png'), 256, roundedSvg(256));
+writePng(join(desktopIcons, 'icon.png'), 512, roundedSvg(512));
 writeFileSync(join(desktopIcons, 'tray.png'), render(traySvg(64), 64));
 
 await writeIco(join(webPublic, 'favicon.ico'), [16, 32, 48], 0.06);
@@ -141,4 +148,4 @@ mkdirSync(preview, { recursive: true });
 cpSync(join(desktopIcons, 'icon.png'), join(preview, 'app-icon.png'));
 cpSync(join(desktopIcons, 'tray.png'), join(preview, 'tray.png'));
 
-console.log('rasterized Inwit mark into web/desktop assets');
+console.log('rasterized Inwit mark into web/mobile/desktop assets');

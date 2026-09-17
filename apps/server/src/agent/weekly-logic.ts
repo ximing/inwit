@@ -7,6 +7,7 @@ import {
 
 export const WEEKLY_REPORT_MEMORY_PREFIX = 'weekly_report:';
 export const WEEKLY_RELEARN_LIMIT = 3;
+export const WEEKLY_ANNOTATION_LIMIT = 10;
 
 export interface WeekReviewCounts {
   remembered: number;
@@ -31,6 +32,15 @@ export interface WeekRelearnConcept {
   reason?: string;
 }
 
+export interface WeekAnnotationItem {
+  id: string;
+  documentId: string;
+  documentTitle: string | null;
+  kind: string;
+  quote: string;
+  note: string;
+}
+
 export interface WeekStats {
   weekStart: string;
   weekEnd: string;
@@ -40,6 +50,8 @@ export interface WeekStats {
   newLinks: number;
   topicCoverage: WeekTopicCoverage[];
   relearn: WeekRelearnConcept[];
+  annotations: WeekAnnotationItem[];
+  annotationCount: number;
 }
 
 export function localDateKey(now: Date): string {
@@ -139,6 +151,7 @@ export function dataSummaryMarkdown(stats: WeekStats): string {
     `- 复习总次数 ${String(r.total)}`,
     `- 新卡片 ${String(stats.newCards)} 张`,
     `- 新建关联边 ${String(stats.newLinks)} 条`,
+    `- 新批注 ${String(stats.annotationCount)} 条`,
   ];
   if (stats.topicCoverage.length === 0) {
     lines.push('- 各主题地图覆盖率：还没有主题地图');
@@ -165,6 +178,23 @@ export function relearnMarkdown(relearn: readonly WeekRelearnConcept[]): string 
   return lines.join('\n');
 }
 
+/** Deep link to one annotation inside its document page (consumed by the docs workbench). */
+export function annotationDeepLink(documentId: string, annotationId: string): string {
+  return `/docs?doc=${documentId}&annotation=${annotationId}`;
+}
+
+export function annotationsMarkdown(annotations: readonly WeekAnnotationItem[]): string {
+  const noted = annotations.filter((item) => item.note.trim() !== '');
+  if (noted.length === 0) return '';
+  const lines = ['## 本周批注', ''];
+  for (const item of noted) {
+    const label = item.documentTitle ?? '未命名文档';
+    const link = `[批注](${annotationDeepLink(item.documentId, item.id)})`;
+    lines.push(`- ${link}（${label}）：${item.note.trim()}`);
+  }
+  return lines.join('\n');
+}
+
 export function ensureRelearnMarkdownLinks(
   contentMd: string,
   relearn: readonly WeekRelearnConcept[],
@@ -177,12 +207,25 @@ export function ensureRelearnMarkdownLinks(
   return `${contentMd.trim()}\n\n${extra}\n`;
 }
 
+export function ensureAnnotationLinks(
+  contentMd: string,
+  annotations: readonly WeekAnnotationItem[],
+): string {
+  const noted = annotations.filter((item) => item.note.trim() !== '');
+  if (noted.length === 0) return contentMd;
+  const missing = noted.filter((item) => !contentMd.includes(`annotation=${item.id}`));
+  if (missing.length === 0) return contentMd;
+  const extra = annotationsMarkdown(annotations);
+  if (!extra) return contentMd;
+  return `${contentMd.trim()}\n\n${extra}\n`;
+}
+
 export function ensureWeeklyReportBody(contentMd: string, stats: WeekStats): string {
   const trimmed = contentMd.trim();
   const withSummary = mentionsDistribution(trimmed)
     ? trimmed
     : `${dataSummaryMarkdown(stats)}\n\n${trimmed}`.trim();
-  return ensureRelearnMarkdownLinks(withSummary, stats.relearn);
+  return ensureAnnotationLinks(ensureRelearnMarkdownLinks(withSummary, stats.relearn), stats.annotations);
 }
 
 export function parseWeeklyReportMemory(content: MemoryContent | undefined | null): {

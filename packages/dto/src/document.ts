@@ -3,7 +3,15 @@ import { z } from 'zod';
 import { cardReviewSummarySchema, cardWithQuestionsSchema } from './card.js';
 import { paginationQuerySchema } from './common.js';
 
-export const DOCUMENT_SOURCES = ['editor', 'paste', 'chat', 'agent', 'import', 'screenshot'] as const;
+export const DOCUMENT_SOURCES = [
+  'editor',
+  'paste',
+  'chat',
+  'agent',
+  'import',
+  'screenshot',
+  'api',
+] as const;
 export const documentSourceSchema = z.enum(DOCUMENT_SOURCES);
 export type DocumentSource = z.infer<typeof documentSourceSchema>;
 
@@ -147,6 +155,21 @@ export const createDocumentInputSchema = z.object({
   source: z.enum(['editor', 'paste']).optional(),
 });
 export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>;
+
+/** Open-API (PAT) creation: raw html/markdown in, server converts to PM JSON. */
+export const MAX_OPEN_CONTENT_BYTES = 3 * 1024 * 1024;
+export const openCreateDocumentInputSchema = z
+  .object({
+    title: z.string().trim().min(1).max(500),
+    html: z.string().min(1).max(MAX_OPEN_CONTENT_BYTES).optional(),
+    markdown: z.string().min(1).max(MAX_OPEN_CONTENT_BYTES).optional(),
+    sourceUrl: z.string().url().max(2048).optional(),
+    topicId: z.string().uuid().optional(),
+  })
+  .refine((value) => (value.html !== undefined) !== (value.markdown !== undefined), {
+    message: 'exactly one of html or markdown is required',
+  });
+export type OpenCreateDocumentInput = z.infer<typeof openCreateDocumentInputSchema>;
 
 export const updateDocumentInputSchema = z
   .object({

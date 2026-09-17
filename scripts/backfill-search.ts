@@ -1,7 +1,8 @@
 import { getDb, pool } from '../apps/server/src/db/index.js';
-import { cards, documents } from '../apps/server/src/db/schema.js';
-import { indexCard, indexDocument } from '../apps/server/src/retrieval/pipeline.js';
+import { annotations, cards, documents } from '../apps/server/src/db/schema.js';
+import { indexAnnotation, indexCard, indexDocument } from '../apps/server/src/retrieval/pipeline.js';
 import {
+  annotationsStoreName,
   cardsStoreName,
   docsStoreName,
   ensureRetrievalStores,
@@ -18,7 +19,8 @@ try {
   const { meili } = getRetrievalClients();
   const docsName = docsStoreName();
   const cardsName = cardsStoreName();
-  console.log(`stores ${docsName} ${cardsName}`);
+  const annotationsName = annotationsStoreName();
+  console.log(`stores ${docsName} ${cardsName} ${annotationsName}`);
 
   const docs = await db
     .select({
@@ -87,14 +89,60 @@ try {
     }
   }
 
+  let indexedAnnotationIds = new Set<string>();
+  try {
+    indexedAnnotationIds = new Set(await meili.listIds(annotationsName));
+  } catch (err) {
+    console.warn(`list annotation ids failed, reindexing all annotations: ${failMessage(err)}`);
+  }
+
+  const annotationRows = await db
+    .select({
+      id: annotations.id,
+      userId: annotations.userId,
+      documentId: annotations.documentId,
+      kind: annotations.kind,
+      quote: annotations.quote,
+      note: annotations.note,
+    })
+    .from(annotations);
+
+  let annotationOk = 0;
+  let annotationSkip = 0;
+  let annotationFail = 0;
+  for (const [i, annotation] of annotationRows.entries()) {
+    if (indexedAnnotationIds.has(annotation.id)) {
+      annotationSkip += 1;
+    } else {
+      try {
+        await indexAnnotation(annotation);
+        annotationOk += 1;
+      } catch (err) {
+        annotationFail += 1;
+        console.error(`annotation fail ${annotation.id}: ${failMessage(err)}`);
+      }
+    }
+    if ((i + 1) % 50 === 0 || i + 1 === annotationRows.length) {
+      console.log(
+        `annotations ${String(i + 1)}/${String(annotationRows.length)} ok=${String(annotationOk)} skip=${String(annotationSkip)} fail=${String(annotationFail)}`,
+      );
+    }
+  }
+
   console.log(
     JSON.stringify({
       documents: { total: docs.length, ok: docOk, fail: docFail },
       cards: { total: cardRows.length, ok: cardOk, skip: cardSkip, fail: cardFail },
-      stores: { documents: docsName, cards: cardsName },
+      annotations: {
+        total: annotationRows.length,
+        ok: annotationOk,
+        skip: annotationSkip,
+        fail: annotationFail,
+      },
+      stores: { documents: docsName, cards: cardsName, annotations: annotationsName },
     }),
   );
-  if (docFail > 0 || cardFail > 0) process.exitCode = 1;
+  if (docFail > 0 || cardFail > 0 || annotationFail > 0) process.exitCode = 1;
 } catch (err) {
   console.error('backfill failed', err);
   process.exitCode = 1;

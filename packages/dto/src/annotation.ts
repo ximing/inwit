@@ -27,6 +27,8 @@ export const annotationSchema = z.object({
   geometry: annotationGeometrySchema.nullable(),
   imageKey: z.string().nullable(),
   positionMs: z.number().int().nullable(),
+  /** Derived: this annotation has already been converted into a card. */
+  hasConvertedCard: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

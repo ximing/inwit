@@ -146,6 +146,9 @@ const HubPane = observer(function HubPane() {
             今日待复习 <b>{due}</b> 张
             {due > 0 ? ` · 约 ${String(minutes)} 分钟` : null}
           </div>
+          {service.backlogCount > 0 ? (
+            <div className="due-backlog">另有 {String(service.backlogCount)} 张积压卡片会顺延</div>
+          ) : null}
           <button
             type="button"
             className="btn btn-primary"
@@ -214,6 +217,29 @@ const HubPane = observer(function HubPane() {
             忘了
           </span>
         </div>
+      </div>
+
+      <div className="hub-panel">
+        <div className="hub-panel-head">
+          <span className="hub-panel-title">最需要巩固</span>
+          <span className="hub-panel-sub">近 30 天里忘记或模糊最多的卡片</span>
+        </div>
+        {service.struggling.length === 0 ? (
+          <p className="hint">还没有明显卡壳的卡片，继续保持。</p>
+        ) : (
+          <div className="weak-list">
+            {service.struggling.map((card) => (
+              <Link className="weak-row" key={card.id} to={cardPath(card.id, card.documentId)}>
+                <span className="weak-concept">{card.concept}</span>
+                <span className="weak-meta">
+                  {card.forgotCount > 0 ? `忘了 ${String(card.forgotCount)} 次` : null}
+                  {card.forgotCount > 0 && card.fuzzyCount > 0 ? ' · ' : null}
+                  {card.fuzzyCount > 0 ? `模糊 ${String(card.fuzzyCount)} 次` : null}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="hub-panel">

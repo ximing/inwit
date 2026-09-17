@@ -10,12 +10,16 @@ export const ROUTES = {
   settings: '/settings',
 } as const;
 
-export function docsPath(docId?: string, opts?: { edit?: boolean; anchor?: string }): string {
-  if (!docId && !opts?.edit && !opts?.anchor) return ROUTES.docs;
+export function docsPath(
+  docId?: string,
+  opts?: { edit?: boolean; anchor?: string; annotation?: string },
+): string {
+  if (!docId && !opts?.edit && !opts?.anchor && !opts?.annotation) return ROUTES.docs;
   const params = new URLSearchParams();
   if (docId) params.set('doc', docId);
   if (opts?.edit) params.set('edit', '1');
   if (opts?.anchor) params.set('anchor', opts.anchor);
+  if (opts?.annotation) params.set('annotation', opts.annotation);
   const qs = params.toString();
   return qs ? `${ROUTES.docs}?${qs}` : ROUTES.docs;
 }
@@ -48,6 +52,10 @@ export function cardPath(cardId: string, documentId?: string | null): string {
 
 export function docAnchorPath(docId: string, cardId: string): string {
   return docsPath(docId, { anchor: cardId });
+}
+
+export function docAnnotationPath(docId: string, annotationId: string): string {
+  return docsPath(docId, { annotation: annotationId });
 }
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];

@@ -1,14 +1,25 @@
+import type { AnnotationKind } from '@inwit/dto';
 import { documentPlainText } from '../documents/content-json.js';
 import { logger } from '../utils/logger.js';
-import { cardsStoreName, docsStoreName, ensureRetrievalStores, getRetrievalClients } from './registry.js';
+import {
+  annotationsStoreName,
+  cardsStoreName,
+  docsStoreName,
+  ensureRetrievalStores,
+  getRetrievalClients,
+} from './registry.js';
 import { rrfMerge } from './rrf.js';
 import {
+  ANNOTATION_QUOTE_CHARS,
+  annotationEmbeddingText,
+  annotationIndexableQuote,
+  clipChars,
   documentEmbeddingText,
   meiliScopeFilter,
   qdrantScopeFilter,
 } from './search-logic.js';
 
-export { documentEmbeddingText } from './search-logic.js';
+export { annotationEmbeddingText, documentEmbeddingText } from './search-logic.js';
 
 export interface IndexableCard {
   id: string;
@@ -29,12 +40,22 @@ export interface IndexableDocument {
   topicId?: string | null;
 }
 
+export interface IndexableAnnotation {
+  id: string;
+  userId: string;
+  documentId: string;
+  kind: AnnotationKind;
+  quote: string;
+  note: string;
+}
+
 export type HybridSearchOptions = {
   topicId?: string | undefined;
   filterIds?: ((ids: string[]) => Promise<string[]>) | undefined;
 };
 
 const RECALL_LIMIT = 20;
+const ANNOTATION_NOTE_CHARS = 500;
 
 export function cardEmbeddingText(card: Pick<IndexableCard, 'concept' | 'example' | 'confusionPoint'>): string {
   return `${card.concept}\n${card.example}\n${card.confusionPoint}`;
@@ -78,6 +99,21 @@ function docIdOf(id: string | number, source: Record<string, unknown>): string {
   const fromPayload = asString(source.doc_id) ?? asString(source.docId);
   if (fromPayload) return fromPayload;
   return String(id);
+}
+
+function annotationIdOf(id: string | number, source: Record<string, unknown>): string {
+  const fromPayload = asString(source.annotation_id) ?? asString(source.annotationId);
+  if (fromPayload) return fromPayload;
+  return String(id);
+}
+
+function annotationPayloadText(source: Record<string, unknown>): string | null {
+  const stored = asString(source.text);
+  if (stored && stored.trim() !== '') return stored;
+  const note = asString(source.note) ?? '';
+  const quote = asString(source.quote) ?? '';
+  const joined = `${note}\n${quote}`.trim();
+  return joined === '' ? null : joined;
 }
 
 async function upsertBoth(
@@ -214,6 +250,75 @@ export async function deleteDocumentFromIndex(documentId: string): Promise<void>
   await deleteBoth(docsStoreName(), documentId, 'deleteDocumentFromIndex');
 }
 
+function annotationDoc(a: IndexableAnnotation, text: string): Record<string, unknown> {
+  return {
+    id: a.id,
+    annotation_id: a.id,
+    user_id: a.userId,
+    doc_id: a.documentId,
+    kind: a.kind,
+    note: clipChars(a.note, ANNOTATION_NOTE_CHARS),
+    quote: annotationIndexableQuote(a.quote, ANNOTATION_QUOTE_CHARS),
+    text,
+  };
+}
+
+/**
+ * Index (or re-index) one annotation. When there is no semantic text (empty
+ * note + placeholder quote), the annotation goes to Meili only — keyword
+ * search still works and no embedding call is spent on a placeholder.
+ */
+export async function indexAnnotation(a: IndexableAnnotation): Promise<void> {
+  await ensureRetrievalStores();
+  const name = annotationsStoreName();
+  const text = annotationEmbeddingText(a);
+  const doc = annotationDoc(a, text);
+  if (text === '') {
+    const { qdrant, meili } = getRetrievalClients();
+    await Promise.all([
+      qdrant.deletePoints(name, [a.id]).catch(() => undefined),
+      meili.upsertDocuments(name, [doc]),
+    ]);
+    return;
+  }
+  const { embedding } = getRetrievalClients();
+  const vectors = await embedding.embedTexts([text], { userId: a.userId });
+  const vector = vectors[0];
+  if (!vector || vector.length === 0) {
+    throw new Error('embedding returned no vector for annotation content');
+  }
+  await upsertBoth(name, a.id, vector, doc, doc, 'indexAnnotation');
+}
+
+/** Remove one annotation from both indexes. */
+export async function deleteAnnotationFromIndex(annotationId: string): Promise<void> {
+  await ensureRetrievalStores();
+  await deleteBoth(annotationsStoreName(), annotationId, 'deleteAnnotationFromIndex');
+}
+
+/** Failures are logged; callers keep the main write path. */
+export async function tryIndexAnnotation(a: IndexableAnnotation): Promise<void> {
+  try {
+    await indexAnnotation(a);
+  } catch (err) {
+    logger.warn('retrieval.index_annotation_failed', {
+      annotationId: a.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+export async function tryDeleteAnnotationFromIndex(annotationId: string): Promise<void> {
+  try {
+    await deleteAnnotationFromIndex(annotationId);
+  } catch (err) {
+    logger.warn('retrieval.delete_annotation_failed', {
+      annotationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 /** Failures are logged; callers keep the main write path. */
 export async function tryIndexDocument(doc: IndexableDocument): Promise<void> {
   try {
@@ -221,6 +326,18 @@ export async function tryIndexDocument(doc: IndexableDocument): Promise<void> {
   } catch (err) {
     logger.warn('retrieval.index_document_failed', {
       documentId: doc.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** Warn-only card indexing for user-facing write paths (manual card creation). */
+export async function tryIndexCard(card: IndexableCard): Promise<void> {
+  try {
+    await indexCard(card);
+  } catch (err) {
+    logger.warn('retrieval.index_card_failed', {
+      cardId: card.id,
       error: err instanceof Error ? err.message : String(err),
     });
   }
@@ -359,5 +476,29 @@ export async function searchDocuments(
     filterIds: options?.filterIds,
     idOf: docIdOf,
     textOf: documentPayloadText,
+  });
+}
+
+/**
+ * Hybrid annotation search: same dual-path → RRF → rerank.
+ * topicId scoping relies on `filterIds` (DB join) only — the annotation
+ * payload carries no topic_id, so an index-side topic filter would match
+ * nothing, and the payload never goes stale when a document changes topic.
+ */
+export async function searchAnnotations(
+  userId: string,
+  query: string,
+  limit = 8,
+  options?: HybridSearchOptions,
+): Promise<string[]> {
+  await ensureRetrievalStores();
+  return hybridSearchIds({
+    storeName: annotationsStoreName(),
+    userId,
+    query,
+    limit,
+    filterIds: options?.filterIds,
+    idOf: annotationIdOf,
+    textOf: annotationPayloadText,
   });
 }

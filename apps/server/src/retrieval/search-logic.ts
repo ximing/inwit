@@ -1,6 +1,8 @@
+import { IMAGE_EXCERPT_QUOTE } from '@inwit/dto';
 import { documentPlainText } from '../documents/content-json.js';
 
 export const DOCUMENT_EMBEDDING_CONTENT_CHARS = 500;
+export const ANNOTATION_QUOTE_CHARS = 300;
 
 export function clipChars(value: string, max: number): string {
   const chars = [...value];
@@ -18,6 +20,24 @@ export function documentEmbeddingText(doc: {
   const description = (doc.description ?? '').trim();
   const head = clipChars(documentPlainText(doc.contentJson), DOCUMENT_EMBEDDING_CONTENT_CHARS).trim();
   return [title, description, head].filter((part) => part.length > 0).join('\n');
+}
+
+/**
+ * Annotation embedding text: note first (the user's own thinking), then a
+ * clipped quote. The `[图片摘录]` placeholder carries no semantics and is
+ * normalized away. Empty string means "nothing worth embedding" (Meili-only).
+ */
+export function annotationEmbeddingText(annotation: { quote: string; note: string }): string {
+  const note = annotation.note.trim();
+  const rawQuote = annotation.quote.trim();
+  const quote = rawQuote === IMAGE_EXCERPT_QUOTE ? '' : clipChars(rawQuote, ANNOTATION_QUOTE_CHARS);
+  return [note, quote].filter((part) => part.length > 0).join('\n');
+}
+
+/** Quote text worth indexing/displaying; the placeholder normalizes to empty. */
+export function annotationIndexableQuote(quote: string, max = ANNOTATION_QUOTE_CHARS): string {
+  const trimmed = quote.trim();
+  return trimmed === IMAGE_EXCERPT_QUOTE ? '' : clipChars(trimmed, max);
 }
 
 export function escapeIlikePattern(value: string): string {

@@ -44,6 +44,11 @@ export const ERROR_MESSAGES = {
   DOCUMENT_NOT_RETRYABLE: '当前文档无法重试',
   ANNOTATION_IMAGE_NOT_FOUND: '批注图片不存在',
   CARD_IMAGE_NOT_FOUND: '卡片图片不存在',
+  RESURFACE_NOT_FOUND: '这条批注回顾不存在',
+  RESURFACE_NOT_PENDING: '这条批注回顾已经处理过了',
+  ANNOTATION_ALREADY_CONVERTED: '这条批注已经转成卡片了',
+  PAT_REQUIRED: '此接口仅支持个人访问令牌（PAT）调用',
+  RATE_LIMITED: '请求过于频繁，请稍后再试',
 } as const;
 
 export type ErrorCode = keyof typeof ERROR_MESSAGES;

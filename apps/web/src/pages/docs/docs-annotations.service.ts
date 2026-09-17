@@ -1,6 +1,6 @@
 import { Service } from '@rabjs/react';
 import {
-  excerptCardInputFromAnnotation,
+  cardInputFromAnnotation,
   type Annotation,
   type CreateAnnotationInput,
 } from '@inwit/dto';
@@ -143,9 +143,9 @@ export class DocsAnnotationsService extends Service {
     if (this.convertingAnnotationId) return false;
     const item = this.annotations.find((note) => note.id === annotationId);
     if (!item) return false;
-    const input = excerptCardInputFromAnnotation(item);
+    const input = cardInputFromAnnotation(item);
     if (!input) {
-      this.docs.showToast('这条批注没有截图');
+      this.docs.showToast('这条批注还没有笔记');
       return false;
     }
     this.convertingAnnotationId = annotationId;

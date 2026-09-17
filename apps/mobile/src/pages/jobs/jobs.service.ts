@@ -18,6 +18,7 @@ export const JOB_TYPES: JobType[] = [
   'selection',
   'extract',
   'ocr',
+  'annotation_resurface',
 ];
 export const JOB_STATUSES: JobStatus[] = ['pending', 'running', 'done', 'failed'];
 
@@ -30,6 +31,7 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
   selection: '选段',
   extract: '提取',
   ocr: '识别',
+  annotation_resurface: '批注回顾',
 };
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {

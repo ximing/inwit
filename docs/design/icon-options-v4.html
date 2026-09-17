@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>inwit icon 终选 v4</title>
+<style>
+  :root {
+    --bg: #f6f3ec; --surface: #fffdf8; --ink: #221d16;
+    --ink-2: #574e41; --ink-3: #8b8172; --line: #e6dfd0; --accent: #b3402a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--bg); color: var(--ink);
+    padding: 48px 32px 80px; -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-family: "Songti SC", "Noto Serif SC", serif; font-size: 26px; margin-bottom: 6px; }
+  .sub { color: var(--ink-3); font-size: 13px; margin-bottom: 36px; }
+  .finals {
+    background: var(--surface); border: 1.5px solid var(--accent); border-radius: 18px;
+    padding: 30px 32px 34px; margin-bottom: 32px;
+  }
+  .finals h2 { font-family: "Songti SC", serif; font-size: 18px; margin-bottom: 22px; }
+  .finals-row { display: flex; align-items: flex-end; gap: 56px; flex-wrap: wrap; }
+  .finals-cell { text-align: center; }
+  .finals-cell .name { font-size: 13px; font-weight: 600; margin-top: 10px; }
+  .finals-cell .en { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+  .sizes { display: flex; gap: 10px; justify-content: center; align-items: flex-end; margin-top: 12px; }
+  .homescreen {
+    margin-top: 26px;
+    background: linear-gradient(160deg, #3a4048, #23262c);
+    border-radius: 22px; padding: 34px 28px 30px;
+    display: flex; gap: 44px; justify-content: center; flex-wrap: wrap;
+  }
+  .hs-icon { text-align: center; }
+  .hs-icon svg { display: block; margin: 0 auto; filter: drop-shadow(0 3px 8px rgba(0,0,0,0.35)); }
+  .hs-icon .appname { color: rgba(255,255,255,0.92); font-size: 11px; margin-top: 7px; }
+  .option {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 28px 32px 32px; margin-bottom: 28px;
+  }
+  .option-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+  .option-head .no { font-size: 13px; color: var(--accent); font-weight: 700; letter-spacing: .08em; }
+  .option-head h2 { font-family: "Songti SC", serif; font-size: 20px; }
+  .option-head .tag { font-size: 11px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  .meaning { color: var(--ink-2); font-size: 13.5px; margin-bottom: 24px; max-width: 660px; line-height: 1.7; }
+  .row { display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap; }
+  .cell { text-align: center; }
+  .cell .label { font-size: 11px; color: var(--ink-3); margin-top: 8px; }
+  .cell svg { display: block; margin: 0 auto; }
+  .darkbox { background: #221d16; padding: 10px; border-radius: 12px; display: inline-block; }
+  .variant-sep { border: none; border-top: 1px dashed var(--line); margin: 26px 0; }
+  .variant-name { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 16px; }
+  .divider { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  .note { font-size: 12.5px; color: var(--ink-3); line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<h1>inwit 图标 · 终选</h1>
+<p class="sub">A2 双叶 i / B1「in」之门 / B3 复习回环 · B1、B3 附微调变体 · 2026-09</p>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F7F3EC"/>
+    </linearGradient>
+    <linearGradient id="tileDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A332A"/>
+      <stop offset="1" stop-color="#2A241D"/>
+    </linearGradient>
+    <clipPath id="squircle"><rect x="1" y="1" width="30" height="30" rx="7"/></clipPath>
+    <clipPath id="circle"><circle cx="16" cy="16" r="15"/></clipPath>
+    <path id="tilepath" d="M8.68 1.5h14.64c4.39 0 6.76 2.37 6.76 6.76v14.64c0 4.39-2.37 6.76-6.76 6.76H8.68C4.29 29.66 1.92 27.29 1.92 22.9V8.26c0-4.39 2.37-6.76 6.76-6.76Z"/>
+  </defs>
+</svg>
+
+<!-- ============ 图标定义 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+
+<!-- A2 双叶 i -->
+<g id="a2">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M16 15.8 Q 17.3 10.2 23.2 10.4 Q 22.2 15.8 16 15.8 Z" fill="#B3402A"/>
+  <path d="M16 18.6 Q 14.7 13 9.8 13.2 Q 10.8 18.6 16 18.6 Z" fill="#B3402A"/>
+  <path d="M16 15.8 V 25" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.4" r="2.3" fill="#B3402A"/>
+</g>
+<g id="a2-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M16 15.8 Q 17.3 10.2 23.2 10.4 Q 22.2 15.8 16 15.8 Z" fill="#E06B4E"/>
+  <path d="M16 18.6 Q 14.7 13 9.8 13.2 Q 10.8 18.6 16 18.6 Z" fill="#E06B4E"/>
+  <path d="M16 15.8 V 25" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.4" r="2.3" fill="#E06B4E"/>
+</g>
+
+<!-- B1-a in 之门（原版） -->
+<g id="b1a">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <circle cx="9.4" cy="7.4" r="2.2" fill="#B3402A"/>
+  <path d="M9.4 12.5 V 24" stroke="#B3402A" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M15.6 24 V 14.5 C 15.6 10.8 17.9 8.8 20.7 8.8 C 23.5 8.8 25.6 10.8 25.6 14.5 V 24" fill="none" stroke="#B3402A" stroke-width="2.5" stroke-linecap="round"/>
+</g>
+<g id="b1a-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <circle cx="9.4" cy="7.4" r="2.2" fill="#E06B4E"/>
+  <path d="M9.4 12.5 V 24" stroke="#E06B4E" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M15.6 24 V 14.5 C 15.6 10.8 17.9 8.8 20.7 8.8 C 23.5 8.8 25.6 10.8 25.6 14.5 V 24" fill="none" stroke="#E06B4E" stroke-width="2.5" stroke-linecap="round"/>
+</g>
+
+<!-- B1-b in 之门 · 豆入门 -->
+<g id="b1b">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <circle cx="9.4" cy="7.4" r="2.2" fill="#B3402A"/>
+  <path d="M9.4 12.5 V 24" stroke="#B3402A" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M15.6 24 V 14.5 C 15.6 10.8 17.9 8.8 20.7 8.8 C 23.5 8.8 25.6 10.8 25.6 14.5 V 24" fill="none" stroke="#B3402A" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="20.6" cy="20.2" r="2" fill="#B3402A"/>
+</g>
+<g id="b1b-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <circle cx="9.4" cy="7.4" r="2.2" fill="#E06B4E"/>
+  <path d="M9.4 12.5 V 24" stroke="#E06B4E" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M15.6 24 V 14.5 C 15.6 10.8 17.9 8.8 20.7 8.8 C 23.5 8.8 25.6 10.8 25.6 14.5 V 24" fill="none" stroke="#E06B4E" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="20.6" cy="20.2" r="2" fill="#E06B4E"/>
+</g>
+
+<!-- B3-a 复习回环（原版，环心点） -->
+<g id="b3a">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M20.9 9 A 8.5 8.5 0 1 1 11.1 9" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M12 10 L 13.6 7.3 L 10.5 7.9" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="16" r="2.6" fill="#B3402A"/>
+</g>
+<g id="b3a-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M20.9 9 A 8.5 8.5 0 1 1 11.1 9" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M12 10 L 13.6 7.3 L 10.5 7.9" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="16" r="2.6" fill="#E06B4E"/>
+</g>
+
+<!-- B3-b 复习回环 · 环心卡 -->
+<g id="b3b">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M20.9 9 A 8.5 8.5 0 1 1 11.1 9" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M12 10 L 13.6 7.3 L 10.5 7.9" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="13.1" y="12.7" width="5.8" height="7" rx="1.2" fill="#FFFDF8" stroke="#B3402A" stroke-width="1.4"/>
+</g>
+<g id="b3b-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M20.9 9 A 8.5 8.5 0 1 1 11.1 9" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M12 10 L 13.6 7.3 L 10.5 7.9" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="13.1" y="12.7" width="5.8" height="7" rx="1.2" fill="#F6F3EC" stroke="#B3402A" stroke-width="1.4"/>
+</g>
+
+<!-- B3-c 回环 i（顶部点为 i 的点，无环心） -->
+<g id="b3c">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M20.9 10.2 A 8.5 8.5 0 1 1 11.1 10.2" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round" transform="translate(0 1.2)"/>
+  <path d="M12 11.2 L 13.6 8.5 L 10.5 9.1" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 1.2)"/>
+  <circle cx="16" cy="6.6" r="2.2" fill="#B3402A"/>
+</g>
+<g id="b3c-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M20.9 10.2 A 8.5 8.5 0 1 1 11.1 10.2" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round" transform="translate(0 1.2)"/>
+  <path d="M12 11.2 L 13.6 8.5 L 10.5 9.1" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 1.2)"/>
+  <circle cx="16" cy="6.6" r="2.2" fill="#E06B4E"/>
+</g>
+
+</defs></svg>
+
+<!-- ============ 终选对比区 ============ -->
+<div class="finals">
+  <h2>终选三强 · 并排对比</h2>
+  <div class="finals-row">
+    <div class="finals-cell">
+      <svg width="140" height="140" viewBox="0 0 32 32"><use href="#a2"/></svg>
+      <div class="name">A2 · 双叶 i</div>
+      <div class="en">发芽 / 成长</div>
+      <div class="sizes">
+        <svg width="32" height="32" viewBox="0 0 32 32"><use href="#a2"/></svg>
+        <svg width="16" height="16" viewBox="0 0 32 32"><use href="#a2"/></svg>
+      </div>
+    </div>
+    <div class="finals-cell">
+      <svg width="140" height="140" viewBox="0 0 32 32"><use href="#b1a"/></svg>
+      <div class="name">B1 ·「in」之门</div>
+      <div class="en">字标 / 扔进去</div>
+      <div class="sizes">
+        <svg width="32" height="32" viewBox="0 0 32 32"><use href="#b1a"/></svg>
+        <svg width="16" height="16" viewBox="0 0 32 32"><use href="#b1a"/></svg>
+      </div>
+    </div>
+    <div class="finals-cell">
+      <svg width="140" height="140" viewBox="0 0 32 32"><use href="#b3a"/></svg>
+      <div class="name">B3 · 复习回环</div>
+      <div class="en">间隔重复</div>
+      <div class="sizes">
+        <svg width="32" height="32" viewBox="0 0 32 32"><use href="#b3a"/></svg>
+        <svg width="16" height="16" viewBox="0 0 32 32"><use href="#b3a"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="homescreen">
+    <div class="hs-icon"><svg width="58" height="58" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#a2"/></g></svg><div class="appname">inwit</div></div>
+    <div class="hs-icon"><svg width="58" height="58" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b1a"/></g></svg><div class="appname">inwit</div></div>
+    <div class="hs-icon"><svg width="58" height="58" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b3a"/></g></svg><div class="appname">inwit</div></div>
+  </div>
+</div>
+
+<!-- ============ B1 变体 ============ -->
+<div class="option">
+  <div class="option-head"><span class="no">B1</span><h2>「in」之门 · 变体</h2><span class="tag">字标</span></div>
+  <p class="meaning">B1-b 在 n 的门洞里放了一颗豆子——「有东西被扔了进去」。比原版多一层叙事，也打破了纯字标的安静；如果嫌它挤，就用 B1-a 原版。</p>
+
+  <div class="variant-name">B1-a · 原版（纯字标）</div>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b1a"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b1a"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b1a"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b1a"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b1a"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b1a"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b1a-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+
+  <hr class="variant-sep">
+
+  <div class="variant-name">B1-b · 豆入门（叙事版）</div>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b1b"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b1b"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b1b"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b1b"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b1b"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b1b"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b1b-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ B3 变体 ============ -->
+<div class="option">
+  <div class="option-head"><span class="no">B3</span><h2>复习回环 · 变体</h2><span class="tag">间隔重复</span></div>
+  <p class="meaning">B3-b 把环心的点换成一张小卡片，直指「卡片会回来找你」；B3-c 去掉环心、在回环正上方放一点——整个回环变成 i 的竖身，点一扣，回环也是字母 i（复习 + inwit 双关）。</p>
+
+  <div class="variant-name">B3-a · 原版（环心点）</div>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b3a"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b3a"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b3a"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b3a"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b3a"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b3a"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b3a-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+
+  <hr class="variant-sep">
+
+  <div class="variant-name">B3-b · 环心卡</div>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b3b"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b3b"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b3b"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b3b"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b3b"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b3b"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b3b-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+
+  <hr class="variant-sep">
+
+  <div class="variant-name">B3-c · 回环 i（点扣回环 = 字母 i）</div>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b3c"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b3c"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b3c"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b3c"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b3c"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b3c"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b3c-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<hr class="divider">
+<p class="note">
+  三个方向的「一句话」：A2 = 成长（扔进去长出来）· B1 = 入口（in 即门，扔进去）· B3 = 复习（卡片会回来）。<br>
+  定了哪一个（含变体）后，我统一产出 web（favicon.svg/.ico、apple-touch-icon）、mobile（Expo icon/splash）、desktop（Tauri icns/ico/png）全套资源。
+</p>
+
+</body>
+</html>

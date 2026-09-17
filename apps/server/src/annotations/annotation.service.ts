@@ -10,6 +10,7 @@ import { annotations, type AnnotationRow } from '../db/schema.js';
 import { isExcerptKeyFor } from '../documents/excerpt-logic.js';
 import { getOwnedDocument } from '../documents/document.service.js';
 import { AppError } from '../errors.js';
+import { tryDeleteAnnotationFromIndex, tryIndexAnnotation } from '../retrieval/pipeline.js';
 import { presignGet } from '../storage/client.js';
 
 export function toPublicAnnotation(row: AnnotationRow): Annotation {
@@ -25,6 +26,7 @@ export function toPublicAnnotation(row: AnnotationRow): Annotation {
     geometry: row.geometry ?? null,
     imageKey: row.imageKey ?? null,
     positionMs: row.positionMs ?? null,
+    hasConvertedCard: row.convertedCardId != null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -77,6 +79,7 @@ export async function createAnnotation(
     })
     .returning();
   if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
+  await tryIndexAnnotation(row);
   return toPublicAnnotation(row);
 }
 
@@ -108,6 +111,7 @@ export async function updateAnnotation(
     .where(and(eq(annotations.id, id), eq(annotations.userId, userId)))
     .returning();
   if (!row) throw AppError.of(404, 'ANNOTATION_NOT_FOUND');
+  await tryIndexAnnotation(row);
   return toPublicAnnotation(row);
 }
 
@@ -116,4 +120,5 @@ export async function deleteAnnotation(userId: string, id: string): Promise<void
   await getDb()
     .delete(annotations)
     .where(and(eq(annotations.id, id), eq(annotations.userId, userId)));
+  await tryDeleteAnnotationFromIndex(id);
 }

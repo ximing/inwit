@@ -6,6 +6,7 @@ import {
   FileText,
   MessageCircle,
   ScanText,
+  StickyNote,
   Sparkles,
   type LucideIcon,
 } from 'lucide-react';
@@ -40,6 +41,7 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
   selection: Sparkles,
   extract: FileText,
   ocr: ScanText,
+  annotation_resurface: StickyNote,
 };
 
 function JobIcon({ type, size }: { type: JobType; size: 'lg' | 'sm' }) {

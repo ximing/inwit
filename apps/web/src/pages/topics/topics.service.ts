@@ -6,10 +6,12 @@ import type {
   MapNodeDetail,
   MapSummary,
   MapTreeNode,
+  ReviewTopicStat,
   Topic,
 } from '@inwit/dto';
 import { isChatQuestion, topicJobPayloadFrom } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
+import { getReviewTopicStats } from '@/api/review';
 import { listDocuments } from '@/api/documents';
 import { ReaderService } from '@/components/reader/reader.service';
 import {
@@ -113,6 +115,8 @@ export function chapterMeta(node: MapTreeNode): string {
 
 export class TopicsService extends Service {
   items: TopicListItem[] = [];
+  /** topicId → 近 7 天复习量/想起率。加载失败时保持为空，UI 静默隐藏。 */
+  topicStats: ReviewTopicStat[] = [];
   error: string | null = null;
   detailError: string | null = null;
   newTopicOpen = false;
@@ -240,6 +244,10 @@ export class TopicsService extends Service {
 
   get masteryPct(): number {
     return this.summary?.masteryPct ?? this.selectedItem?.masteryPct ?? 0;
+  }
+
+  retentionFor(topicId: string): ReviewTopicStat | null {
+    return this.topicStats.find((stat) => stat.topicId === topicId) ?? null;
   }
 
   hangingTitle(doc: DocumentListItem): string | null {
@@ -405,11 +413,20 @@ export class TopicsService extends Service {
 
   async load(): Promise<void> {
     this.error = null;
+    void this.loadTopicStats();
     try {
       const topics = await listTopics();
       this.items = await Promise.all(topics.map((topic) => this._enrich(topic)));
     } catch (err) {
       this.error = errorMessage(err, '加载主题失败');
+    }
+  }
+
+  private async loadTopicStats(): Promise<void> {
+    try {
+      this.topicStats = await getReviewTopicStats();
+    } catch {
+      this.topicStats = [];
     }
   }
 

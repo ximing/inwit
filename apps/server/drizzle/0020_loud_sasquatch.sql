@@ -1,0 +1,3 @@
+ALTER TABLE "annotations" ADD COLUMN "converted_card_id" uuid;--> statement-breakpoint
+ALTER TABLE "annotations" ADD CONSTRAINT "annotations_converted_card_id_cards_id_fk" FOREIGN KEY ("converted_card_id") REFERENCES "public"."cards"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_annotations_converted_card" ON "annotations" USING btree ("converted_card_id");

@@ -1,12 +1,14 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
-import type { MemoryContent } from '@inwit/dto';
+import { docDisplayTitle, type MemoryContent } from '@inwit/dto';
 import { and, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
-import { cardLinks, cards, documents, mapNodes, reviewLogs, reviewStates, topics } from '../db/schema.js';
+import { annotations, cardLinks, cards, documents, mapNodes, reviewLogs, reviewStates, topics } from '../db/schema.js';
 import { markdownToContentJson } from '../documents/content-json.js';
+import { clipChars } from '../retrieval/search-logic.js';
 import { loadUserMasteryMemory, upsertUserMasteryMemory } from '../review/mastery-memory.js';
 import {
+  WEEKLY_ANNOTATION_LIMIT,
   WEEKLY_RELEARN_LIMIT,
   coveragePct,
   defaultWeeklySummary,
@@ -18,6 +20,7 @@ import {
   successRateFromCounts,
   weeklyReportMemoryKey,
   weeklyReportTitle,
+  type WeekAnnotationItem,
   type WeekRelearnConcept,
   type WeekStats,
   type WeekTopicCoverage,
@@ -99,6 +102,48 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
     .where(
       and(eq(cardLinks.userId, userId), gte(cardLinks.createdAt, start), lt(cardLinks.createdAt, endExclusive)),
     );
+
+  const [annotationRow] = await db
+    .select({ n: count() })
+    .from(annotations)
+    .where(
+      and(
+        eq(annotations.userId, userId),
+        gte(annotations.createdAt, start),
+        lt(annotations.createdAt, endExclusive),
+      ),
+    );
+
+  const annotationRows = await db
+    .select({
+      id: annotations.id,
+      documentId: annotations.documentId,
+      kind: annotations.kind,
+      quote: annotations.quote,
+      note: annotations.note,
+      docTitle: documents.title,
+      docDescription: documents.description,
+    })
+    .from(annotations)
+    .innerJoin(documents, eq(documents.id, annotations.documentId))
+    .where(
+      and(
+        eq(annotations.userId, userId),
+        gte(annotations.createdAt, start),
+        lt(annotations.createdAt, endExclusive),
+      ),
+    )
+    .orderBy(desc(annotations.createdAt))
+    .limit(WEEKLY_ANNOTATION_LIMIT);
+
+  const weekAnnotations: WeekAnnotationItem[] = annotationRows.map((row) => ({
+    id: row.id,
+    documentId: row.documentId,
+    documentTitle: docDisplayTitle({ title: row.docTitle, description: row.docDescription }),
+    kind: row.kind,
+    quote: clipChars(row.quote, 80),
+    note: clipChars(row.note, 120),
+  }));
 
   const topicRows = await db
     .select({
@@ -194,6 +239,8 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
     newLinks: Number(linkRow?.n ?? 0),
     topicCoverage,
     relearn,
+    annotations: weekAnnotations,
+    annotationCount: Number(annotationRow?.n ?? 0),
   };
 }
 
@@ -224,6 +271,7 @@ async function upsertWeeklyMemory(
     reviews: stats.reviews,
     newCards: stats.newCards,
     newLinks: stats.newLinks,
+    annotationCount: stats.annotationCount,
     generatedAt: now.toISOString(),
   };
   if (session.documentId) content.documentId = session.documentId;
@@ -245,7 +293,7 @@ export function readWeekStatsTool(session: WeeklySession): AgentTool<typeof read
     name: 'read_week_stats',
     label: '读取本周统计',
     description:
-      '读取本周（周一起）SQL 聚合：三档回忆分布与成功率、复习总次数、新卡片数、新建关联边数、各主题地图覆盖率、lapses 最多的 3 个概念（含 cardId）。必须先调用。统计不消耗 token。',
+      '读取本周（周一起）SQL 聚合：三档回忆分布与成功率、复习总次数、新卡片数、新建关联边数、各主题地图覆盖率、lapses 最多的 3 个概念（含 cardId）、本周新批注列表（含 documentId/annotationId）。必须先调用。统计不消耗 token。',
     parameters: readWeekStatsSchema,
     execute: async () => {
       const stats = await loadWeekStats(session);

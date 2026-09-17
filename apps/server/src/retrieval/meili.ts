@@ -37,6 +37,12 @@ export const DOCS_INDEX_SETTINGS: MeiliIndexSettings = {
   localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
 };
 
+export const ANNOTATION_INDEX_SETTINGS: MeiliIndexSettings = {
+  filterableAttributes: ['user_id', 'annotation_id', 'doc_id', 'kind', 'id'],
+  searchableAttributes: ['note', 'quote', 'text'],
+  localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
+};
+
 const TASK_TIMEOUT_MS = 30_000;
 
 function asHits(value: unknown): Record<string, unknown>[] {

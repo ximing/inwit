@@ -1,6 +1,7 @@
 import { Service } from '@rabjs/react';
 import {
   isChatQuestion,
+  type AnnotationResurface,
   type DocumentListItem,
   type Job,
   type ReviewStats,
@@ -8,6 +9,11 @@ import {
   type TopicSuggestion,
   type WeeklyReportLatest,
 } from '@inwit/dto';
+import {
+  acceptAnnotationResurface,
+  dismissAnnotationResurface,
+  getAnnotationResurface,
+} from '@/api/annotations';
 import { errorMessage } from '@/api/client';
 import { listDocuments } from '@/api/documents';
 import {
@@ -46,8 +52,11 @@ export class TodayService extends Service {
   error: string | null = null;
   toast: string | null = null;
   suggestion: TopicSuggestion | null = null;
+  resurface: AnnotationResurface | null = null;
   weeklyReport: WeeklyReportLatest | null = null;
   dueCount = 0;
+  /** 超出每日上限、会被顺延的积压卡片数。 */
+  overdueBacklog = 0;
   streak = 0;
   totalCards = 0;
   reviewLoaded = false;
@@ -130,6 +139,7 @@ export class TodayService extends Service {
       await Promise.all([
         this.loadDocuments(),
         this.loadSuggestions(),
+        this.loadResurface(),
         this.loadWeeklyReport(),
         this.loadReview(),
         this.loadJobs(),
@@ -274,6 +284,38 @@ export class TodayService extends Service {
     }
   }
 
+  async loadResurface(): Promise<void> {
+    try {
+      const result = await getAnnotationResurface();
+      this.resurface = result.resurface;
+    } catch {
+      // Resurface banner is optional; keep the last snapshot.
+    }
+  }
+
+  async acceptResurface(annotationId: string): Promise<void> {
+    if (!this.resurface) return;
+    this.error = null;
+    try {
+      const result = await acceptAnnotationResurface(this.resurface.key, annotationId);
+      this.resurface = result.resurface;
+      this.showToast('已转成卡片，进入复习队列');
+    } catch (err) {
+      this.error = errorMessage(err, '转卡片失败');
+    }
+  }
+
+  async dismissResurface(): Promise<void> {
+    if (!this.resurface) return;
+    this.error = null;
+    try {
+      await dismissAnnotationResurface(this.resurface.key);
+      this.resurface = null;
+    } catch (err) {
+      this.error = errorMessage(err, '忽略失败');
+    }
+  }
+
   syncPolling(): void {
     const pending = hasPendingDoc(this.documents);
     const waitingSuggest = Date.now() < this.suggestDeadline;
@@ -311,5 +353,6 @@ export class TodayService extends Service {
   private applyStats(stats: ReviewStats): void {
     this.streak = stats.streak.current;
     this.totalCards = stats.totalCards;
+    this.overdueBacklog = Math.max(0, stats.overdueCount - this.dueCount);
   }
 }

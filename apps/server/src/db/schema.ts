@@ -266,12 +266,17 @@ export const annotations = pgTable(
     /** Object storage key (not a URL). */
     imageKey: text('image_key'),
     positionMs: integer('position_ms'),
+    /** Card this annotation was converted into (null = not converted). */
+    convertedCardId: uuid('converted_card_id').references(() => cards.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
   },
   (t) => [
     index('idx_annotations_user').on(t.userId),
     index('idx_annotations_document').on(t.documentId),
+    index('idx_annotations_converted_card').on(t.convertedCardId),
     enumCheck('annotations_kind_check', t.kind, ANNOTATION_KINDS),
   ],
 );

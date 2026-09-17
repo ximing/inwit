@@ -13,6 +13,7 @@ import {
   FileText,
   MessageCircle,
   ScanText,
+  StickyNote,
   Search,
   Sparkles,
   type LucideIcon,
@@ -36,6 +37,7 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
   selection: Sparkles,
   extract: FileText,
   ocr: ScanText,
+  annotation_resurface: StickyNote,
 };
 
 function hotkeyGlyph(): string {
@@ -276,6 +278,43 @@ const TodayPageContent = observer(function TodayPageContent() {
         </div>
       ) : null}
 
+      {service.resurface ? (
+        <div className="banner" role="status">
+          <div className="banner-ico" aria-hidden>
+            📝
+          </div>
+          <div className="banner-body">
+            <div className="banner-title">批注回顾</div>
+            <div className="banner-sub">
+              你有 {service.resurface.annotations.length} 条两周前的批注还没消化成卡片
+              {service.resurface.annotations[0]?.documentTitle
+                ? `，比如《${service.resurface.annotations[0].documentTitle}》里的那条`
+                : ''}
+              。
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={service.$model.acceptResurface.loading || service.$model.dismissResurface.loading}
+            onClick={() => {
+              const first = service.resurface?.annotations[0];
+              if (first) void service.acceptResurface(first.id);
+            }}
+          >
+            {service.$model.acceptResurface.loading ? '转换中…' : '转成卡片'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={service.$model.acceptResurface.loading || service.$model.dismissResurface.loading}
+            onClick={() => void service.dismissResurface()}
+          >
+            {service.$model.dismissResurface.loading ? '忽略中…' : '忽略'}
+          </button>
+        </div>
+      ) : null}
+
       <div className="action-grid">
         <Link className="action-card action-review" to={ROUTES.review}>
           <span className="action-kicker">🔥 连续复习 {service.streak} 天</span>
@@ -285,7 +324,11 @@ const TodayPageContent = observer(function TodayPageContent() {
                 {service.dueCount}{' '}
                 <small>张待复习 · 约 {estimateReviewMinutes(service.dueCount)} 分钟</small>
               </span>
-              <span className="action-sub">现在刷掉，今天的记忆就稳了</span>
+              <span className="action-sub">
+                {service.overdueBacklog > 0
+                  ? `另有 ${String(service.overdueBacklog)} 张积压会顺延，先刷眼前的`
+                  : '现在刷掉，今天的记忆就稳了'}
+              </span>
             </>
           ) : (
             <>

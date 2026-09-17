@@ -71,3 +71,7 @@ pnpm --filter @inwit/server migrate            # 执行
 ## 文件/图片访问规范
 
 所有图片与文件的上传/访问一律由服务端接口层签发 S3 presigned URL（PUT 上传、GET 读取带过期时间）；客户端禁止持有 storage token、禁止直连 bucket 二次获取；DB 只存对象 key，不存 URL。
+
+## 品牌图标
+
+App 图标（web/mobile/desktop）由 `packages/brand` 管线统一生成：改 `packages/brand/src/logo.svg` 后跑 `pnpm --filter @inwit/brand raster-icons`，不手改各端产物。设计决策、比例规则（macOS Dock 80% 等）与注意事项见 `docs/design/brand-icons.md`。

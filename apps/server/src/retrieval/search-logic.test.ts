@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { IMAGE_EXCERPT_QUOTE } from '@inwit/dto';
 import {
+  ANNOTATION_QUOTE_CHARS,
   DOCUMENT_EMBEDDING_CONTENT_CHARS,
+  annotationEmbeddingText,
+  annotationIndexableQuote,
   clipChars,
   documentEmbeddingText,
   escapeIlikePattern,
@@ -13,8 +17,36 @@ import {
   withSearchFallback,
 } from './search-logic.js';
 
-describe('documentEmbeddingText', () => {
-  it('joins title, description, and content head', () => {
+describe('annotationEmbeddingText', () => {
+  it('puts the note first, then the clipped quote', () => {
+    expect(
+      annotationEmbeddingText({
+        note: '这里讲的是梯度消失的根本原因',
+        quote: '反向传播时梯度逐层衰减',
+      }),
+    ).toBe('这里讲的是梯度消失的根本原因\n反向传播时梯度逐层衰减');
+  });
+
+  it('normalizes the excerpt placeholder away and clips long quotes', () => {
+    const longQuote = '文'.repeat(ANNOTATION_QUOTE_CHARS + 50);
+    expect(annotationEmbeddingText({ note: '想法', quote: longQuote })).toBe(
+      `想法\n${'文'.repeat(ANNOTATION_QUOTE_CHARS)}`,
+    );
+    expect(annotationEmbeddingText({ note: '想法', quote: IMAGE_EXCERPT_QUOTE })).toBe('想法');
+  });
+
+  it('returns an empty string when there is nothing worth embedding', () => {
+    expect(annotationEmbeddingText({ note: '  ', quote: IMAGE_EXCERPT_QUOTE })).toBe('');
+    expect(annotationEmbeddingText({ note: '', quote: ' ' })).toBe('');
+  });
+
+  it('annotationIndexableQuote keeps real quotes and blanks the placeholder', () => {
+    expect(annotationIndexableQuote('一段原文')).toBe('一段原文');
+    expect(annotationIndexableQuote(IMAGE_EXCERPT_QUOTE)).toBe('');
+  });
+});
+
+describe('documentEmbeddingText', () => {  it('joins title, description, and content head', () => {
     expect(
       documentEmbeddingText({
         title: '偏差与方差',

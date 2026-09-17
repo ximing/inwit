@@ -3,6 +3,10 @@ import {
   weeklyScanEnabled,
   WEEKLY_SCAN_MS,
 } from './agent/weekly-enqueue.js';
+import {
+  resurfaceScanEnabled,
+  scanAndEnqueueAnnotationResurface,
+} from './annotations/resurface.js';
 import { config } from './config.js';
 import { pool } from './db/index.js';
 import { pruneAccessTokenLogs } from './auth/access-tokens.js';
@@ -74,6 +78,16 @@ async function scanWeekly(): Promise<void> {
   }
 }
 
+async function scanResurface(): Promise<void> {
+  if (stopping) return;
+  try {
+    const created = await scanAndEnqueueAnnotationResurface();
+    if (created > 0) logger.info('worker.resurface.enqueued', { created });
+  } catch (err) {
+    logger.error('worker.resurface.scan_failed', err);
+  }
+}
+
 await ensureRetrievalStores();
 
 const poll = setInterval(() => {
@@ -81,9 +95,14 @@ const poll = setInterval(() => {
 }, config.WORKER_POLL_MS);
 
 const scanOn = weeklyScanEnabled();
-const weeklyScan = scanOn
+const resurfaceOn = resurfaceScanEnabled();
+const hourlyScanOn = scanOn || resurfaceOn;
+const weeklyScan = hourlyScanOn
   ? setInterval(() => {
-      track(scanWeekly);
+      track(async () => {
+        if (scanOn) await scanWeekly();
+        if (resurfaceOn) await scanResurface();
+      });
     }, WEEKLY_SCAN_MS)
   : null;
 
@@ -91,10 +110,15 @@ logger.info('worker started', {
   pollMs: config.WORKER_POLL_MS,
   claimLimit: config.WORKER_CLAIM_LIMIT,
   maxAttempts: config.JOB_MAX_ATTEMPTS,
-  weeklyScanMs: scanOn ? WEEKLY_SCAN_MS : 0,
+  weeklyScanMs: hourlyScanOn ? WEEKLY_SCAN_MS : 0,
 });
 track(tick);
-if (scanOn) track(scanWeekly);
+if (hourlyScanOn) {
+  track(async () => {
+    if (scanOn) await scanWeekly();
+    if (resurfaceOn) await scanResurface();
+  });
+}
 
 function shutdown(sig: string): void {
   if (stopping) return;

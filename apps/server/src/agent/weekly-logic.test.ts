@@ -1,8 +1,11 @@
 import { agentDocumentMetaLabel, weeklyReportBannerText, weeklyReportJobPayloadFrom } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 import {
+  annotationDeepLink,
+  annotationsMarkdown,
   coveragePct,
   dataSummaryMarkdown,
+  ensureAnnotationLinks,
   ensureRelearnMarkdownLinks,
   ensureWeeklyReportBody,
   mentionsDistribution,
@@ -36,6 +39,8 @@ function sampleStats(overrides: Partial<WeekStats> = {}): WeekStats {
       { cardId: CARD_B, concept: '方差', lapses: 2, lastFeedback: 'fuzzy' },
       { cardId: CARD_C, concept: '过拟合', lapses: 2, lastFeedback: 'forgot' },
     ],
+    annotations: [],
+    annotationCount: 0,
     ...overrides,
   };
 }
@@ -144,6 +149,74 @@ describe('document body helpers', () => {
   it('renders coverage lines in the data summary', () => {
     const md = dataSummaryMarkdown(sampleStats());
     expect(md).toContain('机器学习基础 56%（5/9 节点）');
+  });
+
+  it('lists noted annotations with deep links and skips quote-only ones', () => {
+    const stats = sampleStats({
+      annotationCount: 2,
+      annotations: [
+        {
+          id: CARD_A,
+          documentId: CARD_B,
+          documentTitle: '梯度消失笔记',
+          kind: 'text',
+          quote: 'sigmoid 导数上限 0.25',
+          note: '连乘四次就不到百分之一了',
+        },
+        {
+          id: CARD_C,
+          documentId: CARD_B,
+          documentTitle: '梯度消失笔记',
+          kind: 'text',
+          quote: '反向传播逐层算梯度',
+          note: '  ',
+        },
+      ],
+    });
+    const md = dataSummaryMarkdown(stats);
+    expect(md).toContain('- 新批注 2 条');
+    const section = annotationsMarkdown(stats.annotations);
+    expect(section).toContain('## 本周批注');
+    expect(section).toContain(`[批注](${annotationDeepLink(CARD_B, CARD_A)})`);
+    expect(section).toContain('连乘四次就不到百分之一了');
+    expect(section).not.toContain('反向传播逐层算梯度');
+  });
+
+  it('ensureAnnotationLinks appends a 本周批注 section only for missing links', () => {
+    const annotations = [
+      {
+        id: CARD_A,
+        documentId: CARD_B,
+        documentTitle: '梯度消失笔记',
+        kind: 'text',
+        quote: '一段原文',
+        note: '一句想法',
+      },
+    ];
+    const appended = ensureAnnotationLinks('想起来了 / 模糊 / 忘了', annotations);
+    expect(appended).toContain(`annotation=${CARD_A}`);
+    const already = ensureAnnotationLinks(`已有 [批注](/docs?doc=${CARD_B}&annotation=${CARD_A})`, annotations);
+    expect(already).not.toContain('## 本周批注');
+    expect(ensureAnnotationLinks('没有批注', [])).toBe('没有批注');
+  });
+
+  it('ensureWeeklyReportBody threads annotation links through the full body', () => {
+    const stats = sampleStats({
+      annotationCount: 1,
+      annotations: [
+        {
+          id: CARD_A,
+          documentId: CARD_B,
+          documentTitle: '梯度消失笔记',
+          kind: 'text',
+          quote: '一段原文',
+          note: '一句想法',
+        },
+      ],
+    });
+    const body = ensureWeeklyReportBody('这周还行。', stats);
+    expect(body).toContain('- 新批注 1 条');
+    expect(body).toContain(`/docs?doc=${CARD_B}&annotation=${CARD_A}`);
   });
 });
 

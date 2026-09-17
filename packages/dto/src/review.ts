@@ -98,6 +98,27 @@ export const reviewStatsSchema = z.object({
 });
 export type ReviewStats = z.infer<typeof reviewStatsSchema>;
 
+/** 近 30 天忘记/模糊次数达到阈值的卡片（薄弱卡片 Top N）。 */
+export const reviewStrugglingCardSchema = z.object({
+  id: z.string().uuid(),
+  concept: z.string(),
+  struggleCount: z.number().int().nonnegative(),
+  forgotCount: z.number().int().nonnegative(),
+  fuzzyCount: z.number().int().nonnegative(),
+  topicId: z.string().uuid().nullable(),
+  documentId: z.string().uuid().nullable(),
+});
+export type ReviewStrugglingCard = z.infer<typeof reviewStrugglingCardSchema>;
+
+/** 单个主题近 7 天的复习量与想起率。 */
+export const reviewTopicStatSchema = z.object({
+  topicId: z.string().uuid(),
+  title: z.string(),
+  reviews7d: z.number().int().nonnegative(),
+  retention7d: z.number().int().min(0).max(100).nullable(),
+});
+export type ReviewTopicStat = z.infer<typeof reviewTopicStatSchema>;
+
 export const learningStepsSchema = z
   .array(z.number().int().min(1).max(30))
   .min(1)

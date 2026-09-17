@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { annotationKindSchema } from './annotation.js';
 import { cardSchema } from './card.js';
 import { documentListItemSchema } from './document.js';
 
@@ -22,8 +23,22 @@ export const searchCardSchema = cardSchema.extend({
 });
 export type SearchCard = z.infer<typeof searchCardSchema>;
 
+/** Annotation hit, display-ready: quote/note are pre-clipped server-side. */
+export const searchAnnotationSchema = z.object({
+  id: z.string().uuid(),
+  documentId: z.string().uuid(),
+  documentTitle: z.string().nullable(),
+  kind: annotationKindSchema,
+  quote: z.string(),
+  note: z.string(),
+  pageIndex: z.number().int().nullable(),
+  createdAt: z.string(),
+});
+export type SearchAnnotation = z.infer<typeof searchAnnotationSchema>;
+
 export const searchResultSchema = z.object({
   documents: z.array(documentListItemSchema),
   cards: z.array(searchCardSchema),
+  annotations: z.array(searchAnnotationSchema),
 });
 export type SearchResult = z.infer<typeof searchResultSchema>;

@@ -101,9 +101,10 @@ function asString(value: unknown): string | null {
 export async function loadStrugglingCards(
   userId: string,
   now = new Date(),
+  limit?: number,
 ): Promise<StrugglingCardView[]> {
   const cutoff = new Date(now.getTime() - ANALYZE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-  const agg = await getDb()
+  const query = getDb()
     .select({
       cardId: reviewLogs.cardId,
       forgotCount: sql<number>`count(*) filter (where ${reviewLogs.feedback} = 'forgot')::int`,
@@ -120,7 +121,9 @@ export async function loadStrugglingCards(
     )
     .groupBy(reviewLogs.cardId)
     .having(sql`count(*) >= ${ANALYZE_STRUGGLING_MIN_HITS}`)
-    .orderBy(sql`count(*) desc`);
+    .orderBy(sql`count(*) desc`)
+    .$dynamic();
+  const agg = await (typeof limit === 'number' ? query.limit(Math.max(0, limit)) : query);
 
   if (agg.length === 0) return [];
   const ids = agg.map((row) => row.cardId);

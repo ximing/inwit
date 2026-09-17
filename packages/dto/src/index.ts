@@ -2,6 +2,7 @@ export * from './common.js';
 export * from './user.js';
 export * from './document.js';
 export * from './annotation.js';
+export * from './annotation-resurface.js';
 export * from './capture.js';
 export * from './card.js';
 export * from './topic.js';

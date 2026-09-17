@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>inwit icon 方案对比 v2</title>
+<style>
+  :root {
+    --bg: #f6f3ec;
+    --surface: #fffdf8;
+    --ink: #221d16;
+    --ink-2: #574e41;
+    --ink-3: #8b8172;
+    --line: #e6dfd0;
+    --accent: #b3402a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--bg); color: var(--ink);
+    padding: 48px 32px 80px; -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-family: "Songti SC", "Noto Serif SC", serif; font-size: 26px; margin-bottom: 6px; }
+  .sub { color: var(--ink-3); font-size: 13px; margin-bottom: 40px; }
+  .option {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 28px 32px 32px; margin-bottom: 28px;
+  }
+  .option-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .option-head .no { font-size: 13px; color: var(--accent); font-weight: 700; letter-spacing: .08em; }
+  .option-head h2 { font-family: "Songti SC", serif; font-size: 20px; }
+  .option-head .tag { font-size: 11px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  .meaning { color: var(--ink-2); font-size: 13.5px; margin-bottom: 24px; max-width: 640px; line-height: 1.7; }
+  .row { display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap; }
+  .cell { text-align: center; }
+  .cell .label { font-size: 11px; color: var(--ink-3); margin-top: 8px; }
+  .cell svg { display: block; margin: 0 auto; }
+  .darkbox { background: #221d16; padding: 10px; border-radius: 12px; display: inline-block; }
+  .divider { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  .note { font-size: 12.5px; color: var(--ink-3); line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<h1>inwit 图标 · v2 迭代</h1>
+<p class="sub">围绕「发芽」方向的细化变体 + 两个融合想法 · 2026-09</p>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F7F3EC"/>
+    </linearGradient>
+    <linearGradient id="tileDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A332A"/>
+      <stop offset="1" stop-color="#2A241D"/>
+    </linearGradient>
+    <clipPath id="squircle"><rect x="1" y="1" width="30" height="30" rx="7"/></clipPath>
+    <clipPath id="circle"><circle cx="16" cy="16" r="15"/></clipPath>
+    <path id="tilepath" d="M8.68 1.5h14.64c4.39 0 6.76 2.37 6.76 6.76v14.64c0 4.39-2.37 6.76-6.76 6.76H8.68C4.29 29.66 1.92 27.29 1.92 22.9V8.26c0-4.39 2.37-6.76 6.76-6.76Z"/>
+  </defs>
+</svg>
+
+<!-- ============ A1 原版（参照） ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="v1">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M16 16.5 Q 17 10 24 10.5 Q 23 16.5 16 16.5 Z" fill="#B3402A"/>
+  <path d="M16 16.5 V 25" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.6" r="2.5" fill="#B3402A"/>
+</g>
+<g id="v1-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M16 16.5 Q 17 10 24 10.5 Q 23 16.5 16 16.5 Z" fill="#E06B4E"/>
+  <path d="M16 16.5 V 25" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.6" r="2.5" fill="#E06B4E"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">A1</span><h2>i 上发芽 · 原版</h2><span class="tag">v1 参照</span></div>
+  <p class="meaning">上一轮的原方案，放在这里做对照基准。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#v1"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v1"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#v1"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#v1"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#v1"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#v1"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v1-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ A2 双叶 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="v2">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M16 15.8 Q 17.3 10.2 23.2 10.4 Q 22.2 15.8 16 15.8 Z" fill="#B3402A"/>
+  <path d="M16 18.6 Q 14.7 13 9.8 13.2 Q 10.8 18.6 16 18.6 Z" fill="#B3402A"/>
+  <path d="M16 15.8 V 25" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.4" r="2.3" fill="#B3402A"/>
+</g>
+<g id="v2-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M16 15.8 Q 17.3 10.2 23.2 10.4 Q 22.2 15.8 16 15.8 Z" fill="#E06B4E"/>
+  <path d="M16 18.6 Q 14.7 13 9.8 13.2 Q 10.8 18.6 16 18.6 Z" fill="#E06B4E"/>
+  <path d="M16 15.8 V 25" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.4" r="2.3" fill="#E06B4E"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">A2</span><h2>双叶 i</h2><span class="tag">发芽 · 变体</span></div>
+  <p class="meaning">两片对称舒展的新叶，比单片更「活」，仍是干净的 i 字形（点 + 竖画）。种子落下、双叶展开，成长的意味更足。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#v2"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v2"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#v2"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#v2"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#v2"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#v2"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v2-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ A3 种子裂芽 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="v3">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <!-- 芽从种子里钻出来 -->
+  <path d="M18.4 3.4 Q 20.6 2.2 22.3 3.2 Q 20.7 4.6 18.4 3.4 Z" fill="#B3402A"/>
+  <path d="M16 6.4 C 16.1 4.8 17 3.8 18.6 3.4" fill="none" stroke="#B3402A" stroke-width="1.3" stroke-linecap="round"/>
+  <circle cx="16" cy="9" r="2.6" fill="#B3402A"/>
+  <path d="M16 12 V 25" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+</g>
+<g id="v3-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M18.4 3.4 Q 20.6 2.2 22.3 3.2 Q 20.7 4.6 18.4 3.4 Z" fill="#E06B4E"/>
+  <path d="M16 6.4 C 16.1 4.8 17 3.8 18.6 3.4" fill="none" stroke="#E06B4E" stroke-width="1.3" stroke-linecap="round"/>
+  <circle cx="16" cy="9" r="2.6" fill="#E06B4E"/>
+  <path d="M16 12 V 25" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">A3</span><h2>种子裂芽</h2><span class="tag">发芽 · 变体</span></div>
+  <p class="meaning">i 的那一点本身就是种子，嫩芽正从点里钻出来——「扔进去的东西活了」。概念最凝练：一个字母讲完整个产品故事。小尺寸下芽会弱化，但点 + 竖画仍是完整的 i。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#v3"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v3"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#v3"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#v3"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#v3"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#v3"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v3-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ A4 衬线 i · 叶点 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="v4">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <!-- 衬线小写 i -->
+  <path d="M14.5 12.5 L12.3 13.4 V 15.1 L14.5 14.3 Z" fill="#B3402A"/>
+  <rect x="14.5" y="12.5" width="3" height="9.7" fill="#B3402A"/>
+  <rect x="12.2" y="22.2" width="7.6" height="2.2" rx="0.4" fill="#B3402A"/>
+  <!-- 叶点 -->
+  <path d="M15.6 9.8 Q 15.4 5 20.4 4.2 Q 20.5 9.2 15.6 9.8 Z" fill="#B3402A"/>
+</g>
+<g id="v4-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M14.5 12.5 L12.3 13.4 V 15.1 L14.5 14.3 Z" fill="#E06B4E"/>
+  <rect x="14.5" y="12.5" width="3" height="9.7" fill="#E06B4E"/>
+  <rect x="12.2" y="22.2" width="7.6" height="2.2" rx="0.4" fill="#E06B4E"/>
+  <path d="M15.6 9.8 Q 15.4 5 20.4 4.2 Q 20.5 9.2 15.6 9.8 Z" fill="#E06B4E"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">A4</span><h2>衬线 i · 叶点</h2><span class="tag">发芽 × 书卷气</span></div>
+  <p class="meaning">把 i 换成衬线字形（呼应 UI 里的宋体标题），点换成一片叶子。比几何版更「文气」，和品牌字体气质统一；识别上就是一个字母 i，最克制。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#v4"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v4"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#v4"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#v4"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#v4"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#v4"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v4-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ A5 行间芽 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="v5">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <!-- 芽 -->
+  <path d="M16 12.6 Q 17.3 7.4 22.8 7.6 Q 21.8 12.6 16 12.6 Z" fill="#B3402A"/>
+  <path d="M16 15.2 Q 14.7 10 9.2 10.2 Q 10.2 15.2 16 15.2 Z" fill="#B3402A"/>
+  <path d="M16 12.6 V 20" stroke="#B3402A" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- 纸面文字行 -->
+  <path d="M8.5 22 H 23.5" stroke="#8B8172" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M11 25.2 H 21" stroke="#B3A893" stroke-width="1.6" stroke-linecap="round"/>
+</g>
+<g id="v5-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M16 12.6 Q 17.3 7.4 22.8 7.6 Q 21.8 12.6 16 12.6 Z" fill="#E06B4E"/>
+  <path d="M16 15.2 Q 14.7 10 9.2 10.2 Q 10.2 15.2 16 15.2 Z" fill="#E06B4E"/>
+  <path d="M16 12.6 V 20" stroke="#E06B4E" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M8.5 22 H 23.5" stroke="#8B8172" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M11 25.2 H 21" stroke="#6B6255" stroke-width="1.6" stroke-linecap="round"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">A5</span><h2>行间芽</h2><span class="tag">发芽 × 文本</span></div>
+  <p class="meaning">一株芽从两行文字之间长出来——「从你的阅读/笔记里长出智慧」。叙事感最强的一个，把「消化文档」这件事直接画进了图标；元素稍多，16px 下文字行会融成一条色带（可接受）。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#v5"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v5"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#v5"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#v5"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#v5"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#v5"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v5-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ A6 逗号发芽 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="v6">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <!-- 逗号 -->
+  <path d="M16.4 13.2c1.7 1 2.3 2.7 2 4.6-.4 2.3-2.1 4-4.6 5l-1-1.7c1.5-.7 2.4-1.8 2.6-3-.2.1-.5.1-.8.1-1.7 0-2.9-1.2-2.9-2.7 0-1.6 1.4-2.7 3-2.7.7 0 1.2.2 1.7.4z" fill="#B3402A"/>
+  <!-- 从逗号头长出的叶 -->
+  <path d="M17.6 12.4 Q 19.8 8.2 23.8 9 Q 22.6 12.8 17.6 12.4 Z" fill="#B3402A"/>
+</g>
+<g id="v6-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M16.4 13.2c1.7 1 2.3 2.7 2 4.6-.4 2.3-2.1 4-4.6 5l-1-1.7c1.5-.7 2.4-1.8 2.6-3-.2.1-.5.1-.8.1-1.7 0-2.9-1.2-2.9-2.7 0-1.6 1.4-2.7 3-2.7.7 0 1.2.2 1.7.4z" fill="#E06B4E"/>
+  <path d="M17.6 12.4 Q 19.8 8.2 23.8 9 Q 22.6 12.8 17.6 12.4 Z" fill="#E06B4E"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">A6</span><h2>逗号发芽</h2><span class="tag">发芽 × 摘录</span></div>
+  <p class="meaning">B 方案与发芽的融合：一枚衬线逗号，头上顶一片新叶——「摘录下来的那句话，发芽了」。形状独特、几乎不会撞车；但不再是字母，与 inwit 名称的关联靠讲故事。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#v6"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v6"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#v6"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#v6"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#v6"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#v6"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v6-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ A7 极简单芽 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="v7">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M16 12.6 Q 17.5 6.8 23.6 7 Q 22.5 12.6 16 12.6 Z" fill="#B3402A"/>
+  <path d="M16 17 Q 14.5 10.4 8.4 10.6 Q 9.5 17 16 17 Z" fill="#B3402A"/>
+  <path d="M16 12.6 V 25.5" stroke="#B3402A" stroke-width="2.8" stroke-linecap="round"/>
+</g>
+<g id="v7-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M16 12.6 Q 17.5 6.8 23.6 7 Q 22.5 12.6 16 12.6 Z" fill="#E06B4E"/>
+  <path d="M16 17 Q 14.5 10.4 8.4 10.6 Q 9.5 17 16 17 Z" fill="#E06B4E"/>
+  <path d="M16 12.6 V 25.5" stroke="#E06B4E" stroke-width="2.8" stroke-linecap="round"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">A7</span><h2>极简单芽</h2><span class="tag">发芽 · 变体</span></div>
+  <p class="meaning">去掉种子点，只留一株双叶幼苗。最干净、最大胆，远看是一个纯粹的「生长」符号；代价是失去 i 的字形联想，更偏通用植物图标。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#v7"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v7"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#v7"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#v7"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#v7"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#v7"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#v7-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<hr class="divider">
+<p class="note">
+  如果都不满意，告诉我「卡在哪」会很有帮助——比如：太像植物 App / 太单薄 / 想要更几何或更手写 / 想保留字母但换别的字母处理（如 n、w）/ 想完全抛开发芽方向。<br>
+  选定后我再统一产出 web（favicon.svg/.ico、apple-touch-icon）、mobile（Expo）、desktop（Tauri）各端资源。
+</p>
+
+</body>
+</html>

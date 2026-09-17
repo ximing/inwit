@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>inwit icon 方案对比 v3 · 新方向</title>
+<style>
+  :root {
+    --bg: #f6f3ec; --surface: #fffdf8; --ink: #221d16;
+    --ink-2: #574e41; --ink-3: #8b8172; --line: #e6dfd0; --accent: #b3402a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    background: var(--bg); color: var(--ink);
+    padding: 48px 32px 80px; -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-family: "Songti SC", "Noto Serif SC", serif; font-size: 26px; margin-bottom: 6px; }
+  .sub { color: var(--ink-3); font-size: 13px; margin-bottom: 40px; }
+  .option {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 28px 32px 32px; margin-bottom: 28px;
+  }
+  .option.pinned { border-color: var(--accent); border-width: 1.5px; }
+  .option-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; flex-wrap: wrap; }
+  .option-head .no { font-size: 13px; color: var(--accent); font-weight: 700; letter-spacing: .08em; }
+  .option-head h2 { font-family: "Songti SC", serif; font-size: 20px; }
+  .option-head .tag { font-size: 11px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
+  .option-head .tag.hot { color: var(--accent); border-color: var(--accent); }
+  .meaning { color: var(--ink-2); font-size: 13.5px; margin-bottom: 24px; max-width: 660px; line-height: 1.7; }
+  .row { display: flex; align-items: flex-end; gap: 40px; flex-wrap: wrap; }
+  .cell { text-align: center; }
+  .cell .label { font-size: 11px; color: var(--ink-3); margin-top: 8px; }
+  .cell svg { display: block; margin: 0 auto; }
+  .darkbox { background: #221d16; padding: 10px; border-radius: 12px; display: inline-block; }
+  .divider { border: none; border-top: 1px solid var(--line); margin: 40px 0; }
+  .note { font-size: 12.5px; color: var(--ink-3); line-height: 1.8; }
+</style>
+</head>
+<body>
+
+<h1>inwit 图标 · v3 新方向</h1>
+<p class="sub">A2 双叶 i 已列为备选（置顶对照）· 本轮全部换新的设计思路 · 2026-09</p>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F7F3EC"/>
+    </linearGradient>
+    <linearGradient id="tileDark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3A332A"/>
+      <stop offset="1" stop-color="#2A241D"/>
+    </linearGradient>
+    <clipPath id="squircle"><rect x="1" y="1" width="30" height="30" rx="7"/></clipPath>
+    <clipPath id="circle"><circle cx="16" cy="16" r="15"/></clipPath>
+    <path id="tilepath" d="M8.68 1.5h14.64c4.39 0 6.76 2.37 6.76 6.76v14.64c0 4.39-2.37 6.76-6.76 6.76H8.68C4.29 29.66 1.92 27.29 1.92 22.9V8.26c0-4.39 2.37-6.76 6.76-6.76Z"/>
+  </defs>
+</svg>
+
+<!-- ============ 备选基准：A2 双叶 i ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="a2">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M16 15.8 Q 17.3 10.2 23.2 10.4 Q 22.2 15.8 16 15.8 Z" fill="#B3402A"/>
+  <path d="M16 18.6 Q 14.7 13 9.8 13.2 Q 10.8 18.6 16 18.6 Z" fill="#B3402A"/>
+  <path d="M16 15.8 V 25" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.4" r="2.3" fill="#B3402A"/>
+</g>
+<g id="a2-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M16 15.8 Q 17.3 10.2 23.2 10.4 Q 22.2 15.8 16 15.8 Z" fill="#E06B4E"/>
+  <path d="M16 18.6 Q 14.7 13 9.8 13.2 Q 10.8 18.6 16 18.6 Z" fill="#E06B4E"/>
+  <path d="M16 15.8 V 25" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="16" cy="6.4" r="2.3" fill="#E06B4E"/>
+</g>
+</defs></svg>
+
+<div class="option pinned">
+  <div class="option-head"><span class="no">A2</span><h2>双叶 i</h2><span class="tag hot">当前备选</span></div>
+  <p class="meaning">上一轮选出的备选，置顶作为本轮对照基准。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#a2"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#a2"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#a2"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#a2"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#a2"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#a2"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#a2-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ B1 「in」之门 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="b1">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <circle cx="9.4" cy="7.4" r="2.2" fill="#B3402A"/>
+  <path d="M9.4 12.5 V 24" stroke="#B3402A" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M15.6 24 V 14.5 C 15.6 10.8 17.9 8.8 20.7 8.8 C 23.5 8.8 25.6 10.8 25.6 14.5 V 24" fill="none" stroke="#B3402A" stroke-width="2.5" stroke-linecap="round"/>
+</g>
+<g id="b1-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <circle cx="9.4" cy="7.4" r="2.2" fill="#E06B4E"/>
+  <path d="M9.4 12.5 V 24" stroke="#E06B4E" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M15.6 24 V 14.5 C 15.6 10.8 17.9 8.8 20.7 8.8 C 23.5 8.8 25.6 10.8 25.6 14.5 V 24" fill="none" stroke="#E06B4E" stroke-width="2.5" stroke-linecap="round"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">B1</span><h2>「in」之门</h2><span class="tag">字标</span></div>
+  <p class="meaning">直接写 inwit 的前两个字母：i + n，n 的拱是一道门——「扔进去」。字标路线里最贴产品动作的一个：in 本身就是产品的核心动词。几何、干净，任何尺寸都稳。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b1"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b1"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b1"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b1"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b1"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b1"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b1-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ B2 投喂·消化 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="b2">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <circle cx="16" cy="5.4" r="2.2" fill="#B3402A"/>
+  <circle cx="16" cy="10.4" r="1.2" fill="#B3402A" opacity="0.55"/>
+  <path d="M6.5 15 H 25.5 V 22.5 C 25.5 24.4 24.1 25.6 22.5 25.6 H 9.5 C 7.9 25.6 6.5 24.4 6.5 22.5 Z" fill="#FFFDF8" stroke="#B3402A" stroke-width="1.8"/>
+  <path d="M16 16.8 C 16.4 18.3 17.2 19.1 18.7 19.5 C 17.2 19.9 16.4 20.7 16 22.2 C 15.6 20.7 14.8 19.9 13.3 19.5 C 14.8 19.1 15.6 18.3 16 16.8 Z" fill="#B3402A"/>
+</g>
+<g id="b2-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <circle cx="16" cy="5.4" r="2.2" fill="#E06B4E"/>
+  <circle cx="16" cy="10.4" r="1.2" fill="#E06B4E" opacity="0.55"/>
+  <path d="M6.5 15 H 25.5 V 22.5 C 25.5 24.4 24.1 25.6 22.5 25.6 H 9.5 C 7.9 25.6 6.5 24.4 6.5 22.5 Z" fill="#F6F3EC" stroke="#B3402A" stroke-width="1.8"/>
+  <path d="M16 16.8 C 16.4 18.3 17.2 19.1 18.7 19.5 C 17.2 19.9 16.4 20.7 16 22.2 C 15.6 20.7 14.8 19.9 13.3 19.5 C 14.8 19.1 15.6 18.3 16 16.8 Z" fill="#B3402A"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">B2</span><h2>投喂 · 消化</h2><span class="tag">产品流程</span></div>
+  <p class="meaning">一颗点子落进盒子，盒中亮起一枚闪光——「扔进去，AI 消化成智慧」。把整个产品流程压缩进一个图标；叙事最完整，但元素偏多，小尺寸下盒子里的闪光是主要识别点。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b2"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b2"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b2"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b2"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b2"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b2"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b2-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ B3 复习回环 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="b3">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M20.9 9 A 8.5 8.5 0 1 1 11.1 9" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M12 10 L 13.6 7.3 L 10.5 7.9" fill="none" stroke="#B3402A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="16" r="2.6" fill="#B3402A"/>
+</g>
+<g id="b3-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M20.9 9 A 8.5 8.5 0 1 1 11.1 9" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M12 10 L 13.6 7.3 L 10.5 7.9" fill="none" stroke="#E06B4E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="16" cy="16" r="2.6" fill="#E06B4E"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">B3</span><h2>复习回环</h2><span class="tag">间隔重复</span></div>
+  <p class="meaning">一个开口向上的回环箭头，环心是那颗知识卡片——「转一圈，又回到你面前」。主打 SM-2 复习这个差异点，和「催你复习」的产品承诺一一对应；风险是与同步/刷新类图标同构。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b3"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b3"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b3"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b3"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b3"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b3"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b3-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ B4 印章 i ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="b4">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <rect x="4.5" y="4.5" width="23" height="23" rx="5" fill="#B3402A"/>
+  <circle cx="16" cy="10.2" r="2.7" fill="#F7F3EC"/>
+  <rect x="14.5" y="14.2" width="3" height="8.6" rx="0.7" fill="#F7F3EC"/>
+</g>
+<g id="b4-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <rect x="4.5" y="4.5" width="23" height="23" rx="5" fill="#B3402A"/>
+  <circle cx="16" cy="10.2" r="2.7" fill="#F7F3EC"/>
+  <rect x="14.5" y="14.2" width="3" height="8.6" rx="0.7" fill="#F7F3EC"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">B4</span><h2>印章 i</h2><span class="tag">东方书卷</span></div>
+  <p class="meaning">一枚朱砂印章，阴刻一个 i。印章 = 郑重、收藏、署名；朱砂红正是品牌主色，与纸面 UI 是天生一对。方块轮廓在 App 图标阵列里极具存在感，也是东西方气质的一个有趣混合。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b4"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b4"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b4"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b4"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b4"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b4"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b4-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ B5 卡片扇 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="b5">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <rect x="10" y="8" width="12" height="15" rx="2" transform="rotate(-16 16 23)" fill="#FFFDF8" stroke="#B3402A" stroke-width="1.5"/>
+  <rect x="10" y="8" width="12" height="15" rx="2" transform="rotate(16 16 23)" fill="#FFFDF8" stroke="#B3402A" stroke-width="1.5"/>
+  <rect x="10" y="8" width="12" height="15" rx="2" fill="#FFFDF8" stroke="#B3402A" stroke-width="1.5"/>
+  <path d="M13.2 13 h 5.6 M 13.2 16.4 h 5.6" stroke="#B3402A" stroke-width="1.4" stroke-linecap="round"/>
+</g>
+<g id="b5-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <rect x="10" y="8" width="12" height="15" rx="2" transform="rotate(-16 16 23)" fill="#F6F3EC" stroke="#B3402A" stroke-width="1.5"/>
+  <rect x="10" y="8" width="12" height="15" rx="2" transform="rotate(16 16 23)" fill="#F6F3EC" stroke="#B3402A" stroke-width="1.5"/>
+  <rect x="10" y="8" width="12" height="15" rx="2" fill="#F6F3EC" stroke="#B3402A" stroke-width="1.5"/>
+  <path d="M13.2 13 h 5.6 M 13.2 16.4 h 5.6" stroke="#B3402A" stroke-width="1.4" stroke-linecap="round"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">B5</span><h2>卡片扇</h2><span class="tag">产品核心对象</span></div>
+  <p class="meaning">三张卡片扇形展开——inwit 的一切最终都是卡片（digest 切卡、问答转卡、复习抽卡）。是「产品里有什么」最直白的表达，形态像一手牌，有把玩的动感。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b5"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b5"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b5"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b5"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b5"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b5"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b5-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<!-- ============ B6 书签 ============ -->
+<svg width="0" height="0" style="position:absolute"><defs>
+<g id="b6">
+  <use href="#tilepath" fill="url(#tile)" stroke="rgba(34,29,22,0.08)" stroke-width="0.2"/>
+  <path d="M10 5.5 H 22 V 25.5 L 16 20.5 L 10 25.5 Z" fill="#B3402A"/>
+  <path d="M13.4 11 h 5.2 M 13.4 14.6 h 5.2" stroke="#F7F3EC" stroke-width="1.6" stroke-linecap="round"/>
+</g>
+<g id="b6-dark">
+  <use href="#tilepath" fill="url(#tileDark)" stroke="rgba(255,253,248,0.10)" stroke-width="0.2"/>
+  <path d="M10 5.5 H 22 V 25.5 L 16 20.5 L 10 25.5 Z" fill="#B3402A"/>
+  <path d="M13.4 11 h 5.2 M 13.4 14.6 h 5.2" stroke="#F7F3EC" stroke-width="1.6" stroke-linecap="round"/>
+</g>
+</defs></svg>
+
+<div class="option">
+  <div class="option-head"><span class="no">B6</span><h2>书签</h2><span class="tag">阅读/收藏</span></div>
+  <p class="meaning">一枚书签夹在纸页间，上面两行摘录。书签 = 标记、收藏、还会回来——安静书卷气的保守路线，与现行笔记本图标一脉相承但更简。轮廓经典，代价是相对常见。</p>
+  <div class="row">
+    <div class="cell"><svg width="128" height="128" viewBox="0 0 32 32"><use href="#b6"/></svg><div class="label">128</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b6"/></svg><div class="label">64</div></div>
+    <div class="cell"><svg width="32" height="32" viewBox="0 0 32 32"><use href="#b6"/></svg><div class="label">32</div></div>
+    <div class="cell"><svg width="16" height="16" viewBox="0 0 32 32"><use href="#b6"/></svg><div class="label">16</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#squircle)"><rect width="32" height="32" fill="#fff"/><use href="#b6"/></g></svg><div class="label">iOS</div></div>
+    <div class="cell"><svg width="64" height="64" viewBox="0 0 32 32"><g clip-path="url(#circle)"><rect width="32" height="32" fill="#fff"/><use href="#b6"/></g></svg><div class="label">Android</div></div>
+    <div class="cell"><span class="darkbox"><svg width="64" height="64" viewBox="0 0 32 32"><use href="#b6-dark"/></svg></span><div class="label">深色</div></div>
+  </div>
+</div>
+
+<hr class="divider">
+<p class="note">
+  本轮六个方向：B1 字标（in 之门）/ B2 产品流程（投喂·消化）/ B3 复习回环 / B4 印章 / B5 卡片扇 / B6 书签。<br>
+  可以从「A2 + 本轮其一」进入终选，也可以说「B 几的某个点有意思，但……」继续迭代。选定后统一产出 web / mobile / desktop 各端资源。
+</p>
+
+</body>
+</html>

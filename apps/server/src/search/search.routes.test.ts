@@ -32,6 +32,7 @@ async function buildTestApp() {
 const sample = {
   documents: [],
   cards: [],
+  annotations: [],
 };
 
 describe('GET /api/search', () => {

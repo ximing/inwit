@@ -13,6 +13,7 @@ import {
   FileText,
   MessageCircle,
   ScanText,
+  StickyNote,
   Sparkles,
   type LucideIcon,
 } from 'lucide-react-native';
@@ -43,6 +44,7 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
   selection: Sparkles,
   extract: FileText,
   ocr: ScanText,
+  annotation_resurface: StickyNote,
 };
 
 function estimateReviewMinutes(count: number): number {

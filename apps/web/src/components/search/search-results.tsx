@@ -1,18 +1,29 @@
-import { docDisplayTitle, type SearchResult } from '@inwit/dto';
+import { docDisplayTitle, IMAGE_EXCERPT_QUOTE, type SearchResult } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
-import { FileText, Layers, type LucideIcon } from 'lucide-react';
+import { FileText, Layers, MessageSquareQuote, type LucideIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link } from 'react-router';
-import { docAnchorPath, docsPath } from '@/routes';
+import { docAnchorPath, docAnnotationPath, docsPath } from '@/routes';
 import { SearchService } from './search.service';
 
 export type SearchHitItem = {
-  kind: 'document' | 'card';
+  kind: 'document' | 'card' | 'annotation';
   id: string;
   href: string | null;
   title: string;
   meta: string | null;
 };
+
+function firstLine(text: string): string {
+  return (text.split('\n').find((line) => line.trim().length > 0) ?? '').trim();
+}
+
+function annotationHitTitle(quote: string, note: string): string {
+  const fromNote = firstLine(note);
+  if (fromNote) return fromNote;
+  if (quote === IMAGE_EXCERPT_QUOTE) return '图片摘录';
+  return firstLine(quote) || quote;
+}
 
 export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
   const docs: SearchHitItem[] = results.documents.map((doc) => ({
@@ -29,7 +40,14 @@ export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
     title: card.concept,
     meta: card.documentTitle,
   }));
-  return [...docs, ...cards];
+  const annotations: SearchHitItem[] = (results.annotations ?? []).map((annotation) => ({
+    kind: 'annotation',
+    id: annotation.id,
+    href: docAnnotationPath(annotation.documentId, annotation.id),
+    title: annotationHitTitle(annotation.quote, annotation.note),
+    meta: annotation.documentTitle,
+  }));
+  return [...docs, ...cards, ...annotations];
 }
 
 function hitKey(hit: SearchHitItem): string {
@@ -47,7 +65,8 @@ export function SearchHitRow({
   active?: boolean;
   onHover?: (index: number) => void;
 }) {
-  const Icon: LucideIcon = hit.kind === 'document' ? FileText : Layers;
+  const Icon: LucideIcon =
+    hit.kind === 'document' ? FileText : hit.kind === 'card' ? Layers : MessageSquareQuote;
   const className = `search-hit${active ? ' is-active' : ''}${hit.href ? '' : ' is-static'}`;
   const hitId = `search-hit-${String(index)}`;
   const body = (
@@ -142,6 +161,7 @@ export const SearchResults = observer(function SearchResults({
 
   const docs = hits.filter((hit) => hit.kind === 'document');
   const cards = hits.filter((hit) => hit.kind === 'card');
+  const annotations = hits.filter((hit) => hit.kind === 'annotation');
   const activeIndex = navigable ? search.activeIndex : -1;
   const onHover = navigable ? (index: number) => search.setActiveIndex(index) : undefined;
 
@@ -166,6 +186,23 @@ export const SearchResults = observer(function SearchResults({
           <h3 className="search-group-title">卡片</h3>
           {cards.map((hit, index) => {
             const absolute = docs.length + index;
+            return (
+              <SearchHitRow
+                key={hitKey(hit)}
+                hit={hit}
+                index={absolute}
+                active={activeIndex === absolute}
+                onHover={onHover}
+              />
+            );
+          })}
+        </section>
+      ) : null}
+      {annotations.length > 0 ? (
+        <section className="search-group">
+          <h3 className="search-group-title">批注</h3>
+          {annotations.map((hit, index) => {
+            const absolute = docs.length + cards.length + index;
             return (
               <SearchHitRow
                 key={hitKey(hit)}

@@ -1,4 +1,4 @@
-import type { ReviewFeedback, ReviewSettings, ReviewStats } from '@inwit/dto';
+import type { ReviewFeedback, ReviewSettings, ReviewStats, ReviewTopicStat } from '@inwit/dto';
 import {
   addLocalDays,
   endOfLocalDay,
@@ -98,6 +98,22 @@ export function aggregateLast7Days(daily: ReviewStats['daily']): ReviewStats['la
 export function retentionPercent(remembered: number, total: number): number | null {
   if (total === 0) return null;
   return Math.round((remembered / total) * 100);
+}
+
+export function aggregateTopicStats(
+  rows: Iterable<{ topicId: string; title: string; remembered: number; fuzzy: number; forgot: number }>,
+): ReviewTopicStat[] {
+  const result: ReviewTopicStat[] = [];
+  for (const row of rows) {
+    const reviews7d = row.remembered + row.fuzzy + row.forgot;
+    result.push({
+      topicId: row.topicId,
+      title: row.title,
+      reviews7d,
+      retention7d: retentionPercent(row.remembered, reviews7d),
+    });
+  }
+  return result.sort((a, b) => b.reviews7d - a.reviews7d);
 }
 
 export function buildForecast(dueAts: Date[], now: Date): ReviewStats['forecast'] {

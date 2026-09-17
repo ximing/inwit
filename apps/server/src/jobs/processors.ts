@@ -6,6 +6,7 @@ import { AgentTerminalError } from '../agent/run-agent-job.js';
 import { processSelection } from '../agent/selection.js';
 import { processTopic } from '../agent/topic.js';
 import { processWeeklyReport } from '../agent/weekly.js';
+import { processAnnotationResurface } from '../annotations/resurface.js';
 import type { JobRow } from '../db/schema.js';
 import { processExtract } from '../documents/extract-job.js';
 import { processOcr } from '../ocr/ocr-job.js';
@@ -20,6 +21,7 @@ const HANDLERS: Record<JobType, (job: JobRow) => Promise<void>> = {
   selection: processSelection,
   extract: processExtract,
   ocr: processOcr,
+  annotation_resurface: processAnnotationResurface,
 };
 
 export async function processJob(job: JobRow): Promise<void> {

@@ -183,7 +183,7 @@ const TopicList = observer(function TopicList({ selectedId }: { selectedId: stri
   );
 });
 
-function TopicRow({
+const TopicRow = observer(function TopicRow({
   item,
   selected,
   archived = false,
@@ -192,9 +192,11 @@ function TopicRow({
   selected: boolean;
   archived?: boolean;
 }) {
+  const service = useService(TopicsService);
   const { topic } = item;
   const emptyGoal = !topic.goal || topic.goal.trim().length === 0;
   const pct = item.masteryPct;
+  const retention = service.retentionFor(topic.id);
   return (
     <Link
       to={topicPath(topic.id)}
@@ -207,7 +209,10 @@ function TopicRow({
         {emptyGoal ? '一句话锚定这个专题的消化方式' : topic.goal}
       </div>
       <div className="row-meta topic-row-meta">
-        <span>{`${String(item.cardCount)} 卡 · ${String(item.documentCount)} 篇文档`}</span>
+        <span>
+          {`${String(item.cardCount)} 卡 · ${String(item.documentCount)} 篇文档`}
+          {retention?.retention7d != null ? ` · 7 天想起 ${String(retention.retention7d)}%` : ''}
+        </span>
         <span
           className="topic-mastery"
           role="progressbar"
@@ -221,7 +226,7 @@ function TopicRow({
       </div>
     </Link>
   );
-}
+});
 
 function PaneEmpty() {
   return (
@@ -275,6 +280,7 @@ const TopicPane = observer(function TopicPane({ topicId }: { topicId: string }) 
   const emptyGoal = !topic.goal || topic.goal.trim().length === 0;
   const pct = service.masteryPct;
   const lastAt = service.lastDigestedAt;
+  const retention = service.retentionFor(topic.id);
 
   return (
     <div className="pane-topic">
@@ -427,6 +433,12 @@ const TopicPane = observer(function TopicPane({ topicId }: { topicId: string }) 
           </span>
           <span className="sep">·</span>
           <span>{lastAt ? `最近消化 ${formatRelativeTime(lastAt)}` : '还没有消化'}</span>
+          {retention?.retention7d != null ? (
+            <>
+              <span className="sep">·</span>
+              <span>{`7 天想起率 ${String(retention.retention7d)}%`}</span>
+            </>
+          ) : null}
           <span className="sep">·</span>
           <button
             type="button"

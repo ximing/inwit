@@ -141,6 +141,27 @@
       "when": 1789569000000,
       "tag": "0019_document_source_screenshot",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789639093062,
+      "tag": "0020_loud_sasquatch",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1789640622837,
+      "tag": "0021_sudden_ogun",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1789642244937,
+      "tag": "0022_narrow_spitfire",
+      "breakpoints": true
     }
   ]
 }

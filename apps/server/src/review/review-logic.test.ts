@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { localDateKey } from '../utils/date.js';
 import {
+  aggregateTopicStats,
   applyReviewQueueLimits,
   buildDailyDistribution,
   buildForecast,
@@ -161,6 +162,28 @@ describe('retentionPercent', () => {
     expect(retentionPercent(0, 0)).toBeNull();
     expect(retentionPercent(2, 3)).toBe(67);
     expect(retentionPercent(1, 1)).toBe(100);
+  });
+});
+
+describe('aggregateTopicStats', () => {
+  it('sums the three feedback grades and derives retention per topic', () => {
+    const stats = aggregateTopicStats([
+      { topicId: 't1', title: 'RL', remembered: 8, fuzzy: 3, forgot: 1 },
+      { topicId: 't2', title: '统计', remembered: 0, fuzzy: 0, forgot: 4 },
+    ]);
+    expect(stats).toEqual([
+      { topicId: 't1', title: 'RL', reviews7d: 12, retention7d: 67 },
+      { topicId: 't2', title: '统计', reviews7d: 4, retention7d: 0 },
+    ]);
+  });
+
+  it('sorts by review volume desc, keeping stable output for empty input', () => {
+    const stats = aggregateTopicStats([
+      { topicId: 'a', title: 'A', remembered: 1, fuzzy: 0, forgot: 0 },
+      { topicId: 'b', title: 'B', remembered: 2, fuzzy: 2, forgot: 0 },
+    ]);
+    expect(stats.map((row) => row.topicId)).toEqual(['b', 'a']);
+    expect(aggregateTopicStats([])).toEqual([]);
   });
 });
 

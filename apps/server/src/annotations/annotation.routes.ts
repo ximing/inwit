@@ -1,4 +1,5 @@
 import {
+  acceptAnnotationResurfaceInputSchema,
   createAnnotationInputSchema,
   updateAnnotationInputSchema,
 } from '@inwit/dto';
@@ -12,8 +13,14 @@ import {
   listDocumentAnnotations,
   updateAnnotation,
 } from './annotation.service.js';
+import {
+  acceptAnnotationResurface,
+  dismissAnnotationResurface,
+  getAnnotationResurface,
+} from './resurface.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
+const resurfaceKeyParamsSchema = z.object({ key: z.string().min(1).max(200) });
 
 export function registerAnnotationRoutes(app: FastifyInstance): void {
   const auth = { preHandler: [app.authenticate] };
@@ -44,5 +51,22 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
   app.get('/api/annotations/:id/image', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     return getAnnotationImage(requireUser(req).id, id);
+  });
+
+  app.get('/api/annotation-resurface', auth, async (req) => {
+    const resurface = await getAnnotationResurface(requireUser(req).id);
+    return { resurface };
+  });
+
+  app.post('/api/annotation-resurface/:key/dismiss', auth, async (req) => {
+    const { key } = resurfaceKeyParamsSchema.parse(req.params);
+    await dismissAnnotationResurface(requireUser(req).id, key);
+    return { resurface: null };
+  });
+
+  app.post('/api/annotation-resurface/:key/accept', auth, async (req) => {
+    const { key } = resurfaceKeyParamsSchema.parse(req.params);
+    const { annotationId } = acceptAnnotationResurfaceInputSchema.parse(req.body);
+    return acceptAnnotationResurface(requireUser(req).id, key, annotationId);
   });
 }

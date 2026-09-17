@@ -103,6 +103,8 @@ export const createCardInputSchema = z.object({
   anchorBlockIndex: z.number().int().positive().optional(),
   /** Excerpt object key from POST /api/documents/:id/excerpts; never a URL. */
   imageKey: z.string().min(1).max(500).optional(),
+  /** Set when the card is converted from an annotation; server writes back convertedCardId. */
+  annotationId: z.string().uuid().optional(),
 });
 export type CreateCardInput = z.infer<typeof createCardInputSchema>;
 
@@ -121,22 +123,45 @@ function firstNonEmptyLine(text: string): string {
   return (normalized.split('\n').find((line) => line.trim().length > 0) ?? '').trim();
 }
 
-/** Manual card payload for a screenshot annotation. Null when there is no excerpt key. */
-export function excerptCardInputFromAnnotation(input: {
+/**
+ * Manual card payload for an annotation. Screenshot excerpts keep the image
+ * branch; plain annotations convert from their note (concept = first line,
+ * quote becomes the anchor). Null when there is nothing to learn from
+ * (no excerpt image and an empty note).
+ */
+export function cardInputFromAnnotation(input: {
+  id: string;
   documentId: string;
   note: string;
-  pageIndex: number | null;
+  quote: string;
   imageKey: string | null;
+  anchorBlockIndex: number | null;
 }): CreateCardInput | null {
-  const imageKey = input.imageKey?.trim() ?? '';
-  if (!imageKey) return null;
   const note = input.note ?? '';
-  const concept = clipChars(firstNonEmptyLine(note), 2000) || IMAGE_EXCERPT_QUOTE;
+  const imageKey = input.imageKey?.trim() ?? '';
+  if (imageKey) {
+    const concept = clipChars(firstNonEmptyLine(note), 2000) || IMAGE_EXCERPT_QUOTE;
+    return {
+      documentId: input.documentId,
+      concept,
+      example: clipChars(note, 4000),
+      anchorText: IMAGE_EXCERPT_QUOTE,
+      imageKey,
+      annotationId: input.id,
+    };
+  }
+  if (note.trim() === '') return null;
+  const quote = input.quote.trim();
   return {
     documentId: input.documentId,
-    concept,
+    concept: clipChars(firstNonEmptyLine(note), 2000),
     example: clipChars(note, 4000),
-    anchorText: IMAGE_EXCERPT_QUOTE,
-    imageKey,
+    ...(quote !== '' && quote !== IMAGE_EXCERPT_QUOTE
+      ? { anchorText: clipChars(quote, 4000) }
+      : {}),
+    ...(input.anchorBlockIndex != null && input.anchorBlockIndex > 0
+      ? { anchorBlockIndex: input.anchorBlockIndex }
+      : {}),
+    annotationId: input.id,
   };
 }
