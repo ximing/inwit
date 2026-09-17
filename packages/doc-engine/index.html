@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Inwit 文档引擎</title>
+  </head>
+  <body>
+    <div id="app">
+      <main class="engine-main">
+        <div class="paper">
+          <div id="doc-root" class="doc-view"></div>
+        </div>
+      </main>
+      <aside id="harness" class="harness">
+        <div class="harness-head">
+          <h1>桥事件</h1>
+          <p>浏览器 dev 下出桥事件打到本面板。命令按钮模拟 native 入桥。</p>
+        </div>
+        <div id="harness-cmds" class="harness-cmds">
+          <button type="button" data-cmd="active-card">激活卡片</button>
+          <button type="button" data-cmd="clear-card">取消卡片</button>
+          <button type="button" data-cmd="active-note">激活批注</button>
+          <button type="button" data-cmd="clear-note">取消批注</button>
+          <button type="button" data-cmd="focus-card">跳转闪烁</button>
+          <button type="button" data-cmd="inject-asset">注入图片</button>
+          <button type="button" data-cmd="theme-light">浅色</button>
+          <button type="button" data-cmd="theme-dark">深色</button>
+        </div>
+        <ol id="event-log" class="event-log" aria-live="polite"></ol>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

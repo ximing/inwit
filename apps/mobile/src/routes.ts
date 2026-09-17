@@ -1,0 +1,18 @@
+/** Canonical paths. Layouts and guards must use these. */
+export const ROUTES = {
+  login: '/login',
+  tabs: '/(tabs)',
+  today: '/',
+  docs: '/docs',
+  review: '/review',
+  reviewSession: '/review/session',
+  topics: '/topics',
+  jobs: '/jobs',
+  me: '/me',
+  meProfile: '/me/profile',
+  meAppearance: '/me/appearance',
+  meModels: '/me/models',
+  meOcr: '/me/ocr',
+  meTokens: '/me/tokens',
+  search: '/search',
+} as const;

@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Inwit",
+    "slug": "inwit",
+    "scheme": "inwit",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f6f3ec"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.inwit.app",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "package": "com.inwit.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#f6f3ec"
+      },
+      "usesCleartextTraffic": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "用于更换头像"
+        }
+      ],
+      "expo-file-system"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiBaseUrl": "http://localhost:3020"
+    }
+  }
+}
