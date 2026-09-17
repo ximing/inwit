@@ -30,7 +30,7 @@ const PdfPaneView = observer(function PdfPaneView() {
 
   if (!doc) return null;
 
-  const isReport = agentDocumentMetaLabel(doc.source, doc.title) === AGENT_DOC_LABEL_REPORT;
+  const isReport = agentDocumentMetaLabel(doc.source, doc.title, doc.kind) === AGENT_DOC_LABEL_REPORT;
   const stage = docs.stageFor(doc);
 
   return (

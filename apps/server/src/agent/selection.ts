@@ -4,17 +4,14 @@ import { getDb } from '../db/index.js';
 import { cards, type JobRow } from '../db/schema.js';
 import { asPmJson } from '../documents/content-json.js';
 import { findOwnedDocument } from '../documents/document.service.js';
-import { heartbeatJob } from '../jobs/heartbeat.js';
-import { completeChat } from '../llm/usage.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
-import { deleteCard, indexCard } from '../retrieval/pipeline.js';
+import { deleteCardFromIndex, indexCard } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
 import { inheritSelectionAnchor } from './card-anchor-logic.js';
-import { finishExecution, startExecution } from './executions.js';
-import { AgentTerminalError } from './run-agent-job.js';
-import { runWithAgentContext } from './run-context.js';
+import { extractAssistantText } from './messages.js';
+import { AgentTerminalError, runAgentJob } from './run-agent-job.js';
 import {
   parseSelectionCards,
   SELECTION_MIN_CARDS,
@@ -72,7 +69,7 @@ async function persistDrafts(input: {
     } catch (err) {
       logger.error('selection.index_card_failed', err);
       try {
-        await deleteCard(row.id);
+        await deleteCardFromIndex(row.id);
       } catch (cleanupErr) {
         logger.warn('selection.index_card_cleanup_failed', cleanupErr);
       }
@@ -100,88 +97,41 @@ export async function processSelection(job: JobRow): Promise<void> {
     return;
   }
 
-  const executionId = await startExecution({
-    jobId: job.id,
-    userId: job.userId,
+  await runAgentJob({
+    job,
     agentType: 'selection',
-  });
+    systemPrompt: SELECTION_SYSTEM_PROMPT,
+    userPrompt: selectionUserPrompt({
+      title: docDisplayTitle(document),
+      selectionText,
+    }),
+    tools: [],
+    maxTurns: 1,
+    context: { documentId },
+    verify: async ({ agent }) => {
+      const text = extractAssistantText(agent.state.messages);
 
-  const heartbeat = setInterval(() => {
-    void heartbeatJob(job.id);
-  }, 15_000);
-  heartbeat.unref();
+      const drafts = parseSelectionCards(text);
+      if (drafts.length < SELECTION_MIN_CARDS) {
+        throw new AgentTerminalError('selection produced no cards', selectionResultSummary(0));
+      }
 
-  try {
-    await runWithAgentContext(
-      { userId: job.userId, executionId, jobId: job.id, documentId },
-      async () => {
-        const { text } = await completeChat(
-          job.userId,
-          {
-            systemPrompt: SELECTION_SYSTEM_PROMPT,
-            messages: [
-              {
-                role: 'user',
-                content: selectionUserPrompt({
-                  title: docDisplayTitle(document),
-                  selectionText,
-                }),
-              },
-            ],
-          },
-          { executionId },
-        );
-
-        const drafts = parseSelectionCards(text);
-        if (drafts.length < SELECTION_MIN_CARDS) {
-          await finishExecution({
-            executionId,
-            status: 'failed',
-            error: 'selection produced no cards',
-            resultSummary: selectionResultSummary(0),
-          });
-          throw new AgentTerminalError('selection produced no cards');
-        }
-
-        const written = await persistDrafts({
-          userId: job.userId,
-          documentId,
-          topicId: document.topicId,
-          mapNodeId: document.mapNodeId,
-          contentJson: document.contentJson,
-          selectionText,
-          blockIndex: payload?.blockIndex,
-          drafts,
-        });
-        if (written.length < SELECTION_MIN_CARDS) {
-          await finishExecution({
-            executionId,
-            status: 'failed',
-            error: 'selection produced no cards',
-            resultSummary: selectionResultSummary(0),
-          });
-          throw new AgentTerminalError('selection produced no cards');
-        }
-
-        await finishExecution({
-          executionId,
-          status: 'done',
-          resultSummary: selectionResultSummary(written.length),
-        });
-        await tryIndexOwnedDocument(job.userId, documentId);
-      },
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (!(err instanceof AgentTerminalError)) {
-      await finishExecution({
-        executionId,
-        status: 'failed',
-        error: message.slice(0, 2000),
+      const written = await persistDrafts({
+        userId: job.userId,
+        documentId,
+        topicId: document.topicId,
+        mapNodeId: document.mapNodeId,
+        contentJson: document.contentJson,
+        selectionText,
+        blockIndex: payload?.blockIndex,
+        drafts,
       });
-    }
-    throw err;
-  } finally {
-    clearInterval(heartbeat);
-  }
+      if (written.length < SELECTION_MIN_CARDS) {
+        throw new AgentTerminalError('selection produced no cards', selectionResultSummary(0));
+      }
+
+      await tryIndexOwnedDocument(job.userId, documentId);
+      return selectionResultSummary(written.length);
+    },
+  });
 }

@@ -1,4 +1,5 @@
 import { Service } from '@rabjs/react';
+import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
 import {
   isChatQuestion,
   type AnnotationResurface,
@@ -89,6 +90,12 @@ export class TodayService extends Service {
 
   setDraft(value: string): void {
     this.draft = value;
+  }
+
+  captureHandle: CaptureEditorHandle | null = null;
+
+  bindCapture(handle: CaptureEditorHandle | null): void {
+    this.captureHandle = handle;
   }
 
   selectTopic(id: string | null): void {
@@ -184,12 +191,18 @@ export class TodayService extends Service {
   }
 
   async send(mode: 'auto' | 'chat' | 'paste' = 'auto'): Promise<void> {
-    const content = this.draft.trim();
+    const content = (this.captureHandle?.getText() ?? this.draft).trim();
     if (content.length === 0) return;
     this.error = null;
     const useChat = captureIsChat(content, mode);
     try {
-      const { created } = await sendCapture({ content, topicId: this.topicId, mode });
+      const { created } = await sendCapture({
+        text: content,
+        pmJson: this.captureHandle?.getJSON(),
+        topicId: this.topicId,
+        mode,
+      });
+      this.captureHandle?.clear();
       this.draft = '';
       this.documents = [
         asListItem(created, {

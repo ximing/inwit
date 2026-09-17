@@ -9,7 +9,7 @@ import {
   type ReviewToday,
 } from '@inwit/dto';
 import { errorMessage } from '@/api/client';
-import { getCardImage } from '@/api/cards';
+import { archiveCard, getCardImage, suspendCard } from '@/api/cards';
 import { maskCloze, stripCloze } from '@/lib/cloze';
 import {
   isPresignedStale,
@@ -54,6 +54,7 @@ export class ReviewService extends Service {
   toast: string | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
   cardImageUrls: Record<string, PresignedUrlEntry> = {};
+  cardMenuOpen = false;
 
   get layout(): LayoutService {
     return this.resolve(LayoutService);
@@ -157,6 +158,50 @@ export class ReviewService extends Service {
   flip(): void {
     if (!this.current || this.grading) return;
     this.flipped = !this.flipped;
+  }
+
+  toggleCardMenu(): void {
+    this.cardMenuOpen = !this.cardMenuOpen;
+  }
+
+  closeCardMenu(): void {
+    this.cardMenuOpen = false;
+  }
+
+  /** Drop the current card from the session without a review outcome. */
+  private dropCurrent(): void {
+    this.items = this.items.slice(1);
+    this.total = Math.max(this.reviewedToday, this.total - 1);
+    this.flipped = false;
+    this.refreshDueBadge();
+  }
+
+  /** 已熟悉：当前卡不再安排复习，可在文档页卡片栏恢复。 */
+  async markCurrentFamiliar(): Promise<void> {
+    const item = this.current;
+    if (!item || this.grading) return;
+    this.closeCardMenu();
+    try {
+      await suspendCard(item.card.id);
+      this.dropCurrent();
+      this.showToast('已标记为熟悉，不再安排复习');
+    } catch (err) {
+      this.error = errorMessage(err, '操作没成功，再试一次');
+    }
+  }
+
+  /** Soft delete: 当前卡移入回收站，可在设置里恢复。 */
+  async removeCurrentCard(): Promise<void> {
+    const item = this.current;
+    if (!item || this.grading) return;
+    this.closeCardMenu();
+    try {
+      await archiveCard(item.card.id);
+      this.dropCurrent();
+      this.showToast('已移入回收站，可在设置里恢复');
+    } catch (err) {
+      this.error = errorMessage(err, '没删掉，再试一次');
+    }
   }
 
   applyToday(today: ReviewToday): void {

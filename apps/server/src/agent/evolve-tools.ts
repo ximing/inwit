@@ -1,7 +1,7 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { CARD_LINK_TYPES, type CardLinkType, type EvolveReason } from '@inwit/dto';
-import { and, asc, count, desc, eq, inArray, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { toPublicQuestion } from '../cards/card.mapper.js';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
@@ -16,7 +16,7 @@ import {
 } from '../db/schema.js';
 import { asPmJson } from '../documents/content-json.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
-import { deleteCard, indexCard } from '../retrieval/pipeline.js';
+import { deleteCardFromIndex, indexCard } from '../retrieval/pipeline.js';
 import {
   loadUserMasteryMemory,
   masteryCardKey,
@@ -69,7 +69,7 @@ export function readCardTool(session: EvolveSession): AgentTool<typeof readCardS
       const [card] = await getDb()
         .select()
         .from(cards)
-        .where(and(eq(cards.id, session.cardId), eq(cards.userId, session.userId)))
+        .where(and(eq(cards.id, session.cardId), eq(cards.userId, session.userId), isNull(cards.deletedAt)))
         .limit(1);
       if (!card) throw new Error('card not found');
 
@@ -181,7 +181,7 @@ export function evolveWriteQuestionsTool(
       const [card] = await getDb()
         .select()
         .from(cards)
-        .where(and(eq(cards.id, params.cardId), eq(cards.userId, session.userId)))
+        .where(and(eq(cards.id, params.cardId), eq(cards.userId, session.userId), isNull(cards.deletedAt)))
         .limit(1);
       if (!card) throw new Error('card not found');
 
@@ -259,7 +259,7 @@ export async function loadSplitChildren(userId: string, parentId: string): Promi
   return getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.userId, userId), inArray(cards.id, childIds)))
+    .where(and(eq(cards.userId, userId), inArray(cards.id, childIds), isNull(cards.deletedAt)))
     .orderBy(asc(cards.createdAt), asc(cards.id));
 }
 
@@ -297,7 +297,7 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
       const [parent] = await getDb()
         .select()
         .from(cards)
-        .where(and(eq(cards.id, session.cardId), eq(cards.userId, session.userId)))
+        .where(and(eq(cards.id, session.cardId), eq(cards.userId, session.userId), isNull(cards.deletedAt)))
         .limit(1);
       if (!parent) throw new Error('card not found');
 
@@ -380,7 +380,7 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
           } catch (err) {
             logger.error('evolve.index_child_failed', err);
             try {
-              await deleteCard(row.id);
+              await deleteCardFromIndex(row.id);
             } catch (cleanupErr) {
               logger.warn('evolve.index_child_cleanup_failed', cleanupErr);
             }
@@ -395,7 +395,7 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
       } catch (err) {
         for (const id of createdIds) {
           try {
-            await deleteCard(id);
+            await deleteCardFromIndex(id);
           } catch {
             /* ignore */
           }
@@ -498,6 +498,7 @@ export function evolveLinkCardsTool(
           and(
             eq(cards.userId, session.userId),
             inArray(cards.id, [params.cardId, params.targetCardId]),
+            isNull(cards.deletedAt),
           ),
         );
       const from = owned.find((row) => row.id === params.cardId);

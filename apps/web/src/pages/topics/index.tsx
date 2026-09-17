@@ -9,7 +9,8 @@ import { ReaderService } from '@/components/reader/reader.service';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
-import { formatRelativeTime, isSubmitHotkey, summarizeAnswer } from '@/lib/format';
+import { formatRelativeTime, summarizeAnswer } from '@/lib/format';
+import { CaptureEditor } from '@/components/capture/capture-editor';
 import { ROUTES, topicPath } from '@/routes';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
@@ -472,19 +473,12 @@ const DocsTab = observer(function DocsTab() {
     <div className="topic-docs">
       <div className={`pane-capture${archived ? ' is-disabled' : ''}`}>
         <div className="capture">
-          <textarea
-            rows={2}
-            autoComplete="off"
+          <CaptureEditor
             placeholder={archived ? '已归档，不能再往这个主题扔内容' : '扔一句话进来，或以问号结尾问 AI…'}
-            value={service.draft}
             disabled={archived}
-            onChange={(event) => service.setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (isSubmitHotkey(event)) {
-                event.preventDefault();
-                submit('auto');
-              }
-            }}
+            onTextChange={(text) => service.setDraft(text)}
+            onSubmit={() => submit('auto')}
+            onReady={(handle) => service.bindCapture(handle)}
           />
           <div className="capture-bar">
             <div className="capture-actions">
@@ -586,7 +580,7 @@ function rowKindTag(
   doc: DocumentListItem,
 ): { tone: 'ai' | 'busy'; label: string; pulse?: boolean } | null {
   if (doc.status === 'pending') return { tone: 'busy', label: '消化中', pulse: true };
-  const agent = agentDocumentMetaLabel(doc.source, doc.title);
+  const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   if (agent) return { tone: 'ai', label: agent };
   if (doc.source === 'chat') return { tone: 'ai', label: 'AI 回答' };
   return null;

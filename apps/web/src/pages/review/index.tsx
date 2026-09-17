@@ -6,9 +6,11 @@ import {
   type ReviewSettings,
 } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, MoreHorizontal, Pause, Trash2 } from 'lucide-react';
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
+import { ReportsPane } from './reports-pane';
+import { weeklyReportsPath, ROUTES } from '@/routes';
 import { cardPath } from '@/routes';
 import { cloneSettings, ReviewService } from './review.service';
 import { estimateReviewMinutes } from '@/lib/review-eta';
@@ -60,6 +62,8 @@ function normalizeDraft(draft: ReviewSettings): ReviewSettings {
 
 const ReviewPageContent = observer(function ReviewPageContent() {
   const service = useService(ReviewService);
+  const [params] = useSearchParams();
+  const reportsActive = params.get('tab') === 'reports';
 
   useEffect(() => {
     void service.load();
@@ -67,7 +71,7 @@ const ReviewPageContent = observer(function ReviewPageContent() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (service.mode !== 'session') return;
+      if (service.mode !== 'session' || reportsActive) return;
       if (event.repeat) return;
       const target = event.target;
       if (target instanceof HTMLElement) {
@@ -95,11 +99,17 @@ const ReviewPageContent = observer(function ReviewPageContent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [service]);
+  }, [service, reportsActive]);
 
   return (
     <>
-      {service.mode === 'session' ? <SessionPane /> : <HubPane />}
+      {service.mode !== 'session' || reportsActive ? (
+        <nav className="review-tabs" aria-label="复习栏目">
+          <Link to={ROUTES.review} aria-current={!reportsActive ? 'page' : undefined}>复习概览</Link>
+          <Link to={weeklyReportsPath()} aria-current={reportsActive ? 'page' : undefined}>学习周报</Link>
+        </nav>
+      ) : null}
+      {reportsActive ? <ReportsPane /> : service.mode === 'session' ? <SessionPane /> : <HubPane />}
       {service.toast ? (
         <p className="toast" role="status">
           {service.toast}
@@ -479,6 +489,24 @@ const SessionPane = observer(function SessionPane() {
     void service.loadCardImage(current.card.id);
   }, [current?.card.id, current?.card.hasImage, service]);
 
+  useEffect(() => {
+    if (!service.cardMenuOpen) return;
+    const onDown = (event: MouseEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.topic-more-wrap')) {
+        service.closeCardMenu();
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') service.closeCardMenu();
+    };
+    window.addEventListener('mousedown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [service.cardMenuOpen, service]);
+
   return (
     <div className="review-stage">
       <div className="review-head">
@@ -493,6 +521,41 @@ const SessionPane = observer(function SessionPane() {
         <span className="review-count">
           {service.cardOrdinal} / {service.total}
         </span>
+        {current ? (
+          <div className="topic-more-wrap review-card-menu">
+            <button
+              type="button"
+              className="btn btn-ghost card-rail-icon"
+              aria-label="卡片操作"
+              aria-haspopup="menu"
+              aria-expanded={service.cardMenuOpen}
+              onClick={() => service.toggleCardMenu()}
+            >
+              <MoreHorizontal width={15} height={15} strokeWidth={1.8} />
+            </button>
+            {service.cardMenuOpen ? (
+              <div className="topic-menu topic-more-menu" role="menu" aria-label="卡片操作">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => void service.markCurrentFamiliar()}
+                >
+                  <Pause width={13} height={13} strokeWidth={1.8} />
+                  已熟悉，不复习
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="is-danger"
+                  onClick={() => void service.removeCurrentCard()}
+                >
+                  <Trash2 width={13} height={13} strokeWidth={1.8} />
+                  删除（移入回收站）
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <div
         className="review-progress"

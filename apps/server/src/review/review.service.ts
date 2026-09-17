@@ -11,7 +11,7 @@ import type {
   ReviewTopicStat,
   ReviewToday,
 } from '@inwit/dto';
-import { and, asc, count, eq, gte, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, count, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { toPublicCard, toPublicQuestion } from '../cards/card.mapper.js';
 import { getDb } from '../db/index.js';
 import {
@@ -59,6 +59,7 @@ export function toPublicReviewState(row: ReviewStateRow): ReviewState {
     reps: row.reps,
     lapses: row.lapses,
     lastFeedback: row.lastFeedback,
+    suspendedAt: row.suspendedAt ? row.suspendedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -169,7 +170,13 @@ export async function getReviewToday(userId: string, now = new Date()): Promise<
       .from(reviewStates)
       .innerJoin(cards, eq(cards.id, reviewStates.cardId))
       .where(
-        and(eq(reviewStates.userId, userId), eq(cards.userId, userId), lte(reviewStates.dueAt, dayEnd)),
+        and(
+          eq(reviewStates.userId, userId),
+          eq(cards.userId, userId),
+          lte(reviewStates.dueAt, dayEnd),
+          isNull(reviewStates.suspendedAt),
+          isNull(cards.deletedAt),
+        ),
       )
       .orderBy(asc(reviewStates.dueAt), asc(reviewStates.cardId)),
     getReviewSettings(userId),
@@ -219,7 +226,7 @@ export async function submitReviewFeedback(
     const [card] = await tx
       .select({ id: cards.id, mapNodeId: cards.mapNodeId })
       .from(cards)
-      .where(and(eq(cards.id, cardId), eq(cards.userId, userId)))
+      .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
       .limit(1);
     if (!card) throw AppError.of(404, 'CARD_NOT_FOUND');
 
@@ -332,7 +339,7 @@ export async function getReviewStats(userId: string, now = new Date()): Promise<
     getDb()
       .select({ n: count() })
       .from(cards)
-      .where(eq(cards.userId, userId))
+      .where(and(eq(cards.userId, userId), isNull(cards.deletedAt)))
       .then((rows) => rows[0]),
     getDb()
       .select({
@@ -340,8 +347,11 @@ export async function getReviewStats(userId: string, now = new Date()): Promise<
         dueAt: reviewStates.dueAt,
       })
       .from(reviewStates)
-      .innerJoin(cards, and(eq(cards.id, reviewStates.cardId), eq(cards.userId, userId)))
-      .where(eq(reviewStates.userId, userId)),
+      .innerJoin(
+        cards,
+        and(eq(cards.id, reviewStates.cardId), eq(cards.userId, userId), isNull(cards.deletedAt)),
+      )
+      .where(and(eq(reviewStates.userId, userId), isNull(reviewStates.suspendedAt))),
   ]);
 
   const daily = buildDailyDistribution(logRows, now);
@@ -408,4 +418,71 @@ export async function getReviewTopicStats(
     .where(and(eq(reviewLogs.userId, userId), gte(reviewLogs.reviewedAt, from)))
     .groupBy(topics.id, topics.title);
   return aggregateTopicStats(rows);
+}
+
+async function requireActiveOwnedCard(userId: string, cardId: string): Promise<void> {
+  const [card] = await getDb()
+    .select({ id: cards.id })
+    .from(cards)
+    .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
+    .limit(1);
+  if (!card) throw AppError.of(404, 'CARD_NOT_FOUND');
+}
+
+/** 已熟悉：leave the review queue until resumed. Idempotent. */
+export async function suspendCard(
+  userId: string,
+  cardId: string,
+  now = new Date(),
+): Promise<ReviewState> {
+  await requireActiveOwnedCard(userId, cardId);
+  await insertInitialReviewState(userId, cardId, now);
+  const [state] = await getDb()
+    .update(reviewStates)
+    .set({ suspendedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(reviewStates.userId, userId),
+        eq(reviewStates.cardId, cardId),
+        isNull(reviewStates.suspendedAt),
+      ),
+    )
+    .returning();
+  if (state) return toPublicReviewState(state);
+  const [current] = await getDb()
+    .select()
+    .from(reviewStates)
+    .where(and(eq(reviewStates.userId, userId), eq(reviewStates.cardId, cardId)))
+    .limit(1);
+  if (!current) throw AppError.of(500, 'INTERNAL_ERROR');
+  return toPublicReviewState(current);
+}
+
+/** 恢复复习（idempotent）。 */
+export async function resumeCard(
+  userId: string,
+  cardId: string,
+  now = new Date(),
+): Promise<ReviewState> {
+  await requireActiveOwnedCard(userId, cardId);
+  await insertInitialReviewState(userId, cardId, now);
+  const [state] = await getDb()
+    .update(reviewStates)
+    .set({ suspendedAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(reviewStates.userId, userId),
+        eq(reviewStates.cardId, cardId),
+        isNotNull(reviewStates.suspendedAt),
+      ),
+    )
+    .returning();
+  if (state) return toPublicReviewState(state);
+  const [current] = await getDb()
+    .select()
+    .from(reviewStates)
+    .where(and(eq(reviewStates.userId, userId), eq(reviewStates.cardId, cardId)))
+    .limit(1);
+  if (!current) throw AppError.of(500, 'INTERNAL_ERROR');
+  return toPublicReviewState(current);
 }

@@ -72,7 +72,7 @@ function docKindTag(
   doc: DocumentDetail,
 ): { tone: 'ai' | 'busy'; label: string } | null {
   if (doc.status === 'pending') return { tone: 'busy', label: '消化中' };
-  const agent = agentDocumentMetaLabel(doc.source, doc.title);
+  const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   if (agent) return { tone: 'ai', label: agent };
   if (doc.source === 'chat') return { tone: 'ai', label: 'AI 回答' };
   return null;

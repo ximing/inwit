@@ -36,6 +36,7 @@ export function toPublicCardBase(row: CardRow): Card {
     hasImage: Boolean(row.imageKey),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
   };
 }
 

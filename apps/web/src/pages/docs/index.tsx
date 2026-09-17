@@ -7,6 +7,7 @@ import { scrollFlashAnnotationAnchor, scrollFlashCardAnchor } from '@/lib/anchor
 import { ROUTES, docsPath } from '@/routes';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
+import { CardEditDialog } from './card-edit-dialog';
 import { DocsAnnotationsService } from './docs-annotations.service';
 import { DocsImportService } from './docs-import.service';
 import { DocsService } from './docs.service';
@@ -240,6 +241,7 @@ const DocsPageContent = observer(function DocsPageContent() {
       ) : null}
       <SelectionPopoverHost />
       {service.newTopicOpen ? <NewTopicDialog /> : null}
+      {service.editingCard ? <CardEditDialog card={service.editingCard} /> : null}
     </div>
   );
 });

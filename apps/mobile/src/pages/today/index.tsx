@@ -90,7 +90,7 @@ function jobDetail(job: Job): string {
 }
 
 function docTag(doc: DocumentListItem): { tone: 'ai' | 'topic'; label: string } | null {
-  const agent = agentDocumentMetaLabel(doc.source, doc.title);
+  const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   if (agent) return { tone: 'ai', label: agent };
   if (doc.source === 'chat') return { tone: 'ai', label: 'AI 回答' };
   if (doc.source === 'screenshot') return { tone: 'topic', label: '截图' };
@@ -220,7 +220,7 @@ const TodayContent = observer(function TodayContent() {
 
           {service.weeklyReport ? (
             <Pressable
-              onPress={() => service.showToast('网页端可见')}
+              onPress={() => router.push({ pathname: '/review', params: { tab: 'reports', report: service.weeklyReport?.documentId } })}
               style={styles.actionReport}
             >
               <Text style={styles.actionKicker}>📖 本周复盘已生成</Text>

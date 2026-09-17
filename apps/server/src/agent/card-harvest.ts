@@ -1,7 +1,7 @@
-import { and, asc, count, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { cardLinks, cardQuestions, cards } from '../db/schema.js';
-import { deleteCard } from '../retrieval/pipeline.js';
+import { deleteCardFromIndex } from '../retrieval/pipeline.js';
 import { logger } from '../utils/logger.js';
 import { buildAssociationHint } from './anchors.js';
 
@@ -13,7 +13,7 @@ export async function cleanupDocumentCards(userId: string, documentId: string): 
     .where(and(eq(cards.userId, userId), eq(cards.documentId, documentId)));
   for (const row of rows) {
     try {
-      await deleteCard(row.id);
+      await deleteCardFromIndex(row.id);
     } catch (err) {
       logger.warn('harvest.cleanup_index_failed', { cardId: row.id, err: String(err) });
     }
@@ -34,7 +34,7 @@ export async function loadDocumentCards(userId: string, documentId: string) {
   const cardRows = await getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.userId, userId), eq(cards.documentId, documentId)))
+    .where(and(eq(cards.userId, userId), eq(cards.documentId, documentId), isNull(cards.deletedAt)))
     .orderBy(asc(cards.createdAt), asc(cards.id));
   const questionRows =
     cardRows.length === 0

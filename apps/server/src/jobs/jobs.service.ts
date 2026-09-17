@@ -1,5 +1,5 @@
 import type { Job, JobQueue, JobUsage, ListJobsQuery, Paginated } from '@inwit/dto';
-import { and, asc, count, desc, eq, gte, inArray, lte, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNull, lte, type SQL } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import {
   agentExecutions,
@@ -66,7 +66,7 @@ async function loadRelatedMaps(userId: string, rows: JobRow[]): Promise<JobRelat
     const cardRows = await getDb()
       .select({ id: cards.id, topicId: cards.topicId })
       .from(cards)
-      .where(and(eq(cards.userId, userId), inArray(cards.id, ids.cardIds)));
+      .where(and(eq(cards.userId, userId), inArray(cards.id, ids.cardIds), isNull(cards.deletedAt)));
     for (const card of cardRows) {
       cardsById.set(card.id, { topicId: card.topicId });
       if (card.topicId) extraTopicIds.push(card.topicId);

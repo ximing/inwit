@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { cards, documents, mapNodes } from '../db/schema.js';
 import { AppError } from '../errors.js';
@@ -68,7 +68,7 @@ export async function applyTopicOutline(opts: {
     const owned = await db
       .select({ id: cards.id, topicId: cards.topicId, userId: cards.userId })
       .from(cards)
-      .where(and(eq(cards.userId, opts.userId), inArray(cards.id, allCardIds)));
+      .where(and(eq(cards.userId, opts.userId), inArray(cards.id, allCardIds), isNull(cards.deletedAt)));
     if (owned.length !== allCardIds.length) {
       throw AppError.of(400, 'MAP_ORGANIZE_INVALID', '大纲里有不属于你的卡片');
     }

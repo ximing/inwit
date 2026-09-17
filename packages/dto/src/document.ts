@@ -72,9 +72,10 @@ export const MULTIPART_PART_SIZE = 5 * 1024 * 1024;
 export function agentDocumentMetaLabel(
   source: DocumentSource,
   title: string | null | undefined,
+  kind?: 'document' | 'weekly_report',
 ): string | null {
   if (source !== 'agent') return null;
-  if (title?.includes(WEEKLY_REPORT_TITLE_MARK)) return AGENT_DOC_LABEL_REPORT;
+  if (kind === 'weekly_report' || (kind === undefined && title?.includes(WEEKLY_REPORT_TITLE_MARK))) return AGENT_DOC_LABEL_REPORT;
   return AGENT_DOC_LABEL_CONTRAST;
 }
 
@@ -138,6 +139,8 @@ export const documentSchema = z.object({
   description: z.string().nullable(),
   contentJson: pmDocSchema,
   source: documentSourceSchema,
+  kind: z.enum(['document', 'weekly_report']).optional(),
+  reportWeekStart: z.string().nullable().optional(),
   status: documentStatusSchema,
   answer: z.string().nullable(),
   linkHint: z.string().nullable(),

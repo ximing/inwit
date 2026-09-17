@@ -31,8 +31,21 @@ export const annotationSchema = z.object({
   hasConvertedCard: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
 });
 export type Annotation = z.infer<typeof annotationSchema>;
+
+/** Soft-deleted annotation row for the settings 回收站. */
+export const archivedAnnotationSchema = annotationSchema.extend({
+  documentTitle: z.string().nullable(),
+});
+export type ArchivedAnnotation = z.infer<typeof archivedAnnotationSchema>;
+
+export const archivedAnnotationsResponseSchema = z.object({
+  items: z.array(archivedAnnotationSchema),
+  total: z.number().int().nonnegative(),
+});
+export type ArchivedAnnotationsResponse = z.infer<typeof archivedAnnotationsResponseSchema>;
 
 export const createAnnotationInputSchema = z
   .object({

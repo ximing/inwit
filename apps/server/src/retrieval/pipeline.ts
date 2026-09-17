@@ -196,8 +196,8 @@ export async function indexCard(card: IndexableCard): Promise<void> {
 }
 
 /** Remove one card from both indexes. */
-export async function deleteCard(cardId: string): Promise<void> {
-  await deleteBoth(cardsStoreName(), cardId, 'deleteCard');
+export async function deleteCardFromIndex(cardId: string): Promise<void> {
+  await deleteBoth(cardsStoreName(), cardId, 'deleteCardFromIndex');
 }
 
 /** Index (or re-index) one document into Qdrant + Meili. */
@@ -338,6 +338,17 @@ export async function tryIndexCard(card: IndexableCard): Promise<void> {
   } catch (err) {
     logger.warn('retrieval.index_card_failed', {
       cardId: card.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+export async function tryDeleteCardFromIndex(cardId: string): Promise<void> {
+  try {
+    await deleteCardFromIndex(cardId);
+  } catch (err) {
+    logger.warn('retrieval.delete_card_failed', {
+      cardId,
       error: err instanceof Error ? err.message : String(err),
     });
   }

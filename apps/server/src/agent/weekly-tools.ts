@@ -1,7 +1,7 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { docDisplayTitle, type MemoryContent } from '@inwit/dto';
-import { and, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations, cardLinks, cards, documents, mapNodes, reviewLogs, reviewStates, topics } from '../db/schema.js';
 import { markdownToContentJson } from '../documents/content-json.js';
@@ -94,7 +94,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
   const [cardRow] = await db
     .select({ n: count() })
     .from(cards)
-    .where(and(eq(cards.userId, userId), gte(cards.createdAt, start), lt(cards.createdAt, endExclusive)));
+    .where(and(eq(cards.userId, userId), gte(cards.createdAt, start), lt(cards.createdAt, endExclusive), isNull(cards.deletedAt)));
 
   const [linkRow] = await db
     .select({ n: count() })
@@ -111,6 +111,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
         eq(annotations.userId, userId),
         gte(annotations.createdAt, start),
         lt(annotations.createdAt, endExclusive),
+        isNull(annotations.deletedAt),
       ),
     );
 
@@ -131,6 +132,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
         eq(annotations.userId, userId),
         gte(annotations.createdAt, start),
         lt(annotations.createdAt, endExclusive),
+        isNull(annotations.deletedAt),
       ),
     )
     .orderBy(desc(annotations.createdAt))
@@ -177,7 +179,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
       concept: cards.concept,
     })
     .from(reviewStates)
-    .innerJoin(cards, eq(cards.id, reviewStates.cardId))
+    .innerJoin(cards, and(eq(cards.id, reviewStates.cardId), isNull(cards.deletedAt)))
     .where(and(eq(reviewStates.userId, userId), sql`${reviewStates.lapses} > 0`))
     .orderBy(desc(reviewStates.lapses), desc(reviewStates.updatedAt))
     .limit(WEEKLY_RELEARN_LIMIT);
@@ -200,7 +202,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
         lastFeedback: reviewStates.lastFeedback,
       })
       .from(reviewLogs)
-      .innerJoin(cards, eq(cards.id, reviewLogs.cardId))
+      .innerJoin(cards, and(eq(cards.id, reviewLogs.cardId), isNull(cards.deletedAt)))
       .leftJoin(
         reviewStates,
         and(eq(reviewStates.cardId, reviewLogs.cardId), eq(reviewStates.userId, userId)),
@@ -340,6 +342,8 @@ export function weeklyWriteDocumentTool(
           title: session.title,
           contentJson: markdownToContentJson(contentMd),
           source: 'agent',
+          kind: 'weekly_report',
+          reportWeekStart: session.weekStart,
           status: 'digested',
         })
         .returning();
@@ -400,7 +404,7 @@ export function weeklyWriteMemoryTool(
           .select({ id: cards.id, concept: cards.concept })
           .from(cards)
           .where(
-            and(eq(cards.userId, session.userId), inArray(cards.id, [...reasonById.keys()])),
+            and(eq(cards.userId, session.userId), inArray(cards.id, [...reasonById.keys()]), isNull(cards.deletedAt)),
           );
         const known = new Set(relearn.map((item) => item.cardId));
         for (const row of owned) {

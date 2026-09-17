@@ -1,5 +1,6 @@
 import {
   acceptAnnotationResurfaceInputSchema,
+  archiveListQuerySchema,
   createAnnotationInputSchema,
   updateAnnotationInputSchema,
 } from '@inwit/dto';
@@ -7,10 +8,13 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/authenticate.js';
 import {
+  archiveAnnotation,
   createAnnotation,
-  deleteAnnotation,
+  destroyAnnotation,
   getAnnotationImage,
+  listArchivedAnnotations,
   listDocumentAnnotations,
+  restoreAnnotation,
   updateAnnotation,
 } from './annotation.service.js';
 import {
@@ -36,15 +40,32 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     return reply.code(201).send(created);
   });
 
+  app.get('/api/annotations/archived', auth, async (req) => {
+    const query = archiveListQuerySchema.parse(req.query ?? {});
+    return listArchivedAnnotations(requireUser(req).id, query);
+  });
+
   app.patch('/api/annotations/:id', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     const input = updateAnnotationInputSchema.parse(req.body);
     return updateAnnotation(requireUser(req).id, id, input);
   });
 
+  /** Soft delete: the annotation moves to 回收站 and can be restored. */
   app.delete('/api/annotations/:id', auth, async (req, reply) => {
     const { id } = idParamsSchema.parse(req.params);
-    await deleteAnnotation(requireUser(req).id, id);
+    await archiveAnnotation(requireUser(req).id, id);
+    return reply.code(204).send();
+  });
+
+  app.post('/api/annotations/:id/restore', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    return restoreAnnotation(requireUser(req).id, id);
+  });
+
+  app.delete('/api/annotations/:id/permanent', auth, async (req, reply) => {
+    const { id } = idParamsSchema.parse(req.params);
+    await destroyAnnotation(requireUser(req).id, id);
     return reply.code(204).send();
   });
 

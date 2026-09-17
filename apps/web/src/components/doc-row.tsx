@@ -31,7 +31,7 @@ export function DocRow({
   hanging?: string | null;
   onOpen?: (docId: string) => void;
 }) {
-  const agentLabel = agentDocumentMetaLabel(doc.source, doc.title);
+  const agentLabel = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   const summary = docSummaryLine(doc);
   const body = (
     <>

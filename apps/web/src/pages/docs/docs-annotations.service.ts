@@ -92,6 +92,7 @@ export class DocsAnnotationsService extends Service {
         delete next[id];
         this.annotationImageUrls = next;
       }
+      this.docs.showToast('已移入回收站，可在设置里恢复');
     } catch (err) {
       this.docs.showToast(errorMessage(err, '没删掉'));
     }

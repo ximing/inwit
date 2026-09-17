@@ -8,7 +8,8 @@ import { DocRowSummary } from '@/components/doc-row';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
-import { formatRelativeTime, isSubmitHotkey } from '@/lib/format';
+import { formatRelativeTime } from '@/lib/format';
+import { CaptureEditor } from '@/components/capture/capture-editor';
 import { docsPath } from '@/routes';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { DocsService } from './docs.service';
@@ -25,7 +26,7 @@ function rowKindTag(
   if (stage.kind !== 'idle' && stage.kind !== 'failed' && stage.label) {
     return { tone: 'busy', label: stage.label, pulse: stage.pulse };
   }
-  const agent = agentDocumentMetaLabel(doc.source, doc.title);
+  const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   if (agent) return { tone: 'ai', label: agent };
   if (doc.source === 'chat') return { tone: 'ai', label: 'AI 回答' };
   return null;
@@ -205,18 +206,11 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
       ) : null}
       <div className="ws-capture">
         <div className="capture">
-          <textarea
-            rows={2}
-            autoComplete="off"
+          <CaptureEditor
             placeholder="扔一句话进来，或以问号结尾问 AI…"
-            value={service.draft}
-            onChange={(event) => service.setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (isSubmitHotkey(event)) {
-                event.preventDefault();
-                void submit('auto');
-              }
-            }}
+            onTextChange={(text) => service.setDraft(text)}
+            onSubmit={() => void submit('auto')}
+            onReady={(handle) => service.bindCapture(handle)}
           />
           <div className="capture-bar">
             <TopicPicker

@@ -4,7 +4,9 @@ import {
   PanelRight,
   PanelRightClose,
   PanelRightOpen,
+  Pause,
   Pencil,
+  Play,
   SquarePlus,
   Trash2,
   X,
@@ -164,15 +166,53 @@ const DocCardButton = observer(function DocCardButton({ card }: { card: Document
   const open = service.expandedCardIds.includes(card.id);
   const active = service.activeCardId === card.id;
   const lost = service.isCardAnchorLost(card);
+  const suspended = card.review?.suspendedAt != null;
   return (
-    <MiniCard
-      card={card}
-      open={open}
-      active={active}
-      lost={lost}
-      onClick={() => service.toggleCard(card.id)}
-      thumb={card.hasImage ? <DocCardThumb cardId={card.id} /> : null}
-    />
+    <div className="mini-wrap">
+      <MiniCard
+        card={card}
+        open={open}
+        active={active}
+        lost={lost}
+        onClick={() => service.toggleCard(card.id)}
+        thumb={card.hasImage ? <DocCardThumb cardId={card.id} /> : null}
+      />
+      {open ? (
+        <div className="note-item-ops mini-ops">
+          <button
+            type="button"
+            className="note-op"
+            aria-label="编辑卡片"
+            title="编辑"
+            onClick={() => service.openCardEdit(card.id)}
+          >
+            <Pencil width={13} height={13} strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            className={`note-op${suspended ? ' is-on' : ''}`}
+            aria-label={suspended ? '恢复复习' : '已熟悉，不复习'}
+            title={suspended ? '恢复复习' : '已熟悉，不复习'}
+            onClick={() => void service.toggleCardSuspended(card)}
+          >
+            {suspended ? (
+              <Play width={13} height={13} strokeWidth={1.8} />
+            ) : (
+              <Pause width={13} height={13} strokeWidth={1.8} />
+            )}
+          </button>
+          <button
+            type="button"
+            className="note-op"
+            aria-label="删除卡片"
+            title="移入回收站"
+            onClick={() => void service.archiveDocCard(card.id)}
+          >
+            <Trash2 width={13} height={13} strokeWidth={1.8} />
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 });
 

@@ -226,6 +226,8 @@ export const documents = pgTable(
       .notNull()
       .default(sql`'{"type":"doc","content":[{"type":"paragraph"}]}'::jsonb`),
     source: varchar('source', { length: 16 }).$type<DocumentSource>().notNull(),
+    kind: varchar('kind', { length: 16 }).$type<'document' | 'weekly_report'>().notNull().default('document'),
+    reportWeekStart: varchar('report_week_start', { length: 10 }),
     status: varchar('status', { length: 16 }).$type<DocumentStatus>().notNull().default('pending'),
     answer: text('answer'),
     linkHint: text('link_hint'),
@@ -242,6 +244,8 @@ export const documents = pgTable(
     index('idx_documents_user_status').on(t.userId, t.status),
     index('idx_documents_topic').on(t.topicId),
     index('idx_documents_map_node').on(t.mapNodeId),
+    index('idx_documents_user_kind_week').on(t.userId, t.kind, t.reportWeekStart),
+    enumCheck('documents_kind_check', t.kind, ['document', 'weekly_report']),
     enumCheck('documents_source_check', t.source, DOCUMENT_SOURCES),
     enumCheck('documents_status_check', t.status, DOCUMENT_STATUSES),
   ],
@@ -272,6 +276,8 @@ export const annotations = pgTable(
     }),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+    /** Soft delete (回收站); non-null rows are hidden from lists and retrieval. */
+    deletedAt: timestamptz('deleted_at'),
   },
   (t) => [
     index('idx_annotations_user').on(t.userId),
@@ -305,6 +311,8 @@ export const cards = pgTable(
     imageKey: text('image_key'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+    /** Soft delete (回收站); non-null rows are hidden from lists and retrieval. */
+    deletedAt: timestamptz('deleted_at'),
   },
   (t) => [
     index('idx_cards_user').on(t.userId),
@@ -381,12 +389,17 @@ export const reviewStates = pgTable(
     reps: integer('reps').notNull().default(0),
     lapses: integer('lapses').notNull().default(0),
     lastFeedback: varchar('last_feedback', { length: 16 }).$type<ReviewFeedback>(),
+    /** 已熟悉：non-null = left out of the review queue until resumed. */
+    suspendedAt: timestamptz('suspended_at'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
   },
   (t) => [
     unique('review_states_user_card_uidx').on(t.userId, t.cardId),
     index('idx_review_states_user_due').on(t.userId, t.dueAt),
+    index('idx_review_states_user_due_active')
+      .on(t.userId, t.dueAt)
+      .where(sql`${t.suspendedAt} IS NULL`),
     check(
       'review_states_last_feedback_check',
       sql`${t.lastFeedback} IS NULL OR ${t.lastFeedback} IN ('forgot', 'fuzzy', 'remembered')`,

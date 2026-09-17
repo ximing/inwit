@@ -1,7 +1,7 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { CARD_LINK_TYPES, type CardLinkType, type CardSource } from '@inwit/dto';
-import { and, count, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
 import { cardLinks, cardQuestions, cards, documents, topics } from '../db/schema.js';
@@ -9,7 +9,7 @@ import { asPmJson } from '../documents/content-json.js';
 import { AppError } from '../errors.js';
 import { getTopicMapFlat, placeCardOnMap, recalculateMapNodeStatus } from '../maps/map.service.js';
 import { OutlineError, parsePlaceOnMapTarget } from '../maps/outline.js';
-import { deleteCard, indexCard, searchCards } from '../retrieval/pipeline.js';
+import { deleteCardFromIndex, indexCard, searchCards } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
 import { readDocumentAnnotationsTool, searchAnnotationsTool } from './annotation-tools.js';
@@ -159,7 +159,7 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
         } catch (err) {
           logger.error('digest.index_card_failed', err);
           try {
-            await deleteCard(row.id);
+            await deleteCardFromIndex(row.id);
           } catch (cleanupErr) {
             logger.warn('digest.index_card_cleanup_failed', cleanupErr);
           }
@@ -207,7 +207,7 @@ export function writeQuestionsTool(session: DigestSession): AgentTool<typeof wri
       const [card] = await getDb()
         .select()
         .from(cards)
-        .where(and(eq(cards.id, params.cardId), eq(cards.userId, session.userId)))
+        .where(and(eq(cards.id, params.cardId), eq(cards.userId, session.userId), isNull(cards.deletedAt)))
         .limit(1);
       if (!card) throw new Error('card not found');
       if (card.documentId !== session.documentId) throw new Error('card does not belong to this document');
@@ -239,7 +239,10 @@ export type SearchUserMemoriesArgs = Static<typeof searchUserMemoriesSchema>;
 async function searchOwnedCards(userId: string, query: string) {
   const ids = await searchCards(userId, query, 8);
   if (ids.length === 0) return [];
-  const rows = await getDb().select().from(cards).where(eq(cards.userId, userId));
+  const rows = await getDb()
+    .select()
+    .from(cards)
+    .where(and(eq(cards.userId, userId), isNull(cards.deletedAt)));
   const byId = new Map(rows.map((row) => [row.id, row]));
   return ids
     .map((id) => byId.get(id))
@@ -342,7 +345,7 @@ export function attributeTopicTool(session: DigestSession): AgentTool<typeof att
       await getDb()
         .update(cards)
         .set({ topicId: topic.id, updatedAt: now })
-        .where(and(eq(cards.documentId, document.id), eq(cards.userId, session.userId)));
+        .where(and(eq(cards.documentId, document.id), eq(cards.userId, session.userId), isNull(cards.deletedAt)));
       session.topicId = topic.id;
       return toolResult(
         JSON.stringify({ ok: true, topicId: topic.id, reason: params.reason }),
@@ -398,6 +401,7 @@ export function linkCardsTool(session: DigestSession): AgentTool<typeof linkCard
           and(
             eq(cards.userId, session.userId),
             inArray(cards.id, [params.cardId, params.targetCardId]),
+            isNull(cards.deletedAt),
           ),
         );
       const from = owned.find((row) => row.id === params.cardId);

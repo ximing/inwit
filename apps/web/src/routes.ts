@@ -74,3 +74,9 @@ export const PAGE_LIST: ReadonlyArray<{ path: AppRoute; title: string; auth: boo
 export function routeSegment(path: AppRoute): string {
   return path.replace(/^\//, '');
 }
+
+export function weeklyReportsPath(id?: string): string {
+  const params = new URLSearchParams({ tab: 'reports' });
+  if (id) params.set('report', id);
+  return `${ROUTES.review}?${params.toString()}`;
+}

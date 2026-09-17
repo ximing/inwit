@@ -1,5 +1,5 @@
 import { evolveAnalyzeJobPayloadFrom, evolveJobPayloadFrom, type EvolveReason } from '@inwit/dto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { cardQuestions, cards, reviewStates, type CardRow, type JobRow } from '../db/schema.js';
 import { logger } from '../utils/logger.js';
@@ -13,7 +13,7 @@ async function loadOwnedCard(userId: string, cardId: string): Promise<CardRow | 
   const [row] = await getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.id, cardId), eq(cards.userId, userId)))
+    .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
     .limit(1);
   return row ?? null;
 }

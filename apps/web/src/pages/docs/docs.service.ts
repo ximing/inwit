@@ -1,4 +1,5 @@
 import { Service } from '@rabjs/react';
+import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
 import {
   EMPTY_PM_DOC,
   isChatQuestion,
@@ -16,9 +17,10 @@ import {
   type Job,
   type PmDocJson,
   type Topic,
+  type UpdateCardInput,
 } from '@inwit/dto';
 import { listDocumentAnnotations } from '@/api/annotations';
-import { createCard } from '@/api/cards';
+import { archiveCard, createCard, resumeCard, suspendCard, updateCard } from '@/api/cards';
 import { errorMessage } from '@/api/client';
 import {
   createDocument,
@@ -66,7 +68,7 @@ function asDocumentCard(card: Card): DocumentCard {
   return {
     ...card,
     questions: [],
-    review: { dueAt: new Date().toISOString(), intervalDays: 0 },
+    review: { dueAt: new Date().toISOString(), intervalDays: 0, suspendedAt: null },
   };
 }
 
@@ -340,6 +342,12 @@ export class DocsService extends Service {
     this.draft = value;
   }
 
+  captureHandle: CaptureEditorHandle | null = null;
+
+  bindCapture(handle: CaptureEditorHandle | null): void {
+    this.captureHandle = handle;
+  }
+
   selectCaptureTopic(id: string | null): void {
     this.captureTopicId = id;
     this.topicMenuOpen = false;
@@ -453,12 +461,18 @@ export class DocsService extends Service {
   }
 
   async send(mode: 'auto' | 'chat' | 'paste' = 'auto'): Promise<string | null> {
-    const content = this.draft.trim();
+    const content = (this.captureHandle?.getText() ?? this.draft).trim();
     if (content.length === 0) return null;
     this.error = null;
     const useChat = captureIsChat(content, mode);
     try {
-      const { created } = await sendCapture({ content, topicId: this.captureTopicId, mode });
+      const { created } = await sendCapture({
+        text: content,
+        pmJson: this.captureHandle?.getJSON(),
+        topicId: this.captureTopicId,
+        mode,
+      });
+      this.captureHandle?.clear();
       this.draft = '';
       this.ingestCreated(created);
       this.showToast(useChat ? '问题扔出去了，正在答' : '已收下，消化中');
@@ -874,6 +888,80 @@ export class DocsService extends Service {
 
   async cardFromExcerpt(annotationId: string): Promise<boolean> {
     return this.annotationService.cardFromExcerpt(annotationId);
+  }
+
+  editingCardId: string | null = null;
+
+  openCardEdit(id: string): void {
+    this.editingCardId = id;
+  }
+
+  closeCardEdit(): void {
+    this.editingCardId = null;
+  }
+
+  get editingCard(): DocumentCard | null {
+    if (!this.doc || !this.editingCardId) return null;
+    return this.doc.cards.find((card) => card.id === this.editingCardId) ?? null;
+  }
+
+  private replaceDocCard(updated: DocumentCard): void {
+    if (!this.doc) return;
+    this.doc = {
+      ...this.doc,
+      cards: this.doc.cards.map((card) => (card.id === updated.id ? updated : card)),
+    };
+    this.patchListFromDetail(this.doc);
+  }
+
+  async saveCardEdit(id: string, input: UpdateCardInput): Promise<boolean> {
+    try {
+      const detail = await updateCard(id, input);
+      const { documentTitle: _documentTitle, ...card } = detail;
+      this.replaceDocCard(card);
+      this.showToast('已保存');
+      return true;
+    } catch (err) {
+      this.showToast(errorMessage(err, '没改上'));
+      return false;
+    }
+  }
+
+  /** Soft delete: the card moves to 回收站 and can be restored from settings. */
+  async archiveDocCard(id: string): Promise<void> {
+    try {
+      await archiveCard(id);
+      if (this.doc) {
+        this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
+        this.patchListFromDetail(this.doc);
+      }
+      this.expandedCardIds = this.expandedCardIds.filter((cardId) => cardId !== id);
+      if (this.activeCardId === id) this.activeCardId = null;
+      if (this.editingCardId === id) this.editingCardId = null;
+      this.editorHost?.ensureEntityMarks(this.doc?.cards ?? [], this.annotations);
+      this.showToast('已移入回收站，可在设置里恢复');
+    } catch (err) {
+      this.showToast(errorMessage(err, '没删掉'));
+    }
+  }
+
+  /** 已熟悉 ↔ 恢复复习。 */
+  async toggleCardSuspended(card: DocumentCard): Promise<void> {
+    const suspended = card.review?.suspendedAt != null;
+    try {
+      const state = suspended ? await resumeCard(card.id) : await suspendCard(card.id);
+      this.replaceDocCard({
+        ...card,
+        review: {
+          dueAt: state.dueAt,
+          intervalDays: state.intervalDays,
+          suspendedAt: state.suspendedAt,
+        },
+      });
+      this.showToast(suspended ? '已恢复复习' : '已标记为熟悉，不再安排复习');
+    } catch (err) {
+      this.showToast(errorMessage(err, '操作没成功'));
+    }
   }
 
   async queueSelectionCards(documentId: string, text: string, blockIndex: number): Promise<boolean> {

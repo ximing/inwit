@@ -183,7 +183,8 @@ describe('cardDetailSchema', () => {
       updatedAt: '2026-09-14T00:00:00.000Z',
       questions: [],
       documentTitle: '梯度消失',
-      review: { dueAt: '2026-09-15T00:00:00.000Z', intervalDays: 1 },
+      deletedAt: null,
+      review: { dueAt: '2026-09-15T00:00:00.000Z', intervalDays: 1, suspendedAt: null },
     });
     expect(parsed.success).toBe(true);
   });

@@ -1,5 +1,5 @@
 import type { MemoryContent } from '@inwit/dto';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb, type Database } from '../db/index.js';
 import { cards, documents, mapNodes, memories, type MapNodeRow } from '../db/schema.js';
 
@@ -52,7 +52,7 @@ export async function loadTopicMapSnapshot(topicId: string, db: SnapshotDb = get
     const cardRows = await db
       .select({ id: cards.id, mapNodeId: cards.mapNodeId })
       .from(cards)
-      .where(inArray(cards.mapNodeId, nodeIds));
+      .where(and(inArray(cards.mapNodeId, nodeIds), isNull(cards.deletedAt)));
     for (const row of cardRows) {
       if (!row.mapNodeId) continue;
       const list = cardIdsByNode.get(row.mapNodeId);

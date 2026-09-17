@@ -1,3 +1,4 @@
+import { isNull } from 'drizzle-orm';
 import { getDb, pool } from '../apps/server/src/db/index.js';
 import { annotations, cards, documents } from '../apps/server/src/db/schema.js';
 import { indexAnnotation, indexCard, indexDocument } from '../apps/server/src/retrieval/pipeline.js';
@@ -65,7 +66,8 @@ try {
       confusionPoint: cards.confusionPoint,
       tags: cards.tags,
     })
-    .from(cards);
+    .from(cards)
+    .where(isNull(cards.deletedAt));
 
   let cardOk = 0;
   let cardSkip = 0;
@@ -105,7 +107,8 @@ try {
       quote: annotations.quote,
       note: annotations.note,
     })
-    .from(annotations);
+    .from(annotations)
+    .where(isNull(annotations.deletedAt));
 
   let annotationOk = 0;
   let annotationSkip = 0;

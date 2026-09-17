@@ -357,7 +357,7 @@ const DocCard = observer(function DocCard({
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const excerpt = cardExcerpt(doc);
   const hanging = service.hangingTitle(doc);
-  const agent = agentDocumentMetaLabel(doc.source, doc.title);
+  const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   const pending = doc.status === 'pending';
   return (
     <Pressable onPress={onOpen} style={styles.docCard}>

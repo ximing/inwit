@@ -54,7 +54,7 @@ const DocRow = observer(function DocRow({ doc }: { doc: DocumentListItem }) {
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const stage = service.stageFor(doc);
-  const agent = agentDocumentMetaLabel(doc.source, doc.title);
+  const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   const summary = docSummary(doc);
   const failed = doc.status === 'failed' || stage.kind === 'failed';
   const pulse = stage.pulse && stage.label;

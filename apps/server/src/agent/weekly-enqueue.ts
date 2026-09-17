@@ -1,5 +1,5 @@
 import { WEEKLY_REPORT_TITLE_MARK, type Job, type WeeklyReportLatest } from '@inwit/dto';
-import { and, count, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { getDb, type Database } from '../db/index.js';
 import { cardLinks, cards, documents, jobs, reviewLogs, users, type JobRow } from '../db/schema.js';
 import { enqueueJob } from '../jobs/enqueue.js';
@@ -64,7 +64,7 @@ async function countWeeklyActivity(
   const [cardRow] = await db
     .select({ n: count() })
     .from(cards)
-    .where(and(eq(cards.userId, userId), gte(cards.createdAt, start), lt(cards.createdAt, endExclusive)));
+    .where(and(eq(cards.userId, userId), gte(cards.createdAt, start), lt(cards.createdAt, endExclusive), isNull(cards.deletedAt)));
   const [linkRow] = await db
     .select({ n: count() })
     .from(cardLinks)

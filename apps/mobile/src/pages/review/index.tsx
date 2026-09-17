@@ -1,5 +1,5 @@
 import { bindServices, observer, useService } from '@rabjs/react';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { ROUTES } from '@/routes';
 import { useTheme, type ThemeTokens } from '@/theme';
 import { ForecastBars, WeekBars, WeekLegend } from './charts';
 import { ReviewService } from './review.service';
+import { ReportsPane } from './reports-pane';
 import { SettingsPanel } from './settings-panel';
 
 function estimateReviewMinutes(count: number): number {
@@ -16,6 +17,8 @@ function estimateReviewMinutes(count: number): number {
 
 const HubContent = observer(function HubContent() {
   const service = useService(ReviewService);
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const reportsActive = params.tab === 'reports';
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const stats = service.stats;
@@ -34,7 +37,10 @@ const HubContent = observer(function HubContent() {
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <View style={{ flexDirection: 'row', gap: 24, paddingHorizontal: 20, paddingVertical: 12 }}>
+        {(['overview', 'reports'] as const).map(tab => <Pressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: reportsActive === (tab === 'reports') }} onPress={() => router.setParams({ tab })}><Text style={{ color: reportsActive === (tab === 'reports') ? theme.colors.accentDeep : theme.colors.ink3, fontWeight: '600', fontSize: 16 }}>{tab === 'reports' ? '学习周报' : '复习概览'}</Text></Pressable>)}
+      </View>
+      {reportsActive ? <ReportsPane /> : <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         {!service.ready ? <Text style={styles.hint}>正在加载复习中心…</Text> : null}
         {service.error ? (
           <Text style={styles.error} accessibilityRole="alert">
@@ -110,7 +116,7 @@ const HubContent = observer(function HubContent() {
         </View>
 
         <SettingsPanel />
-      </ScrollView>
+      </ScrollView>}
     </SafeAreaView>
   );
 });

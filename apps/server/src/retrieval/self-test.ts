@@ -6,7 +6,7 @@ import { getDb, pool } from '../db/index.js';
 import { annotations, cards, documents, users } from '../db/schema.js';
 import {
   deleteAnnotationFromIndex,
-  deleteCard,
+  deleteCardFromIndex,
   indexAnnotation,
   indexCard,
   searchAnnotations,
@@ -97,9 +97,9 @@ async function runPipeline(): Promise<void> {
     if (!hits.includes(card.id)) fail('searchCards did not recall the indexed card');
     pass('searchCards recalled the indexed card');
 
-    await deleteCard(card.id);
+    await deleteCardFromIndex(card.id);
     await getDb().delete(cards).where(eq(cards.id, card.id));
-    pass('deleteCard removed indexes');
+    pass('deleteCardFromIndex removed indexes');
 
     const after = await searchCards(user.id, '梯度消失 sigmoid 反向传播', 5);
     console.log(`search after delete=${JSON.stringify(after)}`);

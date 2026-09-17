@@ -4,6 +4,13 @@ import { OCR_DEFAULT_MODEL, type LlmProvider } from '@inwit/dto';
 import { UserAvatar } from '@/components/user-avatar';
 import { Tag } from '@/components/tag';
 import { formatDate, formatDateTime } from '@/lib/format';
+
+/** 回收站摘要：单行截断。 */
+function clipArchiveText(text: string, max = 60): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const chars = [...flat];
+  return chars.length <= max ? flat : `${chars.slice(0, max).join('')}…`;
+}
 import { THEME_OPTIONS, ThemeService, type ThemePreference } from '@/services/theme.service';
 import {
   ACCESS_TOKEN_MAX_PER_USER,
@@ -26,6 +33,7 @@ const NAV: Array<{ id: SettingsSection; href: string; label: string }> = [
   { id: 'models', href: '#models', label: '模型配置' },
   { id: 'ocr', href: '#ocr', label: '文档解析' },
   { id: 'token', href: '#token', label: '接口令牌' },
+  { id: 'archive', href: '#archive', label: '回收站' },
 ];
 
 const SettingsPageContent = observer(function SettingsPageContent() {
@@ -560,6 +568,179 @@ const SettingsPageContent = observer(function SettingsPageContent() {
               ) : null}
             </div>
           )}
+        </div>
+
+        <div className="section" id="archive">
+          <div className="section-title">回收站</div>
+          <div className="section-lede">
+            删除的卡片和批注会先到这里，可以恢复；彻底删除后无法找回。
+          </div>
+
+          <div className="archive-group">
+            <div className="archive-group-title">卡片 · {service.archivedCardsTotal}</div>
+            {service.archivedCardsError ? (
+              <p className="banner-error" role="alert">
+                {service.archivedCardsError}
+              </p>
+            ) : null}
+            {!service.$model.loadArchivedCards.loading && service.archivedCards.length === 0 ? (
+              <p className="empty compact">回收站里没有卡片。</p>
+            ) : null}
+            {service.archivedCards.length > 0 ? (
+              <table className="hist-table">
+                <thead>
+                  <tr>
+                    <th>概念</th>
+                    <th>来源文档</th>
+                    <th>删除时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {service.archivedCards.map((card) => (
+                    <tr key={card.id}>
+                      <td>{clipArchiveText(card.concept)}</td>
+                      <td>{card.documentTitle ?? '（文档已删除）'}</td>
+                      <td>{card.deletedAt ? formatDateTime(card.deletedAt) : '—'}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => void service.restoreArchivedCard(card.id)}
+                          >
+                            恢复
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => {
+                              if (window.confirm('彻底删除后无法恢复，确定吗？')) {
+                                void service.destroyArchivedCard(card.id);
+                              }
+                            }}
+                          >
+                            彻底删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            {service.archivedCardsTotal > 0 ? (
+              <div className="hist-pager">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={!service.archivedCardsHasPrev}
+                  onClick={() => void service.loadArchivedCards(service.archivedCardsPage - 1)}
+                >
+                  上一页
+                </button>
+                <span>
+                  {service.archivedCardsPage} /{' '}
+                  {Math.max(1, Math.ceil(service.archivedCardsTotal / service.archivedCardsLimit))}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={!service.archivedCardsHasNext}
+                  onClick={() => void service.loadArchivedCards(service.archivedCardsPage + 1)}
+                >
+                  下一页
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="archive-group">
+            <div className="archive-group-title">批注 · {service.archivedAnnotationsTotal}</div>
+            {service.archivedAnnotationsError ? (
+              <p className="banner-error" role="alert">
+                {service.archivedAnnotationsError}
+              </p>
+            ) : null}
+            {!service.$model.loadArchivedAnnotations.loading &&
+            service.archivedAnnotations.length === 0 ? (
+              <p className="empty compact">回收站里没有批注。</p>
+            ) : null}
+            {service.archivedAnnotations.length > 0 ? (
+              <table className="hist-table">
+                <thead>
+                  <tr>
+                    <th>内容</th>
+                    <th>来源文档</th>
+                    <th>删除时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {service.archivedAnnotations.map((item) => (
+                    <tr key={item.id}>
+                      <td>{clipArchiveText(item.note.trim() || item.quote)}</td>
+                      <td>{item.documentTitle ?? '（文档已删除）'}</td>
+                      <td>{item.deletedAt ? formatDateTime(item.deletedAt) : '—'}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => void service.restoreArchivedAnnotation(item.id)}
+                          >
+                            恢复
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => {
+                              if (window.confirm('彻底删除后无法恢复，确定吗？')) {
+                                void service.destroyArchivedAnnotation(item.id);
+                              }
+                            }}
+                          >
+                            彻底删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            {service.archivedAnnotationsTotal > 0 ? (
+              <div className="hist-pager">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={!service.archivedAnnotationsHasPrev}
+                  onClick={() =>
+                    void service.loadArchivedAnnotations(service.archivedAnnotationsPage - 1)
+                  }
+                >
+                  上一页
+                </button>
+                <span>
+                  {service.archivedAnnotationsPage} /{' '}
+                  {Math.max(
+                    1,
+                    Math.ceil(service.archivedAnnotationsTotal / service.archivedAnnotationsLimit),
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={!service.archivedAnnotationsHasNext}
+                  onClick={() =>
+                    void service.loadArchivedAnnotations(service.archivedAnnotationsPage + 1)
+                  }
+                >
+                  下一页
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
       {service.toast ? (

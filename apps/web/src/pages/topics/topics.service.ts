@@ -1,4 +1,5 @@
 import { Service } from '@rabjs/react';
+import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
 import type {
   Document,
   DocumentListItem,
@@ -278,6 +279,12 @@ export class TopicsService extends Service {
 
   setDraft(value: string): void {
     this.draft = value;
+  }
+
+  captureHandle: CaptureEditorHandle | null = null;
+
+  bindCapture(handle: CaptureEditorHandle | null): void {
+    this.captureHandle = handle;
   }
 
   setNewTitle(value: string): void {
@@ -593,12 +600,18 @@ export class TopicsService extends Service {
 
   async send(mode: 'auto' | 'chat' | 'paste' = 'auto'): Promise<string | null> {
     if (!this.topic || this.topic.status === 'archived') return null;
-    const content = this.draft.trim();
+    const content = (this.captureHandle?.getText() ?? this.draft).trim();
     if (content.length === 0) return null;
     this.error = null;
     const useChat = captureIsChat(content, mode);
     try {
-      const { created } = await sendCapture({ content, topicId: this.topic.id, mode });
+      const { created } = await sendCapture({
+        text: content,
+        pmJson: this.captureHandle?.getJSON(),
+        topicId: this.topic.id,
+        mode,
+      });
+      this.captureHandle?.clear();
       this.draft = '';
       this.ingestCreated(created);
       this.showToast(useChat ? '问题扔出去了，正在答' : '已收下，消化中');

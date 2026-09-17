@@ -1,4 +1,6 @@
 import type {
+  ArchivedCardsResponse,
+  ArchiveListQuery,
   Card,
   CardDetail,
   CardImageResponse,
@@ -7,8 +9,9 @@ import type {
   CardLinkWithCard,
   CardSummary,
   CreateCardInput,
+  UpdateCardInput,
 } from '@inwit/dto';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import {
   annotations,
@@ -24,9 +27,10 @@ import { getOwnedDocument } from '../documents/document.service.js';
 import { isExcerptKeyFor } from '../documents/excerpt-logic.js';
 import { AppError } from '../errors.js';
 import { recalculateMapNodeStatus, requireWritableMapNode } from '../maps/map.service.js';
-import { tryIndexCard } from '../retrieval/pipeline.js';
+import { tryDeleteCardFromIndex, tryIndexCard } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { presignGet } from '../storage/client.js';
+import { diffCardQuestions, normalizeTags } from './card-logic.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
 
 function toPublicLink(row: CardLinkRow): CardLink {
@@ -47,6 +51,17 @@ function withCard(row: CardLinkRow, card: CardSummary): CardLinkWithCard {
 }
 
 async function getOwnedCard(userId: string, id: string): Promise<CardRow> {
+  const [row] = await getDb()
+    .select()
+    .from(cards)
+    .where(and(eq(cards.id, id), eq(cards.userId, userId), isNull(cards.deletedAt)))
+    .limit(1);
+  if (!row) throw AppError.of(404, 'CARD_NOT_FOUND');
+  return row;
+}
+
+/** Ownership check that also sees archived cards (回收站 restore/destroy paths). */
+async function getOwnedCardAny(userId: string, id: string): Promise<CardRow> {
   const [row] = await getDb()
     .select()
     .from(cards)
@@ -136,7 +151,11 @@ export async function getCard(userId: string, id: string): Promise<CardDetail> {
   }
 
   const [state] = await getDb()
-    .select({ dueAt: reviewStates.dueAt, intervalDays: reviewStates.intervalDays })
+    .select({
+      dueAt: reviewStates.dueAt,
+      intervalDays: reviewStates.intervalDays,
+      suspendedAt: reviewStates.suspendedAt,
+    })
     .from(reviewStates)
     .where(and(eq(reviewStates.userId, userId), eq(reviewStates.cardId, id)))
     .limit(1);
@@ -148,7 +167,11 @@ export async function getCard(userId: string, id: string): Promise<CardDetail> {
     ),
     documentTitle,
     review: state
-      ? { dueAt: state.dueAt.toISOString(), intervalDays: state.intervalDays }
+      ? {
+          dueAt: state.dueAt.toISOString(),
+          intervalDays: state.intervalDays,
+          suspendedAt: state.suspendedAt ? state.suspendedAt.toISOString() : null,
+        }
       : null,
   };
 }
@@ -222,4 +245,136 @@ export async function setCardMapNode(
     }
     return toPublicCardBase(row);
   });
+}
+
+export async function updateCard(
+  userId: string,
+  id: string,
+  input: UpdateCardInput,
+): Promise<CardDetail> {
+  await getOwnedCard(userId, id);
+  const now = new Date();
+
+  await getDb().transaction(async (tx) => {
+    const fields: Partial<typeof cards.$inferInsert> = { updatedAt: now };
+    if (input.concept !== undefined) fields.concept = input.concept;
+    if (input.example !== undefined) fields.example = input.example;
+    if (input.confusionPoint !== undefined) fields.confusionPoint = input.confusionPoint;
+    if (input.tags !== undefined) fields.tags = normalizeTags(input.tags);
+    await tx
+      .update(cards)
+      .set(fields)
+      .where(and(eq(cards.id, id), eq(cards.userId, userId)));
+
+    if (input.questions !== undefined) {
+      const existingRows = await tx
+        .select()
+        .from(cardQuestions)
+        .where(eq(cardQuestions.cardId, id));
+      const diff = diffCardQuestions(
+        existingRows.map((row) => toPublicQuestion(row)),
+        input.questions,
+      );
+      if (diff.unknownIds.length > 0) throw AppError.of(400, 'VALIDATION_ERROR');
+      for (const question of diff.toCreate) {
+        await tx.insert(cardQuestions).values({
+          cardId: id,
+          type: question.type,
+          question: question.question,
+          answer: question.answer,
+        });
+      }
+      for (const { id: questionId, input: question } of diff.toUpdate) {
+        await tx
+          .update(cardQuestions)
+          .set({ type: question.type, question: question.question, answer: question.answer })
+          .where(eq(cardQuestions.id, questionId));
+      }
+      if (diff.toDelete.length > 0) {
+        await tx.delete(cardQuestions).where(
+          and(eq(cardQuestions.cardId, id), inArray(cardQuestions.id, diff.toDelete)),
+        );
+      }
+    }
+  });
+
+  const detail = await getCard(userId, id);
+  await tryIndexCard({
+    id: detail.id,
+    userId: detail.userId,
+    topicId: detail.topicId,
+    concept: detail.concept,
+    example: detail.example,
+    confusionPoint: detail.confusionPoint,
+    tags: detail.tags,
+  });
+  return detail;
+}
+
+/** Soft delete (idempotent): hidden everywhere, restorable from 回收站. */
+export async function archiveCard(userId: string, id: string): Promise<void> {
+  const card = await getOwnedCardAny(userId, id);
+  if (card.deletedAt) return;
+  const now = new Date();
+  await getDb().transaction(async (tx) => {
+    await tx
+      .update(cards)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(cards.id, id), eq(cards.userId, userId)));
+    if (card.mapNodeId) await recalculateMapNodeStatus(card.mapNodeId, tx);
+  });
+  await tryDeleteCardFromIndex(id);
+}
+
+export async function restoreCard(userId: string, id: string): Promise<Card> {
+  const card = await getOwnedCardAny(userId, id);
+  if (!card.deletedAt) return toPublicCardBase(card);
+  const now = new Date();
+  const restored = await getDb().transaction(async (tx) => {
+    const [row] = await tx
+      .update(cards)
+      .set({ deletedAt: null, updatedAt: now })
+      .where(and(eq(cards.id, id), eq(cards.userId, userId)))
+      .returning();
+    if (!row) throw AppError.of(404, 'CARD_NOT_FOUND');
+    if (row.mapNodeId) await recalculateMapNodeStatus(row.mapNodeId, tx);
+    return row;
+  });
+  await tryIndexCard(restored);
+  return toPublicCardBase(restored);
+}
+
+/** Permanent delete from 回收站; cardLinks/questions/review rows cascade. */
+export async function destroyCard(userId: string, id: string): Promise<void> {
+  await getOwnedCardAny(userId, id);
+  await getDb()
+    .delete(cards)
+    .where(and(eq(cards.id, id), eq(cards.userId, userId)));
+  await tryDeleteCardFromIndex(id);
+}
+
+export async function listArchivedCards(
+  userId: string,
+  query: ArchiveListQuery,
+): Promise<ArchivedCardsResponse> {
+  const offset = (query.page - 1) * query.limit;
+  const where = and(eq(cards.userId, userId), isNotNull(cards.deletedAt));
+  const [rows, [totalRow]] = await Promise.all([
+    getDb()
+      .select({ card: cards, documentTitle: documents.title })
+      .from(cards)
+      .leftJoin(documents, eq(documents.id, cards.documentId))
+      .where(where)
+      .orderBy(desc(cards.deletedAt), desc(cards.id))
+      .limit(query.limit)
+      .offset(offset),
+    getDb().select({ value: count() }).from(cards).where(where),
+  ]);
+  return {
+    items: rows.map((row) => ({
+      ...toPublicCardBase(row.card),
+      documentTitle: row.documentTitle ?? null,
+    })),
+    total: totalRow?.value ?? 0,
+  };
 }

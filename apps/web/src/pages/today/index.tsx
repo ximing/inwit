@@ -1,3 +1,4 @@
+import { weeklyReportsPath } from '@/routes';
 import {
   agentDocumentMetaLabel,
   docDisplayTitle,
@@ -23,7 +24,8 @@ import { Link, useNavigate } from 'react-router';
 import { SearchPalette, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
-import { dayGreeting, formatRelativeTime, formatTodayLong, isSubmitHotkey } from '@/lib/format';
+import { dayGreeting, formatRelativeTime, formatTodayLong } from '@/lib/format';
+import { CaptureEditor } from '@/components/capture/capture-editor';
 import { ROUTES, docPath, topicPath } from '@/routes';
 import { TodayService } from './today.service';
 import { estimateReviewMinutes } from '@/lib/review-eta';
@@ -84,7 +86,7 @@ function jobDetail(job: Job): string {
 }
 
 function docTag(doc: DocumentListItem): { tone: 'ai' | 'topic'; label: string } | null {
-  const agent = agentDocumentMetaLabel(doc.source, doc.title);
+  const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   if (agent) return { tone: 'ai', label: agent };
   if (doc.source === 'chat') return { tone: 'ai', label: 'AI 回答' };
   if (doc.source === 'screenshot') return { tone: 'topic', label: '截图' };
@@ -156,18 +158,11 @@ const TodayPageContent = observer(function TodayPageContent() {
       </div>
 
       <div className="capture hero-capture">
-        <textarea
-          rows={2}
-          autoComplete="off"
+        <CaptureEditor
           placeholder="扔一句话进来，或以问号结尾问 AI…"
-          value={service.draft}
-          onChange={(event) => service.setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (isSubmitHotkey(event)) {
-              event.preventDefault();
-              void service.send('auto');
-            }
-          }}
+          onTextChange={(text) => service.setDraft(text)}
+          onSubmit={() => void service.send('auto')}
+          onReady={(handle) => service.bindCapture(handle)}
         />
         <div className="capture-bar">
           <div className="topic-pick-wrap">
@@ -341,7 +336,7 @@ const TodayPageContent = observer(function TodayPageContent() {
           <span className="action-go">开始复习 →</span>
         </Link>
         {service.weeklyReport ? (
-          <Link className="action-card action-report" to={docPath(service.weeklyReport.documentId)}>
+          <Link className="action-card action-report" to={weeklyReportsPath(service.weeklyReport.documentId)}>
             <span className="action-kicker">📖 本周复盘已生成</span>
             <span className="action-big">
               {service.weeklyReport.successRate}

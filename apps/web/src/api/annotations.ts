@@ -3,6 +3,8 @@ import type {
   Annotation,
   AnnotationImageResponse,
   AnnotationResurfaceResponse,
+  ArchivedAnnotationsResponse,
+  ArchiveListQuery,
   CreateAnnotationInput,
   UpdateAnnotationInput,
 } from '@inwit/dto';
@@ -26,8 +28,25 @@ export function updateAnnotation(id: string, input: UpdateAnnotationInput): Prom
   });
 }
 
+/** Soft delete: the annotation moves to 回收站. */
 export function deleteAnnotation(id: string): Promise<void> {
   return request<void>(`/api/annotations/${id}`, { method: 'DELETE' });
+}
+
+export function restoreAnnotation(id: string): Promise<Annotation> {
+  return request<Annotation>(`/api/annotations/${id}/restore`, { method: 'POST' });
+}
+
+export function destroyAnnotation(id: string): Promise<void> {
+  return request<void>(`/api/annotations/${id}/permanent`, { method: 'DELETE' });
+}
+
+export function listArchivedAnnotations(
+  query: ArchiveListQuery,
+): Promise<ArchivedAnnotationsResponse> {
+  return request<ArchivedAnnotationsResponse>(
+    `/api/annotations/archived?page=${query.page}&limit=${query.limit}`,
+  );
 }
 
 export function getAnnotationImage(id: string): Promise<AnnotationImageResponse> {

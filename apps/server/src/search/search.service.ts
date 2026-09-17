@@ -6,7 +6,7 @@ import {
   type SearchQuery,
   type SearchResult,
 } from '@inwit/dto';
-import { and, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { toPublicCardBase } from '../cards/card.mapper.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -71,6 +71,7 @@ async function searchCardIdsIlike(
     .where(
       and(
         eq(cards.userId, userId),
+        isNull(cards.deletedAt),
         topicEq(cards.topicId, topicId),
         or(ilike(cards.concept, pattern), ilike(cards.example, pattern), ilike(cards.confusionPoint, pattern)),
       ),
@@ -94,6 +95,7 @@ async function searchAnnotationIdsIlike(
     .where(
       and(
         eq(annotations.userId, userId),
+        isNull(annotations.deletedAt),
         topicEq(documents.topicId, topicId),
         or(ilike(annotations.note, pattern), ilike(annotations.quote, pattern)),
       ),
@@ -118,17 +120,31 @@ async function idsInTopic(
       .where(
         and(
           eq(annotations.userId, userId),
+          isNull(annotations.deletedAt),
           eq(documents.topicId, topicId),
           inArray(annotations.id, ids),
         ),
       );
     return intersectOrdered(ids, new Set(rows.map((row) => row.id)));
   }
-  const table = kind === 'documents' ? documents : cards;
+  if (kind === 'cards') {
+    const rows = await getDb()
+      .select({ id: cards.id })
+      .from(cards)
+      .where(
+        and(
+          eq(cards.userId, userId),
+          isNull(cards.deletedAt),
+          eq(cards.topicId, topicId),
+          inArray(cards.id, ids),
+        ),
+      );
+    return intersectOrdered(ids, new Set(rows.map((row) => row.id)));
+  }
   const rows = await getDb()
-    .select({ id: table.id })
-    .from(table)
-    .where(and(eq(table.userId, userId), eq(table.topicId, topicId), inArray(table.id, ids)));
+    .select({ id: documents.id })
+    .from(documents)
+    .where(and(eq(documents.userId, userId), eq(documents.topicId, topicId), inArray(documents.id, ids)));
   return intersectOrdered(ids, new Set(rows.map((row) => row.id)));
 }
 
@@ -142,7 +158,7 @@ async function loadCardsByIds(userId: string, ids: string[]): Promise<SearchCard
     })
     .from(cards)
     .leftJoin(documents, eq(documents.id, cards.documentId))
-    .where(and(eq(cards.userId, userId), inArray(cards.id, ids)));
+    .where(and(eq(cards.userId, userId), isNull(cards.deletedAt), inArray(cards.id, ids)));
   const byId = new Map(rows.map((row) => [row.card.id, row]));
   const ordered: SearchCard[] = [];
   for (const id of ids) {
@@ -172,7 +188,7 @@ export async function loadAnnotationsByIds(userId: string, ids: string[]): Promi
     })
     .from(annotations)
     .innerJoin(documents, eq(documents.id, annotations.documentId))
-    .where(and(eq(annotations.userId, userId), inArray(annotations.id, ids)));
+    .where(and(eq(annotations.userId, userId), isNull(annotations.deletedAt), inArray(annotations.id, ids)));
   const byId = new Map(rows.map((row) => [row.annotation.id, row]));
   const ordered: SearchAnnotation[] = [];
   for (const id of ids) {

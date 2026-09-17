@@ -33,6 +33,7 @@ export const cardSchema = z.object({
   hasImage: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
 });
 export type Card = z.infer<typeof cardSchema>;
 
@@ -86,6 +87,8 @@ export type CardLinksResponse = z.infer<typeof cardLinksResponseSchema>;
 export const cardReviewSummarySchema = z.object({
   dueAt: z.string(),
   intervalDays: z.number().int().nonnegative(),
+  /** Non-null when the card is marked 已熟悉 and left out of the review queue. */
+  suspendedAt: z.string().nullable(),
 });
 export type CardReviewSummary = z.infer<typeof cardReviewSummarySchema>;
 
@@ -107,6 +110,46 @@ export const createCardInputSchema = z.object({
   annotationId: z.string().uuid().optional(),
 });
 export type CreateCardInput = z.infer<typeof createCardInputSchema>;
+
+/** Question payload inside updateCardInputSchema; no id = create, id = update in place. */
+export const cardQuestionInputSchema = z.object({
+  id: z.string().uuid().optional(),
+  type: cardQuestionTypeSchema,
+  question: z.string().trim().min(1).max(2000),
+  answer: z.string().trim().min(1).max(4000),
+});
+export type CardQuestionInput = z.infer<typeof cardQuestionInputSchema>;
+
+/**
+ * All fields optional; only provided fields change.
+ * `questions` present = full replace of the card's question list; absent = untouched.
+ */
+export const updateCardInputSchema = z.object({
+  concept: z.string().trim().min(1).max(2000).optional(),
+  example: z.string().max(4000).optional(),
+  confusionPoint: z.string().max(4000).optional(),
+  tags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
+  questions: z.array(cardQuestionInputSchema).max(50).optional(),
+});
+export type UpdateCardInput = z.infer<typeof updateCardInputSchema>;
+
+/** Soft-deleted card row for the settings 回收站. */
+export const archivedCardSchema = cardSchema.extend({
+  documentTitle: z.string().nullable(),
+});
+export type ArchivedCard = z.infer<typeof archivedCardSchema>;
+
+export const archivedCardsResponseSchema = z.object({
+  items: z.array(archivedCardSchema),
+  total: z.number().int().nonnegative(),
+});
+export type ArchivedCardsResponse = z.infer<typeof archivedCardsResponseSchema>;
+
+export const archiveListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+export type ArchiveListQuery = z.infer<typeof archiveListQuerySchema>;
 
 export const cardImageResponseSchema = z.object({
   url: z.string().url(),

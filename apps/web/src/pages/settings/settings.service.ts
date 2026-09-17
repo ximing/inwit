@@ -7,6 +7,8 @@ import {
   OCR_DEFAULT_MODEL,
   type AccessToken,
   type AccessTokenLog,
+  type ArchivedAnnotation,
+  type ArchivedCard,
   type LlmConfig,
   type LlmProvider,
   type LlmTestResult,
@@ -25,6 +27,8 @@ import {
   updateMe,
 } from '@/api/auth';
 import { ApiError, errorMessage } from '@/api/client';
+import { destroyAnnotation, listArchivedAnnotations, restoreAnnotation } from '@/api/annotations';
+import { destroyCard, listArchivedCards, restoreCard } from '@/api/cards';
 import { putViaFetch } from '@/pages/docs/upload-asset';
 import {
   createLlmConfig,
@@ -54,7 +58,7 @@ export const PROVIDER_MODELS: Record<LlmProvider, string> = {
 
 export const PROVIDERS = LLM_PROVIDERS;
 
-export type SettingsSection = 'profile' | 'appearance' | 'models' | 'ocr' | 'token';
+export type SettingsSection = 'profile' | 'appearance' | 'models' | 'ocr' | 'token' | 'archive';
 export type TokenPane = 'list' | 'logs';
 
 export { ACCESS_TOKEN_MAX_PER_USER, ACCESS_TOKEN_NAME_MAX };
@@ -101,6 +105,16 @@ export class SettingsService extends Service {
   accessTokenLogsPage = 1;
   accessTokenLogsLimit = 20;
   accessTokenLogsError: string | null = null;
+  archivedCards: ArchivedCard[] = [];
+  archivedCardsTotal = 0;
+  archivedCardsPage = 1;
+  archivedCardsLimit = 20;
+  archivedCardsError: string | null = null;
+  archivedAnnotations: ArchivedAnnotation[] = [];
+  archivedAnnotationsTotal = 0;
+  archivedAnnotationsPage = 1;
+  archivedAnnotationsLimit = 20;
+  archivedAnnotationsError: string | null = null;
   toast: string | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -126,7 +140,8 @@ export class SettingsService extends Service {
       hash === 'appearance' ||
       hash === 'profile' ||
       hash === 'ocr' ||
-      hash === 'token'
+      hash === 'token' ||
+      hash === 'archive'
     ) {
       this.section = hash;
       if (hash === 'token') this.tokenPane = 'list';
@@ -235,6 +250,8 @@ export class SettingsService extends Service {
       this.applyOcrConfig(ocr);
       this.accessTokens = tokens;
       if (this.tokenPane === 'logs') void this.loadAccessTokenLogs();
+      void this.loadArchivedCards();
+      void this.loadArchivedAnnotations();
     } catch (err) {
       this.error = errorMessage(err, '加载模型配置失败');
     }
@@ -389,6 +406,104 @@ export class SettingsService extends Service {
 
   get accessTokenLogsHasNext(): boolean {
     return this.accessTokenLogsPage * this.accessTokenLogsLimit < this.accessTokenLogsTotal;
+  }
+
+  get archivedCardsHasPrev(): boolean {
+    return this.archivedCardsPage > 1;
+  }
+
+  get archivedCardsHasNext(): boolean {
+    return this.archivedCardsPage * this.archivedCardsLimit < this.archivedCardsTotal;
+  }
+
+  get archivedAnnotationsHasPrev(): boolean {
+    return this.archivedAnnotationsPage > 1;
+  }
+
+  get archivedAnnotationsHasNext(): boolean {
+    return this.archivedAnnotationsPage * this.archivedAnnotationsLimit < this.archivedAnnotationsTotal;
+  }
+
+  async loadArchivedCards(page = this.archivedCardsPage): Promise<void> {
+    this.archivedCardsError = null;
+    const nextPage = Math.max(1, page);
+    try {
+      const result = await listArchivedCards({ page: nextPage, limit: this.archivedCardsLimit });
+      this.archivedCards = result.items;
+      this.archivedCardsTotal = result.total;
+      this.archivedCardsPage = nextPage;
+    } catch (err) {
+      this.archivedCardsError = errorMessage(err, '回收站加载失败');
+    }
+  }
+
+  async loadArchivedAnnotations(page = this.archivedAnnotationsPage): Promise<void> {
+    this.archivedAnnotationsError = null;
+    const nextPage = Math.max(1, page);
+    try {
+      const result = await listArchivedAnnotations({
+        page: nextPage,
+        limit: this.archivedAnnotationsLimit,
+      });
+      this.archivedAnnotations = result.items;
+      this.archivedAnnotationsTotal = result.total;
+      this.archivedAnnotationsPage = nextPage;
+    } catch (err) {
+      this.archivedAnnotationsError = errorMessage(err, '回收站加载失败');
+    }
+  }
+
+  /** 删到当前页空了且不是第一页时，往回翻一页。 */
+  private archivedPageAfterRemoval(page: number, remaining: number): number {
+    return remaining === 1 && page > 1 ? page - 1 : page;
+  }
+
+  async restoreArchivedCard(id: string): Promise<void> {
+    try {
+      await restoreCard(id);
+      await this.loadArchivedCards(
+        this.archivedPageAfterRemoval(this.archivedCardsPage, this.archivedCards.length),
+      );
+      this.showToast('已恢复');
+    } catch (err) {
+      this.showToast(errorMessage(err, '恢复失败'));
+    }
+  }
+
+  async destroyArchivedCard(id: string): Promise<void> {
+    try {
+      await destroyCard(id);
+      await this.loadArchivedCards(
+        this.archivedPageAfterRemoval(this.archivedCardsPage, this.archivedCards.length),
+      );
+      this.showToast('已彻底删除');
+    } catch (err) {
+      this.showToast(errorMessage(err, '删除失败'));
+    }
+  }
+
+  async restoreArchivedAnnotation(id: string): Promise<void> {
+    try {
+      await restoreAnnotation(id);
+      await this.loadArchivedAnnotations(
+        this.archivedPageAfterRemoval(this.archivedAnnotationsPage, this.archivedAnnotations.length),
+      );
+      this.showToast('已恢复');
+    } catch (err) {
+      this.showToast(errorMessage(err, '恢复失败'));
+    }
+  }
+
+  async destroyArchivedAnnotation(id: string): Promise<void> {
+    try {
+      await destroyAnnotation(id);
+      await this.loadArchivedAnnotations(
+        this.archivedPageAfterRemoval(this.archivedAnnotationsPage, this.archivedAnnotations.length),
+      );
+      this.showToast('已彻底删除');
+    } catch (err) {
+      this.showToast(errorMessage(err, '删除失败'));
+    }
   }
 
   async generateAccessToken(): Promise<void> {

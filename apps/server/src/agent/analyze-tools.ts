@@ -1,7 +1,7 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import type { MemoryContent } from '@inwit/dto';
-import { and, eq, gte, inArray, like, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
 import {
@@ -130,7 +130,7 @@ export async function loadStrugglingCards(
   const cardRows = await getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.userId, userId), inArray(cards.id, ids)));
+    .where(and(eq(cards.userId, userId), inArray(cards.id, ids), isNull(cards.deletedAt)));
   const byId = new Map(cardRows.map((row) => [row.id, row]));
   const views: StrugglingCardView[] = [];
   for (const row of agg) {
@@ -207,7 +207,7 @@ async function loadOwnedCards(userId: string, ids: string[]): Promise<CardRow[]>
   return getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.userId, userId), inArray(cards.id, ids)));
+    .where(and(eq(cards.userId, userId), inArray(cards.id, ids), isNull(cards.deletedAt)));
 }
 
 function trackMemoryKey(session: AnalyzeSession, key: string): void {

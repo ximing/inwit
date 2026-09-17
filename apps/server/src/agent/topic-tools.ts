@@ -1,6 +1,6 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { cards, documents, memories, topics } from '../db/schema.js';
 import { applyTopicOutline } from '../maps/apply.js';
@@ -82,7 +82,7 @@ export function readTopicContextTool(session: DigestSession): AgentTool<typeof r
             mapNodeId: cards.mapNodeId,
           })
           .from(cards)
-          .where(and(eq(cards.userId, session.userId), eq(cards.topicId, params.topicId)))
+          .where(and(eq(cards.userId, session.userId), eq(cards.topicId, params.topicId), isNull(cards.deletedAt)))
           .orderBy(asc(cards.createdAt), asc(cards.id));
 
         const docRows = await getDb()
@@ -197,7 +197,7 @@ export function readMapNodeTool(session: DigestSession): AgentTool<typeof readMa
         const nodeCards = await getDb()
           .select({ id: cards.id, concept: cards.concept })
           .from(cards)
-          .where(and(eq(cards.userId, session.userId), eq(cards.mapNodeId, node.id)));
+          .where(and(eq(cards.userId, session.userId), eq(cards.mapNodeId, node.id), isNull(cards.deletedAt)));
         const payload = {
           node: {
             id: node.id,

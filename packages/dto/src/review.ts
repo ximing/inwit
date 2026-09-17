@@ -15,6 +15,8 @@ export const reviewStateSchema = z.object({
   reps: z.number().int().nonnegative(),
   lapses: z.number().int().nonnegative(),
   lastFeedback: reviewFeedbackSchema.nullable(),
+  /** Non-null when the card is marked 已熟悉 and left out of the review queue. */
+  suspendedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

@@ -16,7 +16,7 @@ import type {
   Paginated,
   UpdateDocumentInput,
 } from '@inwit/dto';
-import { and, asc, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { toPublicCard, toPublicQuestion } from '../cards/card.mapper.js';
 import { getDb } from '../db/index.js';
 import {
@@ -59,6 +59,8 @@ export function toPublicDocument(row: DocumentRow): Document {
     description: row.description ?? null,
     contentJson: (row.contentJson ?? EMPTY_PM_DOC) as Document['contentJson'],
     source: row.source,
+    kind: row.kind,
+    reportWeekStart: row.reportWeekStart,
     status: row.status,
     answer: row.answer ?? null,
     linkHint: row.linkHint ?? null,
@@ -171,8 +173,9 @@ export async function enqueueSelectionCards(
 export async function listDocuments(
   userId: string,
   query: ListDocumentsQuery,
+  kind: 'document' | 'weekly_report' = 'document',
 ): Promise<Paginated<DocumentListItem>> {
-  const conditions: SQL[] = [eq(documents.userId, userId)];
+  const conditions: SQL[] = [eq(documents.userId, userId), eq(documents.kind, kind)];
   if (query.topicId !== undefined) conditions.push(eq(documents.topicId, query.topicId));
   if (query.status !== undefined) conditions.push(eq(documents.status, query.status));
   const where = and(...conditions);
@@ -184,6 +187,7 @@ export async function listDocuments(
       n: count().as('n'),
     })
     .from(cards)
+    .where(isNull(cards.deletedAt))
     .groupBy(cards.documentId)
     .as('doc_card_counts');
 
@@ -197,7 +201,7 @@ export async function listDocuments(
     .leftJoin(cardCounts, eq(cardCounts.documentId, documents.id))
     .leftJoin(topics, eq(topics.id, documents.topicId))
     .where(where)
-    .orderBy(desc(documents.updatedAt), desc(documents.id))
+    .orderBy(...(kind === 'weekly_report' ? [desc(documents.reportWeekStart), desc(documents.createdAt)] : [desc(documents.updatedAt)]), desc(documents.id))
     .limit(query.limit)
     .offset(query.offset);
 
@@ -224,6 +228,7 @@ export async function getDocumentListItemsByIds(
       n: count().as('n'),
     })
     .from(cards)
+    .where(isNull(cards.deletedAt))
     .groupBy(cards.documentId)
     .as('doc_card_counts');
 
@@ -268,7 +273,7 @@ export async function updateDocument(
       const [cardCountRow] = await tx
         .select({ n: count() })
         .from(cards)
-        .where(and(eq(cards.userId, userId), eq(cards.documentId, id)));
+        .where(and(eq(cards.userId, userId), eq(cards.documentId, id), isNull(cards.deletedAt)));
       const [activeDigest] = await tx
         .select({ id: jobs.id })
         .from(jobs)
@@ -333,7 +338,7 @@ export async function getDocument(userId: string, id: string): Promise<DocumentD
   const cardRows = await getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.userId, userId), eq(cards.documentId, document.id)))
+    .where(and(eq(cards.userId, userId), eq(cards.documentId, document.id), isNull(cards.deletedAt)))
     .orderBy(asc(cards.createdAt), asc(cards.id));
 
   const questionRows: CardQuestionRow[] =
@@ -365,6 +370,7 @@ export async function getDocument(userId: string, id: string): Promise<DocumentD
             cardId: reviewStates.cardId,
             dueAt: reviewStates.dueAt,
             intervalDays: reviewStates.intervalDays,
+            suspendedAt: reviewStates.suspendedAt,
           })
           .from(reviewStates)
           .where(
@@ -386,7 +392,11 @@ export async function getDocument(userId: string, id: string): Promise<DocumentD
       return {
         ...toPublicCard(row, questionsByCard.get(row.id) ?? []),
         review: state
-          ? { dueAt: state.dueAt.toISOString(), intervalDays: state.intervalDays }
+          ? {
+              dueAt: state.dueAt.toISOString(),
+              intervalDays: state.intervalDays,
+              suspendedAt: state.suspendedAt ? state.suspendedAt.toISOString() : null,
+            }
           : null,
       };
     }),

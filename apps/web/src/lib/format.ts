@@ -109,9 +109,24 @@ export function summarizeAnswer(answer: string, max = 48): string {
   return `${chars.slice(0, max).join('')}…`;
 }
 
-export function isSubmitHotkey(event: { key: string; metaKey: boolean; ctrlKey: boolean; nativeEvent: { isComposing?: boolean } }): boolean {
-  if (event.nativeEvent.isComposing) return false;
+/** Mod+Enter（Cmd/Ctrl+Enter），带输入法组合保护。DOM 与 React 键盘事件共用。 */
+export function isModEnterHotkey(event: {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  isComposing?: boolean;
+}): boolean {
+  if (event.isComposing) return false;
   return event.key === 'Enter' && (event.metaKey || event.ctrlKey);
+}
+
+export function isSubmitHotkey(event: { key: string; metaKey: boolean; ctrlKey: boolean; nativeEvent: { isComposing?: boolean } }): boolean {
+  return isModEnterHotkey({
+    key: event.key,
+    metaKey: event.metaKey,
+    ctrlKey: event.ctrlKey,
+    isComposing: event.nativeEvent.isComposing,
+  });
 }
 
 export function formatDuration(ms: number | null | undefined): string {

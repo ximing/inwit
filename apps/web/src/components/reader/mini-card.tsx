@@ -34,7 +34,9 @@ export function cardMasteryLevel(card: DocumentCard): number {
 }
 
 export function cardNextReviewLabel(card: DocumentCard): string {
-  return card.review ? formatNextReview(card.review.dueAt) : '还没进复习队列';
+  if (!card.review) return '还没进复习队列';
+  if (card.review.suspendedAt != null) return '已熟悉，不复习';
+  return formatNextReview(card.review.dueAt);
 }
 
 export function MiniCard({
@@ -73,6 +75,7 @@ export function MiniCard({
         <MasteryDots level={cardMasteryLevel(card)} />
         <span>{cardNextReviewLabel(card)}</span>
         {card.source === 'manual' ? <span className="hand-tag">手写</span> : null}
+        {card.review?.suspendedAt != null ? <span className="hand-tag">已熟悉</span> : null}
         {lost ? <span className="anchor-lost">原文已删除</span> : null}
       </div>
     </button>

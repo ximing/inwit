@@ -4404,3 +4404,138 @@ html[data-theme='dark'] .pdf-thumb-img {
   .pane-inner { --write-gap: 24px; }
   .paper { --paper-hang: 0px; padding: var(--write-gap) 20px 32px; margin-inline: 0; }
 }
+
+/* ---------- 捕获编辑器（扔进去富文本） ---------- */
+.capture-editor .ProseMirror {
+  display: block;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  padding: 18px 20px 8px;
+  font-size: 16px;
+  line-height: 1.65;
+  min-height: 66px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.capture-editor .ProseMirror:focus,
+.capture-editor .ProseMirror:focus-visible { outline: none; }
+.capture-editor .ProseMirror p { margin: 0 0 2px; }
+.capture-editor .ProseMirror ul,
+.capture-editor .ProseMirror ol { padding-left: 20px; margin: 2px 0; }
+.capture-editor .ProseMirror blockquote {
+  margin: 2px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+  color: var(--ink-3);
+}
+.capture-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-4);
+}
+.pane-capture .capture-editor .ProseMirror,
+.ws-capture .capture-editor .ProseMirror {
+  padding: 12px 12px 4px;
+  font-size: 14.5px;
+  min-height: 42px;
+}
+.capture-editor.is-disabled .ProseMirror { opacity: 0.55; }
+
+/* ---------- 卡片操作（卡片栏） ---------- */
+.mini-wrap { position: relative; }
+.mini-wrap .mini-ops {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+}
+.mini-wrap .note-op.is-on { color: var(--accent); background: var(--accent-soft); }
+
+/* ---------- 卡片编辑对话框 ---------- */
+.card-edit-dialog {
+  width: min(640px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+}
+.card-edit-questions { display: flex; flex-direction: column; gap: 10px; }
+.card-edit-questions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.card-edit-question {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.card-edit-question-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.card-edit-question-head select {
+  height: 28px;
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0 6px;
+}
+
+/* ---------- 复习页卡片菜单 ---------- */
+.review-card-menu { margin-left: 8px; }
+.review-card-menu .topic-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- 回收站 ---------- */
+.archive-group { margin-top: 18px; }
+.archive-group-title {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+}
+.archive-group .row-actions { display: flex; gap: 6px; }
+
+/* Weekly reports belong to the review workspace. */
+.review-tabs { max-width: 700px; margin: 24px auto 0; display: flex; gap: 28px; border-bottom: 1px solid var(--line); }
+.review-tabs a { padding: 12px 0; color: var(--ink-3); text-decoration: none; border-bottom: 2px solid transparent; }
+.review-tabs a[aria-current='page'] { color: var(--accent-deep); border-bottom-color: var(--accent); font-weight: 600; }
+.weekly-reports { max-width: 780px; padding: 32px 40px 100px; margin: 0 auto; }
+.weekly-report-heading { margin-bottom: 28px; }
+.weekly-report-heading h1 { font: 700 28px/1.4 var(--serif); margin: 8px 0; }
+.weekly-report-heading p, .weekly-empty p { color: var(--ink-3); line-height: 1.8; }
+.weekly-report-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 0; border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+.weekly-report-row:hover h2 { color: var(--accent-deep); }
+.weekly-report-row h2 { font-size: 18px; margin: 8px 0; }
+.weekly-report-row p { color: var(--ink-3); margin: 0; }
+.weekly-period { font-size: 12px; color: var(--ink-3); }
+.weekly-read { flex-shrink: 0; font-size: 13px; color: var(--accent-deep); }
+.weekly-empty { padding: 32px 0; border-top: 1px solid var(--line); }
+.weekly-empty h2 { font-size: 18px; }
+.weekly-more { margin-top: 24px; }
+.weekly-back { display: inline-block; margin-bottom: 24px; color: var(--accent-deep); }
+.weekly-report-detail .doc-view { line-height: 1.8; }
+@media (max-width: 700px) {
+  .review-tabs { margin: 16px 20px 0; }
+  .weekly-reports { padding: 24px 20px 80px; }
+  .weekly-report-row { align-items: flex-start; flex-direction: column; gap: 8px; }
+}
+.weekly-report-detail .paper { padding: 28px; }
+@media (max-width: 700px) {
+  .weekly-report-detail .paper { padding: 20px; }
+}

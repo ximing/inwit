@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { cardQuestions, cards, reviewStates, type JobRow } from '../db/schema.js';
 import { logger } from '../utils/logger.js';
@@ -89,7 +89,7 @@ async function assertContrastCards(userId: string, session: AnalyzeSession): Pro
   const childCards = await getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.userId, userId), eq(cards.documentId, documentId)));
+    .where(and(eq(cards.userId, userId), eq(cards.documentId, documentId), isNull(cards.deletedAt)));
   if (childCards.length < ANALYZE_MIN_CARDS || childCards.length > ANALYZE_MAX_CARDS) {
     throw new Error(
       `analyze contrast doc expected ${String(ANALYZE_MIN_CARDS)}-${String(ANALYZE_MAX_CARDS)} cards, got ${String(childCards.length)}`,

@@ -60,7 +60,7 @@ export const PaneRead = observer(function PaneRead() {
   if (!doc) return null;
 
   const isPdf = doc.fileMime === 'application/pdf';
-  const isReport = agentDocumentMetaLabel(doc.source, doc.title) === AGENT_DOC_LABEL_REPORT;
+  const isReport = agentDocumentMetaLabel(doc.source, doc.title, doc.kind) === AGENT_DOC_LABEL_REPORT;
   const stage = service.stageFor(doc);
   const emptyHint =
     stage.kind !== 'idle' && stage.kind !== 'failed' && stage.label

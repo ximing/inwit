@@ -184,7 +184,7 @@ async function loadStatsByNode(
       reviewStates,
       and(eq(reviewStates.cardId, cards.id), eq(reviewStates.userId, cards.userId)),
     )
-    .where(inArray(cards.mapNodeId, nodeIds));
+    .where(and(inArray(cards.mapNodeId, nodeIds), isNull(cards.deletedAt)));
 
   for (const row of cardRows) {
     if (!row.mapNodeId) continue;
@@ -250,7 +250,7 @@ export async function getMapNodeDetail(userId: string, nodeId: string): Promise<
       tags: cards.tags,
     })
     .from(cards)
-    .where(and(eq(cards.userId, userId), eq(cards.mapNodeId, nodeId)))
+    .where(and(eq(cards.userId, userId), eq(cards.mapNodeId, nodeId), isNull(cards.deletedAt)))
     .orderBy(asc(cards.createdAt), asc(cards.id));
   const docRows = await db
     .select({
@@ -289,7 +289,7 @@ export async function placeCardOnMap(
   const [card] = await db
     .select()
     .from(cards)
-    .where(and(eq(cards.id, cardId), eq(cards.userId, userId)))
+    .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
     .limit(1);
   if (!card) throw AppError.of(404, 'CARD_NOT_FOUND');
 

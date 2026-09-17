@@ -151,6 +151,7 @@ async function loadResurfaceCandidates(
       and(
         eq(annotations.userId, userId),
         isNull(annotations.convertedCardId),
+        isNull(annotations.deletedAt),
         ne(annotations.note, ''),
         lt(annotations.createdAt, cutoff),
       ),
@@ -169,7 +170,7 @@ async function loadCardHints(userId: string, documentIds: string[]): Promise<Can
       anchorText: cards.anchorText,
     })
     .from(cards)
-    .where(and(eq(cards.userId, userId), inArray(cards.documentId, documentIds)));
+    .where(and(eq(cards.userId, userId), inArray(cards.documentId, documentIds), isNull(cards.deletedAt)));
 }
 
 /** Deterministic daily job: pick stale unconverted annotations and store the suggestion. */
@@ -256,6 +257,7 @@ async function convertedAnnotationIds(userId: string, ids: string[]): Promise<Se
       and(
         eq(annotations.userId, userId),
         inArray(annotations.id, ids),
+        isNull(annotations.deletedAt),
         sql`${annotations.convertedCardId} IS NOT NULL`,
       ),
     );
@@ -321,7 +323,7 @@ export async function acceptAnnotationResurface(
   const [annotation] = await getDb()
     .select()
     .from(annotations)
-    .where(and(eq(annotations.id, annotationId), eq(annotations.userId, userId)))
+    .where(and(eq(annotations.id, annotationId), eq(annotations.userId, userId), isNull(annotations.deletedAt)))
     .limit(1);
   if (!annotation) throw AppError.of(404, 'ANNOTATION_NOT_FOUND');
   if (annotation.convertedCardId) throw AppError.of(409, 'ANNOTATION_ALREADY_CONVERTED');
