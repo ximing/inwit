@@ -11,9 +11,11 @@ COPY packages/dto/package.json packages/dto/
 COPY packages/markdown/package.json packages/markdown/
 COPY packages/doc-schema/package.json packages/doc-schema/
 COPY packages/brand/package.json packages/brand/
+COPY packages/doc-engine/package.json packages/doc-engine/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 COPY apps/desktop/package.json apps/desktop/
+COPY apps/mobile/package.json apps/mobile/
 RUN pnpm install --frozen-lockfile --filter=@inwit/server...
 
 FROM deps AS build
@@ -34,9 +36,11 @@ COPY packages/dto/package.json packages/dto/
 COPY packages/markdown/package.json packages/markdown/
 COPY packages/doc-schema/package.json packages/doc-schema/
 COPY packages/brand/package.json packages/brand/
+COPY packages/doc-engine/package.json packages/doc-engine/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 COPY apps/desktop/package.json apps/desktop/
+COPY apps/mobile/package.json apps/mobile/
 RUN pnpm install --frozen-lockfile --prod --filter=@inwit/server...
 
 FROM base AS runtime
