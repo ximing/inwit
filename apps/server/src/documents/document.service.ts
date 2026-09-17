@@ -62,6 +62,7 @@ export function toPublicDocument(row: DocumentRow): Document {
     kind: row.kind,
     reportWeekStart: row.reportWeekStart,
     status: row.status,
+    failReason: row.failReason ?? null,
     answer: row.answer ?? null,
     linkHint: row.linkHint ?? null,
     fileMime: row.fileMime ?? null,
@@ -302,7 +303,7 @@ export async function updateDocument(
         updatedAt: new Date(),
         ...(input.topicId !== undefined ? { topicId: input.topicId } : {}),
         ...(topicChanged ? { mapNodeId: null } : {}),
-        ...(enqueueDigest ? { status: 'pending' as const } : {}),
+        ...(enqueueDigest ? { status: 'pending' as const, failReason: null } : {}),
       })
       .where(and(eq(documents.id, id), eq(documents.userId, userId)))
       .returning();
@@ -485,7 +486,7 @@ export async function retryDocument(userId: string, id: string): Promise<Job> {
 
     await tx
       .update(documents)
-      .set({ status: 'pending', updatedAt: new Date() })
+      .set({ status: 'pending', failReason: null, updatedAt: new Date() })
       .where(and(eq(documents.id, id), eq(documents.userId, userId)));
 
     let payload: JobPayload;

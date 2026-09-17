@@ -2,9 +2,11 @@ import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb, type Database } from '../db/index.js';
 import { jobs, type JobRow } from '../db/schema.js';
+import { markDocumentFailed, pipelineDocumentId } from '../documents/document-status.js';
 import { logger } from '../utils/logger.js';
 import { heartbeatJob } from './heartbeat.js';
 import { processJob } from './processors.js';
+import { backoffMs, failureDisposition } from './queue-logic.js';
 
 export { heartbeatJob };
 export { enqueueJob, type EnqueueJobInput, type JobWriter } from './enqueue.js';
@@ -73,11 +75,46 @@ async function markDone(job: JobRow, now: Date): Promise<void> {
     .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
 }
 
-async function markFailedOrRetry(job: JobRow, err: unknown, now: Date): Promise<void> {
+/** Reflects a job's final failure onto the document it owns (best-effort). */
+async function settleDocumentFailure(job: JobRow, message: string): Promise<void> {
+  const documentId = pipelineDocumentId(job);
+  if (!documentId) return;
+  try {
+    await markDocumentFailed(job.userId, documentId, message);
+  } catch (err) {
+    logger.error('job.document_settle_failed', err);
+  }
+}
+
+async function markFailedTerminal(job: JobRow, message: string, now: Date): Promise<void> {
+  await getDb()
+    .update(jobs)
+    .set({
+      status: 'failed',
+      lastError: message,
+      finishedAt: now,
+      updatedAt: now,
+    })
+    .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
+  logger.warn('job.failed', {
+    jobId: job.id,
+    type: job.type,
+    attempts: job.attempts,
+    terminal: true,
+    lastError: message,
+  });
+  await settleDocumentFailure(job, message);
+}
+
+async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<void> {
   const message = errorMessage(err);
   const attempts = job.attempts;
-  const exhausted = attempts >= config.JOB_MAX_ATTEMPTS;
-  if (exhausted) {
+  const disposition = failureDisposition(err, attempts, config.JOB_MAX_ATTEMPTS);
+  if (disposition === 'terminal') {
+    await markFailedTerminal(job, message, now);
+    return;
+  }
+  if (disposition === 'exhausted') {
     await getDb()
       .update(jobs)
       .set({
@@ -88,9 +125,10 @@ async function markFailedOrRetry(job: JobRow, err: unknown, now: Date): Promise<
       })
       .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
     logger.warn('job.failed', { jobId: job.id, type: job.type, attempts, lastError: message });
+    await settleDocumentFailure(job, message);
     return;
   }
-  const wait = BACKOFF_MS[Math.min(Math.max(attempts - 1, 0), BACKOFF_MS.length - 1)] ?? 32_000;
+  const wait = backoffMs(attempts, BACKOFF_MS);
   await getDb()
     .update(jobs)
     .set({
@@ -112,7 +150,7 @@ async function processOne(job: JobRow): Promise<void> {
   } catch (err) {
     logger.error('job.process.failed', err);
     try {
-      await markFailedOrRetry(job, err, new Date());
+      await settleJobFailure(job, err, new Date());
     } catch (writeErr) {
       logger.error('job.finalize.failed', writeErr);
     }

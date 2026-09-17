@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
+import { finishExecution, startExecution } from '../agent/executions.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { documents, jobs, ocrPages, type DocumentRow, type JobRow } from '../db/schema.js';
@@ -35,13 +36,6 @@ import {
 import { rasterImageFileToPng } from './ocr-image.js';
 import { resolveOcrFor } from './ocr.service.js';
 import { openPdf } from './rasterize.js';
-
-async function markDocumentFailed(userId: string, documentId: string): Promise<void> {
-  await getDb()
-    .update(documents)
-    .set({ status: 'failed', updatedAt: new Date() })
-    .where(and(eq(documents.id, documentId), eq(documents.userId, userId)));
-}
 
 async function loadCompletedPages(documentId: string): Promise<CompletedOcrPage[]> {
   return getDb()
@@ -131,6 +125,11 @@ export async function processOcr(job: JobRow): Promise<void> {
   const dest = path.join(dir, image ? 'source.bin' : 'source.pdf');
   const completed = await loadCompletedPages(documentId);
   let progress = mergeOcrResume(job.payload, completed) ?? parsed;
+  const executionId = await startExecution({
+    jobId: job.id,
+    userId: job.userId,
+    agentType: 'ocr',
+  });
 
   try {
     await getObjectToFile(document.fileKey, dest);
@@ -175,6 +174,7 @@ export async function processOcr(job: JobRow): Promise<void> {
         if (outcome.ok) {
           await logLlmUsage({
             userId: job.userId,
+            executionId,
             provider: 'dashscope',
             model: resolved.model,
             capability: 'ocr',
@@ -206,6 +206,7 @@ export async function processOcr(job: JobRow): Promise<void> {
             if (outcome.ok) {
               await logLlmUsage({
                 userId: job.userId,
+                executionId,
                 provider: 'dashscope',
                 model: resolved.model,
                 capability: 'ocr',
@@ -255,7 +256,6 @@ export async function processOcr(job: JobRow): Promise<void> {
     }
 
     if (progress.failedPages.length > 0) {
-      await markDocumentFailed(job.userId, documentId);
       throw new Error(ocrIncompleteError(progress.failedPages));
     }
 
@@ -269,6 +269,7 @@ export async function processOcr(job: JobRow): Promise<void> {
           contentJson,
           pageCount: progress.totalPages,
           status: blank ? 'digested' : 'pending',
+          failReason: null,
           updatedAt: new Date(),
         })
         .where(and(eq(documents.id, documentId), eq(documents.userId, job.userId)))
@@ -293,8 +294,19 @@ export async function processOcr(job: JobRow): Promise<void> {
         contentJson,
       });
     }
+    await finishExecution({
+      executionId,
+      status: 'done',
+      resultSummary: `pages=${String(progress.totalPages)} blank=${blank ? 1 : 0}`,
+    });
   } catch (err) {
-    await markDocumentFailed(job.userId, documentId);
+    // The queue decides retry vs. final failure and marks the document only
+    // once the job is done failing — transient errors leave it pending.
+    await finishExecution({
+      executionId,
+      status: 'failed',
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 2000),
+    });
     throw err;
   } finally {
     await rm(dir, { recursive: true, force: true });

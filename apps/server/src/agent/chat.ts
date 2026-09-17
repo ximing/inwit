@@ -4,6 +4,7 @@ import { getDb } from '../db/index.js';
 import { documents, type JobRow } from '../db/schema.js';
 import { documentPlainText } from '../documents/content-json.js';
 import { findOwnedDocument } from '../documents/document.service.js';
+import { markDocumentFailed } from '../documents/document-status.js';
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -18,16 +19,12 @@ import { CHAT_SYSTEM_PROMPT, chatUserPrompt } from './prompts.js';
 import { AgentTerminalError, runAgentJob } from './run-agent-job.js';
 import { chatTools, type DigestSession } from './tools.js';
 
-async function markChatDocument(
-  id: string,
-  status: 'digested' | 'failed',
-  answer: string | null,
-  linkHint?: string | null,
-): Promise<void> {
+async function markChatDigested(id: string, answer: string | null, linkHint?: string | null): Promise<void> {
   await getDb()
     .update(documents)
     .set({
-      status,
+      status: 'digested',
+      failReason: null,
       answer,
       updatedAt: new Date(),
       ...(linkHint !== undefined ? { linkHint } : {}),
@@ -73,13 +70,15 @@ export async function processChat(job: JobRow): Promise<void> {
     verify: async ({ agent, executionId }) => {
       const answerText = extractAssistantText(agent.state.messages);
       if (answerText.length === 0) {
-        await markChatDocument(documentId, 'failed', null);
         throw new AgentTerminalError('chat produced no answer', 'answer=0');
       }
 
       const produced = await loadDocumentCards(job.userId, documentId);
       if (produced.length === 0) {
-        await markChatDocument(documentId, 'failed', answerText);
+        // Keep the answer on the failed document; the queue settles status/reason.
+        await markDocumentFailed(job.userId, documentId, 'chat produced no cards', {
+          answer: answerText,
+        });
         throw new AgentTerminalError('chat produced no cards', 'cards=0');
       }
       const missingQuestions = produced.filter((card) => card.questionCount < 1);
@@ -90,7 +89,7 @@ export async function processChat(job: JobRow): Promise<void> {
       const cardIds = produced.map((card) => card.id);
       const hint = await associationHintForCards(job.userId, cardIds);
       const linkN = await countOutgoingLinks(job.userId, cardIds);
-      await markChatDocument(documentId, 'digested', answerText, hint);
+      await markChatDigested(documentId, answerText, hint);
       try {
         await ensureDocumentMeta({
           userId: job.userId,

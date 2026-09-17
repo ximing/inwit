@@ -25,15 +25,12 @@ async function listActiveTopics(userId: string) {
     .orderBy(asc(topics.createdAt));
 }
 
-async function markDocument(
-  id: string,
-  status: 'digested' | 'failed',
-  extra?: { linkHint?: string | null },
-): Promise<void> {
+async function markDigested(id: string, extra?: { linkHint?: string | null }): Promise<void> {
   await getDb()
     .update(documents)
     .set({
-      status,
+      status: 'digested',
+      failReason: null,
       updatedAt: new Date(),
       ...(extra && 'linkHint' in extra ? { linkHint: extra.linkHint ?? null } : {}),
     })
@@ -48,7 +45,7 @@ async function verifyDigest(
 ): Promise<string> {
   const produced = await loadDocumentCards(job.userId, documentId);
   if (produced.length === 0) {
-    await markDocument(documentId, 'failed');
+    // Terminal: the queue settles the job as failed and marks the document.
     throw new AgentTerminalError('digest produced no cards', 'cards=0');
   }
   const missingQuestions = produced.filter((card) => card.questionCount < 1);
@@ -59,7 +56,7 @@ async function verifyDigest(
   const cardIds = produced.map((card) => card.id);
   const hint = await associationHintForCards(job.userId, cardIds);
   const linkN = await countOutgoingLinks(job.userId, cardIds);
-  await markDocument(documentId, 'digested', { linkHint: hint });
+  await markDigested(documentId, { linkHint: hint });
   try {
     await ensureDocumentMeta({
       userId: job.userId,

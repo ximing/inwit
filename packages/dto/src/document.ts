@@ -142,6 +142,8 @@ export const documentSchema = z.object({
   kind: z.enum(['document', 'weekly_report']).optional(),
   reportWeekStart: z.string().nullable().optional(),
   status: documentStatusSchema,
+  /** 消化失败原因（status='failed' 时有值，离开 failed 状态清空）。 */
+  failReason: z.string().nullable(),
   answer: z.string().nullable(),
   linkHint: z.string().nullable(),
   fileMime: z.string().nullable(),

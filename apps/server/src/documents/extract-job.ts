@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { and, eq } from 'drizzle-orm';
+import { finishExecution, startExecution } from '../agent/executions.js';
 import { getDb } from '../db/index.js';
 import { documents, type DocumentRow, type JobRow } from '../db/schema.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
@@ -17,13 +18,6 @@ import { isBlankDocumentContent } from './document-logic.js';
 import { extractImported } from './extract.js';
 import { followUpAfterExtract } from './extract-logic.js';
 import { detectImportFormat, formatFromSourceKey, titleFromFilename } from './import-logic.js';
-
-async function markDocumentFailed(userId: string, documentId: string): Promise<void> {
-  await getDb()
-    .update(documents)
-    .set({ status: 'failed', updatedAt: new Date() })
-    .where(and(eq(documents.id, documentId), eq(documents.userId, userId)));
-}
 
 function formatForDocument(doc: DocumentRow): ImportFormat {
   if (doc.fileKey) {
@@ -54,6 +48,11 @@ export async function processExtract(job: JobRow): Promise<void> {
   const format = formatForDocument(document);
   const dir = await mkdtemp(path.join(tmpdir(), 'inwit-extract-'));
   const dest = path.join(dir, `source.${format}`);
+  const executionId = await startExecution({
+    jobId: job.id,
+    userId: job.userId,
+    agentType: 'extract',
+  });
 
   try {
     await getObjectToFile(document.fileKey, dest);
@@ -75,6 +74,7 @@ export async function processExtract(job: JobRow): Promise<void> {
           pageCount,
           title,
           status: followUp === 'none' ? 'digested' : 'pending',
+          failReason: null,
           updatedAt: new Date(),
         })
         .where(and(eq(documents.id, documentId), eq(documents.userId, job.userId)))
@@ -105,8 +105,19 @@ export async function processExtract(job: JobRow): Promise<void> {
         contentJson,
       });
     }
+    await finishExecution({
+      executionId,
+      status: 'done',
+      resultSummary: `format=${format} pages=${String(pageCount ?? 0)} follow_up=${followUp}`,
+    });
   } catch (err) {
-    await markDocumentFailed(job.userId, documentId);
+    // The queue decides retry vs. final failure and marks the document only
+    // once the job is done failing — transient errors leave it pending.
+    await finishExecution({
+      executionId,
+      status: 'failed',
+      error: (err instanceof Error ? err.message : String(err)).slice(0, 2000),
+    });
     throw err;
   } finally {
     await rm(dir, { recursive: true, force: true });

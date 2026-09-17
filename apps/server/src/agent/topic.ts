@@ -24,10 +24,10 @@ import { suggestTools, type SuggestSession } from './suggest-tools.js';
 import { fillTools, organizeTools } from './topic-tools.js';
 import type { DigestSession } from './tools.js';
 
-async function markDocument(id: string, status: 'digested' | 'failed'): Promise<void> {
+async function markDigested(id: string): Promise<void> {
   await getDb()
     .update(documents)
-    .set({ status, updatedAt: new Date() })
+    .set({ status: 'digested', failReason: null, updatedAt: new Date() })
     .where(eq(documents.id, id));
 }
 
@@ -113,7 +113,7 @@ async function processFill(
     verify: async () => {
       const produced = await loadDocumentCards(job.userId, documentId);
       if (produced.length === 0) {
-        await markDocument(documentId, 'failed');
+        // Terminal: the queue settles the job as failed and marks the document.
         throw new AgentTerminalError('fill produced no cards', 'cards=0');
       }
       const missingQuestions = produced.filter((card) => card.questionCount < 1);
@@ -121,7 +121,7 @@ async function processFill(
         throw new Error(`fill missing questions for ${String(missingQuestions.length)} card(s)`);
       }
 
-      await markDocument(documentId, 'digested');
+      await markDigested(documentId);
       return `action=fill node=${payload.nodeId} cards=${String(produced.length)} questions=${String(
         produced.reduce((sum, card) => sum + card.questionCount, 0),
       )}`;

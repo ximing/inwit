@@ -74,7 +74,11 @@ const DocRow = observer(function DocRow({ doc }: { doc: DocumentListItem }) {
       ) : null}
       <View style={styles.rowMeta}>
         {pulse ? <PulseLabel text={stage.label.replace(/…$/, '') || '消化中'} /> : null}
-        {failed ? <Text style={styles.failed}>失败</Text> : null}
+        {failed ? (
+          <Text style={styles.failed} numberOfLines={1}>
+            失败{doc.failReason ? `：${doc.failReason}` : ''}
+          </Text>
+        ) : null}
         {agent ? (
           <View style={[styles.tag, styles.tagAi]}>
             <Text style={styles.tagAiText}>{agent}</Text>

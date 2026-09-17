@@ -1,6 +1,15 @@
 import { z } from 'zod';
 
-export const AGENT_TYPES = ['digest', 'evolve', 'weekly_report', 'topic', 'chat', 'selection'] as const;
+export const AGENT_TYPES = [
+  'digest',
+  'evolve',
+  'weekly_report',
+  'topic',
+  'chat',
+  'selection',
+  'extract',
+  'ocr',
+] as const;
 export const agentTypeSchema = z.enum(AGENT_TYPES);
 export type AgentType = z.infer<typeof agentTypeSchema>;
 

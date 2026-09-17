@@ -7,26 +7,13 @@ import { logLlmUsage } from '../llm/usage.js';
 import { finishExecution, saveExecutionSteps, startExecution, summarizeValue } from './executions.js';
 import { isAssistantMessage } from './messages.js';
 import { runWithAgentContext, type AgentRunContext } from './run-context.js';
+import { AgentTerminalError } from './terminal-error.js';
+
+export { AgentTerminalError } from './terminal-error.js';
 
 const RUN_TIMEOUT_MS = 180_000;
 const HEARTBEAT_MS = 15_000;
 const DEFAULT_MAX_TURNS = 24;
-
-/**
- * A failure the job has already accounted for (domain state updated, no retry
- * worthwhile). The queue processor logs and swallows it instead of rethrowing.
- */
-export class AgentTerminalError extends Error {
-  readonly terminal = true;
-
-  constructor(
-    message: string,
-    readonly resultSummary: string | null = null,
-  ) {
-    super(message);
-    this.name = 'AgentTerminalError';
-  }
-}
 
 export interface AgentJobRun {
   job: JobRow;

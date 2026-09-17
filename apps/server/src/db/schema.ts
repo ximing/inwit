@@ -229,6 +229,8 @@ export const documents = pgTable(
     kind: varchar('kind', { length: 16 }).$type<'document' | 'weekly_report'>().notNull().default('document'),
     reportWeekStart: varchar('report_week_start', { length: 10 }),
     status: varchar('status', { length: 16 }).$type<DocumentStatus>().notNull().default('pending'),
+    /** Reason for the current 'failed' status; cleared when the pipeline restarts or succeeds. */
+    failReason: text('fail_reason'),
     answer: text('answer'),
     linkHint: text('link_hint'),
     /** Object storage key (not a URL). */

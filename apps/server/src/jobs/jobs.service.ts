@@ -11,6 +11,7 @@ import {
   type JobRow,
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { pipelineDocumentId, resetDocumentPipeline } from '../documents/document-status.js';
 import { endOfLocalDay, startOfLocalDay, startOfLocalDayDaysAgo } from '../utils/date.js';
 import {
   PENDING_QUEUE_LIMIT,
@@ -262,6 +263,8 @@ export async function retryJob(userId: string, id: string): Promise<Job> {
     .where(and(eq(jobs.id, id), eq(jobs.userId, userId), eq(jobs.status, 'failed')))
     .returning();
   if (!row) throw AppError.of(409, 'JOB_NOT_RETRYABLE');
+  const documentId = pipelineDocumentId(row);
+  if (documentId) await resetDocumentPipeline(userId, documentId);
   return toHydratedJob(userId, row);
 }
 

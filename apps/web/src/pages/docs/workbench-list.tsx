@@ -54,7 +54,11 @@ const DocStreamRow = observer(function DocStreamRow({
               {kind.label}
             </Tag>
           ) : null}
-          {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
+          {doc.status === 'failed' ? (
+            <span className="doc-failed" title={doc.failReason ?? undefined}>
+              失败{doc.failReason ? `：${doc.failReason}` : ''}
+            </span>
+          ) : null}
         </div>
         <DocRowSummary doc={doc} />
         <div className="row-meta">

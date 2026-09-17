@@ -134,7 +134,9 @@ const ReaderContent = observer(function ReaderContent() {
       : doc?.status === 'pending' && service.isBlank
         ? '消化中…'
         : doc?.status === 'failed'
-          ? '消化失败'
+          ? doc.failReason
+            ? `消化失败：${doc.failReason}`
+            : '消化失败'
           : service.isPdf
             ? 'PDF 请在网页端打开'
             : doc && service.isBlank

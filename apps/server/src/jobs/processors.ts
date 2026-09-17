@@ -29,8 +29,9 @@ export async function processJob(job: JobRow): Promise<void> {
     await HANDLERS[job.type](job);
   } catch (err) {
     if (err instanceof AgentTerminalError) {
+      // Terminal failures still settle as failed jobs (no retry) — the queue
+      // records lastError and reflects the failure onto the owned document.
       logger.warn(`${job.type}.terminal`, { jobId: job.id, error: err.message });
-      return;
     }
     throw err;
   }
