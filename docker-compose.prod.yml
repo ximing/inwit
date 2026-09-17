@@ -37,7 +37,7 @@ services:
     container_name: inwit-server
     # 入口 nginx（39.96.159.212）反代 https://inwit.aimo.plus → 这里；server 同时托管 SPA 静态资产
     ports:
-      - '13005:3020'
+      - '13006:3020'
     depends_on:
       migrate:
         condition: service_completed_successfully

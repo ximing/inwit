@@ -30,7 +30,8 @@ export async function registerWebStatic(app: FastifyInstance): Promise<void> {
   await app.register(fastifyStatic, {
     root: dist,
     prefix: '/',
-    index: false,
+    // index 默认 true：请求 / 由插件直接回 index.html（index:false 会让 / 落进
+    // wildcard 空路径，@fastify/send 抛 Forbidden → 500）
     setHeaders: (reply, pathname) => {
       // vite 产物文件名带内容 hash，可长缓存；index.html 由 not-found 兜底返回（no-store 语义交给 SPA 路由）
       if (pathname.includes('/assets/')) {
