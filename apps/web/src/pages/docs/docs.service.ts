@@ -21,7 +21,6 @@ import { listDocumentAnnotations } from '@/api/annotations';
 import { createCard } from '@/api/cards';
 import { errorMessage } from '@/api/client';
 import {
-  createChat,
   createDocument,
   enqueueSelectionCards,
   getDocument,
@@ -29,6 +28,17 @@ import {
   retryDocument,
   updateDocument,
 } from '@/api/documents';
+import {
+  asListItem,
+  captureIsChat,
+  hasPendingDoc,
+  mergeDetail,
+  sendCapture,
+  showToast,
+  startPolling,
+  stopPolling,
+  stopToast,
+} from '@/lib/doc-list';
 import { getJobQueue } from '@/api/jobs';
 import { createTopic, listTopics } from '@/api/topics';
 import {
@@ -49,8 +59,6 @@ import { DocsImportService, importFailMessage } from './docs-import.service';
 import { EditorService } from './editor.service';
 
 const DOC_PAGE = 20;
-const POLL_MS = 3000;
-const TOAST_MS = 3200;
 const SELECTION_POLL_MS = 2000;
 const SELECTION_POLL_FOR_MS = 9000;
 
@@ -59,35 +67,6 @@ function asDocumentCard(card: Card): DocumentCard {
     ...card,
     questions: [],
     review: { dueAt: new Date().toISOString(), intervalDays: 0 },
-  };
-}
-
-function asListItem(
-  doc: Document,
-  extra: { cardCount: number; topicTitle: string | null },
-): DocumentListItem {
-  return {
-    ...doc,
-    cardCount: extra.cardCount,
-    topicTitle: extra.topicTitle,
-  };
-}
-
-function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentListItem {
-  return {
-    ...item,
-    title: detail.title,
-    description: detail.description,
-    contentJson: detail.contentJson,
-    status: detail.status,
-    answer: detail.answer,
-    linkHint: detail.linkHint,
-    topicId: detail.topicId,
-    fileMime: detail.fileMime,
-    pageCount: detail.pageCount,
-    updatedAt: detail.updatedAt,
-    cardCount: detail.cards.length,
-    topicTitle: detail.topicTitle ?? item.topicTitle,
   };
 }
 
@@ -408,12 +387,7 @@ export class DocsService extends Service {
   }
 
   showToast(message: string): void {
-    this.toast = message;
-    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => {
-      this.toast = null;
-      this.toastTimer = null;
-    }, TOAST_MS);
+    showToast(this, message);
   }
 
   dismissImportError(): void {
@@ -482,17 +456,9 @@ export class DocsService extends Service {
     const content = this.draft.trim();
     if (content.length === 0) return null;
     this.error = null;
-    const useChat = mode === 'chat' || (mode === 'auto' && isChatQuestion(content));
+    const useChat = captureIsChat(content, mode);
     try {
-      const created = useChat
-        ? await createChat({
-            question: content,
-            ...(this.captureTopicId ? { topicId: this.captureTopicId } : {}),
-          })
-        : await createDocument({
-            contentJson: textToPmDoc(content),
-            ...(this.captureTopicId ? { topicId: this.captureTopicId } : {}),
-          });
+      const { created } = await sendCapture({ content, topicId: this.captureTopicId, mode });
       this.draft = '';
       this.ingestCreated(created);
       this.showToast(useChat ? '问题扔出去了，正在答' : '已收下，消化中');
@@ -696,8 +662,7 @@ export class DocsService extends Service {
     this.activeCardId = unique[0] ?? null;
     this.activeAnnotationId = null;
     this.scrollCardId = unique[0] ?? null;
-    const extra = unique.filter((id) => !this.expandedCardIds.includes(id));
-    if (extra.length > 0) this.expandedCardIds = [...this.expandedCardIds, ...extra];
+    this.expandedCardIds = unique;
     this.cardRailOverlayOpen = true;
   }
 
@@ -1011,24 +976,19 @@ export class DocsService extends Service {
   }
 
   stopPolling(): void {
-    if (this.pollTimer === null) return;
-    clearInterval(this.pollTimer);
-    this.pollTimer = null;
+    stopPolling(this);
   }
 
   override destroy(): void {
     this.importService.abortInFlight();
     this.stopPolling();
     this.finishSelectionPoll();
-    if (this.toastTimer !== null) {
-      clearTimeout(this.toastTimer);
-      this.toastTimer = null;
-    }
+    stopToast(this);
     super.destroy();
   }
 
   syncPolling(): void {
-    const listPending = this.documents.some((item) => item.status === 'pending');
+    const listPending = hasPendingDoc(this.documents);
     const docPending = this.doc?.status === 'pending';
     const uploading = Object.keys(this.uploadByDoc).length > 0;
     if (listPending || docPending || uploading) this.startPolling();
@@ -1036,10 +996,7 @@ export class DocsService extends Service {
   }
 
   startPolling(): void {
-    if (this.pollTimer !== null) return;
-    this.pollTimer = setInterval(() => {
-      void this.tickPending();
-    }, POLL_MS);
+    startPolling(this, () => void this.tickPending());
   }
 
   async tickPending(): Promise<void> {

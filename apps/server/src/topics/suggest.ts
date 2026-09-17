@@ -22,20 +22,6 @@ import {
 } from './suggest-logic.js';
 import { toPublicTopic } from './topic.service.js';
 
-export {
-  SUGGEST_DISMISS_MS,
-  SUGGEST_EXPIRE_MS,
-  SUGGEST_LOOKBACK_MS,
-  decideSuggestionWrite,
-  documentOverlap,
-  normalizeSuggestionTitle,
-  parseSuggestionContent,
-  slugifySuggestionTitle,
-  suggestionKeyFromSlug,
-  titlesOverlap,
-} from './suggest-logic.js';
-export type { SuggestionMemoryView, SuggestionWriteDecision } from './suggest-logic.js';
-
 export function normalizeSuggestionKey(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.startsWith(TOPIC_SUGGESTION_KEY_PREFIX)) {

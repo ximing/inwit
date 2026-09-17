@@ -157,3 +157,21 @@ docker compose -f docker-compose.prod.yml up -d
 测试环境只读 `apps/server/.env.test`，不会回落到开发 `.env`。
 
 产品需求见 [docs/prd.md](docs/prd.md)，任务历史见 [docs/dev-log.md](docs/dev-log.md) 与 [docs/tasks/](docs/tasks/)。
+
+### 附件存储
+
+开发环境直接使用远端 S3，不再启动本地存储模拟器。在 `apps/server/.env` 配置：
+
+```dotenv
+ATTACHMENT_S3_ENDPOINT=https://s3.aimo.plus
+ATTACHMENT_S3_REGION=cn-beijing
+ATTACHMENT_S3_BUCKET=inwit-dev
+ATTACHMENT_S3_ACCESS_KEY_ID=your-access-key
+ATTACHMENT_S3_SECRET_ACCESS_KEY=your-secret-key
+ATTACHMENT_S3_IS_PUBLIC=false
+ATTACHMENT_S3_FORCE_PATH_STYLE=true
+```
+
+私有文件通过服务端签发的预签名 URL 上传和读取；客户端不持有存储密钥。
+Bucket 的 CORS 需要允许前端来源的 GET、PUT、HEAD 请求，并暴露 `ETag` 响应头供分片上传使用。
+修改环境变量后需重启 API 和 worker。历史本地文件不会自动迁移到远端。

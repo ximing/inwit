@@ -18,7 +18,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { isSearchHotkey, requestSearchFocus } from '@/components/search';
 import { UserAvatar } from '@/components/user-avatar';
 import { ROUTES } from '@/routes';
-import { AppService } from '@/services/app.service';
 import { AuthService } from '@/services/auth.service';
 import { ScreenshotService } from '@/services/screenshot.service';
 import { ThemeService } from '@/services/theme.service';
@@ -41,7 +40,6 @@ const NAV: ReadonlyArray<{
 ];
 
 const LayoutContent = observer(function LayoutContent() {
-  const app = useService(AppService);
   const auth = useService(AuthService);
   const shot = useService(ScreenshotService);
   const theme = useService(ThemeService);
@@ -72,7 +70,7 @@ const LayoutContent = observer(function LayoutContent() {
       <aside className={collapsed ? 'rail is-collapsed' : 'rail'}>
         <div className="brand">
           <div className="brand-text">
-            <div className="brand-name">{app.title}</div>
+            <div className="brand-name">Inwit</div>
             <div className="brand-tag">扔进去，它来消化</div>
           </div>
           <button

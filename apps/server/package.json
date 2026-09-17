@@ -14,7 +14,6 @@
     "test:retrieval": "tsx src/retrieval/self-test.ts",
     "migrate": "tsx src/db/migrate.ts",
     "migrate:generate": "drizzle-kit generate",
-    "dev:s3": "node scripts/dev-s3.mjs",
     "backfill:review-states": "tsx ../../scripts/backfill-review-states.ts",
     "backfill:search": "tsx ../../scripts/backfill-search.ts"
   },
@@ -47,7 +46,6 @@
     "@types/node": "^22.13.4",
     "@types/pg": "^8.11.11",
     "drizzle-kit": "^0.31.9",
-    "s3rver": "^3.7.1",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vitest": "^5.0.0"

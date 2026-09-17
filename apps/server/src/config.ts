@@ -56,12 +56,13 @@ export const envSchema = z.object({
   EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(2560),
   RERANK_MODEL: z.string().min(1).default('qwen3.7-text-rerank'),
   WEB_ORIGIN: z.string().url().default('http://localhost:5190'),
-  S3_ENDPOINT: optionalUrl,
-  S3_REGION: optionalNonEmpty,
-  S3_BUCKET: optionalNonEmpty,
-  S3_ACCESS_KEY: optionalNonEmpty,
-  S3_SECRET_KEY: optionalNonEmpty,
-  S3_FORCE_PATH_STYLE: z.preprocess(blankToUndef, boolEnum.optional()),
+  ATTACHMENT_S3_ENDPOINT: optionalUrl,
+  ATTACHMENT_S3_REGION: optionalNonEmpty,
+  ATTACHMENT_S3_BUCKET: optionalNonEmpty,
+  ATTACHMENT_S3_ACCESS_KEY_ID: optionalNonEmpty,
+  ATTACHMENT_S3_SECRET_ACCESS_KEY: optionalNonEmpty,
+  ATTACHMENT_S3_FORCE_PATH_STYLE: z.preprocess(blankToUndef, boolEnum.optional()),
+  ATTACHMENT_S3_IS_PUBLIC: boolEnum.default('false'),
   /** Technical ceiling for imported originals (S3 multipart). Default 2 GiB. */
   IMPORT_MAX_FILE_BYTES: z.coerce
     .number()

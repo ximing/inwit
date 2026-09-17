@@ -254,7 +254,7 @@ export const FeedTab = observer(function FeedTab() {
                 doc={doc}
                 hanging={service.hangingTitle(doc)}
                 onOpen={(id) => {
-                  const to = service.readerNavForDoc(id, doc.fileMime);
+                  const to = service.readerNavForDoc(id);
                   if (to) navigate(to);
                 }}
               />

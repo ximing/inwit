@@ -1,5 +1,6 @@
 import { evolveAnalyzeJobPayloadFrom, evolveJobPayloadFrom } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
+import { localDateKey } from '../utils/date.js';
 import {
   ANALYZE_DAILY_THRESHOLD,
   capDocumentTitle,
@@ -7,7 +8,6 @@ import {
   contrastDocTitle,
   documentOnCooldown,
   eligibleContrastPairs,
-  localDateKey,
   parseConfusableKey,
   shouldEnqueueDailyAnalyze,
   analyzeResultSummary,

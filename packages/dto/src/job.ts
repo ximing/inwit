@@ -35,6 +35,8 @@ export const jobSchema = z.object({
   updatedAt: z.string(),
   summary: z.string(),
   description: z.string(),
+  /** Actual models recorded in usage logs across this job's executions. */
+  modelNames: z.array(z.string()).optional(),
   /** Present on running items from `GET /api/jobs/queue`. */
   startedElapsedSec: z.number().int().nonnegative().optional(),
   /** Present on pending items from `GET /api/jobs/queue` (`runAt` ISO). */

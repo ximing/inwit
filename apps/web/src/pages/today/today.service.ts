@@ -1,8 +1,6 @@
 import { Service } from '@rabjs/react';
 import {
   isChatQuestion,
-  type Document,
-  type DocumentDetail,
   type DocumentListItem,
   type Job,
   type ReviewStats,
@@ -11,8 +9,18 @@ import {
   type WeeklyReportLatest,
 } from '@inwit/dto';
 import { errorMessage } from '@/api/client';
-import { textToPmDoc } from '@/lib/pm-doc';
-import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
+import { listDocuments } from '@/api/documents';
+import {
+  asListItem,
+  captureIsChat,
+  fetchMergedItem,
+  hasPendingDoc,
+  sendCapture,
+  showToast,
+  startPolling,
+  stopPolling,
+  stopToast,
+} from '@/lib/doc-list';
 import { listJobs } from '@/api/jobs';
 import { getLatestWeeklyReport } from '@/api/reports';
 import { getReviewStats, getReviewToday } from '@/api/review';
@@ -26,34 +34,6 @@ import {
 
 const RECENT_DOCS = 4;
 const RECENT_JOBS = 5;
-const POLL_MS = 3000;
-const TOAST_MS = 3200;
-
-function asListItem(
-  doc: Document,
-  extra: { cardCount: number; topicTitle: string | null },
-): DocumentListItem {
-  return {
-    ...doc,
-    cardCount: extra.cardCount,
-    topicTitle: extra.topicTitle,
-  };
-}
-
-function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentListItem {
-  return {
-    ...item,
-    title: detail.title,
-    description: detail.description,
-    contentJson: detail.contentJson,
-    status: detail.status,
-    answer: detail.answer,
-    linkHint: detail.linkHint,
-    updatedAt: detail.updatedAt,
-    cardCount: detail.cards.length,
-    topicTitle: detail.topicTitle ?? item.topicTitle,
-  };
-}
 
 export class TodayService extends Service {
   topics: Topic[] = [];
@@ -137,12 +117,7 @@ export class TodayService extends Service {
   }
 
   showToast(message: string): void {
-    this.toast = message;
-    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => {
-      this.toast = null;
-      this.toastTimer = null;
-    }, TOAST_MS);
+    showToast(this, message);
   }
 
   async load(): Promise<void> {
@@ -202,17 +177,9 @@ export class TodayService extends Service {
     const content = this.draft.trim();
     if (content.length === 0) return;
     this.error = null;
-    const useChat = mode === 'chat' || (mode === 'auto' && isChatQuestion(content));
+    const useChat = captureIsChat(content, mode);
     try {
-      const created = useChat
-        ? await createChat({
-            question: content,
-            ...(this.topicId ? { topicId: this.topicId } : {}),
-          })
-        : await createDocument({
-            contentJson: textToPmDoc(content),
-            ...(this.topicId ? { topicId: this.topicId } : {}),
-          });
+      const { created } = await sendCapture({ content, topicId: this.topicId, mode });
       this.draft = '';
       this.documents = [
         asListItem(created, {
@@ -252,17 +219,12 @@ export class TodayService extends Service {
   }
 
   stopPolling(): void {
-    if (this.pollTimer === null) return;
-    clearInterval(this.pollTimer);
-    this.pollTimer = null;
+    stopPolling(this);
   }
 
   override destroy(): void {
     this.stopPolling();
-    if (this.toastTimer !== null) {
-      clearTimeout(this.toastTimer);
-      this.toastTimer = null;
-    }
+    stopToast(this);
     super.destroy();
   }
 
@@ -313,17 +275,14 @@ export class TodayService extends Service {
   }
 
   syncPolling(): void {
-    const pending = this.documents.some((item) => item.status === 'pending');
+    const pending = hasPendingDoc(this.documents);
     const waitingSuggest = Date.now() < this.suggestDeadline;
     if (pending || waitingSuggest) this.startPolling();
     else this.stopPolling();
   }
 
   startPolling(): void {
-    if (this.pollTimer !== null) return;
-    this.pollTimer = setInterval(() => {
-      void this.tickPending();
-    }, POLL_MS);
+    startPolling(this, () => void this.tickPending());
   }
 
   async tickPending(): Promise<void> {
@@ -339,17 +298,13 @@ export class TodayService extends Service {
   }
 
   async refreshOne(id: string): Promise<void> {
-    try {
-      const prev = this.documents.find((item) => item.id === id);
-      const detail = await getDocument(id);
-      this.documents = this.documents.map((item) =>
-        item.id === id ? mergeDetail(item, detail) : item,
-      );
-      if (prev?.status === 'pending' && detail.status === 'digested' && !detail.topicId) {
-        this.suggestDeadline = Date.now() + 120_000;
-      }
-    } catch {
-      // Transient poll errors should not wipe the list.
+    const prev = this.documents.find((item) => item.id === id);
+    if (!prev) return;
+    const merged = await fetchMergedItem(prev);
+    if (!merged) return;
+    this.documents = this.documents.map((item) => (item.id === id ? merged : item));
+    if (prev.status === 'pending' && merged.status === 'digested' && !merged.topicId) {
+      this.suggestDeadline = Date.now() + 120_000;
     }
   }
 

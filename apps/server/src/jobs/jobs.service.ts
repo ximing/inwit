@@ -11,7 +11,7 @@ import {
   type JobRow,
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
-import { endOfLocalDay, startOfLocalDay, startOfLocalDayDaysAgo } from '../review/review-logic.js';
+import { endOfLocalDay, startOfLocalDay, startOfLocalDayDaysAgo } from '../utils/date.js';
 import {
   PENDING_QUEUE_LIMIT,
   USAGE_DAYS,
@@ -90,8 +90,23 @@ async function loadRelatedMaps(userId: string, rows: JobRow[]): Promise<JobRelat
 
 async function toHydratedJobs(userId: string, rows: JobRow[]): Promise<Job[]> {
   if (rows.length === 0) return [];
-  const maps = await loadRelatedMaps(userId, rows);
-  return rows.map((row) => toPublicJob(row, relatedForJob(row, maps)));
+  const [maps, modelRows] = await Promise.all([
+    loadRelatedMaps(userId, rows),
+    getDb()
+      .selectDistinct({ jobId: agentExecutions.jobId, model: llmUsageLogs.model })
+      .from(agentExecutions)
+      .innerJoin(llmUsageLogs, eq(llmUsageLogs.executionId, agentExecutions.id))
+      .where(and(
+        eq(agentExecutions.userId, userId),
+        eq(llmUsageLogs.userId, userId),
+        inArray(agentExecutions.jobId, rows.map((row) => row.id)),
+      ))
+      .orderBy(asc(llmUsageLogs.model)),
+  ]);
+  return rows.map((row) => ({
+    ...toPublicJob(row, relatedForJob(row, maps)),
+    modelNames: modelRows.filter((model) => model.jobId === row.id).map((model) => model.model),
+  }));
 }
 
 async function toHydratedJob(userId: string, row: JobRow): Promise<Job> {

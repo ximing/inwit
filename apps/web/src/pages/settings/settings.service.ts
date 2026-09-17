@@ -25,6 +25,7 @@ import {
   updateMe,
 } from '@/api/auth';
 import { ApiError, errorMessage } from '@/api/client';
+import { putViaFetch } from '@/pages/docs/upload-asset';
 import {
   createLlmConfig,
   deleteLlmConfig,
@@ -208,11 +209,7 @@ export class SettingsService extends Service {
         contentType,
         sizeBytes: file.size,
       });
-      const put = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': contentType },
-      });
+      const put = await putViaFetch(uploadUrl, file, contentType);
       if (!put.ok) {
         this.avatarError = '头像上传失败';
         return;

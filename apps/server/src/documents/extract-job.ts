@@ -12,19 +12,11 @@ import { tryIndexDocument } from '../retrieval/pipeline.js';
 import { getObjectToFile } from '../storage/client.js';
 import { logger } from '../utils/logger.js';
 import { markdownToContentJson } from './content-json.js';
+import { findOwnedDocument } from './document.service.js';
 import { isBlankDocumentContent } from './document-logic.js';
 import { extractImported } from './extract.js';
 import { followUpAfterExtract } from './extract-logic.js';
 import { detectImportFormat, formatFromSourceKey, titleFromFilename } from './import-logic.js';
-
-async function loadDocument(userId: string, documentId: string): Promise<DocumentRow | null> {
-  const [row] = await getDb()
-    .select()
-    .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
-    .limit(1);
-  return row ?? null;
-}
 
 async function markDocumentFailed(userId: string, documentId: string): Promise<void> {
   await getDb()
@@ -52,7 +44,7 @@ export async function processExtract(job: JobRow): Promise<void> {
   const documentId = documentIdFromJobPayload(job.payload);
   if (!documentId) throw new Error('extract job missing documentId');
 
-  const document = await loadDocument(job.userId, documentId);
+  const document = await findOwnedDocument(job.userId, documentId);
   if (!document) {
     logger.warn('extract.document_missing', { jobId: job.id, documentId });
     return;

@@ -1,8 +1,9 @@
 import { docDisplayTitle, documentIdFromJobPayload, selectionJobPayloadFrom } from '@inwit/dto';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
-import { cards, documents, type JobRow } from '../db/schema.js';
+import { cards, type JobRow } from '../db/schema.js';
 import { asPmJson } from '../documents/content-json.js';
+import { findOwnedDocument } from '../documents/document.service.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
 import { completeChat } from '../llm/usage.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
@@ -12,6 +13,7 @@ import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
 import { inheritSelectionAnchor } from './card-anchor-logic.js';
 import { finishExecution, startExecution } from './executions.js';
+import { AgentTerminalError } from './run-agent-job.js';
 import { runWithAgentContext } from './run-context.js';
 import {
   parseSelectionCards,
@@ -21,24 +23,6 @@ import {
   selectionUserPrompt,
   type SelectionCardDraft,
 } from './selection-logic.js';
-
-export class SelectionTerminalError extends Error {
-  readonly terminal = true;
-
-  constructor(message: string) {
-    super(message);
-    this.name = 'SelectionTerminalError';
-  }
-}
-
-async function loadDocument(userId: string, documentId: string) {
-  const [row] = await getDb()
-    .select()
-    .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
-    .limit(1);
-  return row ?? null;
-}
 
 async function persistDrafts(input: {
   userId: string;
@@ -108,9 +92,9 @@ export async function processSelection(job: JobRow): Promise<void> {
   const documentId = payload?.documentId ?? documentIdFromJobPayload(job.payload);
   const selectionText = payload?.selectionText?.trim() ?? '';
   if (!documentId) throw new Error('selection job missing documentId');
-  if (selectionText.length === 0) throw new SelectionTerminalError('selection job missing selectionText');
+  if (selectionText.length === 0) throw new AgentTerminalError('selection job missing selectionText');
 
-  const document = await loadDocument(job.userId, documentId);
+  const document = await findOwnedDocument(job.userId, documentId);
   if (!document) {
     logger.warn('selection.document_missing', { jobId: job.id, documentId });
     return;
@@ -156,7 +140,7 @@ export async function processSelection(job: JobRow): Promise<void> {
             error: 'selection produced no cards',
             resultSummary: selectionResultSummary(0),
           });
-          throw new SelectionTerminalError('selection produced no cards');
+          throw new AgentTerminalError('selection produced no cards');
         }
 
         const written = await persistDrafts({
@@ -176,7 +160,7 @@ export async function processSelection(job: JobRow): Promise<void> {
             error: 'selection produced no cards',
             resultSummary: selectionResultSummary(0),
           });
-          throw new SelectionTerminalError('selection produced no cards');
+          throw new AgentTerminalError('selection produced no cards');
         }
 
         await finishExecution({
@@ -189,7 +173,7 @@ export async function processSelection(job: JobRow): Promise<void> {
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (!(err instanceof SelectionTerminalError)) {
+    if (!(err instanceof AgentTerminalError)) {
       await finishExecution({
         executionId,
         status: 'failed',

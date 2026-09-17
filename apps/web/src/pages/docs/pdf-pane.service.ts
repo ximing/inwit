@@ -1,4 +1,5 @@
 import { Service } from '@rabjs/react';
+import { putViaFetch } from './upload-asset';
 import {
   EXCERPT_MAX_BYTES,
   IMAGE_EXCERPT_QUOTE,
@@ -176,11 +177,7 @@ export class PdfPaneService extends Service {
         contentType,
         sizeBytes: blob.size,
       });
-      const put = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: blob,
-        headers: { 'Content-Type': contentType },
-      });
+      const put = await putViaFetch(uploadUrl, blob, contentType);
       if (!put.ok) {
         this.docs.showToast('截图没传上去');
         return null;

@@ -168,9 +168,4 @@ export async function cancelPendingDocumentJobs(
   return rows.length;
 }
 
-/** @deprecated use cancelPendingDocumentJobs */
-export const cancelPendingCaptureJobs = cancelPendingDocumentJobs;
-/** @deprecated use cancelPendingDocumentJobs */
-export const cancelPendingDigestJobs = cancelPendingDocumentJobs;
-
 export { CANCEL_REASON };

@@ -30,6 +30,7 @@ import {
   cardNextReviewLabel,
 } from './mini-card';
 import { ReaderService } from './reader.service';
+import { isPdfMime } from '@/lib/mime';
 
 const LINK_ORDER: CardLinkType[] = [
   'confusable',
@@ -171,14 +172,15 @@ export const ReaderOverlay = observer(function ReaderOverlay() {
             type="button"
             className="btn btn-ghost reader-overlay-close"
             aria-label="关闭"
+            title="关闭阅读弹窗"
             onClick={() => service.close()}
           >
-            <X width={16} height={16} strokeWidth={1.8} />
+            <X width={20} height={20} strokeWidth={2} aria-hidden />
           </button>
         </header>
 
         <div className="reader-overlay-main">
-          <div className="reader-overlay-scroll" ref={scrollRef}>
+          <div className={`reader-overlay-scroll${isPdfMime(doc?.fileMime) ? ' is-pdf' : ''}`} ref={scrollRef}>
             {service.loading && !doc ? (
               <p className="empty">
                 <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
@@ -186,7 +188,9 @@ export const ReaderOverlay = observer(function ReaderOverlay() {
               </p>
             ) : null}
             {service.error && !doc ? <p className="empty">{service.error}</p> : null}
-            {doc ? <ReaderDocBody doc={doc} /> : null}
+            {doc ? (
+              isPdfMime(doc.fileMime) ? <ReaderPdfBody doc={doc} /> : <ReaderDocBody doc={doc} />
+            ) : null}
           </div>
           {doc ? (
             <aside className="reader-overlay-rail" aria-label={cardMode ? '卡片详情' : '本文卡片'}>
@@ -198,6 +202,20 @@ export const ReaderOverlay = observer(function ReaderOverlay() {
     </div>,
     document.body,
   );
+});
+
+const ReaderPdfBody = observer(function ReaderPdfBody({ doc }: { doc: DocumentDetail }) {
+  const service = useService(ReaderService);
+  if (service.pdfError) return <p className="empty">{service.pdfError}</p>;
+  if (!service.pdfUrl) {
+    return (
+      <p className="empty">
+        <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+        正在打开 PDF…
+      </p>
+    );
+  }
+  return <iframe className="reader-overlay-pdf" src={service.pdfUrl} title={docDisplayTitle(doc)} />;
 });
 
 const ReaderDocBody = observer(function ReaderDocBody({

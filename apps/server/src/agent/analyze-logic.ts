@@ -14,15 +14,6 @@ export const ANALYZE_MAX_CARDS = 3;
 export const CONFUSABLE_MEMORY_PREFIX = 'confusable:';
 export const CONFUSABLE_LINK_TYPE = 'confusable' as const;
 
-export function localDateKey(now: Date): string {
-  const d = new Date(now.getTime());
-  d.setHours(0, 0, 0, 0);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export function truncateChars(value: string, max: number): string {
   const chars = [...value.trim()];
   if (chars.length <= max) return chars.join('');

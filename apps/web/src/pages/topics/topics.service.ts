@@ -1,7 +1,6 @@
 import { Service } from '@rabjs/react';
 import type {
   Document,
-  DocumentDetail,
   DocumentListItem,
   Job,
   MapNodeDetail,
@@ -11,10 +10,21 @@ import type {
 } from '@inwit/dto';
 import { isChatQuestion, topicJobPayloadFrom } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
-import { textToPmDoc } from '@/lib/pm-doc';
-import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
+import { listDocuments } from '@/api/documents';
 import { ReaderService } from '@/components/reader/reader.service';
-import { cardPath, docAnchorPath, docPath } from '@/routes';
+import {
+  asListItem,
+  captureIsChat,
+  fetchMergedItem,
+  hasPendingDoc,
+  POLL_MS,
+  sendCapture,
+  showToast,
+  startPolling,
+  stopPolling,
+  stopToast,
+} from '@/lib/doc-list';
+import { cardPath } from '@/routes';
 import { getJob } from '@/api/jobs';
 import {
   fillMapNode,
@@ -34,9 +44,7 @@ import {
   updateTopic,
 } from '@/api/topics';
 
-const POLL_MS = 3000;
 const DOC_PAGE = 50;
-const TOAST_MS = 3200;
 
 export type TopicTab = 'docs' | 'map' | 'feed';
 export type TopicEditField = 'title' | 'goal';
@@ -86,33 +94,6 @@ function jobIdFromConflict(err: unknown): string | null {
   return typeof id === 'string' ? id : null;
 }
 
-function asListItem(
-  doc: Document,
-  extra: { cardCount: number; topicTitle: string | null },
-): DocumentListItem {
-  return {
-    ...doc,
-    cardCount: extra.cardCount,
-    topicTitle: extra.topicTitle,
-  };
-}
-
-function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentListItem {
-  return {
-    ...item,
-    title: detail.title,
-    description: detail.description,
-    contentJson: detail.contentJson,
-    status: detail.status,
-    answer: detail.answer,
-    linkHint: detail.linkHint,
-    topicId: detail.topicId,
-    updatedAt: detail.updatedAt,
-    cardCount: detail.cards.length,
-    topicTitle: detail.topicTitle ?? item.topicTitle,
-  };
-}
-
 export function subtreeCounts(node: MapTreeNode): { cards: number; docs: number } {
   let cards = node.cardCount;
   let docs = node.docCount;
@@ -159,7 +140,7 @@ export class TopicsService extends Service {
   toast: string | null = null;
 
   jobPollTimer: ReturnType<typeof setInterval> | null = null;
-  docPollTimer: ReturnType<typeof setInterval> | null = null;
+  pollTimer: ReturnType<typeof setInterval> | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
   topicLoadGen = 0;
 
@@ -274,19 +255,15 @@ export class TopicsService extends Service {
     this.tab = tab;
   }
 
-  /** PDF 返回应跳转的完整页路径；否则打开阅读弹层并返回 null。 */
-  readerNavForDoc(docId: string, fileMime?: string | null): string | null {
-    const mime = fileMime ?? this.documents.find((item) => item.id === docId)?.fileMime ?? null;
-    if (mime === 'application/pdf') return docPath(docId);
+  /** 在当前主题页打开阅读弹层。 */
+  readerNavForDoc(docId: string): string | null {
     void this.reader.openDoc(docId);
     return null;
   }
 
-  /** PDF / 无所属文档时返回跳转路径；否则打开卡片模式弹层。 */
+  /** 无所属文档时返回跳转路径；否则打开卡片模式弹层（PDF 同样走弹层）。 */
   readerNavForCard(cardId: string, documentId: string | null): string | null {
     if (!documentId) return cardPath(cardId, documentId);
-    const mime = this.documents.find((item) => item.id === documentId)?.fileMime ?? null;
-    if (mime === 'application/pdf') return docAnchorPath(documentId, cardId);
     void this.reader.openCard(cardId, documentId);
     return null;
   }
@@ -391,12 +368,7 @@ export class TopicsService extends Service {
   }
 
   showToast(message: string): void {
-    this.toast = message;
-    if (this.toastTimer !== null) clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => {
-      this.toast = null;
-      this.toastTimer = null;
-    }, TOAST_MS);
+    showToast(this, message);
   }
 
   watchJob(job: Job): void {
@@ -419,21 +391,15 @@ export class TopicsService extends Service {
   }
 
   startDocPolling(): void {
-    if (this.docPollTimer !== null) return;
-    this.docPollTimer = setInterval(() => {
-      void this.tickPending();
-    }, POLL_MS);
+    startPolling(this, () => void this.tickPending());
   }
 
   stopDocPolling(): void {
-    if (this.docPollTimer === null) return;
-    clearInterval(this.docPollTimer);
-    this.docPollTimer = null;
+    stopPolling(this);
   }
 
   syncDocPolling(): void {
-    const pending = this.documents.some((item) => item.status === 'pending');
-    if (pending) this.startDocPolling();
+    if (hasPendingDoc(this.documents)) this.startDocPolling();
     else this.stopDocPolling();
   }
 
@@ -613,11 +579,9 @@ export class TopicsService extends Service {
     const content = this.draft.trim();
     if (content.length === 0) return null;
     this.error = null;
-    const useChat = mode === 'chat' || (mode === 'auto' && isChatQuestion(content));
+    const useChat = captureIsChat(content, mode);
     try {
-      const created = useChat
-        ? await createChat({ question: content, topicId: this.topic.id })
-        : await createDocument({ contentJson: textToPmDoc(content), topicId: this.topic.id });
+      const { created } = await sendCapture({ content, topicId: this.topic.id, mode });
       this.draft = '';
       this.ingestCreated(created);
       this.showToast(useChat ? '问题扔出去了，正在答' : '已收下，消化中');
@@ -786,14 +750,11 @@ export class TopicsService extends Service {
   }
 
   async refreshOne(id: string): Promise<void> {
-    try {
-      const detail = await getDocument(id);
-      this.documents = this.documents.map((item) =>
-        item.id === id ? mergeDetail(item, detail) : item,
-      );
-    } catch {
-      // Transient poll errors should not wipe the list.
-    }
+    const prev = this.documents.find((item) => item.id === id);
+    if (!prev) return;
+    const merged = await fetchMergedItem(prev);
+    if (!merged) return;
+    this.documents = this.documents.map((item) => (item.id === id ? merged : item));
   }
 
   async _enrich(topic: Topic): Promise<TopicListItem> {
@@ -819,10 +780,7 @@ export class TopicsService extends Service {
   override destroy(): void {
     this.stopJobPolling();
     this.stopDocPolling();
-    if (this.toastTimer !== null) {
-      clearTimeout(this.toastTimer);
-      this.toastTimer = null;
-    }
+    stopToast(this);
     super.destroy();
   }
 }

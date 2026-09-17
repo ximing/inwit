@@ -542,7 +542,7 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
       type="button"
       className="topic-doc-card"
       onClick={() => {
-        const to = service.readerNavForDoc(doc.id, doc.fileMime);
+        const to = service.readerNavForDoc(doc.id);
         if (to) navigate(to);
       }}
     >

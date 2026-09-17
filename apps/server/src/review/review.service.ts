@@ -27,25 +27,21 @@ import { maybeEnqueueAnalyzePatterns } from '../agent/analyze-enqueue.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
 import { logger } from '../utils/logger.js';
+import { addLocalDays, endOfLocalDay, localDateKey, startOfLocalDay } from '../utils/date.js';
 import { evolveReasonFor } from './evolve-reason.js';
 import { upsertCardMasteryRecent } from './mastery-memory.js';
 import {
-  addLocalDays,
   aggregateLast7Days,
   applyReviewQueueLimits,
   buildDailyDistribution,
   buildForecast,
   computeStreak,
-  endOfLocalDay,
-  localDateKey,
   retentionPercent,
-  startOfLocalDay,
 } from './review-logic.js';
 import { getReviewSettings, updateReviewSettings } from './review-settings.js';
 import { scheduleReview } from './sm2.js';
 import { insertInitialReviewState } from './state-init.js';
 
-export { startOfLocalDay, endOfLocalDay } from './review-logic.js';
 export { getReviewSettings, updateReviewSettings } from './review-settings.js';
 
 export function toPublicReviewState(row: ReviewStateRow): ReviewState {

@@ -25,6 +25,7 @@ import { Tag } from '@/components/tag';
 import { dayGreeting, formatRelativeTime, formatTodayLong, isSubmitHotkey } from '@/lib/format';
 import { ROUTES, docPath, topicPath } from '@/routes';
 import { TodayService } from './today.service';
+import { estimateReviewMinutes } from '@/lib/review-eta';
 
 const JOB_ICONS: Record<JobType, LucideIcon> = {
   digest: BrainCircuit,
@@ -40,11 +41,6 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
 function hotkeyGlyph(): string {
   if (typeof navigator === 'undefined') return '⌘';
   return /Mac|iPhone|iPad/i.test(navigator.userAgent) ? '⌘' : 'Ctrl';
-}
-
-/** ~25s / 卡，7 张 ≈ 3 分钟（稿子里的约数）。 */
-function estimateReviewMinutes(count: number): number {
-  return Math.max(1, Math.round((count * 25) / 60));
 }
 
 function jobHeadline(job: Job): string {

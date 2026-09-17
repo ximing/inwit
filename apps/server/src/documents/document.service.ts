@@ -64,12 +64,17 @@ export function toPublicDocument(row: DocumentRow): Document {
   };
 }
 
-export async function getOwnedDocument(userId: string, id: string): Promise<DocumentRow> {
+export async function findOwnedDocument(userId: string, id: string): Promise<DocumentRow | null> {
   const [row] = await getDb()
     .select()
     .from(documents)
     .where(and(eq(documents.id, id), eq(documents.userId, userId)))
     .limit(1);
+  return row ?? null;
+}
+
+export async function getOwnedDocument(userId: string, id: string): Promise<DocumentRow> {
+  const row = await findOwnedDocument(userId, id);
   if (!row) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
   return row;
 }

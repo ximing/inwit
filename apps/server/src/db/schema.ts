@@ -1,4 +1,4 @@
-import { relations, sql } from 'drizzle-orm';
+import { relations, sql, type SQLWrapper } from 'drizzle-orm';
 import {
   bigint,
   boolean,
@@ -17,6 +17,25 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import {
+  AGENT_EXECUTION_STATUSES,
+  AGENT_TYPES,
+  ANNOTATION_KINDS,
+  CARD_LINK_ORIGINS,
+  CARD_LINK_TYPES,
+  CARD_QUESTION_TYPES,
+  CARD_SOURCES,
+  DOCUMENT_SOURCES,
+  DOCUMENT_STATUSES,
+  JOB_STATUSES,
+  JOB_TYPES,
+  LLM_CAPABILITIES,
+  LLM_PROVIDERS,
+  MAP_NODE_STATUSES,
+  MEMORY_LAYERS,
+  MEMORY_SCOPES,
+  TOPIC_STATUSES,
+} from '@inwit/dto';
 import type {
   AgentExecutionStatus,
   AgentExecutionStep,
@@ -44,6 +63,10 @@ import type {
 } from '@inwit/dto';
 
 const timestamptz = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
+
+/** Values are compile-time constants from @inwit/dto, so raw interpolation is safe. */
+const enumCheck = (name: string, column: SQLWrapper, values: readonly string[]) =>
+  check(name, sql`${column} IN (${sql.raw(values.map((v) => `'${v}'`).join(', '))})`);
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -77,10 +100,7 @@ export const llmConfigs = pgTable(
     uniqueIndex('llm_configs_user_default_uidx')
       .on(t.userId)
       .where(sql`${t.isDefault} = true`),
-    check(
-      'llm_configs_provider_check',
-      sql`${t.provider} IN ('openai', 'deepseek', 'claude', 'zhipu', 'dashscope')`,
-    ),
+    enumCheck('llm_configs_provider_check', t.provider, LLM_PROVIDERS),
   ],
 );
 
@@ -157,7 +177,7 @@ export const topics = pgTable(
   (t) => [
     index('idx_topics_user').on(t.userId),
     index('idx_topics_user_status').on(t.userId, t.status),
-    check('topics_status_check', sql`${t.status} IN ('active', 'archived')`),
+    enumCheck('topics_status_check', t.status, TOPIC_STATUSES),
   ],
 );
 
@@ -177,10 +197,7 @@ export const mapNodes = pgTable(
   },
   (t) => [
     index('idx_map_nodes_topic_parent').on(t.topicId, t.parentId),
-    check(
-      'map_nodes_status_check',
-      sql`${t.status} IN ('uncovered', 'learning', 'covered')`,
-    ),
+    enumCheck('map_nodes_status_check', t.status, MAP_NODE_STATUSES),
     check(
       'map_nodes_not_self_parent_check',
       sql`${t.parentId} IS NULL OR ${t.parentId} <> ${t.id}`,
@@ -225,11 +242,8 @@ export const documents = pgTable(
     index('idx_documents_user_status').on(t.userId, t.status),
     index('idx_documents_topic').on(t.topicId),
     index('idx_documents_map_node').on(t.mapNodeId),
-    check(
-      'documents_source_check',
-      sql`${t.source} IN ('editor', 'paste', 'chat', 'agent', 'import', 'screenshot')`,
-    ),
-    check('documents_status_check', sql`${t.status} IN ('pending', 'digested', 'failed')`),
+    enumCheck('documents_source_check', t.source, DOCUMENT_SOURCES),
+    enumCheck('documents_status_check', t.status, DOCUMENT_STATUSES),
   ],
 );
 
@@ -258,7 +272,7 @@ export const annotations = pgTable(
   (t) => [
     index('idx_annotations_user').on(t.userId),
     index('idx_annotations_document').on(t.documentId),
-    check('annotations_kind_check', sql`${t.kind} IN ('text', 'pdf', 'media')`),
+    enumCheck('annotations_kind_check', t.kind, ANNOTATION_KINDS),
   ],
 );
 
@@ -293,7 +307,7 @@ export const cards = pgTable(
     index('idx_cards_topic').on(t.topicId),
     index('idx_cards_map_node').on(t.mapNodeId),
     index('idx_cards_tags').using('gin', t.tags),
-    check('cards_source_check', sql`${t.source} IN ('manual', 'agent', 'chat')`),
+    enumCheck('cards_source_check', t.source, CARD_SOURCES),
   ],
 );
 
@@ -320,11 +334,8 @@ export const cardLinks = pgTable(
     index('idx_card_links_user').on(t.userId),
     index('idx_card_links_from').on(t.fromCardId),
     index('idx_card_links_to').on(t.toCardId),
-    check(
-      'card_links_type_check',
-      sql`${t.type} IN ('same_concept', 'confusable', 'prerequisite', 'related')`,
-    ),
-    check('card_links_origin_check', sql`${t.origin} IN ('agent', 'user')`),
+    enumCheck('card_links_type_check', t.type, CARD_LINK_TYPES),
+    enumCheck('card_links_origin_check', t.origin, CARD_LINK_ORIGINS),
     check('card_links_not_self_check', sql`${t.fromCardId} <> ${t.toCardId}`),
   ],
 );
@@ -343,7 +354,7 @@ export const cardQuestions = pgTable(
   },
   (t) => [
     index('idx_card_questions_card').on(t.cardId),
-    check('card_questions_type_check', sql`${t.type} IN ('cloze', 'compare', 'judge')`),
+    enumCheck('card_questions_type_check', t.type, CARD_QUESTION_TYPES),
   ],
 );
 
@@ -422,11 +433,8 @@ export const memories = pgTable(
     uniqueIndex('memories_user_scope_id_layer_key_uidx')
       .on(t.userId, t.scope, t.scopeId, t.layer, t.key)
       .where(sql`${t.scopeId} IS NOT NULL`),
-    check('memories_scope_check', sql`${t.scope} IN ('user', 'topic')`),
-    check(
-      'memories_layer_check',
-      sql`${t.layer} IN ('profile', 'mastery', 'association', 'topic_map')`,
-    ),
+    enumCheck('memories_scope_check', t.scope, MEMORY_SCOPES),
+    enumCheck('memories_layer_check', t.layer, MEMORY_LAYERS),
     check(
       'memories_scope_id_check',
       sql`(${t.scope} = 'user' AND ${t.scopeId} IS NULL) OR (${t.scope} = 'topic' AND ${t.scopeId} IS NOT NULL)`,
@@ -455,11 +463,8 @@ export const jobs = pgTable(
     index('idx_jobs_status_run_at').on(t.status, t.runAt),
     index('idx_jobs_user').on(t.userId),
     index('idx_jobs_user_type').on(t.userId, t.type),
-    check(
-      'jobs_type_check',
-      sql`${t.type} IN ('digest', 'evolve', 'weekly_report', 'topic', 'chat', 'selection', 'extract', 'ocr')`,
-    ),
-    check('jobs_status_check', sql`${t.status} IN ('pending', 'running', 'done', 'failed')`),
+    enumCheck('jobs_type_check', t.type, JOB_TYPES),
+    enumCheck('jobs_status_check', t.status, JOB_STATUSES),
   ],
 );
 
@@ -510,14 +515,8 @@ export const agentExecutions = pgTable(
     index('idx_agent_executions_job').on(t.jobId),
     index('idx_agent_executions_user_started').on(t.userId, t.startedAt),
     index('idx_agent_executions_type_status').on(t.agentType, t.status),
-    check(
-      'agent_executions_agent_type_check',
-      sql`${t.agentType} IN ('digest', 'evolve', 'weekly_report', 'topic', 'chat', 'selection')`,
-    ),
-    check(
-      'agent_executions_status_check',
-      sql`${t.status} IN ('pending', 'running', 'done', 'failed')`,
-    ),
+    enumCheck('agent_executions_agent_type_check', t.agentType, AGENT_TYPES),
+    enumCheck('agent_executions_status_check', t.status, AGENT_EXECUTION_STATUSES),
   ],
 );
 
@@ -544,10 +543,7 @@ export const llmUsageLogs = pgTable(
     index('idx_llm_usage_logs_user_created').on(t.userId, t.createdAt),
     index('idx_llm_usage_logs_execution').on(t.executionId),
     index('idx_llm_usage_logs_capability_created').on(t.capability, t.createdAt),
-    check(
-      'llm_usage_logs_capability_check',
-      sql`${t.capability} IN ('chat', 'embed', 'rerank', 'ocr')`,
-    ),
+    enumCheck('llm_usage_logs_capability_check', t.capability, LLM_CAPABILITIES),
   ],
 );
 

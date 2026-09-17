@@ -223,6 +223,7 @@ function HistoryRow({
       <td>
         <StatusTag status={job.status} />
       </td>
+      <td className="hist-model">{job.modelNames?.join('、') || '—'}</td>
       <td>{time}</td>
       <td>
         {duration}
@@ -292,6 +293,7 @@ const HistoryBoard = observer(function HistoryBoard() {
                 <th>类型</th>
                 <th>内容</th>
                 <th>状态</th>
+                <th>模型</th>
                 <th>时间</th>
                 <th>耗时</th>
                 <th />

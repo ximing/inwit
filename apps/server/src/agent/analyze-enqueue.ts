@@ -4,26 +4,14 @@ import { getDb, type Database } from '../db/index.js';
 import { agentExecutions, jobs, reviewLogs, type JobRow } from '../db/schema.js';
 import { enqueueJob } from '../jobs/enqueue.js';
 import { toPublicJob } from '../jobs/jobs.service.js';
+import { endOfLocalDay, localDateKey, startOfLocalDay } from '../utils/date.js';
 import {
   ANALYZE_ACTION,
   ANALYZE_DEBOUNCE_MS,
   ANALYZE_LOOKBACK_DAYS,
   ANALYZE_STRUGGLING_MIN_HITS,
-  localDateKey,
   shouldEnqueueDailyAnalyze,
 } from './analyze-logic.js';
-
-function startOfLocalDay(now: Date): Date {
-  const d = new Date(now.getTime());
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function endOfLocalDay(now: Date): Date {
-  const d = new Date(now.getTime());
-  d.setHours(23, 59, 59, 999);
-  return d;
-}
 
 export type AnalyzeEnqueueDb = Pick<Database, 'select' | 'insert'>;
 

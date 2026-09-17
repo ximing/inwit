@@ -11,14 +11,10 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router';
 import { cardPath } from '@/routes';
 import { cloneSettings, ReviewService } from './review.service';
+import { estimateReviewMinutes } from '@/lib/review-eta';
 
 const LEARNING_STEP_OPTIONS = [1, 3, 6, 10] as const;
 const WEEKDAY_SHORT = ['日', '一', '二', '三', '四', '五', '六'] as const;
-
-function estimateReviewMinutes(count: number): number {
-  if (count <= 0) return 0;
-  return Math.ceil((count * 25) / 60);
-}
 
 function tenths(n: number): number {
   return Math.round(n * 10) / 10;

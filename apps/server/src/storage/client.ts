@@ -34,11 +34,11 @@ type StorageConfig = {
 let cached: { cfg: StorageConfig; client: S3Client } | null = null;
 
 function readStorageConfig(): StorageConfig | null {
-  const endpoint = config.S3_ENDPOINT;
-  const region = config.S3_REGION;
-  const bucket = config.S3_BUCKET;
-  const accessKey = config.S3_ACCESS_KEY;
-  const secretKey = config.S3_SECRET_KEY;
+  const endpoint = config.ATTACHMENT_S3_ENDPOINT;
+  const region = config.ATTACHMENT_S3_REGION;
+  const bucket = config.ATTACHMENT_S3_BUCKET;
+  const accessKey = config.ATTACHMENT_S3_ACCESS_KEY_ID;
+  const secretKey = config.ATTACHMENT_S3_SECRET_ACCESS_KEY;
   if (!endpoint || !region || !bucket || !accessKey || !secretKey) return null;
   return {
     endpoint,
@@ -46,7 +46,7 @@ function readStorageConfig(): StorageConfig | null {
     bucket,
     accessKey,
     secretKey,
-    forcePathStyle: config.S3_FORCE_PATH_STYLE ?? false,
+    forcePathStyle: config.ATTACHMENT_S3_FORCE_PATH_STYLE ?? true,
   };
 }
 
@@ -81,7 +81,7 @@ function getClient(): { cfg: StorageConfig; client: S3Client } {
       accessKeyId: cfg.accessKey,
       secretAccessKey: cfg.secretKey,
     },
-    // s3rver / MinIO reject the SDK's default CRC32 checksum headers.
+    // Keep checksum headers compatible with S3-compatible providers.
     requestChecksumCalculation: 'WHEN_REQUIRED',
     responseChecksumValidation: 'WHEN_REQUIRED',
   });

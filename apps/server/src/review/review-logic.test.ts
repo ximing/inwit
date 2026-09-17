@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { localDateKey } from '../utils/date.js';
 import {
   applyReviewQueueLimits,
   buildDailyDistribution,
   buildForecast,
   computeStreak,
-  localDateKey,
   retentionPercent,
 } from './review-logic.js';
 

@@ -17,7 +17,6 @@ Inwit — 一个「扔进去、AI 消化、催你复习」的学习伴侣。pnpm
 pnpm install
 pnpm dev                                  # server :3020 + web :5190（并行）
 pnpm --filter @inwit/server worker        # Agent 队列 worker，需另开终端；没有它文档停在「消化中…」
-pnpm --filter @inwit/server dev:s3        # 本地 S3（s3rver :4569，数据目录 apps/server/.tmp/s3）
 pnpm typecheck                            # 全仓库 tsc
 pnpm -r build
 pnpm --filter @inwit/server test          # vitest（co-located: src/**/*.test.ts）

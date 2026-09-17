@@ -2,14 +2,8 @@ import type { CardLinksResponse, DocumentCard, DocumentDetail } from '@inwit/dto
 import { Service } from '@rabjs/react';
 import { getCardLinks } from '@/api/cards';
 import { errorMessage } from '@/api/client';
-import { getDocument } from '@/api/documents';
-
-const PDF_MIME = 'application/pdf';
-const PDF_BLOCK_MESSAGE = 'PDF 文档请在完整页面打开。';
-
-function isPdfDocument(doc: Pick<DocumentDetail, 'fileMime'>): boolean {
-  return doc.fileMime === PDF_MIME;
-}
+import { getDocument, getDocumentFile } from '@/api/documents';
+import { isPdfMime } from '@/lib/mime';
 
 export class ReaderService extends Service {
   doc: DocumentDetail | null = null;
@@ -23,6 +17,9 @@ export class ReaderService extends Service {
   /** openLinkedCard 走过的卡片，backToList 时清空。 */
   cardTrail: string[] = [];
   pendingScrollTop = false;
+  /** PDF 文档的 presigned URL（doc.fileMime 为 PDF 时懒加载）。 */
+  pdfUrl: string | null = null;
+  pdfError: string | null = null;
   loadGen = 0;
 
   get isOpen(): boolean {
@@ -55,12 +52,9 @@ export class ReaderService extends Service {
     try {
       const detail = await getDocument(docId);
       if (gen !== this.loadGen) return;
-      if (isPdfDocument(detail)) {
-        this.blockPdf();
-        return;
-      }
       this.doc = detail;
       this.loading = false;
+      this.syncPdf(detail, gen);
     } catch (err) {
       if (gen !== this.loadGen) return;
       this.loading = false;
@@ -113,6 +107,8 @@ export class ReaderService extends Service {
     this.linksCache = {};
     this.cardTrail = [];
     this.pendingScrollTop = false;
+    this.pdfUrl = null;
+    this.pdfError = null;
   }
 
   clearFocus(): void {
@@ -138,15 +134,12 @@ export class ReaderService extends Service {
     try {
       const detail = await getDocument(docId);
       if (gen !== this.loadGen) return;
-      if (isPdfDocument(detail)) {
-        this.blockPdf();
-        return;
-      }
       this.doc = detail;
       this.loading = false;
       this.activeCardId = cardId;
       this.focusCardId = cardId;
       this.pendingScrollTop = false;
+      this.syncPdf(detail, gen);
       await this.ensureLinks(cardId, gen);
     } catch (err) {
       if (gen !== this.loadGen) return;
@@ -159,14 +152,20 @@ export class ReaderService extends Service {
     }
   }
 
-  private blockPdf(): void {
-    this.loading = false;
-    this.doc = null;
-    this.activeCardId = null;
-    this.focusCardId = null;
-    this.links = null;
-    this.pendingScrollTop = false;
-    this.error = PDF_BLOCK_MESSAGE;
+  private syncPdf(doc: DocumentDetail, gen: number): void {
+    this.pdfUrl = null;
+    this.pdfError = null;
+    if (!isPdfMime(doc.fileMime)) return;
+    void (async () => {
+      try {
+        const file = await getDocumentFile(doc.id);
+        if (gen !== this.loadGen || this.doc?.id !== doc.id) return;
+        this.pdfUrl = file.url;
+      } catch (err) {
+        if (gen !== this.loadGen || this.doc?.id !== doc.id) return;
+        this.pdfError = errorMessage(err, '打不开这份 PDF');
+      }
+    })();
   }
 
   private linkedDocumentId(cardId: string): string | null {

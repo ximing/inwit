@@ -6,6 +6,7 @@ import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { documents, jobs, ocrPages, type DocumentRow, type JobRow } from '../db/schema.js';
 import { markdownToContentJson } from '../documents/content-json.js';
+import { findOwnedDocument } from '../documents/document.service.js';
 import { isBlankDocumentContent } from '../documents/document-logic.js';
 import { isOcrImageMime } from '../documents/screenshot-logic.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
@@ -34,15 +35,6 @@ import {
 import { rasterImageFileToPng } from './ocr-image.js';
 import { resolveOcrFor } from './ocr.service.js';
 import { openPdf } from './rasterize.js';
-
-async function loadDocument(userId: string, documentId: string): Promise<DocumentRow | null> {
-  const [row] = await getDb()
-    .select()
-    .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
-    .limit(1);
-  return row ?? null;
-}
 
 async function markDocumentFailed(userId: string, documentId: string): Promise<void> {
   await getDb()
@@ -127,7 +119,7 @@ export async function processOcr(job: JobRow): Promise<void> {
   if (!parsed) throw new Error('ocr job missing documentId');
   const documentId = parsed.documentId;
 
-  const document = await loadDocument(job.userId, documentId);
+  const document = await findOwnedDocument(job.userId, documentId);
   if (!document) {
     logger.warn('ocr.document_missing', { jobId: job.id, documentId });
     return;
