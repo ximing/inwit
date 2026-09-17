@@ -4,6 +4,7 @@ import type { JobRow } from '../db/schema.js';
 import { heartbeatJob } from '../jobs/heartbeat.js';
 import { modelResponseError, resolveModelFor } from '../llm/pi.js';
 import { logLlmUsage } from '../llm/usage.js';
+import { logger } from '../utils/logger.js';
 import { finishExecution, saveExecutionSteps, startExecution, summarizeValue } from './executions.js';
 import { isAssistantMessage } from './messages.js';
 import { runWithAgentContext, type AgentRunContext } from './run-context.js';
@@ -11,7 +12,7 @@ import { AgentTerminalError } from './terminal-error.js';
 
 export { AgentTerminalError } from './terminal-error.js';
 
-const RUN_TIMEOUT_MS = 180_000;
+const RUN_TIMEOUT_MS = 600_000;
 const HEARTBEAT_MS = 15_000;
 const DEFAULT_MAX_TURNS = 24;
 
@@ -149,7 +150,27 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
 
         const assistant = agent.state.messages.filter(isAssistantMessage);
         const failed = assistant.find((m) => m.stopReason === 'error' || m.stopReason === 'aborted');
-        if (failed) throw modelResponseError(failed.stopReason, failed.errorMessage ?? '');
+        if (failed) {
+          // Salvage: a timed-out run may already have produced its output
+          // (cards written, answer given). Verify against the domain state
+          // before failing — a passing verify settles the job as done.
+          if (failed.stopReason === 'aborted' && run.verify) {
+            try {
+              const salvaged = await run.verify({ agent, executionId });
+              await finishExecution({
+                executionId,
+                status: 'done',
+                resultSummary: salvaged !== null ? `${salvaged} salvaged=1` : 'salvaged=1',
+              });
+              logger.info('agent.run_salvaged', { jobId: job.id, agentType: run.agentType });
+              return;
+            } catch {
+              // Output didn't pass verification — fall through to the timeout
+              // error, which stays retryable.
+            }
+          }
+          throw modelResponseError(failed.stopReason, failed.errorMessage ?? '');
+        }
 
         const resultSummary = (await run.verify?.({ agent, executionId })) ?? null;
         await finishExecution({ executionId, status: 'done', resultSummary });
