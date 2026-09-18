@@ -31,6 +31,10 @@ pnpm --filter @inwit/server migrate            # 执行
 
 改 schema 必须走 drizzle migration（`apps/server/src/db/schema.ts` → generate → migrate），不手改数据库。
 
+## 发版
+
+发版前必须先升级 `apps/web/package.json` 的 `version`（semver）。Vite 构建时把它打进前端常量，设置页底部展示该版本号；不要在 UI 里手写版本。改完需重新构建；dev 下改 version 后要重启 Vite。
+
 ## 服务端架构
 
 分层模式（每个功能一个目录，如 `src/documents/`、`src/review/`）：
@@ -59,6 +63,7 @@ pnpm --filter @inwit/server migrate            # 执行
 - `src/api/` 是薄 fetch 封装（带 cookie），不直接在组件里 fetch
 - 编辑器是 tiptap（`pages/editor/paper-editor.tsx`）；图标用 lucide-react
 - 文案全中文，语气克制书面；dev 端口 5190，`/api` 代理到 3020
+- 不要用 `window.alert` / `window.prompt` / `window.confirm`，统一走全局 `DialogService`（`apps/web/src/services/dialog.service.ts`）
 
 ### Web 样式组织规范
 

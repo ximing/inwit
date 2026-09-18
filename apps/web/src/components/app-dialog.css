@@ -1,0 +1,33 @@
+.app-dialog-backdrop {
+  z-index: 1200;
+}
+.app-dialog-body {
+  margin: 8px 0 16px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.65;
+}
+.app-dialog-backdrop .dialog-actions {
+  margin-top: 12px;
+}
+.app-dialog-backdrop .stack-form input {
+  width: 100%;
+}
+.app-dialog-danger {
+  background: var(--accent);
+  color: #fff;
+}
+.app-dialog-danger:hover {
+  background: var(--accent-deep);
+  color: #fff;
+}
+
+@media (max-width: 760px) {
+  .app-dialog-backdrop {
+    padding: 16px;
+    align-items: end;
+  }
+  .app-dialog-backdrop .dialog {
+    width: 100%;
+  }
+}

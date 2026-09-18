@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router';
+import { AppDialog } from '@/components/app-dialog';
 import { DocsPage } from '@/pages/docs';
 import { JobsPage } from '@/pages/jobs';
 import { LoginPage } from '@/pages/login';
@@ -45,25 +46,28 @@ function LegacyTopicRedirect() {
 
 export function App() {
   return (
-    <Routes>
-      <Route path={ROUTES.login} element={<LoginPage />} />
-      <Route element={<RequireAuth />}>
-        <Route path="/doc/:id" element={<LegacyDocRedirect />} />
-        <Route path="/editor/:id" element={<LegacyEditorRedirect />} />
-        <Route path="/card/:id" element={<Navigate to={ROUTES.review} replace />} />
-        <Route path="/cards/:id" element={<Navigate to={ROUTES.review} replace />} />
-        <Route path="/captures" element={<Navigate to={ROUTES.jobs} replace />} />
-        <Route path="/admin" element={<Navigate to={ROUTES.jobs} replace />} />
-        <Route element={<Layout />}>
-          <Route index element={<TodayPage />} />
-          <Route path={routeSegment(ROUTES.docs)} element={<DocsPage />} />
-          <Route path={routeSegment(ROUTES.review)} element={<ReviewPage />} />
-          <Route path={routeSegment(ROUTES.topics)} element={<TopicsPage />} />
-          <Route path={routeSegment(ROUTES.topic)} element={<LegacyTopicRedirect />} />
-          <Route path={routeSegment(ROUTES.jobs)} element={<JobsPage />} />
-          <Route path={routeSegment(ROUTES.settings)} element={<SettingsPage />} />
+    <>
+      <Routes>
+        <Route path={ROUTES.login} element={<LoginPage />} />
+        <Route element={<RequireAuth />}>
+          <Route path="/doc/:id" element={<LegacyDocRedirect />} />
+          <Route path="/editor/:id" element={<LegacyEditorRedirect />} />
+          <Route path="/card/:id" element={<Navigate to={ROUTES.review} replace />} />
+          <Route path="/cards/:id" element={<Navigate to={ROUTES.review} replace />} />
+          <Route path="/captures" element={<Navigate to={ROUTES.jobs} replace />} />
+          <Route path="/admin" element={<Navigate to={ROUTES.jobs} replace />} />
+          <Route element={<Layout />}>
+            <Route index element={<TodayPage />} />
+            <Route path={routeSegment(ROUTES.docs)} element={<DocsPage />} />
+            <Route path={routeSegment(ROUTES.review)} element={<ReviewPage />} />
+            <Route path={routeSegment(ROUTES.topics)} element={<TopicsPage />} />
+            <Route path={routeSegment(ROUTES.topic)} element={<LegacyTopicRedirect />} />
+            <Route path={routeSegment(ROUTES.jobs)} element={<JobsPage />} />
+            <Route path={routeSegment(ROUTES.settings)} element={<SettingsPage />} />
+          </Route>
         </Route>
-      </Route>
-    </Routes>
+      </Routes>
+      <AppDialog />
+    </>
   );
 }

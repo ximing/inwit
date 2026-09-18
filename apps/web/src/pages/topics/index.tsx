@@ -14,6 +14,7 @@ import { formatRelativeTime, summarizeAnswer } from '@/lib/format';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { ROUTES, topicPath } from '@/routes';
 import { AssetUrlsService } from '@/services/asset-urls.service';
+import { DialogService } from '@/services/dialog.service';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
 import { TopicsService, type TopicListItem } from './topics.service';
 
@@ -242,13 +243,19 @@ function PaneEmpty() {
 
 const TopicPane = observer(function TopicPane({ topicId }: { topicId: string }) {
   const service = useService(TopicsService);
+  const dialog = useService(DialogService);
   const navigate = useNavigate();
   const topic = service.topic;
   const loading = service.$model.openTopic.loading && !topic;
   const archived = topic?.status === 'archived';
 
   const remove = async () => {
-    if (!window.confirm('删除这个主题？文档会保留，地图会一起删掉。')) return;
+    const confirmed = await dialog.confirm('文档会保留，地图会一起删掉。', {
+      title: '删除这个主题？',
+      ok: '删除',
+      danger: true,
+    });
+    if (!confirmed) return;
     const ok = await service.deleteSelected();
     if (ok) navigate(ROUTES.topics);
   };

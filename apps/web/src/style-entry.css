@@ -1,6 +1,7 @@
 /* Global primitives first; feature styles are kept beside their owning modules.
    Keep this eager entry so shared styles do not depend on route visitation order. */
 @import './styles.css';
+@import './components/app-dialog.css';
 @import './shell/styles.css';
 @import './pages/today/styles.css';
 @import './pages/review/styles.css';

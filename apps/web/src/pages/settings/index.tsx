@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { OCR_DEFAULT_MODEL, docDisplayTitle, type LlmProvider } from '@inwit/dto';
 import { UserAvatar } from '@/components/user-avatar';
 import { Tag } from '@/components/tag';
+import { APP_VERSION } from '@/lib/app-version';
 import { formatDate, formatDateTime } from '@/lib/format';
 
 /** 回收站摘要：单行截断。 */
@@ -11,6 +12,7 @@ function clipArchiveText(text: string, max = 60): string {
   const chars = [...flat];
   return chars.length <= max ? flat : `${chars.slice(0, max).join('')}…`;
 }
+import { DialogService } from '@/services/dialog.service';
 import { THEME_OPTIONS, ThemeService, type ThemePreference } from '@/services/theme.service';
 import {
   ACCESS_TOKEN_MAX_PER_USER,
@@ -39,6 +41,7 @@ const NAV: Array<{ id: SettingsSection; href: string; label: string }> = [
 const SettingsPageContent = observer(function SettingsPageContent() {
   const service = useService(SettingsService);
   const theme = useService(ThemeService);
+  const dialog = useService(DialogService);
   const avatarInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -301,7 +304,15 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                       className="btn btn-danger"
                       disabled={service.busyId === config.id}
                       onClick={() => {
-                        if (window.confirm('删除这个模型配置？')) void service.remove(config.id);
+                        void dialog
+                          .confirm('删除这个模型配置？', {
+                            title: '删除配置',
+                            ok: '删除',
+                            danger: true,
+                          })
+                          .then((ok) => {
+                            if (ok) void service.remove(config.id);
+                          });
                       }}
                     >
                       删除
@@ -616,13 +627,14 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                             type="button"
                             className="btn btn-danger"
                             onClick={() => {
-                              if (
-                                window.confirm(
-                                  '彻底删除后文档、批注、卡片和原始文件都会被移除，复习记录一并删除，无法恢复，确定吗？',
+                              void dialog
+                                .confirm(
+                                  '彻底删除后文档、批注、卡片和原始文件都会被移除，复习记录一并删除，无法恢复。',
+                                  { title: '彻底删除', ok: '彻底删除', danger: true },
                                 )
-                              ) {
-                                void service.destroyArchivedDocument(doc.id);
-                              }
+                                .then((ok) => {
+                                  if (ok) void service.destroyArchivedDocument(doc.id);
+                                });
                             }}
                           >
                             彻底删除
@@ -706,9 +718,15 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                             type="button"
                             className="btn btn-danger"
                             onClick={() => {
-                              if (window.confirm('彻底删除后无法恢复，确定吗？')) {
-                                void service.destroyArchivedCard(card.id);
-                              }
+                              void dialog
+                                .confirm('彻底删除后无法恢复。', {
+                                  title: '彻底删除',
+                                  ok: '彻底删除',
+                                  danger: true,
+                                })
+                                .then((ok) => {
+                                  if (ok) void service.destroyArchivedCard(card.id);
+                                });
                             }}
                           >
                             彻底删除
@@ -786,9 +804,15 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                             type="button"
                             className="btn btn-danger"
                             onClick={() => {
-                              if (window.confirm('彻底删除后无法恢复，确定吗？')) {
-                                void service.destroyArchivedAnnotation(item.id);
-                              }
+                              void dialog
+                                .confirm('彻底删除后无法恢复。', {
+                                  title: '彻底删除',
+                                  ok: '彻底删除',
+                                  danger: true,
+                                })
+                                .then((ok) => {
+                                  if (ok) void service.destroyArchivedAnnotation(item.id);
+                                });
                             }}
                           >
                             彻底删除
@@ -833,6 +857,8 @@ const SettingsPageContent = observer(function SettingsPageContent() {
             ) : null}
           </div>
         </div>
+
+        <p className="settings-version">版本 {APP_VERSION}</p>
       </div>
       {service.toast ? (
         <p className="toast" role="status">

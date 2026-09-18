@@ -47,6 +47,7 @@ import {
 } from '@/lib/entity-marks';
 import { asPmJson, clonePmJson } from '@/lib/pm-doc';
 import { AssetUrlsService } from '@/services/asset-urls.service';
+import { DialogService } from '@/services/dialog.service';
 import { AnchorHighlight } from './anchor-highlight';
 import { SelectionActions } from './selection-toolbar';
 import {
@@ -144,6 +145,7 @@ export const PaperEditor = observer(function PaperEditor({
   bindHost,
 }: PaperEditorProps) {
   const assetUrls = useService(AssetUrlsService);
+  const dialog = useService(DialogService);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
   const onAnchorClickRef = useRef(onAnchorClick);
@@ -324,17 +326,17 @@ export const PaperEditor = observer(function PaperEditor({
 
   const insertLink = () => {
     const previous = editor.getAttributes('link').href;
-    const href = window.prompt(
-      '链接地址',
-      typeof previous === 'string' && previous.length > 0 ? previous : 'https://',
-    );
-    if (href === null) return;
-    const trimmed = href.trim();
-    if (trimmed === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
-      return;
-    }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: trimmed }).run();
+    const fallback =
+      typeof previous === 'string' && previous.length > 0 ? previous : 'https://';
+    void dialog.prompt('链接地址', fallback).then((href) => {
+      if (href === null) return;
+      const trimmed = href.trim();
+      if (trimmed === '') {
+        editor.chain().focus().extendMarkRange('link').unsetLink().run();
+        return;
+      }
+      editor.chain().focus().extendMarkRange('link').setLink({ href: trimmed }).run();
+    });
   };
 
   const toggleTable = () => {
