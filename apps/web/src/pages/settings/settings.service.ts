@@ -9,7 +9,7 @@ import {
   type AccessTokenLog,
   type ArchivedAnnotation,
   type ArchivedCard,
-  type Document,
+  type ArchivedDocument,
   type LlmConfig,
   type LlmProvider,
   type LlmTestResult,
@@ -121,7 +121,7 @@ export class SettingsService extends Service {
   archivedAnnotationsPage = 1;
   archivedAnnotationsLimit = 20;
   archivedAnnotationsError: string | null = null;
-  archivedDocuments: Document[] = [];
+  archivedDocuments: ArchivedDocument[] = [];
   archivedDocumentsTotal = 0;
   archivedDocumentsPage = 1;
   archivedDocumentsLimit = 20;

@@ -139,7 +139,7 @@ const ActionsContent = observer(function ActionsContent({ children }: { children
               {service.doc?.topicId && !service.topics.some((topic) => topic.id === service.doc?.topicId) && <option value={service.doc.topicId} disabled>{service.doc.topicTitle ?? '当前主题'}（不可选）</option>}
               {service.topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}
             </select>{service.topicsLoading && <span>加载主题中…</span>}</label>}
-            {service.dialog === 'delete' && <p>确定把「{service.doc ? docDisplayTitle(service.doc) : ''}」移入回收站？文档和批注会被隐藏，30 天内可在设置页恢复。</p>}
+            {service.dialog === 'delete' && <p>确定把「{service.doc ? docDisplayTitle(service.doc) : ''}」移入回收站？文档、批注和卡片会被隐藏，30 天内可在设置页恢复。</p>}
             {service.dialog === 'retry' && <p>重新处理「{service.doc ? docDisplayTitle(service.doc) : ''}」。</p>}
             {service.error && <p className="banner-error" role="alert">{service.error}</p>}
             {service.dialog === 'move' && !service.topicsLoaded && !service.topicsLoading && <button type="button" className="btn btn-ghost" onClick={() => void service.loadTopics()}>重新加载主题</button>}

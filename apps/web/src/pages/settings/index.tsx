@@ -573,7 +573,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
         <div className="section" id="archive">
           <div className="section-title">回收站</div>
           <div className="section-lede">
-            删除的文档、卡片和批注会先到这里，可以恢复；文档在 30 天后自动彻底删除，彻底删除后无法找回。
+            删除的文档、卡片和批注会先到这里，可以恢复；文档在 30 天后自动彻底删除，彻底删除后无法找回。删除文档时，它的批注和卡片会一起进来，恢复时一起回来。
           </div>
 
           <div className="archive-group">
@@ -592,6 +592,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                 <thead>
                   <tr>
                     <th>标题</th>
+                    <th>卡片</th>
                     <th>删除时间</th>
                     <th>操作</th>
                   </tr>
@@ -600,6 +601,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                   {service.archivedDocuments.map((doc) => (
                     <tr key={doc.id}>
                       <td>{clipArchiveText(docDisplayTitle(doc))}</td>
+                      <td>{doc.cardCount > 0 ? `${doc.cardCount} 张` : '—'}</td>
                       <td>{doc.deletedAt ? formatDateTime(doc.deletedAt) : '—'}</td>
                       <td>
                         <div className="row-actions">
@@ -616,7 +618,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                             onClick={() => {
                               if (
                                 window.confirm(
-                                  '彻底删除后文档、批注和原始文件都会被移除，无法恢复，确定吗？',
+                                  '彻底删除后文档、批注、卡片和原始文件都会被移除，复习记录一并删除，无法恢复，确定吗？',
                                 )
                               ) {
                                 void service.destroyArchivedDocument(doc.id);

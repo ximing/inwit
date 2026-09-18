@@ -224,9 +224,14 @@ export const documentListItemSchema = documentSchema.extend({
 });
 export type DocumentListItem = z.infer<typeof documentListItemSchema>;
 
-/** 回收站里的文档（settings 回收站页）。 */
+/** 回收站里的文档（settings 回收站页）；cardCount 为随文档进回收站的卡片数。 */
+export const archivedDocumentSchema = documentSchema.extend({
+  cardCount: z.number().int().nonnegative(),
+});
+export type ArchivedDocument = z.infer<typeof archivedDocumentSchema>;
+
 export const archivedDocumentsResponseSchema = z.object({
-  items: z.array(documentSchema),
+  items: z.array(archivedDocumentSchema),
   total: z.number().int().nonnegative(),
 });
 export type ArchivedDocumentsResponse = z.infer<typeof archivedDocumentsResponseSchema>;

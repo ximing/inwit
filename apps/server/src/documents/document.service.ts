@@ -18,7 +18,7 @@ import type {
   Paginated,
   UpdateDocumentInput,
 } from '@inwit/dto';
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, like, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, like, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { toPublicCard, toPublicQuestion } from '../cards/card.mapper.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -36,12 +36,14 @@ import {
 import { AppError } from '../errors.js';
 import { toPublicJob } from '../jobs/jobs.service.js';
 import { cancelDocumentJobs, enqueueJob } from '../jobs/queue.js';
-import { requireWritableMapNode } from '../maps/map.service.js';
+import { recalculateMapNodeStatus, requireWritableMapNode } from '../maps/map.service.js';
 import { ocrPayloadForRetry } from '../ocr/ocr-logic.js';
 import {
   tryDeleteAnnotationFromIndex,
+  tryDeleteCardFromIndex,
   tryDeleteDocumentFromIndex,
   tryIndexAnnotation,
+  tryIndexCard,
   tryIndexDocument,
 } from '../retrieval/pipeline.js';
 import { deletePrefixExcept, isStorageConfigured, presignGet, presignPut } from '../storage/client.js';
@@ -448,11 +450,10 @@ export async function getDocument(userId: string, id: string): Promise<DocumentD
 }
 
 /**
- * Soft delete (回收站): the document and its annotations are hidden everywhere
- * and can be restored. Pipeline jobs for the document — pending and running —
- * are cancelled (running ones settle cooperatively via the worker heartbeat
- * probe). Cards keep their rows and their documentId; S3 objects stay put
- * until permanent deletion.
+ * Soft delete (回收站): the document, its annotations and its cards are hidden
+ * everywhere and can be restored together. Pipeline jobs for the document —
+ * pending and running — are cancelled (running ones settle cooperatively via
+ * the worker heartbeat probe). S3 objects stay put until permanent deletion.
  */
 export async function archiveDocument(userId: string, id: string): Promise<void> {
   await getOwnedDocument(userId, id);
@@ -466,8 +467,12 @@ export async function archiveDocument(userId: string, id: string): Promise<void>
         isNull(annotations.deletedAt),
       ),
     );
+  const cardRows = await getDb()
+    .select({ id: cards.id, mapNodeId: cards.mapNodeId })
+    .from(cards)
+    .where(and(eq(cards.documentId, id), eq(cards.userId, userId), isNull(cards.deletedAt)));
   // One shared timestamp: restore uses it to revive exactly the annotations
-  // archived by this call, leaving earlier user-deleted ones in 回收站.
+  // and cards archived by this call, leaving earlier user-deleted ones in 回收站.
   const now = new Date();
   await getDb().transaction(async (tx) => {
     await cancelDocumentJobs(tx, userId, id, now);
@@ -482,23 +487,34 @@ export async function archiveDocument(userId: string, id: string): Promise<void>
         ),
       );
     await tx
+      .update(cards)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(cards.documentId, id), eq(cards.userId, userId), isNull(cards.deletedAt)));
+    await tx
       .update(documents)
       .set({ deletedAt: now, updatedAt: now })
       .where(and(eq(documents.id, id), eq(documents.userId, userId)));
+    const nodeIds = [...new Set(cardRows.map((row) => row.mapNodeId).filter((v): v is string => v !== null))];
+    for (const nodeId of nodeIds) {
+      await recalculateMapNodeStatus(nodeId, tx);
+    }
   });
   await tryDeleteDocumentFromIndex(id);
   for (const row of annotationRows) {
     await tryDeleteAnnotationFromIndex(row.id);
   }
+  for (const row of cardRows) {
+    await tryDeleteCardFromIndex(row.id);
+  }
 }
 
-/** Restore from 回收站: brings back the annotations archived with the document. */
+/** Restore from 回收站: brings back the annotations and cards archived with the document. */
 export async function restoreDocument(userId: string, id: string): Promise<Document> {
   const row = await getOwnedDocumentAny(userId, id);
   if (!row.deletedAt) return toPublicDocument(row);
   const archivedAt = row.deletedAt;
   const now = new Date();
-  const { restored, restoredAnnotations } = await getDb().transaction(async (tx) => {
+  const { restored, restoredAnnotations, restoredCards } = await getDb().transaction(async (tx) => {
     const [doc] = await tx
       .update(documents)
       .set({ deletedAt: null, updatedAt: now })
@@ -516,16 +532,38 @@ export async function restoreDocument(userId: string, id: string): Promise<Docum
         ),
       )
       .returning();
-    return { restored: doc, restoredAnnotations: annotationRows };
+    const cardRows = await tx
+      .update(cards)
+      .set({ deletedAt: null, updatedAt: now })
+      .where(
+        and(
+          eq(cards.documentId, id),
+          eq(cards.userId, userId),
+          eq(cards.deletedAt, archivedAt),
+        ),
+      )
+      .returning();
+    const nodeIds = [...new Set(cardRows.map((card) => card.mapNodeId).filter((v): v is string => v !== null))];
+    for (const nodeId of nodeIds) {
+      await recalculateMapNodeStatus(nodeId, tx);
+    }
+    return { restored: doc, restoredAnnotations: annotationRows, restoredCards: cardRows };
   });
   await tryIndexDocument(restored);
   for (const annotation of restoredAnnotations) {
     await tryIndexAnnotation(annotation);
   }
+  for (const card of restoredCards) {
+    await tryIndexCard(card);
+  }
   return toPublicDocument(restored);
 }
 
-/** Excerpt keys under the document prefix still referenced by surviving cards. */
+/**
+ * Excerpt keys under the document prefix referenced by cards that survive
+ * the destroy — i.e. orphan cards from an earlier deletion whose documentId
+ * was already set to NULL. The document's own cards are destroyed with it.
+ */
 async function excerptKeysReferencedByCards(
   userId: string,
   documentId: string,
@@ -534,16 +572,22 @@ async function excerptKeysReferencedByCards(
   const rows = await getDb()
     .select({ imageKey: cards.imageKey })
     .from(cards)
-    .where(and(eq(cards.userId, userId), like(cards.imageKey, `${prefix}%`)));
+    .where(
+      and(
+        eq(cards.userId, userId),
+        like(cards.imageKey, `${prefix}%`),
+        or(isNull(cards.documentId), ne(cards.documentId, documentId)),
+      ),
+    );
   return new Set(rows.map((row) => row.imageKey).filter((key): key is string => key !== null));
 }
 
 /**
- * Permanent delete from 回收站 (also used for aborted imports). Cards keep
- * their rows (`cards.document_id ON DELETE SET NULL`) so review history is
- * not destroyed; annotations and OCR pages cascade away. S3 objects under
+ * Permanent delete from 回收站 (also used for aborted imports). The document's
+ * cards — including their questions, links and review history — are deleted
+ * with it; annotations and OCR pages cascade away. S3 objects under
  * docs/{userId}/{docId}/ are removed best-effort, except excerpts still
- * referenced by cards.
+ * referenced by surviving orphan cards.
  */
 export async function destroyDocument(userId: string, id: string): Promise<void> {
   await getOwnedDocumentAny(userId, id);
@@ -551,17 +595,28 @@ export async function destroyDocument(userId: string, id: string): Promise<void>
     .select({ id: annotations.id })
     .from(annotations)
     .where(and(eq(annotations.documentId, id), eq(annotations.userId, userId)));
+  const cardRows = await getDb()
+    .select({ id: cards.id })
+    .from(cards)
+    .where(and(eq(cards.documentId, id), eq(cards.userId, userId)));
+  // Snapshot surviving references before the transaction removes the cards.
+  const keepKeys = isStorageConfigured() ? await excerptKeysReferencedByCards(userId, id) : new Set<string>();
   await getDb().transaction(async (tx) => {
     await cancelDocumentJobs(tx, userId, id);
+    // Delete the cards first: the FK is ON DELETE SET NULL, so removing the
+    // document row first would orphan them instead of deleting them.
+    await tx.delete(cards).where(and(eq(cards.documentId, id), eq(cards.userId, userId)));
     await tx.delete(documents).where(and(eq(documents.id, id), eq(documents.userId, userId)));
   });
   await tryDeleteDocumentFromIndex(id);
   for (const row of annotationRows) {
     await tryDeleteAnnotationFromIndex(row.id);
   }
+  for (const row of cardRows) {
+    await tryDeleteCardFromIndex(row.id);
+  }
   if (isStorageConfigured()) {
     try {
-      const keepKeys = await excerptKeysReferencedByCards(userId, id);
       await deletePrefixExcept(documentObjectPrefix(userId, id), keepKeys);
     } catch (err) {
       logger.warn('document.storage_delete_failed', {
@@ -578,10 +633,20 @@ export async function listArchivedDocuments(
 ): Promise<ArchivedDocumentsResponse> {
   const offset = (query.page - 1) * query.limit;
   const where = and(eq(documents.userId, userId), isNotNull(documents.deletedAt));
+  const cardCounts = getDb()
+    .select({
+      documentId: cards.documentId,
+      n: count().as('n'),
+    })
+    .from(cards)
+    .where(isNotNull(cards.deletedAt))
+    .groupBy(cards.documentId)
+    .as('doc_archived_card_counts');
   const [rows, [totalRow]] = await Promise.all([
     getDb()
-      .select()
+      .select({ document: documents, cardCount: cardCounts.n })
       .from(documents)
+      .leftJoin(cardCounts, eq(cardCounts.documentId, documents.id))
       .where(where)
       .orderBy(desc(documents.deletedAt), desc(documents.id))
       .limit(query.limit)
@@ -589,7 +654,10 @@ export async function listArchivedDocuments(
     getDb().select({ value: count() }).from(documents).where(where),
   ]);
   return {
-    items: rows.map(toPublicDocument),
+    items: rows.map((row) => ({
+      ...toPublicDocument(row.document),
+      cardCount: Number(row.cardCount ?? 0),
+    })),
     total: totalRow?.value ?? 0,
   };
 }
