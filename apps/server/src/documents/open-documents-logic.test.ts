@@ -1,42 +1,83 @@
 import { describe, expect, it } from 'vitest';
+import type { PmJson } from '@inwit/doc-schema';
 import { AppError } from '../errors.js';
-import { buildFinalMarkdown, checkOpenTokenRate, htmlToMarkdownViaTurndown, resetOpenTokenRate } from './open-documents-logic.js';
+import { htmlToContentJson } from './content-json.js';
+import { buildFinalMarkdown, checkOpenTokenRate, resetOpenTokenRate } from './open-documents-logic.js';
 
-describe('htmlToMarkdownViaTurndown', () => {
-  it('converts headings, paragraphs and emphasis', () => {
-    const md = htmlToMarkdownViaTurndown(
+function collect(node: PmJson, type: string, acc: PmJson[] = []): PmJson[] {
+  if (node.type === type) acc.push(node);
+  for (const child of node.content ?? []) collect(child, type, acc);
+  return acc;
+}
+
+describe('htmlToContentJson', () => {
+  it('converts headings, paragraphs, emphasis and links', () => {
+    const doc = htmlToContentJson(
       '<h1>标题</h1><p>hello <strong>world</strong> and <a href="https://a.b">link</a></p>',
     );
-    expect(md).toContain('# 标题');
-    expect(md).toContain('**world**');
-    expect(md).toContain('[link](https://a.b)');
+    expect(collect(doc, 'heading')[0]).toMatchObject({ attrs: { level: 1 } });
+    const strong = collect(doc, 'text').find((n) => n.marks?.some((m) => m.type === 'bold'));
+    expect(strong?.text).toBe('world');
+    const link = collect(doc, 'text').find((n) => n.marks?.some((m) => m.type === 'link'));
+    expect(link?.marks?.[0]).toMatchObject({ type: 'link', attrs: { href: 'https://a.b' } });
   });
 
-  it('keeps images as markdown image syntax', () => {
-    const md = htmlToMarkdownViaTurndown('<p><img src="https://x/img.png" alt="pic"></p>');
-    expect(md).toContain('![pic](https://x/img.png)');
-  });
-
-  it('converts gfm tables and strikethrough', () => {
-    const md = htmlToMarkdownViaTurndown(
-      '<table><tr><th>a</th><th>b</th></tr><tr><td>1</td><td>2</td></tr></table><p><del>gone</del></p>',
+  it('keeps http(s) images and drops illegal srcs', () => {
+    const doc = htmlToContentJson(
+      '<p><img src="https://x/img.png" alt="pic"></p><p><img src="javascript:alert(1)"></p>',
     );
-    expect(md).toContain('| a | b |');
-    expect(md).toContain('~gone~');
+    const images = collect(doc, 'image');
+    expect(images).toHaveLength(1);
+    expect(images[0]?.attrs).toMatchObject({ src: 'https://x/img.png', alt: 'pic' });
+  });
+
+  it('converts video with src/poster/type into a video node', () => {
+    const doc = htmlToContentJson(
+      '<video src="https://x/v.mp4" poster="https://x/p.jpg" type="video/mp4" controls></video>',
+    );
+    const videos = collect(doc, 'video');
+    expect(videos).toHaveLength(1);
+    expect(videos[0]).toMatchObject({
+      type: 'video',
+      attrs: { src: 'https://x/v.mp4', poster: 'https://x/p.jpg', mime: 'video/mp4' },
+    });
+  });
+
+  it('falls back to a source child for video src and mime', () => {
+    const doc = htmlToContentJson(
+      '<video controls><source src="https://x/v.webm" type="video/webm"></video>',
+    );
+    const videos = collect(doc, 'video');
+    expect(videos).toHaveLength(1);
+    expect(videos[0]).toMatchObject({
+      type: 'video',
+      attrs: { src: 'https://x/v.webm', mime: 'video/webm' },
+    });
+  });
+
+  it('drops videos without any src', () => {
+    const doc = htmlToContentJson('<video controls></video><p>留</p>');
+    expect(collect(doc, 'video')).toEqual([]);
   });
 
   it('drops script/style content', () => {
-    const md = htmlToMarkdownViaTurndown(
-      '<script>evil()</script><style>.x{}</style><p>visible</p>',
-    );
-    expect(md).not.toContain('evil');
-    expect(md).toContain('visible');
+    const doc = htmlToContentJson('<script>evil()</script><style>.x{}</style><p>visible</p>');
+    expect(JSON.stringify(doc)).not.toContain('evil');
+    expect(JSON.stringify(doc)).toContain('visible');
   });
 
   it('throws IMPORT_EMPTY on blank html', () => {
-    expect(() => htmlToMarkdownViaTurndown('<div>   </div>')).toThrowError(
+    expect(() => htmlToContentJson('<div>   </div>')).toThrowError(
       expect.objectContaining({ code: 'IMPORT_EMPTY' } as Partial<AppError>),
     );
+  });
+
+  it('prepends a source blockquote when sourceUrl is given', () => {
+    const doc = htmlToContentJson('<p>正文</p>', 'https://example.com/a');
+    const first = doc.content?.[0];
+    expect(first?.type).toBe('blockquote');
+    const link = collect(first!, 'text').find((n) => n.marks?.some((m) => m.type === 'link'));
+    expect(link?.marks?.[0]).toMatchObject({ type: 'link', attrs: { href: 'https://example.com/a' } });
   });
 });
 

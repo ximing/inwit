@@ -3487,7 +3487,8 @@ button.doc-row {
 }
 .note-item:hover .note-item-ops,
 .note-item:focus-within .note-item-ops,
-.note-item.is-editing .note-item-ops {
+.note-item.is-editing .note-item-ops,
+.note-item.is-on .note-item-ops {
   opacity: 1;
   pointer-events: auto;
 }
@@ -4469,6 +4470,8 @@ html[data-theme='dark'] .pdf-thumb-img {
   right: 6px;
   display: flex;
   gap: 2px;
+  opacity: 1;
+  pointer-events: auto;
 }
 .mini-wrap .note-op.is-on { color: var(--accent); background: var(--accent-soft); }
 

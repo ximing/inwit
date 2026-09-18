@@ -13,7 +13,8 @@ import { PageBreak } from './page-break.js';
 import { Video } from './video.js';
 import { VitalEntity } from './vital-entity.js';
 
-function headlessExtensions(): AnyExtension[] {
+/** Extensions shared by the editor schema and server-side HTML→PM conversion. */
+export function getHeadlessExtensions(): AnyExtension[] {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5, 6] },
@@ -43,6 +44,6 @@ function headlessExtensions(): AnyExtension[] {
 let cached: Schema | undefined;
 
 export function getHeadlessSchema(): Schema {
-  cached ??= getSchema(headlessExtensions());
+  cached ??= getSchema(getHeadlessExtensions());
   return cached;
 }

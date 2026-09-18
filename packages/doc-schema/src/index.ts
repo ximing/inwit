@@ -4,7 +4,7 @@ export { locateQuote } from './locate.js';
 export { thematicBreaksToPageBreaks } from './page-breaks.js';
 export { AnnotationMark } from './schema/annotation-mark.js';
 export { CardAnchorMark } from './schema/card-anchor-mark.js';
-export { getHeadlessSchema } from './schema/headless.js';
+export { getHeadlessExtensions, getHeadlessSchema } from './schema/headless.js';
 export { PageBreak } from './schema/page-break.js';
 export { Video } from './schema/video.js';
 export { VitalEntity } from './schema/vital-entity.js';

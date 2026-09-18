@@ -20,7 +20,21 @@ export const Video = Node.create({
   },
 
   parseHTML() {
-    return [{ tag: 'video[src]' }];
+    return [
+      { tag: 'video[src]' },
+      {
+        // Videos that only carry a <source src type> child (common in captured articles).
+        tag: 'video',
+        getAttrs: (element) => {
+          if (element.getAttribute('src')) return {};
+          const source = element.querySelector('source[src]');
+          const src = source?.getAttribute('src');
+          if (!src) return false;
+          const type = source?.getAttribute('type');
+          return type ? { src, mime: type } : { src };
+        },
+      },
+    ];
   },
 
   renderHTML({ HTMLAttributes }) {
