@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/authenticate.js';
 import {
+  getReviewCheckins,
   getReviewSettings,
   getReviewStats,
   getReviewToday,
@@ -15,6 +16,9 @@ import {
 const cardIdParamsSchema = z.object({ cardId: z.string().uuid() });
 const strugglingQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(20).optional(),
+});
+const checkinsQuerySchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
 });
 
 export function registerReviewRoutes(app: FastifyInstance): void {
@@ -35,6 +39,11 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   app.get('/api/review/struggling', auth, async (req) => {
     const { limit } = strugglingQuerySchema.parse(req.query);
     return getStrugglingCards(requireUser(req).id, limit ?? 5);
+  });
+
+  app.get('/api/review/checkins', auth, async (req) => {
+    const { month } = checkinsQuerySchema.parse(req.query);
+    return getReviewCheckins(requireUser(req).id, month);
   });
 
   app.get('/api/review/settings', auth, async (req) => {

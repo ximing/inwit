@@ -1,6 +1,7 @@
 import type {
   CardQuestion,
   MapPlacement,
+  ReviewCheckins,
   ReviewFeedback,
   ReviewFeedbackResult,
   ReviewLog,
@@ -378,6 +379,32 @@ export async function getReviewStats(userId: string, now = new Date()): Promise<
     daily,
     forecast: buildForecast(forecastDue, now),
   };
+}
+
+/** 按月打卡：该月每天复习次数（按本地日期聚合）。month 格式 YYYY-MM。 */
+export async function getReviewCheckins(userId: string, month: string): Promise<ReviewCheckins> {
+  const [year = 1970, mon = 1] = month.split('-').map(Number);
+  const from = new Date(year, mon - 1, 1);
+  const to = endOfLocalDay(new Date(year, mon, 0));
+  const rows = await getDb()
+    .select({ reviewedAt: reviewLogs.reviewedAt })
+    .from(reviewLogs)
+    .where(
+      and(
+        eq(reviewLogs.userId, userId),
+        gte(reviewLogs.reviewedAt, from),
+        lte(reviewLogs.reviewedAt, to),
+      ),
+    );
+  const byDate = new Map<string, number>();
+  for (const row of rows) {
+    const key = localDateKey(row.reviewedAt);
+    byDate.set(key, (byDate.get(key) ?? 0) + 1);
+  }
+  const days = [...byDate.entries()]
+    .map(([date, n]) => ({ date, count: n }))
+    .sort((a, b) => (a.date < b.date ? -1 : 1));
+  return { month, days };
 }
 
 /** 近 30 天忘记/模糊 ≥2 次的卡片，按挣扎次数倒序。 */

@@ -18,6 +18,7 @@ import {
   type PresignedUrlEntry,
 } from '@/lib/presign-cache-logic';
 import {
+  getReviewCheckins,
   getReviewSettings,
   getReviewStats,
   getReviewToday,
@@ -28,6 +29,16 @@ import {
 import { LayoutService } from '@/shell/layout.service';
 
 const TOAST_MS = 3200;
+
+/** 本地日期 → 'YYYY-MM'。 */
+export function monthKeyOf(d: Date): string {
+  return `${String(d.getFullYear())}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** 本地日期 → 'YYYY-MM-DD'。 */
+function dateKeyOf(d: Date): string {
+  return `${monthKeyOf(d)}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export function cloneSettings(settings: ReviewSettings): ReviewSettings {
   return {
@@ -61,6 +72,9 @@ export class ReviewService extends Service {
   toastTimer: ReturnType<typeof setTimeout> | null = null;
   cardImageUrls: Record<string, PresignedUrlEntry> = {};
   cardMenuOpen = false;
+  /** 打卡月历当前展示的月份（YYYY-MM）与每日复习次数（date → count）。 */
+  calMonth: string = monthKeyOf(new Date());
+  checkins: Record<string, number> = {};
 
   get layout(): LayoutService {
     return this.resolve(LayoutService);
@@ -229,6 +243,7 @@ export class ReviewService extends Service {
       this.applyToday(today);
       this.stats = stats;
       this.settings = cloneSettings(settings);
+      this.calMonth = monthKeyOf(new Date());
       this.refreshDueBadge();
     } catch (err) {
       this.error = errorMessage(err, '复习中心加载失败');
@@ -236,6 +251,7 @@ export class ReviewService extends Service {
       this.ready = true;
     }
     void this.loadStruggling();
+    void this.loadCheckins();
   }
 
   /** 薄弱卡片是锦上添花，失败时静默保留旧列表。 */
@@ -245,6 +261,27 @@ export class ReviewService extends Service {
     } catch {
       // keep last snapshot
     }
+  }
+
+  get isCurrentCalMonth(): boolean {
+    return this.calMonth === monthKeyOf(new Date());
+  }
+
+  /** 打卡图同样是锦上添花，失败时静默保留旧数据。 */
+  async loadCheckins(month = this.calMonth): Promise<void> {
+    try {
+      const data = await getReviewCheckins(month);
+      if (month !== this.calMonth) return;
+      this.checkins = Object.fromEntries(data.days.map((day) => [day.date, day.count]));
+    } catch {
+      // keep last snapshot
+    }
+  }
+
+  async shiftCalMonth(delta: number): Promise<void> {
+    const [year = 1970, mon = 1] = this.calMonth.split('-').map(Number);
+    this.calMonth = monthKeyOf(new Date(year, mon - 1 + delta, 1));
+    await this.loadCheckins();
   }
 
   async startSession(): Promise<void> {
@@ -291,6 +328,10 @@ export class ReviewService extends Service {
       await submitReviewFeedback(item.card.id, feedback);
       this.reviewedToday += 1;
       this.sessionRecap = { ...this.sessionRecap, [feedback]: this.sessionRecap[feedback] + 1 };
+      if (this.isCurrentCalMonth) {
+        const key = dateKeyOf(new Date());
+        this.checkins = { ...this.checkins, [key]: (this.checkins[key] ?? 0) + 1 };
+      }
       this.items = this.items.slice(1);
       this.flipped = false;
       this.lastFeedback = null;

@@ -100,6 +100,19 @@ export const reviewStatsSchema = z.object({
 });
 export type ReviewStats = z.infer<typeof reviewStatsSchema>;
 
+/** 按月打卡热图：某天复习了多少次。month 格式 YYYY-MM。 */
+export const reviewCheckinDaySchema = z.object({
+  date: z.string(),
+  count: z.number().int().nonnegative(),
+});
+export type ReviewCheckinDay = z.infer<typeof reviewCheckinDaySchema>;
+
+export const reviewCheckinsSchema = z.object({
+  month: z.string(),
+  days: z.array(reviewCheckinDaySchema),
+});
+export type ReviewCheckins = z.infer<typeof reviewCheckinsSchema>;
+
 /** 近 30 天忘记/模糊次数达到阈值的卡片（薄弱卡片 Top N）。 */
 export const reviewStrugglingCardSchema = z.object({
   id: z.string().uuid(),

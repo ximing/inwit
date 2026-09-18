@@ -27,54 +27,59 @@
   .hub-tab.is-on { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-1); }
 
   /* ---------- 今日 Hero ---------- */
+  /* ---------- 今日 Hero：扁平纸面 + 单一焦点 ---------- */
   .today {
     position: relative; overflow: hidden;
-    background:
-      radial-gradient(120% 160% at 100% 0%, rgba(179, 64, 42, 0.06), transparent 55%),
-      linear-gradient(150deg, #fdf4ee, var(--surface) 70%);
-    border: 1px solid var(--accent-line);
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
     border-radius: var(--r-xl);
-    padding: 30px 34px 28px;
-    display: flex; align-items: center; gap: 32px;
+    box-shadow: var(--shadow-1);
+    padding: 34px 38px 32px;
+    display: flex; align-items: stretch; gap: 64px;
     margin-bottom: 14px;
   }
-  .today-main { flex: 1; min-width: 0; }
-  .today-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--accent); }
-  .today-count { font-family: var(--serif); margin: 10px 0 4px; line-height: 1.1; }
-  .today-count b { font-size: 44px; font-weight: 700; }
-  .today-count span { font-size: 17px; font-weight: 600; color: var(--ink-2); margin-left: 6px; }
-  .today-sub { font-size: 13px; color: var(--ink-3); }
-  .today-sub b { color: var(--accent-deep); font-weight: 600; }
-  .today-cta { margin-top: 20px; display: flex; align-items: center; gap: 12px; }
-  .today-cta .btn-primary { height: 42px; padding: 0 30px; font-size: 14.5px; border-radius: 10px; }
-  .today-cta .eta { font-size: 12.5px; color: var(--ink-4); }
+  .today::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(80% 130% at 0% 0%, color-mix(in srgb, var(--accent) 4.5%, transparent), transparent 55%);
+  }
+  .today-main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+  .today-date { font-size: 12.5px; color: var(--ink-3); letter-spacing: 0.04em; }
+  .today-line { font-family: var(--serif); margin-top: 16px; line-height: 1.15; display: flex; align-items: baseline; }
+  .today-line b { font-size: 42px; font-weight: 700; color: var(--accent-deep); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  .today-line span { font-size: 19px; font-weight: 600; color: var(--ink); margin-left: 10px; }
+  .today-sub { font-size: 12.5px; color: var(--ink-4); margin-top: 12px; }
+  .today-sub b { color: var(--ink-2); font-weight: 600; }
+  .today-cta { margin-top: auto; padding-top: 26px; display: flex; align-items: center; gap: 12px; position: relative; }
+  .today-cta .btn-primary { height: 40px; padding: 0 28px; font-size: 14px; border-radius: 10px; }
 
-  /* hero 右侧：连续打卡 */
-  .streak {
-    flex: none; width: 168px; padding: 18px 18px 16px;
-    background: rgba(255, 253, 248, 0.7);
-    border: 1px solid var(--accent-line);
-    border-radius: var(--r-lg);
-    backdrop-filter: blur(2px);
+  /* 右侧：打卡月历 */
+  .mini-cal { flex: none; width: 204px; position: relative; display: flex; flex-direction: column; }
+  .mc-top { display: flex; align-items: baseline; margin-bottom: 10px; }
+  .mc-label { font-size: 11px; font-weight: 600; letter-spacing: 0.12em; color: var(--ink-4); }
+  .mc-nav { margin-left: auto; display: flex; align-items: center; gap: 1px; }
+  .mc-month { min-width: 42px; text-align: center; font-size: 11.5px; color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mc-arrow {
+    width: 18px; height: 18px; border-radius: 5px; color: var(--ink-4);
+    display: inline-flex; align-items: center; justify-content: center; transition: color 0.15s;
   }
-  .streak-top { display: flex; align-items: center; gap: 10px; }
-  .streak-flame {
-    width: 38px; height: 38px; border-radius: 12px; flex: none;
-    background: linear-gradient(150deg, #d0765a, var(--accent));
-    display: flex; align-items: center; justify-content: center; font-size: 18px;
-    box-shadow: 0 4px 12px rgba(179, 64, 42, 0.3);
+  .mc-arrow:hover:not(:disabled) { color: var(--ink); }
+  .mc-arrow:disabled { opacity: 0.25; cursor: default; }
+
+  .mc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2.5px; }
+  .mc-wd { font-size: 8px; color: var(--ink-4); text-align: center; padding-bottom: 1px; }
+  .mc-cell {
+    aspect-ratio: 1; border-radius: 3px; background: color-mix(in srgb, var(--ink) 5%, transparent);
+    transition: transform 0.1s;
   }
-  .streak-num { font-family: var(--serif); font-size: 21px; font-weight: 700; line-height: 1.15; }
-  .streak-num small { font-size: 12px; font-weight: 500; color: var(--ink-3); }
-  .streak-best { font-size: 11px; color: var(--ink-4); margin-top: 1px; }
-  .streak-week { display: flex; gap: 5px; margin-top: 12px; }
-  .sw-dot {
-    flex: 1; aspect-ratio: 1; border-radius: 50%;
-    border: 1.5px solid var(--line); display: flex; align-items: center; justify-content: center;
-    font-size: 9px; color: var(--ink-4);
-  }
-  .sw-dot.is-done { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .sw-dot.is-today { border-color: var(--accent); color: var(--accent-deep); font-weight: 700; }
+  .mc-cell:hover { transform: scale(1.25); }
+  .mc-cell.lv1 { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+  .mc-cell.lv2 { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .mc-cell.lv3 { background: color-mix(in srgb, var(--accent) 78%, transparent); }
+  .mc-cell.is-today { box-shadow: 0 0 0 1.5px var(--accent-deep); }
+  .mc-cell.is-empty, .mc-cell.is-future { visibility: hidden; pointer-events: none; }
+
+  .mc-foot { margin-top: 10px; font-size: 10.5px; color: var(--ink-4); display: flex; gap: 4px; }
+  .mc-foot b { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
 
   /* ---------- 记忆库数据带 ---------- */
   .metrics {
@@ -289,6 +294,44 @@
   .done-recap { display: flex; gap: 10px; margin-top: 24px; }
   .done-chip { display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px; font-size: 12.5px; background: var(--surface); border: 1px solid var(--line-soft); color: var(--ink-2); }
   .done-chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+  /* ---------- hero 右侧：打卡月历（镜像左侧节奏：标签→大数字→纹理） ---------- */
+  .mini-cal {
+    flex: none; width: 196px; align-self: stretch;
+    display: flex; flex-direction: column;
+  }
+  .mc-label-row { display: flex; align-items: baseline; gap: 6px; }
+  .mc-label { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--ink-4); }
+  .mc-nav { margin-left: auto; display: flex; align-items: center; gap: 1px; }
+  .mc-month { min-width: 40px; text-align: center; font-size: 11px; color: var(--ink-3); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .mc-arrow {
+    width: 18px; height: 18px; border-radius: 5px; color: var(--ink-4);
+    display: inline-flex; align-items: center; justify-content: center; transition: all 0.15s;
+  }
+  .mc-arrow:hover:not(:disabled) { color: var(--ink); }
+  .mc-arrow:disabled { opacity: 0.25; cursor: default; }
+
+  .mc-streak { font-family: var(--serif); margin: 8px 0 2px; line-height: 1.1; }
+  .mc-streak b { font-size: 28px; font-weight: 700; }
+  .mc-streak span { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+  .mc-best { font-size: 11px; color: var(--ink-4); margin-bottom: 12px; }
+  .mc-best b { color: var(--ink-2); font-weight: 600; }
+
+  .mc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2.5px; }
+  .mc-wd { font-size: 8px; color: var(--ink-4); text-align: center; padding-bottom: 1px; }
+  .mc-cell {
+    aspect-ratio: 1; border-radius: 3px; background: color-mix(in srgb, var(--ink) 5%, transparent);
+    transition: transform 0.1s;
+  }
+  .mc-cell:hover { transform: scale(1.25); }
+  .mc-cell.lv1 { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+  .mc-cell.lv2 { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .mc-cell.lv3 { background: color-mix(in srgb, var(--accent) 78%, transparent); }
+  .mc-cell.is-today { box-shadow: 0 0 0 1.5px var(--accent-deep); }
+  .mc-cell.is-empty, .mc-cell.is-future { visibility: hidden; pointer-events: none; }
+
+  .mc-foot { margin-top: 10px; font-size: 10.5px; color: var(--ink-4); }
+  .mc-foot b { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+
   /* ============================================================
      学习周报 —— 期刊感：本期 featured + 过刊档案 + 阅读页
      ============================================================ */
@@ -419,31 +462,28 @@
       <!-- 今日 Hero -->
       <section class="today">
         <div class="today-main">
-          <span class="today-kicker">今日复习</span>
-          <div class="today-count"><b>7</b><span>张卡片到期</span></div>
-          <div class="today-sub">另有 <b>12</b> 张积压卡片会顺延到明天</div>
+          <span class="today-date">9月18日 · 周五</span>
+          <div class="today-line"><b>7</b><span>张卡片到期</span></div>
+          <div class="today-sub">约 <b>3</b> 分钟 · 另有 <b>12</b> 张积压顺延到明天</div>
           <div class="today-cta">
             <button class="btn btn-primary" id="btn-start">开始复习</button>
-            <span class="eta">约 3 分钟</span>
           </div>
         </div>
-        <div class="streak">
-          <div class="streak-top">
-            <span class="streak-flame">🔥</span>
-            <div>
-              <div class="streak-num">5 <small>天连续</small></div>
-              <div class="streak-best">最长纪录 12 天</div>
+        <div class="mini-cal">
+          <div class="mc-top">
+            <span class="mc-label">打卡</span>
+            <div class="mc-nav">
+              <button class="mc-arrow" id="cal-prev" aria-label="上个月">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 6l-6 6 6 6"/></svg>
+              </button>
+              <span class="mc-month" id="cal-month">9月</span>
+              <button class="mc-arrow" id="cal-next" aria-label="下个月" disabled>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+              </button>
             </div>
           </div>
-          <div class="streak-week" title="本周打卡">
-            <span class="sw-dot is-done">一</span>
-            <span class="sw-dot is-done">二</span>
-            <span class="sw-dot is-done">三</span>
-            <span class="sw-dot is-today">四</span>
-            <span class="sw-dot">五</span>
-            <span class="sw-dot">六</span>
-            <span class="sw-dot">日</span>
-          </div>
+          <div class="mc-grid" id="cal-grid"></div>
+          <div class="mc-foot">本月 <b id="cs-days">14</b> 天 · 连续 <b>5</b> 天 · 最长 <b>12</b> 天</div>
         </div>
       </section>
 
@@ -873,6 +913,81 @@
   }
 
   renderCard();
+
+  /* ---------- 迷你打卡月历（演示数据：按月份确定性伪随机） ---------- */
+  const TODAY = new Date(2026, 8, 18); // 2026-09-18
+  let calYear = TODAY.getFullYear(), calMon = TODAY.getMonth();
+
+  function demoCount(y, m, d) {
+    if (y === TODAY.getFullYear() && m === TODAY.getMonth() && d > TODAY.getDate()) return null; // 未来
+    const seed = (y * 372 + m * 31 + d * 7) % 97;
+    if (seed % 5 === 0) return 0;                    // 断卡日
+    return 1 + (seed * 13) % 11;                     // 1–11 次
+  }
+  function levelOf(count) {
+    if (count === null || count === 0) return 0;
+    if (count <= 4) return 1;
+    if (count <= 8) return 2;
+    return 3;
+  }
+
+  function renderCalendar() {
+    const grid = document.getElementById('cal-grid');
+    grid.innerHTML = '';
+    ['一', '二', '三', '四', '五', '六', '日'].forEach((w) => {
+      const el = document.createElement('span');
+      el.className = 'mc-wd';
+      el.textContent = w;
+      grid.appendChild(el);
+    });
+
+    const first = new Date(calYear, calMon, 1);
+    const lead = (first.getDay() + 6) % 7; // 周一开头
+    for (let i = 0; i < lead; i++) {
+      const el = document.createElement('span');
+      el.className = 'mc-cell is-empty';
+      grid.appendChild(el);
+    }
+
+    const days = new Date(calYear, calMon + 1, 0).getDate();
+    const isCurrentMonth = calYear === TODAY.getFullYear() && calMon === TODAY.getMonth();
+    const lastVisible = isCurrentMonth ? TODAY.getDate() : days; // 当月只画到今天，满月画整月
+    let checkinDays = 0;
+    for (let d = 1; d <= lastVisible; d++) {
+      const count = demoCount(calYear, calMon, d);
+      const el = document.createElement('span');
+      const lv = levelOf(count);
+      el.className = 'mc-cell' + (lv > 0 ? ` lv${lv}` : '');
+      el.title = `${calMon + 1}月${d}日 · ${count > 0 ? `复习 ${count} 次` : '没刷'}`;
+      if (count !== null && count > 0) checkinDays++;
+      if (isCurrentMonth && d === TODAY.getDate()) el.classList.add('is-today');
+      grid.appendChild(el);
+    }
+    // 补齐当前周（对齐用），尾随的空周整体裁掉，hero 高度保持紧凑
+    const used = lead + lastVisible;
+    const trailing = (7 - (used % 7)) % 7;
+    for (let i = 0; i < trailing; i++) {
+      const el = document.createElement('span');
+      el.className = 'mc-cell is-empty';
+      grid.appendChild(el);
+    }
+
+    document.getElementById('cal-month').textContent = calYear === TODAY.getFullYear()
+      ? `${calMon + 1}月`
+      : `${calYear}年${calMon + 1}月`;
+    document.getElementById('cs-days').textContent = checkinDays;
+    document.getElementById('cal-next').disabled = isCurrentMonth;
+  }
+
+  document.getElementById('cal-prev').addEventListener('click', () => {
+    calMon--; if (calMon < 0) { calMon = 11; calYear--; }
+    renderCalendar();
+  });
+  document.getElementById('cal-next').addEventListener('click', () => {
+    calMon++; if (calMon > 11) { calMon = 0; calYear++; }
+    renderCalendar();
+  });
+  renderCalendar();
 
   /* ---------- 设置面板 ---------- */
   document.getElementById('cfg-head').addEventListener('click', () =>

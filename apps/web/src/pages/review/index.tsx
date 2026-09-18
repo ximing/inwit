@@ -6,18 +6,17 @@ import {
   type ReviewStats,
 } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
-import { Check, ChevronDown, ChevronRight, MoreHorizontal, Pause, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Pause, Trash2, X } from 'lucide-react';
+import { useEffect, useState, type ReactElement } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { ReportsPane } from './reports-pane';
 import { weeklyReportsPath, ROUTES } from '@/routes';
 import { cardPath } from '@/routes';
 import { cloneSettings, ReviewService } from './review.service';
-import { ReviewSectionHead } from './section-head';
+import { ReviewSectionHead, todayLabel } from './section-head';
 import { estimateReviewMinutes } from '@/lib/review-eta';
 
 const LEARNING_STEP_OPTIONS = [1, 3, 6, 10] as const;
-const WEEKDAY_SHORT = ['日', '一', '二', '三', '四', '五', '六'] as const;
 
 function tenths(n: number): number {
   return Math.round(n * 10) / 10;
@@ -30,10 +29,6 @@ function formatMult(n: number): string {
 function parseDateKey(key: string): Date {
   const [year, month, day] = key.split('-').map(Number);
   return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1);
-}
-
-function weekdayShort(key: string): string {
-  return WEEKDAY_SHORT[parseDateKey(key).getDay()] ?? '';
 }
 
 function dayOfMonth(key: string): string {
@@ -121,12 +116,9 @@ const ReviewPageContent = observer(function ReviewPageContent() {
 const HubPane = observer(function HubPane() {
   const service = useService(ReviewService);
   const stats = service.stats;
-  const streak = stats?.streak.current ?? 0;
-  const longest = stats?.streak.longest ?? 0;
   const due = service.dueCount;
   const minutes = estimateReviewMinutes(due);
   const retention = stats?.retention7d ?? null;
-  const daily = stats?.daily ?? [];
 
   return (
     <div className="hub">
@@ -142,18 +134,26 @@ const HubPane = observer(function HubPane() {
       {/* 今日 Hero */}
       <section className="today-hero">
         <div className="today-main">
-          <span className="today-kicker">今日复习</span>
-          <div className="today-count">
+          <span className="today-date">{todayLabel()}</span>
+          <div className="today-line">
             <b>{due}</b>
-            <span>{due > 0 ? '张卡片到期' : '张卡片到期 · 今日已清空'}</span>
+            <span>张卡片到期</span>
           </div>
-          {service.backlogCount > 0 ? (
-            <div className="today-sub">
-              另有 <b>{service.backlogCount}</b> 张积压卡片会顺延到明天
-            </div>
-          ) : (
-            <div className="today-sub">想起来了就翻面，诚实打分，间隔才会准</div>
-          )}
+          <div className="today-sub">
+            {due === 0 ? (
+              '今天没有到期卡片 · 明天再来保持连续'
+            ) : (
+              <>
+                约 <b>{minutes}</b> 分钟
+                {service.backlogCount > 0 ? (
+                  <>
+                    {' · 另有 '}
+                    <b>{service.backlogCount}</b> 张积压顺延到明天
+                  </>
+                ) : null}
+              </>
+            )}
+          </div>
           <div className="today-cta">
             <button
               type="button"
@@ -163,44 +163,9 @@ const HubPane = observer(function HubPane() {
             >
               {service.$model.startSession.loading ? '准备中…' : '开始复习'}
             </button>
-            {due > 0 ? <span className="eta">约 {minutes} 分钟</span> : null}
           </div>
         </div>
-        <div className="streak-card">
-          <div className="streak-top">
-            <span className="streak-flame" aria-hidden>
-              🔥
-            </span>
-            <div>
-              {streak === 0 ? (
-                <div className="streak-num is-zero">今天开始第一天</div>
-              ) : (
-                <div className="streak-num">
-                  {streak} <small>天连续</small>
-                </div>
-              )}
-              <div className="streak-best">最长纪录 {longest} 天</div>
-            </div>
-          </div>
-          {daily.length > 0 ? (
-            <div className="streak-week" title="近 7 天打卡">
-              {daily.map((row, index) => {
-                const cls = [
-                  'sw-dot',
-                  dayTotal(row) > 0 ? 'is-done' : '',
-                  index === daily.length - 1 ? 'is-today' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ');
-                return (
-                  <span className={cls} key={row.date}>
-                    {weekdayShort(row.date)}
-                  </span>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
+        <MiniCalendar />
       </section>
 
       {/* 记忆库数据带 */}
@@ -277,6 +242,86 @@ const HubPane = observer(function HubPane() {
       </section>
 
       <SettingsPanel />
+    </div>
+  );
+});
+
+const CAL_WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日'] as const;
+
+/** hero 右侧：按月打卡热图，可左右切换月份。 */
+const MiniCalendar = observer(function MiniCalendar() {
+  const service = useService(ReviewService);
+  const today = new Date();
+  const isCurrent = service.isCurrentCalMonth;
+  const [year = 1970, mon = 1] = service.calMonth.split('-').map(Number);
+  const lastVisible = isCurrent ? today.getDate() : new Date(year, mon, 0).getDate();
+  const lead = (new Date(year, mon - 1, 1).getDay() + 6) % 7; // 周一开头
+  const streak = service.stats?.streak ?? { current: 0, longest: 0 };
+
+  let checkinDays = 0;
+  const cells: ReactElement[] = [];
+  for (let i = 0; i < lead; i++) cells.push(<span className="mc-cell is-empty" key={`lead-${String(i)}`} />);
+  for (let d = 1; d <= lastVisible; d++) {
+    const key = `${service.calMonth}-${String(d).padStart(2, '0')}`;
+    const count = service.checkins[key] ?? 0;
+    if (count > 0) checkinDays++;
+    const level = count === 0 ? 0 : count <= 4 ? 1 : count <= 8 ? 2 : 3;
+    const cls = [
+      'mc-cell',
+      level > 0 ? `lv${String(level)}` : '',
+      isCurrent && d === today.getDate() ? 'is-today' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    cells.push(
+      <span
+        className={cls}
+        key={key}
+        title={`${String(mon)}月${String(d)}日 · ${count > 0 ? `复习 ${String(count)} 次` : '没刷'}`}
+      />,
+    );
+  }
+  const trailing = (7 - ((lead + lastVisible) % 7)) % 7; // 补齐当前周，尾随空周裁掉
+  for (let i = 0; i < trailing; i++) cells.push(<span className="mc-cell is-empty" key={`trail-${String(i)}`} />);
+
+  return (
+    <div className="mini-cal">
+      <div className="mc-top">
+        <span className="mc-label">打卡</span>
+        <div className="mc-nav">
+          <button
+            type="button"
+            className="mc-arrow"
+            aria-label="上个月"
+            onClick={() => void service.shiftCalMonth(-1)}
+          >
+            <ChevronLeft width={11} height={11} strokeWidth={2.4} />
+          </button>
+          <span className="mc-month">
+            {year === today.getFullYear() ? `${String(mon)}月` : `${String(year)}年${String(mon)}月`}
+          </span>
+          <button
+            type="button"
+            className="mc-arrow"
+            aria-label="下个月"
+            disabled={isCurrent}
+            onClick={() => void service.shiftCalMonth(1)}
+          >
+            <ChevronRight width={11} height={11} strokeWidth={2.4} />
+          </button>
+        </div>
+      </div>
+      <div className="mc-grid">
+        {CAL_WEEKDAYS.map((w) => (
+          <span className="mc-wd" key={w}>
+            {w}
+          </span>
+        ))}
+        {cells}
+      </div>
+      <div className="mc-foot">
+        本月 <b>{checkinDays}</b> 天 · 连续 <b>{streak.current}</b> 天 · 最长 <b>{streak.longest}</b> 天
+      </div>
     </div>
   );
 });

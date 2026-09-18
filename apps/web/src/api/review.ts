@@ -1,4 +1,5 @@
 import type {
+  ReviewCheckins,
   ReviewFeedback,
   ReviewFeedbackResult,
   ReviewSettings,
@@ -33,6 +34,10 @@ export function getReviewTopicStats(): Promise<ReviewTopicStat[]> {
 
 export function getStrugglingCards(limit = 5): Promise<ReviewStrugglingCard[]> {
   return request<ReviewStrugglingCard[]>(`/api/review/struggling?limit=${String(limit)}`);
+}
+
+export function getReviewCheckins(month: string): Promise<ReviewCheckins> {
+  return request<ReviewCheckins>(`/api/review/checkins?month=${month}`);
 }
 
 export function getReviewSettings(): Promise<ReviewSettings> {
