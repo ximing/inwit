@@ -24,7 +24,7 @@ import {
   type CardRow,
 } from '../db/schema.js';
 import { getOwnedDocument } from '../documents/document.service.js';
-import { isExcerptKeyFor } from '../documents/excerpt-logic.js';
+import { isExcerptKeyFor, isExcerptKeyOwnedBy } from '../documents/excerpt-logic.js';
 import { AppError } from '../errors.js';
 import { recalculateMapNodeStatus, requireWritableMapNode } from '../maps/map.service.js';
 import { tryDeleteCardFromIndex, tryIndexCard } from '../retrieval/pipeline.js';
@@ -125,9 +125,12 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
 export async function getCardImage(userId: string, id: string): Promise<CardImageResponse> {
   const row = await getOwnedCard(userId, id);
   if (!row.imageKey) throw AppError.of(404, 'CARD_IMAGE_NOT_FOUND');
-  if (!row.documentId || !isExcerptKeyFor(row.imageKey, userId, row.documentId)) {
-    throw AppError.of(404, 'CARD_IMAGE_NOT_FOUND');
-  }
+  // Cards survive their document (documentId set to NULL on permanent delete);
+  // fall back to an ownership-scoped key check so their excerpts keep working.
+  const keyOk = row.documentId
+    ? isExcerptKeyFor(row.imageKey, userId, row.documentId)
+    : isExcerptKeyOwnedBy(row.imageKey, userId);
+  if (!keyOk) throw AppError.of(404, 'CARD_IMAGE_NOT_FOUND');
   const url = await presignGet(row.imageKey);
   return { url };
 }

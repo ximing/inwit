@@ -1,4 +1,4 @@
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 import { clampFailReason } from './document-status-logic.js';
@@ -25,7 +25,12 @@ export async function markDocumentFailed(
       ...(extra && 'answer' in extra ? { answer: extra.answer ?? null } : {}),
     })
     .where(
-      and(eq(documents.id, documentId), eq(documents.userId, userId), ne(documents.status, 'digested')),
+      and(
+        eq(documents.id, documentId),
+        eq(documents.userId, userId),
+        ne(documents.status, 'digested'),
+        isNull(documents.deletedAt),
+      ),
     );
 }
 
@@ -35,6 +40,11 @@ export async function resetDocumentPipeline(userId: string, documentId: string):
     .update(documents)
     .set({ status: 'pending', failReason: null, updatedAt: new Date() })
     .where(
-      and(eq(documents.id, documentId), eq(documents.userId, userId), eq(documents.status, 'failed')),
+      and(
+        eq(documents.id, documentId),
+        eq(documents.userId, userId),
+        eq(documents.status, 'failed'),
+        isNull(documents.deletedAt),
+      ),
     );
 }

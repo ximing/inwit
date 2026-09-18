@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 文档页头部重设计</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  /* ===== 设计稿脚手架（非产物） ===== */
+  body { padding: 0 0 120px; }
+  .draft-head { max-width: 1080px; margin: 0 auto; padding: 48px 40px 8px; }
+  .draft-head h1 { font-family: var(--serif); font-size: 26px; font-weight: 700; }
+  .draft-head p { font-size: 13.5px; color: var(--ink-3); line-height: 1.7; margin-top: 8px; max-width: 640px; }
+
+  .opt { max-width: 1080px; margin: 40px auto 0; padding: 0 40px; }
+  .opt-head {
+    display: flex; align-items: baseline; gap: 12px;
+    font-family: var(--serif); font-size: 18px; font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .opt-head .badge {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    color: var(--accent-deep); background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    padding: 2px 8px; border-radius: 999px; letter-spacing: 0.04em;
+  }
+  .opt-sub { font-size: 12.5px; color: var(--ink-3); margin-bottom: 14px; line-height: 1.6; }
+  .frame {
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--bg);
+    overflow: hidden;
+    box-shadow: var(--shadow-2);
+  }
+  .opt-notes {
+    margin: 12px 0 0; padding: 0 0 0 18px;
+    font-size: 12.5px; color: var(--ink-3); line-height: 1.8;
+  }
+  .opt-notes b { color: var(--ink-2); font-weight: 600; }
+  .measure { font-family: var(--mono); font-size: 11px; color: var(--gold); }
+
+  /* ===== 正文样例（三个方案共用，模拟收紧后的正文排版） ===== */
+  .demo-body p {
+    font-size: 15.5px; line-height: 1.7; color: var(--ink-2);
+    margin: 0 0 10px;
+  }
+  .demo-body h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.35; margin: 22px 0 8px; }
+  .paper {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-1);
+    padding: 28px 32px 40px;
+  }
+  .topic-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 24px; padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    font-size: 12px; color: var(--ink-2);
+    cursor: pointer;
+  }
+  .topic-chip:hover { border-color: var(--ink-4); }
+  .topic-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); }
+  .save-dot { color: var(--green); }
+  .mode-seg {
+    display: inline-flex; gap: 3px; padding: 3px;
+    border: 1.5px solid var(--line); border-radius: 9px;
+    background: var(--surface);
+  }
+  .mode-seg-btn {
+    height: 24px; padding: 0 10px; border-radius: 6px;
+    font-size: 12px; font-weight: 500; color: var(--ink-3);
+    cursor: pointer; border: 0; background: none;
+  }
+  .mode-seg-btn.is-on {
+    color: var(--accent-deep); background: var(--accent-soft);
+    box-shadow: 0 0 0 1px var(--accent-line); font-weight: 600;
+  }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px;
+    border: 0; background: none; color: var(--ink-3); cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--bg-sunken); color: var(--ink); }
+
+  /* ============================================================
+     现状（对照）
+     ============================================================ */
+  .cur-chrome {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 20px;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .cur-chrome .spacer { flex: 1; }
+  .cur-close {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 32px; padding: 0 12px;
+    font-size: 13px; color: var(--ink-3);
+    background: none; border: 0; cursor: pointer; border-radius: var(--r-sm);
+  }
+  .cur-inner { max-width: 800px; margin: 0 auto; padding: 36px 40px 64px; }
+  .cur-title { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; margin: 4px 0 8px; }
+  .cur-meta { font-size: 12px; color: var(--ink-4); display: flex; gap: 0; align-items: center; margin-bottom: 16px; }
+  .cur-meta .sep { margin: 0 8px; opacity: 0.55; }
+
+  /* ============================================================
+     方案 A · 细线工具栏 + 紧凑标题块
+     ============================================================ */
+  .a-chrome {
+    display: flex; align-items: center; gap: 6px;
+    height: 44px; padding: 0 16px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .a-chrome .spacer { flex: 1; }
+  .a-chrome .save { font-size: 12px; color: var(--ink-4); display: inline-flex; gap: 5px; align-items: center; }
+  .a-inner { max-width: 800px; margin: 0 auto; padding: 26px 40px 64px; }
+  .a-title { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.3; margin: 0 0 6px; }
+  .a-meta {
+    font-size: 12px; color: var(--ink-4);
+    display: flex; align-items: center; gap: 0;
+    margin-bottom: 18px;
+  }
+  .a-meta .sep { margin: 0 7px; opacity: 0.5; }
+  .a-meta .ok { color: var(--green); }
+
+  /* ============================================================
+     方案 B · 题区行内工具丸 + 杂志式题区（v2：胶囊与主题同排）
+     ============================================================ */
+  .b-pane { position: relative; }
+  .b-inner { max-width: 720px; margin: 0 auto; padding: 24px 40px 64px; }
+  .b-toprow {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px;
+  }
+  .b-kicker {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em;
+    color: var(--gold);
+    cursor: pointer;
+    min-width: 0;
+  }
+  .b-kicker::before { content: ''; width: 18px; height: 1.5px; background: var(--gold); flex: none; }
+  .b-toprow .spacer { flex: 1; }
+  .b-fab {
+    display: flex; align-items: center; gap: 2px;
+    padding: 3px;
+    flex: none;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  /* 胶囊默认隐形：无底色无边框无阴影，hover 才浮现 */
+  .b-fab:hover {
+    background: var(--surface);
+    border-color: var(--line);
+    box-shadow: var(--shadow-1);
+  }
+  .b-fab .mode-seg { border: 0; background: none; padding: 0; gap: 2px; }
+  .b-fab .mode-seg-btn { height: 22px; padding: 0 9px; font-size: 11.5px; }
+  .b-fab .divider { width: 1px; height: 14px; background: var(--line); margin: 0 3px; }
+  .b-fab .icon-btn { width: 24px; height: 24px; border-radius: 50%; font-size: 12px; color: var(--ink-4); }
+  .b-fab .save {
+    font-size: 11px; color: var(--ink-4);
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 0 4px 0 2px; white-space: nowrap;
+  }
+  .b-title {
+    font-family: var(--serif);
+    font-size: 30px; font-weight: 700; line-height: 1.3;
+    letter-spacing: 0.01em;
+    margin: 0 0 8px;
+  }
+  .b-meta {
+    font-size: 12.5px; color: var(--ink-4);
+    display: flex; align-items: center; gap: 0;
+    padding-bottom: 14px; margin-bottom: 20px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .b-meta .sep { margin: 0 8px; opacity: 0.5; }
+
+  /* ============================================================
+     方案 C · 面包屑单行 + 标题即主角
+     ============================================================ */
+  .c-chrome {
+    display: flex; align-items: center; gap: 8px;
+    height: 40px; padding: 0 20px;
+  }
+  .c-crumb {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; color: var(--ink-3);
+    background: none; border: 0; cursor: pointer; padding: 4px 6px; border-radius: 6px;
+  }
+  .c-crumb:hover { color: var(--ink); background: var(--bg-sunken); }
+  .c-crumb .sep { color: var(--ink-4); opacity: 0.6; }
+  .c-crumb .topic { color: var(--ink-2); font-weight: 500; }
+  .c-chrome .spacer { flex: 1; }
+  .c-chrome .save { font-size: 12px; color: var(--ink-4); }
+  .c-inner { max-width: 800px; margin: 0 auto; padding: 20px 40px 64px; }
+  .c-title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.3; margin: 0 0 8px; }
+  .c-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--ink-4);
+    margin-bottom: 20px;
+  }
+  .c-meta .pill {
+    background: var(--bg-sunken); border-radius: 6px;
+    padding: 1px 7px; font-size: 11px; color: var(--ink-3);
+  }
+</style>
+</head>
+<body>
+
+<div class="draft-head">
+  <h1>文档页头部重设计</h1>
+  <p>现状：顶部 sticky 工具栏（约 52px）+ 32px 大标题 + meta 行，三层叠加，正文开始前垂直占用约 200px。以下三个方案都把这个占用压到 130px 以内，区别在工具栏的形态与标题的气质。正文排版已按收紧后的规则渲染（15.5px / 1.7）。</p>
+</div>
+
+<!-- ============ 现状 ============ -->
+<section class="opt">
+  <div class="opt-head">现状 <span class="badge" style="color:var(--ink-3);background:var(--bg-sunken);border-color:var(--line)">对照</span></div>
+  <div class="opt-sub">工具栏 + 大标题 + meta，头部共约 <span class="measure">200px</span></div>
+  <div class="frame">
+    <div class="cur-chrome">
+      <button class="cur-close">✕ 关闭</button>
+      <span class="topic-chip"><span class="dot"></span>机器学习</span>
+      <span class="spacer"></span>
+      <span class="mode-seg">
+        <button class="mode-seg-btn is-on">编辑</button>
+        <button class="mode-seg-btn">预览</button>
+      </span>
+    </div>
+    <div class="cur-inner">
+      <div class="cur-title">交叉验证入门</div>
+      <div class="cur-meta">
+        <span>3 小时前</span><span class="sep">·</span><span>12 张卡</span><span class="sep">·</span><span>已消化</span>
+      </div>
+      <div class="paper demo-body">
+        <p>交叉验证是评估模型泛化能力的标准做法。它将数据切成 k 份，轮流用其中一份做验证、其余做训练，最后取 k 次结果的平均。</p>
+        <p>相比单次划分，它的好处是评估结果对「恰好分到好验证集」这件事不敏感，方差更小。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 方案 A ============ -->
+<section class="opt">
+  <div class="opt-head">方案 A · 细线工具栏 + 紧凑标题 <span class="badge">改动最小</span></div>
+  <div class="opt-sub">保留现有信息架构，只做压缩与降噪。头部约 <span class="measure">130px</span></div>
+  <div class="frame">
+    <div class="a-chrome">
+      <button class="icon-btn" title="关闭" aria-label="关闭">✕</button>
+      <span class="topic-chip"><span class="dot"></span>机器学习</span>
+      <span class="spacer"></span>
+      <span class="save"><span class="save-dot">●</span>已保存</span>
+      <span class="mode-seg">
+        <button class="mode-seg-btn is-on">编辑</button>
+        <button class="mode-seg-btn">预览</button>
+      </span>
+    </div>
+    <div class="a-inner">
+      <h1 class="a-title">交叉验证入门</h1>
+      <div class="a-meta">
+        <span>3 小时前</span><span class="sep">·</span><span>12 张卡</span><span class="sep">·</span><span class="ok">已消化</span>
+      </div>
+      <div class="paper demo-body">
+        <h2>为什么需要交叉验证</h2>
+        <p>交叉验证是评估模型泛化能力的标准做法。它将数据切成 k 份，轮流用其中一份做验证、其余做训练，最后取 k 次结果的平均。</p>
+        <p>相比单次划分，它的好处是评估结果对「恰好分到好验证集」这件事不敏感，方差更小。</p>
+      </div>
+    </div>
+  </div>
+  <ul class="opt-notes">
+    <li><b>关闭按钮</b>：去掉文字，只留图标， hover 出底色；宽度从 ~76px 收到 28px。</li>
+    <li><b>工具栏</b>：52px → 44px，保留细分隔线但去掉 blur 背景，视觉上不再是一「条」。</li>
+    <li><b>标题</b>：32px → 25px，与正文 h2（20px）拉开清晰层级但不抢戏；上方留白 36px → 26px。</li>
+    <li>保存状态从工具栏左侧挪到模式切换旁，所有「状态类」信息聚在右侧。</li>
+  </ul>
+</section>
+
+<!-- ============ 方案 B ============ -->
+<section class="opt">
+  <div class="opt-head">方案 B · 题区行内工具丸 + 杂志式题区 <span class="badge">已选 · v2</span></div>
+  <div class="opt-sub">胶囊缩小一号并与主题 kicker 同排，常驻工具栏消失。头部约 <span class="measure">110px</span></div>
+  <div class="frame">
+    <div class="b-pane">
+      <div class="b-inner">
+        <div class="b-toprow">
+          <div class="b-kicker">机器学习</div>
+          <span class="spacer"></span>
+          <div class="b-fab">
+            <span class="save"><span class="save-dot">●</span>已保存</span>
+            <span class="divider"></span>
+            <span class="mode-seg">
+              <button class="mode-seg-btn is-on">编辑</button>
+              <button class="mode-seg-btn">预览</button>
+            </span>
+            <span class="divider"></span>
+            <button class="icon-btn" title="关闭" aria-label="关闭">✕</button>
+          </div>
+        </div>
+        <h1 class="b-title">交叉验证入门</h1>
+        <div class="b-meta">
+          <span>3 小时前</span><span class="sep">·</span><span>12 张卡</span><span class="sep">·</span><span>已消化</span>
+        </div>
+        <div class="demo-body">
+          <h2>为什么需要交叉验证</h2>
+          <p>交叉验证是评估模型泛化能力的标准做法。它将数据切成 k 份，轮流用其中一份做验证、其余做训练，最后取 k 次结果的平均。</p>
+          <p>相比单次划分，它的好处是评估结果对「恰好分到好验证集」这件事不敏感，方差更小。实际中最常用的是 k = 5 或 k = 10。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="opt-notes">
+    <li><b>胶囊弱视觉</b>：默认无底色、无边框、无阴影，只是一排小字和小图标；hover 时才浮现胶囊底。常驻画面里几乎感觉不到它。</li>
+    <li><b>同一排</b>：主题 kicker 在左、工具丸在右，一行收掉原来两层；题区顶部留白 48px → 24px。</li>
+    <li><b>标题</b>：衬线 30px，与 sans 正文形成字体对比；meta 一道 hairline 收尾，题区与正文分界明确。</li>
+    <li>阅读态可把胶囊设为「滚动向下时淡出、hover 或向上滚动浮现」，进一步零干扰。</li>
+  </ul>
+</section>
+
+<!-- ============ 方案 C ============ -->
+<section class="opt">
+  <div class="opt-head">方案 C · 面包屑单行 + 标题即主角 <span class="badge">最紧凑</span></div>
+  <div class="opt-sub">工具栏降级为 40px 面包屑行（返回 = 关闭），头部约 <span class="measure">110px</span></div>
+  <div class="frame">
+    <div class="c-chrome">
+      <button class="c-crumb">‹ 文档 <span class="sep">/</span> <span class="topic">机器学习</span></button>
+      <span class="spacer"></span>
+      <span class="save">● 已保存</span>
+      <span class="mode-seg">
+        <button class="mode-seg-btn is-on">编辑</button>
+        <button class="mode-seg-btn">预览</button>
+      </span>
+    </div>
+    <div class="c-inner">
+      <h1 class="c-title">交叉验证入门</h1>
+      <div class="c-meta">
+        <span>3 小时前</span>
+        <span class="pill">12 张卡</span>
+        <span class="pill">已消化</span>
+      </div>
+      <div class="paper demo-body">
+        <h2>为什么需要交叉验证</h2>
+        <p>交叉验证是评估模型泛化能力的标准做法。它将数据切成 k 份，轮流用其中一份做验证、其余做训练，最后取 k 次结果的平均。</p>
+        <p>相比单次划分，它的好处是评估结果对「恰好分到好验证集」这件事不敏感，方差更小。</p>
+      </div>
+    </div>
+  </div>
+  <ul class="opt-notes">
+    <li><b>「关闭」变成面包屑返回</b>：‹ 文档 / 主题名，一行同时完成导航、定位、关闭三件事，语义比裸 X 更清楚。</li>
+    <li><b>无分隔线无背景</b>：工具行完全融入页面，视觉上正文往上提了整整一截。</li>
+    <li><b>meta 用 pill</b>：卡数、消化状态从文字分隔改成小胶囊，扫读更快。</li>
+    <li>代价：面包屑需要承载主题切换（点击主题名弹 TopicPicker），交互要重新约定。</li>
+  </ul>
+</section>
+
+</body>
+</html>

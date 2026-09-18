@@ -1,5 +1,5 @@
 import { TOPIC_SUGGESTION_MIN_DOCS, topicJobPayloadFrom } from '@inwit/dto';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents, type JobRow } from '../db/schema.js';
 import { findOwnedDocument } from '../documents/document.service.js';
@@ -28,7 +28,7 @@ async function markDigested(id: string): Promise<void> {
   await getDb()
     .update(documents)
     .set({ status: 'digested', failReason: null, updatedAt: new Date() })
-    .where(eq(documents.id, id));
+    .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
 }
 
 async function processOrganize(job: JobRow, topicId: string): Promise<void> {

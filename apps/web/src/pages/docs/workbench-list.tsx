@@ -1,11 +1,11 @@
 import { agentDocumentMetaLabel, docDisplayTitle, type DocumentListItem } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
-import { FilePlus, Loader2, Upload, X } from 'lucide-react';
+import { ChevronDown, FilePlus, Loader2, Plus, Search, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { Chip } from '@/components/chip';
+import { DocumentActions, useDocumentMenu } from '@/components/document-actions';
 import { DocRowSummary } from '@/components/doc-row';
-import { SearchBox, SearchResults, SearchService } from '@/components/search';
+import { SearchPalette, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
 import { formatRelativeTime } from '@/lib/format';
@@ -40,10 +40,15 @@ const DocStreamRow = observer(function DocStreamRow({
   selected: boolean;
 }) {
   const service = useService(DocsService);
+  const navigate = useNavigate();
+  const menu = useDocumentMenu(doc, (change) => {
+    service.applyDocumentChange(change);
+    if (!change.document && selected) navigate(docsPath(), { replace: true });
+  }, () => navigate(docsPath(doc.id)), () => service.prepareDocumentChange(doc.id));
   const stage = service.stageFor(doc);
   const kind = rowKindTag(doc, stage);
   return (
-    <div className={`row ws-doc-row${selected ? ' is-on' : ''}`}>
+    <div className={`row ws-doc-row${selected ? ' is-on' : ''}`} {...menu}>
       <Link to={docsPath(doc.id)} className="ws-doc-row-link">
         <div className="row-title">
           <span className="t">{docDisplayTitle(doc)}</span>
@@ -120,7 +125,7 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
     );
     io.observe(target);
     return () => io.disconnect();
-  }, [service, service.hasMore, service.documents.length, search.hasQuery]);
+  }, [service, service.hasMore, service.documents.length]);
 
   const sending = service.$model.send.loading;
   const creating = service.$model.createBlank.loading;
@@ -193,8 +198,21 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
     .filter(Boolean)
     .join(' ');
 
+  // 列表头：常驻主题筛选下拉框 + 全局搜索弹窗入口
+  const filterTopic = service.topics.find((topic) => topic.id === service.filterTopicId) ?? null;
+
+  const openSearchPalette = () => {
+    search.openSurface();
+    requestAnimationFrame(() => search.focusInput());
+  };
+
+  const pickFilter = (id: string | null) => {
+    service.closeListFilterMenu();
+    void service.setFilter(id);
+  };
+
   return (
-    <div className="ws-list" onDragOver={swallowFileDrop} onDrop={swallowFileDrop}>
+    <DocumentActions><div className="ws-list" onDragOver={swallowFileDrop} onDrop={swallowFileDrop}>
       {service.importError ? (
         <div className="ws-alert" role="alert">
           <p>{service.importError}</p>
@@ -253,61 +271,127 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
         ) : null}
       </div>
 
-      <div className="ws-search">
-        <SearchBox />
-      </div>
-
-      <div className="ws-filters">
-        <Chip isOn={service.filterTopicId === null} onClick={() => void service.setFilter(null)}>
-          全部
-        </Chip>
-        {service.topics.map((topic) => (
-          <Chip
-            key={topic.id}
-            isOn={service.filterTopicId === topic.id}
-            title={topic.goal ?? topic.title}
-            onClick={() => void service.setFilter(topic.id)}
+      <div className="ws-listhead">
+        <div className="ws-filter-wrap">
+          <button
+            type="button"
+            className={`ws-filter-select${service.filterTopicId ? ' is-filtered' : ''}`}
+            aria-haspopup="listbox"
+            aria-expanded={service.listFilterMenuOpen}
+            onClick={() => service.toggleListFilterMenu()}
           >
-            {topic.title}
-          </Chip>
-        ))}
-        <Chip dashed onClick={() => service.openNewTopic('filter')}>
-          ＋ 主题
-        </Chip>
-      </div>
-
-      <div className="ws-tools">
+            <span className={`dot${service.filterTopicId ? '' : ' is-all'}`} />
+            <span className="lbl">{filterTopic?.title ?? '全部主题'}</span>
+            <span className="cnt">{service.documentsTotal}</span>
+            <ChevronDown width={10} height={10} strokeWidth={2.4} aria-hidden />
+          </button>
+          {service.listFilterMenuOpen ? (
+            <div className="topic-menu ws-filter-menu" role="listbox" aria-label="按主题筛选">
+              <button
+                type="button"
+                role="option"
+                aria-selected={service.filterTopicId === null}
+                className={service.filterTopicId === null ? 'is-on' : undefined}
+                onClick={() => pickFilter(null)}
+              >
+                <span className="dot is-all" />
+                全部主题
+              </button>
+              {service.topics.map((topic) => (
+                <button
+                  key={topic.id}
+                  type="button"
+                  role="option"
+                  aria-selected={service.filterTopicId === topic.id}
+                  className={service.filterTopicId === topic.id ? 'is-on' : undefined}
+                  title={topic.goal ?? topic.title}
+                  onClick={() => pickFilter(topic.id)}
+                >
+                  <span className="dot" />
+                  {topic.title}
+                </button>
+              ))}
+              <div className="topic-menu-sep" />
+              <button
+                type="button"
+                className="topic-menu-new"
+                onClick={() => {
+                  service.closeListFilterMenu();
+                  service.openNewTopic('filter');
+                }}
+              >
+                ＋ 新建主题
+              </button>
+            </div>
+          ) : null}
+        </div>
         <button
           type="button"
-          className="btn btn-ghost"
-          disabled={busy}
-          onClick={() => void createBlank()}
+          className="ws-head-icon"
+          aria-label="搜索"
+          title="搜索（⌘K）"
+          onClick={openSearchPalette}
         >
-          <FilePlus strokeWidth={1.8} />
-          {creating ? '正在新建…' : '新建文档'}
+          <Search width={14} height={14} strokeWidth={1.8} />
         </button>
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={busy}
-          aria-busy={importing}
-          onClick={() => fileRef.current?.click()}
-        >
-          {importing ? <Loader2 className="icon-spin" strokeWidth={1.8} /> : <Upload strokeWidth={1.8} />}
-          {importing ? '导入中…' : '导入'}
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".pdf,.docx,.epub,.txt,.md"
-          hidden
-          aria-label="选择要导入的文件"
-          onChange={(event) => {
-            const file = event.target.files?.item(0);
-            event.target.value = '';
-            if (file) void importOne(file);
-          }}
-        />
+        <div className="ws-plus-wrap">
+          <button
+            type="button"
+            className={`ws-head-icon${service.listPlusOpen ? ' is-on' : ''}`}
+            aria-label="新建或导入"
+            title="新建 / 导入"
+            aria-haspopup="menu"
+            aria-expanded={service.listPlusOpen}
+            onClick={() => service.toggleListPlus()}
+          >
+            <Plus width={14} height={14} strokeWidth={1.8} />
+          </button>
+          {service.listPlusOpen ? (
+            <div className="topic-menu ws-plus-menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                disabled={busy}
+                onClick={() => {
+                  service.closeListPlus();
+                  void createBlank();
+                }}
+              >
+                <FilePlus width={14} height={14} strokeWidth={1.8} />
+                {creating ? '正在新建…' : '新建文档'}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={busy}
+                aria-busy={importing}
+                onClick={() => {
+                  service.closeListPlus();
+                  fileRef.current?.click();
+                }}
+              >
+                {importing ? (
+                  <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+                ) : (
+                  <Upload width={14} height={14} strokeWidth={1.8} />
+                )}
+                {importing ? '导入中…' : '导入文件'}
+              </button>
+            </div>
+          ) : null}
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".pdf,.docx,.epub,.txt,.md"
+            hidden
+            aria-label="选择要导入的文件"
+            onChange={(event) => {
+              const file = event.target.files?.item(0);
+              event.target.value = '';
+              if (file) void importOne(file);
+            }}
+          />
+        </div>
       </div>
 
       <div
@@ -318,51 +402,46 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        {search.hasQuery ? (
-          <SearchResults />
-        ) : (
-          <>
-            {importing ? (
-              <p className="ws-importing">
-                <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
-                正在上传 {service.importingName}
-                {uploadPercent !== null ? ` ${uploadPercent}%` : ''}
-                {service.uploadingDocumentId ? (
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={service.cancelingId === service.uploadingDocumentId}
-                    onClick={() => {
-                      const id = service.uploadingDocumentId;
-                      if (id) void service.cancelImport(id);
-                    }}
-                  >
-                    取消
-                  </button>
-                ) : null}
-              </p>
+        {importing ? (
+          <p className="ws-importing">
+            <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+            正在上传 {service.importingName}
+            {uploadPercent !== null ? ` ${uploadPercent}%` : ''}
+            {service.uploadingDocumentId ? (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={service.cancelingId === service.uploadingDocumentId}
+                onClick={() => {
+                  const id = service.uploadingDocumentId;
+                  if (id) void service.cancelImport(id);
+                }}
+              >
+                取消
+              </button>
             ) : null}
-            {service.documents.length === 0 && !service.$model.boot.loading && !service.$model.loadDocuments.loading && !importing ? (
-              <p className="hint">这张纸还是空的。扔一句话进来。</p>
-            ) : null}
-            {service.documents.map((doc) => (
-              <DocStreamRow key={doc.id} doc={doc} selected={doc.id === selectedId} />
-            ))}
-            {service.hasMore ? (
-              <div ref={moreRef} className="ws-more">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={service.$model.loadMore.loading}
-                  onClick={() => void service.loadMore()}
-                >
-                  {service.$model.loadMore.loading ? '载入中…' : '更早的文档'}
-                </button>
-              </div>
-            ) : null}
-          </>
-        )}
+          </p>
+        ) : null}
+        {service.documents.length === 0 && !service.$model.boot.loading && !service.$model.loadDocuments.loading && !importing ? (
+          <p className="hint">这张纸还是空的。扔一句话进来。</p>
+        ) : null}
+        {service.documents.map((doc) => (
+          <DocStreamRow key={doc.id} doc={doc} selected={doc.id === selectedId} />
+        ))}
+        {service.hasMore ? (
+          <div ref={moreRef} className="ws-more">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={service.$model.loadMore.loading}
+              onClick={() => void service.loadMore()}
+            >
+              {service.$model.loadMore.loading ? '载入中…' : '更早的文档'}
+            </button>
+          </div>
+        ) : null}
       </div>
-    </div>
+      <SearchPalette />
+    </div></DocumentActions>
   );
 });

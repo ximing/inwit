@@ -12,6 +12,28 @@
 .topic-pick .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .topic-pick .dot.is-off { background: var(--ink-4); }
 .topic-pick-wrap { position: relative; }
+
+/* 题区 kicker 形态：金色小字引导线，无按钮感；字号与卡片栏头部「本文」一致 */
+.topic-pick.is-kicker {
+  height: auto;
+  padding: 3px 4px;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  max-width: 100%;
+}
+.topic-pick.is-kicker::before {
+  content: '';
+  width: 18px;
+  height: 1.5px;
+  background: currentColor;
+  flex: none;
+}
+.topic-pick.is-kicker .dot { display: none; }
+.topic-pick.is-kicker:hover { background: none; color: var(--gold); opacity: 0.75; }
+
 .topic-menu {
   position: absolute;
   top: calc(100% + 6px);

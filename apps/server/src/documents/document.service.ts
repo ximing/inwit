@@ -1,4 +1,6 @@
 import type {
+  ArchiveListQuery,
+  ArchivedDocumentsResponse,
   CardQuestion,
   CreateChatInput,
   CreateDocumentInput,
@@ -16,8 +18,9 @@ import type {
   Paginated,
   UpdateDocumentInput,
 } from '@inwit/dto';
-import { and, asc, count, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, like, lte, sql, type SQL } from 'drizzle-orm';
 import { toPublicCard, toPublicQuestion } from '../cards/card.mapper.js';
+import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import {
   annotations,
@@ -32,19 +35,20 @@ import {
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { toPublicJob } from '../jobs/jobs.service.js';
-import { cancelPendingDocumentJobs, enqueueJob } from '../jobs/queue.js';
+import { cancelDocumentJobs, enqueueJob } from '../jobs/queue.js';
 import { requireWritableMapNode } from '../maps/map.service.js';
 import { ocrPayloadForRetry } from '../ocr/ocr-logic.js';
 import {
   tryDeleteAnnotationFromIndex,
   tryDeleteDocumentFromIndex,
+  tryIndexAnnotation,
   tryIndexDocument,
 } from '../retrieval/pipeline.js';
-import { deletePrefix, isStorageConfigured, presignGet, presignPut } from '../storage/client.js';
+import { deletePrefixExcept, isStorageConfigured, presignGet, presignPut } from '../storage/client.js';
 import { getOwnedTopic } from '../topics/topic.service.js';
 import { logger } from '../utils/logger.js';
 import { EMPTY_PM_DOC, textToParagraphDoc } from './content-json.js';
-import { isBlankDocumentContent, shouldEnqueueDigest } from './document-logic.js';
+import { isBlankDocumentContent, planDigestOnSave, type DigestPlan } from './document-logic.js';
 import { retryJobKindForDocument } from './extract-logic.js';
 import { excerptKeyFor, validateExcerptUpload } from './excerpt-logic.js';
 import { documentObjectPrefix } from './import-logic.js';
@@ -69,6 +73,7 @@ export function toPublicDocument(row: DocumentRow): Document {
     pageCount: row.pageCount ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    deletedAt: row.deletedAt ? row.deletedAt.toISOString() : null,
   };
 }
 
@@ -76,13 +81,24 @@ export async function findOwnedDocument(userId: string, id: string): Promise<Doc
   const [row] = await getDb()
     .select()
     .from(documents)
-    .where(and(eq(documents.id, id), eq(documents.userId, userId)))
+    .where(and(eq(documents.id, id), eq(documents.userId, userId), isNull(documents.deletedAt)))
     .limit(1);
   return row ?? null;
 }
 
 export async function getOwnedDocument(userId: string, id: string): Promise<DocumentRow> {
   const row = await findOwnedDocument(userId, id);
+  if (!row) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
+  return row;
+}
+
+/** Ownership check that also sees archived documents (回收站 restore/destroy paths). */
+export async function getOwnedDocumentAny(userId: string, id: string): Promise<DocumentRow> {
+  const [row] = await getDb()
+    .select()
+    .from(documents)
+    .where(and(eq(documents.id, id), eq(documents.userId, userId)))
+    .limit(1);
   if (!row) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
   return row;
 }
@@ -100,6 +116,8 @@ export async function createDocument(
   await assertWritableTopic(userId, input.topicId);
 
   const blank = isBlankDocumentContent(input.contentJson);
+  // Editor documents are still being written; digest once the user pauses.
+  const digestDelayMs = !blank && input.source === 'editor' ? config.DIGEST_IDLE_DELAY_MS : 0;
 
   const document = await getDb().transaction(async (tx) => {
     const [row] = await tx
@@ -119,11 +137,13 @@ export async function createDocument(
         userId,
         type: 'digest',
         payload: { documentId: row.id },
+        ...(digestDelayMs > 0 ? { runAt: new Date(Date.now() + digestDelayMs) } : {}),
       });
     }
     return row;
   });
-  if (!blank) await tryIndexDocument(document);
+  // A delayed digest indexes the document when it finishes; don't embed drafts.
+  if (!blank && digestDelayMs === 0) await tryIndexDocument(document);
   return toPublicDocument(document);
 }
 
@@ -176,7 +196,11 @@ export async function listDocuments(
   query: ListDocumentsQuery,
   kind: 'document' | 'weekly_report' = 'document',
 ): Promise<Paginated<DocumentListItem>> {
-  const conditions: SQL[] = [eq(documents.userId, userId), eq(documents.kind, kind)];
+  const conditions: SQL[] = [
+    eq(documents.userId, userId),
+    eq(documents.kind, kind),
+    isNull(documents.deletedAt),
+  ];
   if (query.topicId !== undefined) conditions.push(eq(documents.topicId, query.topicId));
   if (query.status !== undefined) conditions.push(eq(documents.status, query.status));
   const where = and(...conditions);
@@ -242,7 +266,7 @@ export async function getDocumentListItemsByIds(
     .from(documents)
     .leftJoin(cardCounts, eq(cardCounts.documentId, documents.id))
     .leftJoin(topics, eq(topics.id, documents.topicId))
-    .where(and(eq(documents.userId, userId), inArray(documents.id, ids)));
+    .where(and(eq(documents.userId, userId), inArray(documents.id, ids), isNull(documents.deletedAt)));
 
   return rows.map((row) => ({
     ...toPublicDocument(row.document),
@@ -263,20 +287,25 @@ export async function updateDocument(
   if (input.topicId) await assertWritableTopic(userId, input.topicId);
 
   const topicChanged = input.topicId !== undefined && input.topicId !== existing.topicId;
-  const becameNonEmpty =
+  const contentChanged =
     input.contentJson !== undefined &&
-    isBlankDocumentContent(existing.contentJson) &&
-    !isBlankDocumentContent(input.contentJson);
+    JSON.stringify(input.contentJson) !== JSON.stringify(existing.contentJson);
+  // Digest planning only matters while a first digest can still be scheduled:
+  // blank content gaining text, or an editor draft with a pending digest job.
+  const needsDigestPlan =
+    input.contentJson !== undefined &&
+    (isBlankDocumentContent(existing.contentJson) || existing.source === 'editor');
 
-  const row = await getDb().transaction(async (tx) => {
-    let enqueueDigest = false;
-    if (becameNonEmpty) {
+  const { row, digestPlanned } = await getDb().transaction(async (tx) => {
+    let plan: DigestPlan = { kind: 'none' };
+    let pendingDigestId: string | null = null;
+    if (needsDigestPlan) {
       const [cardCountRow] = await tx
         .select({ n: count() })
         .from(cards)
         .where(and(eq(cards.userId, userId), eq(cards.documentId, id), isNull(cards.deletedAt)));
-      const [activeDigest] = await tx
-        .select({ id: jobs.id })
+      const digestJobs = await tx
+        .select({ id: jobs.id, status: jobs.status })
         .from(jobs)
         .where(
           and(
@@ -285,43 +314,57 @@ export async function updateDocument(
             inArray(jobs.status, ['pending', 'running']),
             sql`coalesce(${jobs.payload}->>'documentId', ${jobs.payload}->>'captureId') = ${id}`,
           ),
-        )
-        .limit(1);
-      enqueueDigest = shouldEnqueueDigest(
+        );
+      pendingDigestId = digestJobs.find((job) => job.status === 'pending')?.id ?? null;
+      plan = planDigestOnSave({
+        source: existing.source,
         existing,
         input,
-        Number(cardCountRow?.n ?? 0),
-        activeDigest !== undefined,
-      );
+        contentChanged,
+        cardCount: Number(cardCountRow?.n ?? 0),
+        hasPendingDigest: pendingDigestId !== null,
+        hasRunningDigest: digestJobs.some((job) => job.status === 'running'),
+        idleDelayMs: config.DIGEST_IDLE_DELAY_MS,
+      });
     }
 
+    const now = new Date();
     const [updated] = await tx
       .update(documents)
       .set({
         title,
         contentJson,
-        updatedAt: new Date(),
+        updatedAt: now,
         ...(input.topicId !== undefined ? { topicId: input.topicId } : {}),
         ...(topicChanged ? { mapNodeId: null } : {}),
-        ...(enqueueDigest ? { status: 'pending' as const, failReason: null } : {}),
+        ...(plan.kind === 'enqueue' ? { status: 'pending' as const, failReason: null } : {}),
       })
-      .where(and(eq(documents.id, id), eq(documents.userId, userId)))
+      .where(and(eq(documents.id, id), eq(documents.userId, userId), isNull(documents.deletedAt)))
       .returning();
     if (!updated) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
-    if (enqueueDigest) {
+    if (plan.kind === 'enqueue') {
       await enqueueJob(tx, {
         userId,
         type: 'digest',
         payload: { documentId: id },
+        ...(plan.delayMs > 0 ? { runAt: new Date(now.getTime() + plan.delayMs) } : {}),
       });
+    } else if (plan.kind === 'postpone' && pendingDigestId !== null) {
+      // Conditional update: if the worker claimed the job first, the digest
+      // handler re-checks freshness and reschedules itself.
+      await tx
+        .update(jobs)
+        .set({ runAt: new Date(now.getTime() + plan.delayMs), updatedAt: now })
+        .where(and(eq(jobs.id, pendingDigestId), eq(jobs.status, 'pending')));
     }
-    return updated;
+    return { row: updated, digestPlanned: plan.kind !== 'none' };
   });
   const titleChanged = input.title !== undefined && title !== existing.title;
-  const contentChanged =
-    input.contentJson !== undefined &&
-    JSON.stringify(input.contentJson) !== JSON.stringify(existing.contentJson);
-  if (titleChanged || contentChanged || topicChanged) await tryIndexDocument(row);
+  // While a digest is pending it re-indexes on completion; embedding every
+  // intermediate save would burn tokens on drafts.
+  if ((titleChanged || contentChanged || topicChanged) && !digestPlanned) {
+    await tryIndexDocument(row);
+  }
   return toPublicDocument(row);
 }
 
@@ -405,18 +448,111 @@ export async function getDocument(userId: string, id: string): Promise<DocumentD
 }
 
 /**
- * Deletes the document. Cards keep their rows (`cards.document_id ON DELETE SET NULL`)
- * so review history is not destroyed. Pending digest/chat/extract/ocr jobs for this document are cancelled.
- * S3 objects under docs/{userId}/{docId}/ are removed best-effort.
+ * Soft delete (回收站): the document and its annotations are hidden everywhere
+ * and can be restored. Pipeline jobs for the document — pending and running —
+ * are cancelled (running ones settle cooperatively via the worker heartbeat
+ * probe). Cards keep their rows and their documentId; S3 objects stay put
+ * until permanent deletion.
  */
-export async function deleteDocument(userId: string, id: string): Promise<void> {
+export async function archiveDocument(userId: string, id: string): Promise<void> {
   await getOwnedDocument(userId, id);
+  const annotationRows = await getDb()
+    .select({ id: annotations.id })
+    .from(annotations)
+    .where(
+      and(
+        eq(annotations.documentId, id),
+        eq(annotations.userId, userId),
+        isNull(annotations.deletedAt),
+      ),
+    );
+  // One shared timestamp: restore uses it to revive exactly the annotations
+  // archived by this call, leaving earlier user-deleted ones in 回收站.
+  const now = new Date();
+  await getDb().transaction(async (tx) => {
+    await cancelDocumentJobs(tx, userId, id, now);
+    await tx
+      .update(annotations)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(annotations.documentId, id),
+          eq(annotations.userId, userId),
+          isNull(annotations.deletedAt),
+        ),
+      );
+    await tx
+      .update(documents)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(documents.id, id), eq(documents.userId, userId)));
+  });
+  await tryDeleteDocumentFromIndex(id);
+  for (const row of annotationRows) {
+    await tryDeleteAnnotationFromIndex(row.id);
+  }
+}
+
+/** Restore from 回收站: brings back the annotations archived with the document. */
+export async function restoreDocument(userId: string, id: string): Promise<Document> {
+  const row = await getOwnedDocumentAny(userId, id);
+  if (!row.deletedAt) return toPublicDocument(row);
+  const archivedAt = row.deletedAt;
+  const now = new Date();
+  const { restored, restoredAnnotations } = await getDb().transaction(async (tx) => {
+    const [doc] = await tx
+      .update(documents)
+      .set({ deletedAt: null, updatedAt: now })
+      .where(and(eq(documents.id, id), eq(documents.userId, userId)))
+      .returning();
+    if (!doc) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
+    const annotationRows = await tx
+      .update(annotations)
+      .set({ deletedAt: null, updatedAt: now })
+      .where(
+        and(
+          eq(annotations.documentId, id),
+          eq(annotations.userId, userId),
+          eq(annotations.deletedAt, archivedAt),
+        ),
+      )
+      .returning();
+    return { restored: doc, restoredAnnotations: annotationRows };
+  });
+  await tryIndexDocument(restored);
+  for (const annotation of restoredAnnotations) {
+    await tryIndexAnnotation(annotation);
+  }
+  return toPublicDocument(restored);
+}
+
+/** Excerpt keys under the document prefix still referenced by surviving cards. */
+async function excerptKeysReferencedByCards(
+  userId: string,
+  documentId: string,
+): Promise<Set<string>> {
+  const prefix = `${documentObjectPrefix(userId, documentId)}excerpts/`;
+  const rows = await getDb()
+    .select({ imageKey: cards.imageKey })
+    .from(cards)
+    .where(and(eq(cards.userId, userId), like(cards.imageKey, `${prefix}%`)));
+  return new Set(rows.map((row) => row.imageKey).filter((key): key is string => key !== null));
+}
+
+/**
+ * Permanent delete from 回收站 (also used for aborted imports). Cards keep
+ * their rows (`cards.document_id ON DELETE SET NULL`) so review history is
+ * not destroyed; annotations and OCR pages cascade away. S3 objects under
+ * docs/{userId}/{docId}/ are removed best-effort, except excerpts still
+ * referenced by cards.
+ */
+export async function destroyDocument(userId: string, id: string): Promise<void> {
+  await getOwnedDocumentAny(userId, id);
   const annotationRows = await getDb()
     .select({ id: annotations.id })
     .from(annotations)
     .where(and(eq(annotations.documentId, id), eq(annotations.userId, userId)));
   await getDb().transaction(async (tx) => {
-    await cancelPendingDocumentJobs(tx, userId, id);
+    await cancelDocumentJobs(tx, userId, id);
     await tx.delete(documents).where(and(eq(documents.id, id), eq(documents.userId, userId)));
   });
   await tryDeleteDocumentFromIndex(id);
@@ -425,7 +561,8 @@ export async function deleteDocument(userId: string, id: string): Promise<void> 
   }
   if (isStorageConfigured()) {
     try {
-      await deletePrefix(documentObjectPrefix(userId, id));
+      const keepKeys = await excerptKeysReferencedByCards(userId, id);
+      await deletePrefixExcept(documentObjectPrefix(userId, id), keepKeys);
     } catch (err) {
       logger.warn('document.storage_delete_failed', {
         documentId: id,
@@ -433,6 +570,50 @@ export async function deleteDocument(userId: string, id: string): Promise<void> 
       });
     }
   }
+}
+
+export async function listArchivedDocuments(
+  userId: string,
+  query: ArchiveListQuery,
+): Promise<ArchivedDocumentsResponse> {
+  const offset = (query.page - 1) * query.limit;
+  const where = and(eq(documents.userId, userId), isNotNull(documents.deletedAt));
+  const [rows, [totalRow]] = await Promise.all([
+    getDb()
+      .select()
+      .from(documents)
+      .where(where)
+      .orderBy(desc(documents.deletedAt), desc(documents.id))
+      .limit(query.limit)
+      .offset(offset),
+    getDb().select({ value: count() }).from(documents).where(where),
+  ]);
+  return {
+    items: rows.map(toPublicDocument),
+    total: totalRow?.value ?? 0,
+  };
+}
+
+/** Worker sweep: permanently destroy documents whose 回收站 stay expired. */
+export async function purgeExpiredDocuments(now = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - config.RECYCLE_BIN_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await getDb()
+    .select({ id: documents.id, userId: documents.userId })
+    .from(documents)
+    .where(and(isNotNull(documents.deletedAt), lte(documents.deletedAt, cutoff)));
+  let purged = 0;
+  for (const row of rows) {
+    try {
+      await destroyDocument(row.userId, row.id);
+      purged += 1;
+    } catch (err) {
+      logger.error('document.purge_failed', {
+        documentId: row.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return purged;
 }
 
 export async function getDocumentFile(userId: string, id: string): Promise<DocumentFileResponse> {
@@ -487,7 +668,7 @@ export async function retryDocument(userId: string, id: string): Promise<Job> {
     await tx
       .update(documents)
       .set({ status: 'pending', failReason: null, updatedAt: new Date() })
-      .where(and(eq(documents.id, id), eq(documents.userId, userId)));
+      .where(and(eq(documents.id, id), eq(documents.userId, userId), isNull(documents.deletedAt)));
 
     let payload: JobPayload;
     if (kind === 'ocr') {

@@ -133,6 +133,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
         gte(annotations.createdAt, start),
         lt(annotations.createdAt, endExclusive),
         isNull(annotations.deletedAt),
+        isNull(documents.deletedAt),
       ),
     )
     .orderBy(desc(annotations.createdAt))

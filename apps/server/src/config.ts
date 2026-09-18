@@ -77,6 +77,14 @@ export const envSchema = z.object({
   WORKER_CLAIM_LIMIT: z.coerce.number().int().positive().default(5),
   WORKER_STUCK_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
   JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  /**
+   * Idle window before an editor-sourced document is digested. Each save
+   * postpones the pending digest by this much, so a document is only
+   * digested once the user has stopped writing for this long.
+   */
+  DIGEST_IDLE_DELAY_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
+  /** Days a soft-deleted document stays in 回收站 before the worker purges it. */
+  RECYCLE_BIN_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   /** When true, GET /api/search skips hybrid retrieval and uses PG ILIKE. */
   INWIT_SEARCH_FALLBACK: boolEnum.default('false'),
 });

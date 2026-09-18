@@ -6,10 +6,11 @@ import { markDocumentFailed, pipelineDocumentId } from '../documents/document-st
 import { logger } from '../utils/logger.js';
 import { heartbeatJob } from './heartbeat.js';
 import { processJob } from './processors.js';
-import { backoffMs, failureDisposition } from './queue-logic.js';
+import { backoffMs, failureDisposition, RescheduleJobError } from './queue-logic.js';
 
 export { heartbeatJob };
 export { enqueueJob, type EnqueueJobInput, type JobWriter } from './enqueue.js';
+export { RescheduleJobError };
 
 export const BACKOFF_MS = [2_000, 8_000, 32_000] as const;
 
@@ -141,6 +142,14 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
   logger.warn('job.retry', { jobId: job.id, type: job.type, attempts, waitMs: wait, lastError: message });
 }
 
+async function rescheduleJob(job: JobRow, runAt: Date, now: Date): Promise<void> {
+  await getDb()
+    .update(jobs)
+    .set({ status: 'pending', runAt, updatedAt: now })
+    .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
+  logger.info('job.rescheduled', { jobId: job.id, type: job.type, runAt: runAt.toISOString() });
+}
+
 async function processOne(job: JobRow): Promise<void> {
   const started = Date.now();
   try {
@@ -148,6 +157,14 @@ async function processOne(job: JobRow): Promise<void> {
     await markDone(job, new Date());
     logger.info('job.done', { jobId: job.id, type: job.type, ms: Date.now() - started });
   } catch (err) {
+    if (err instanceof RescheduleJobError) {
+      try {
+        await rescheduleJob(job, err.runAt, new Date());
+      } catch (writeErr) {
+        logger.error('job.finalize.failed', writeErr);
+      }
+      return;
+    }
     logger.error('job.process.failed', err);
     try {
       await settleJobFailure(job, err, new Date());
@@ -180,7 +197,14 @@ export async function processDueJobs(now = new Date()): Promise<number> {
   return claimed.length;
 }
 
-export async function cancelPendingDocumentJobs(
+/**
+ * Cancels all pipeline jobs for a document, pending and running alike.
+ * Running jobs settle cooperatively: run-agent-job polls the job row on its
+ * heartbeat and aborts the agent once the row leaves 'running'. The
+ * eq(status,'running') guards in markDone/settleJobFailure make any late
+ * settlement a no-op, and recoverStuckJobs only revives 'running' rows.
+ */
+export async function cancelDocumentJobs(
   db: Pick<Database, 'update'>,
   userId: string,
   documentId: string,
@@ -198,7 +222,7 @@ export async function cancelPendingDocumentJobs(
       and(
         eq(jobs.userId, userId),
         inArray(jobs.type, ['digest', 'chat', 'selection', 'extract', 'ocr']),
-        eq(jobs.status, 'pending'),
+        inArray(jobs.status, ['pending', 'running']),
         sql`coalesce(${jobs.payload}->>'documentId', ${jobs.payload}->>'captureId') = ${documentId}`,
       ),
     )

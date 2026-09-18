@@ -150,6 +150,8 @@ export const documentSchema = z.object({
   pageCount: z.number().int().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** 回收站软删除时间；null = 正常文档。 */
+  deletedAt: z.string().nullable().optional(),
 });
 export type Document = z.infer<typeof documentSchema>;
 
@@ -221,6 +223,13 @@ export const documentListItemSchema = documentSchema.extend({
   topicTitle: z.string().nullable(),
 });
 export type DocumentListItem = z.infer<typeof documentListItemSchema>;
+
+/** 回收站里的文档（settings 回收站页）。 */
+export const archivedDocumentsResponseSchema = z.object({
+  items: z.array(documentSchema),
+  total: z.number().int().nonnegative(),
+});
+export type ArchivedDocumentsResponse = z.infer<typeof archivedDocumentsResponseSchema>;
 
 export const documentCardSchema = cardWithQuestionsSchema.extend({
   review: cardReviewSummarySchema.nullable(),

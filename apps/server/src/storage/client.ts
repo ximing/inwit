@@ -258,6 +258,11 @@ export async function deleteObjects(keys: string[]): Promise<void> {
 }
 
 export async function deletePrefix(prefix: string): Promise<void> {
+  await deletePrefixExcept(prefix, new Set());
+}
+
+/** deletePrefix that keeps the given keys (e.g. excerpts still referenced by cards). */
+export async function deletePrefixExcept(prefix: string, keepKeys: ReadonlySet<string>): Promise<void> {
   const { cfg, client } = getClient();
   let token: string | undefined;
   do {
@@ -270,7 +275,8 @@ export async function deletePrefix(prefix: string): Promise<void> {
     );
     const keys = (listed.Contents ?? [])
       .map((obj) => obj.Key)
-      .filter((key): key is string => typeof key === 'string' && key.length > 0);
+      .filter((key): key is string => typeof key === 'string' && key.length > 0)
+      .filter((key) => !keepKeys.has(key));
     await deleteObjects(keys);
     token = listed.IsTruncated ? listed.NextContinuationToken : undefined;
   } while (token);

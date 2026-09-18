@@ -3,6 +3,7 @@ import { bindServices, observer, useService } from '@rabjs/react';
 import { ChevronDown, ChevronRight, Tags } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { DocumentActions, useDocumentMenu } from '@/components/document-actions';
 import { docSummaryLine } from '@/components/doc-row';
 import { ReaderOverlay } from '@/components/reader/ReaderOverlay';
 import { ReaderService } from '@/components/reader/reader.service';
@@ -470,7 +471,7 @@ const DocsTab = observer(function DocsTab() {
   };
 
   return (
-    <div className="topic-docs">
+    <DocumentActions><div className="topic-docs">
       <div className={`pane-capture${archived ? ' is-disabled' : ''}`}>
         <div className="capture">
           <CaptureEditor
@@ -526,7 +527,7 @@ const DocsTab = observer(function DocsTab() {
           </button>
         </div>
       ) : null}
-    </div>
+    </div></DocumentActions>
   );
 });
 
@@ -540,6 +541,10 @@ function cardExcerpt(doc: DocumentListItem): string | null {
 const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentListItem }) {
   const service = useService(TopicsService);
   const navigate = useNavigate();
+  const menu = useDocumentMenu(doc, (change) => service.applyDocumentChange(change), () => {
+    const to = service.readerNavForDoc(doc.id);
+    if (to) navigate(to);
+  });
   const kind = rowKindTag(doc);
   const excerpt = cardExcerpt(doc);
   const hanging = service.hangingTitle(doc);
@@ -547,6 +552,7 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
     <button
       type="button"
       className="topic-doc-card"
+      {...menu}
       onClick={() => {
         const to = service.readerNavForDoc(doc.id);
         if (to) navigate(to);

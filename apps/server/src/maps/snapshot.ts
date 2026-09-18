@@ -64,7 +64,7 @@ export async function loadTopicMapSnapshot(topicId: string, db: SnapshotDb = get
     const docRows = await db
       .select({ id: documents.id, mapNodeId: documents.mapNodeId })
       .from(documents)
-      .where(inArray(documents.mapNodeId, nodeIds));
+      .where(and(inArray(documents.mapNodeId, nodeIds), isNull(documents.deletedAt)));
     for (const row of docRows) {
       if (!row.mapNodeId) continue;
       const list = documentIdsByNode.get(row.mapNodeId);

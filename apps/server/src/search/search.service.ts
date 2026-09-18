@@ -45,6 +45,7 @@ async function searchDocumentIdsIlike(
     .where(
       and(
         eq(documents.userId, userId),
+        isNull(documents.deletedAt),
         topicEq(documents.topicId, topicId),
         or(
           ilike(documents.title, pattern),
@@ -96,6 +97,7 @@ async function searchAnnotationIdsIlike(
       and(
         eq(annotations.userId, userId),
         isNull(annotations.deletedAt),
+        isNull(documents.deletedAt),
         topicEq(documents.topicId, topicId),
         or(ilike(annotations.note, pattern), ilike(annotations.quote, pattern)),
       ),
@@ -121,6 +123,7 @@ async function idsInTopic(
         and(
           eq(annotations.userId, userId),
           isNull(annotations.deletedAt),
+          isNull(documents.deletedAt),
           eq(documents.topicId, topicId),
           inArray(annotations.id, ids),
         ),
@@ -144,7 +147,14 @@ async function idsInTopic(
   const rows = await getDb()
     .select({ id: documents.id })
     .from(documents)
-    .where(and(eq(documents.userId, userId), eq(documents.topicId, topicId), inArray(documents.id, ids)));
+    .where(
+      and(
+        eq(documents.userId, userId),
+        eq(documents.topicId, topicId),
+        inArray(documents.id, ids),
+        isNull(documents.deletedAt),
+      ),
+    );
   return intersectOrdered(ids, new Set(rows.map((row) => row.id)));
 }
 
@@ -188,7 +198,14 @@ export async function loadAnnotationsByIds(userId: string, ids: string[]): Promi
     })
     .from(annotations)
     .innerJoin(documents, eq(documents.id, annotations.documentId))
-    .where(and(eq(annotations.userId, userId), isNull(annotations.deletedAt), inArray(annotations.id, ids)));
+    .where(
+      and(
+        eq(annotations.userId, userId),
+        isNull(annotations.deletedAt),
+        isNull(documents.deletedAt),
+        inArray(annotations.id, ids),
+      ),
+    );
   const byId = new Map(rows.map((row) => [row.annotation.id, row]));
   const ordered: SearchAnnotation[] = [];
   for (const id of ids) {

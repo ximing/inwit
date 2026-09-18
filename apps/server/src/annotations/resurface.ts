@@ -341,7 +341,13 @@ export async function acceptAnnotationResurface(
   const [document] = await getDb()
     .select({ id: documents.id, topicId: documents.topicId })
     .from(documents)
-    .where(and(eq(documents.id, annotation.documentId), eq(documents.userId, userId)))
+    .where(
+      and(
+        eq(documents.id, annotation.documentId),
+        eq(documents.userId, userId),
+        isNull(documents.deletedAt),
+      ),
+    )
     .limit(1);
   if (!document) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
 

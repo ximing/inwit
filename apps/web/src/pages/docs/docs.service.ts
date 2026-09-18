@@ -1,3 +1,4 @@
+import type { DocumentChange } from '@/components/document-actions.service';
 import { Service } from '@rabjs/react';
 import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
 import {
@@ -87,6 +88,9 @@ export class DocsService extends Service {
   toast: string | null = null;
   topicMenuOpen = false;
   paneTopicMenuOpen = false;
+  /** 列表头：主题筛选下拉 / 新建菜单 的开合 */
+  listFilterMenuOpen = false;
+  listPlusOpen = false;
   newTopicOpen = false;
   newTopicSource: 'capture' | 'filter' | 'pane' = 'capture';
   newTitle = '';
@@ -371,6 +375,24 @@ export class DocsService extends Service {
     this.paneTopicMenuOpen = false;
   }
 
+  toggleListFilterMenu(): void {
+    this.listFilterMenuOpen = !this.listFilterMenuOpen;
+    if (this.listFilterMenuOpen) this.listPlusOpen = false;
+  }
+
+  closeListFilterMenu(): void {
+    this.listFilterMenuOpen = false;
+  }
+
+  toggleListPlus(): void {
+    this.listPlusOpen = !this.listPlusOpen;
+    if (this.listPlusOpen) this.listFilterMenuOpen = false;
+  }
+
+  closeListPlus(): void {
+    this.listPlusOpen = false;
+  }
+
   openNewTopic(source: 'capture' | 'filter' | 'pane'): void {
     this.topicMenuOpen = false;
     this.paneTopicMenuOpen = false;
@@ -400,6 +422,32 @@ export class DocsService extends Service {
 
   dismissImportError(): void {
     this.importService.dismissImportError();
+  }
+
+  async prepareDocumentChange(id: string): Promise<void> {
+    const editor = this.resolve(EditorService);
+    if (editor.id !== id) return;
+    await editor.save();
+    if (editor.saveState === 'error') throw new Error(editor.error ?? '请先保存文档');
+  }
+
+  applyDocumentChange(change: DocumentChange): void {
+    const { id, document: updated, topicTitle } = change;
+    const remove = !updated || (this.filterTopicId !== null && updated.topicId !== this.filterTopicId);
+    const had = this.documents.some((item) => item.id === id);
+    this.documents = remove
+      ? this.documents.filter((item) => item.id !== id)
+      : this.documents.map((item) => item.id === id ? { ...item, ...updated, topicTitle } : item);
+    if (remove && had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
+    if (!updated) {
+      if (this.doc?.id === id) this.closeDoc();
+    } else {
+      if (this.doc?.id === id) this.doc = { ...this.doc, ...updated, topicTitle };
+      this.syncEditorFromRemote(updated);
+      const editor = this.resolve(EditorService);
+      if (editor.id === id) editor.topicId = updated.topicId;
+    }
+    this.syncPolling();
   }
 
   async boot(): Promise<void> {

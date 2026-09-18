@@ -9,6 +9,7 @@ import {
   type AccessTokenLog,
   type ArchivedAnnotation,
   type ArchivedCard,
+  type Document,
   type LlmConfig,
   type LlmProvider,
   type LlmTestResult,
@@ -29,6 +30,11 @@ import {
 import { ApiError, errorMessage } from '@/api/client';
 import { destroyAnnotation, listArchivedAnnotations, restoreAnnotation } from '@/api/annotations';
 import { destroyCard, listArchivedCards, restoreCard } from '@/api/cards';
+import {
+  destroyDocumentPermanently,
+  listArchivedDocuments,
+  restoreDocument,
+} from '@/api/documents';
 import { putViaFetch } from '@/pages/docs/upload-asset';
 import {
   createLlmConfig,
@@ -115,6 +121,11 @@ export class SettingsService extends Service {
   archivedAnnotationsPage = 1;
   archivedAnnotationsLimit = 20;
   archivedAnnotationsError: string | null = null;
+  archivedDocuments: Document[] = [];
+  archivedDocumentsTotal = 0;
+  archivedDocumentsPage = 1;
+  archivedDocumentsLimit = 20;
+  archivedDocumentsError: string | null = null;
   toast: string | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -252,6 +263,7 @@ export class SettingsService extends Service {
       if (this.tokenPane === 'logs') void this.loadAccessTokenLogs();
       void this.loadArchivedCards();
       void this.loadArchivedAnnotations();
+      void this.loadArchivedDocuments();
     } catch (err) {
       this.error = errorMessage(err, '加载模型配置失败');
     }
@@ -424,6 +436,30 @@ export class SettingsService extends Service {
     return this.archivedAnnotationsPage * this.archivedAnnotationsLimit < this.archivedAnnotationsTotal;
   }
 
+  get archivedDocumentsHasPrev(): boolean {
+    return this.archivedDocumentsPage > 1;
+  }
+
+  get archivedDocumentsHasNext(): boolean {
+    return this.archivedDocumentsPage * this.archivedDocumentsLimit < this.archivedDocumentsTotal;
+  }
+
+  async loadArchivedDocuments(page = this.archivedDocumentsPage): Promise<void> {
+    this.archivedDocumentsError = null;
+    const nextPage = Math.max(1, page);
+    try {
+      const result = await listArchivedDocuments({
+        page: nextPage,
+        limit: this.archivedDocumentsLimit,
+      });
+      this.archivedDocuments = result.items;
+      this.archivedDocumentsTotal = result.total;
+      this.archivedDocumentsPage = nextPage;
+    } catch (err) {
+      this.archivedDocumentsError = errorMessage(err, '回收站加载失败');
+    }
+  }
+
   async loadArchivedCards(page = this.archivedCardsPage): Promise<void> {
     this.archivedCardsError = null;
     const nextPage = Math.max(1, page);
@@ -499,6 +535,30 @@ export class SettingsService extends Service {
       await destroyAnnotation(id);
       await this.loadArchivedAnnotations(
         this.archivedPageAfterRemoval(this.archivedAnnotationsPage, this.archivedAnnotations.length),
+      );
+      this.showToast('已彻底删除');
+    } catch (err) {
+      this.showToast(errorMessage(err, '删除失败'));
+    }
+  }
+
+  async restoreArchivedDocument(id: string): Promise<void> {
+    try {
+      await restoreDocument(id);
+      await this.loadArchivedDocuments(
+        this.archivedPageAfterRemoval(this.archivedDocumentsPage, this.archivedDocuments.length),
+      );
+      this.showToast('已恢复');
+    } catch (err) {
+      this.showToast(errorMessage(err, '恢复失败'));
+    }
+  }
+
+  async destroyArchivedDocument(id: string): Promise<void> {
+    try {
+      await destroyDocumentPermanently(id);
+      await this.loadArchivedDocuments(
+        this.archivedPageAfterRemoval(this.archivedDocumentsPage, this.archivedDocuments.length),
       );
       this.showToast('已彻底删除');
     } catch (err) {

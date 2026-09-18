@@ -1,5 +1,5 @@
 import { documentIdFromJobPayload } from '@inwit/dto';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents, type JobRow } from '../db/schema.js';
 import { documentPlainText } from '../documents/content-json.js';
@@ -29,7 +29,7 @@ async function markChatDigested(id: string, answer: string | null, linkHint?: st
       updatedAt: new Date(),
       ...(linkHint !== undefined ? { linkHint } : {}),
     })
-    .where(eq(documents.id, id));
+    .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
 }
 
 export async function processChat(job: JobRow): Promise<void> {

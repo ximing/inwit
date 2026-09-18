@@ -6,6 +6,7 @@ export function TopicPicker({
   topicId,
   open,
   compact = false,
+  kicker = false,
   onToggle,
   onSelect,
   onNew,
@@ -14,6 +15,7 @@ export function TopicPicker({
   topicId: string | null;
   open: boolean;
   compact?: boolean;
+  kicker?: boolean;
   onToggle: () => void;
   onSelect: (id: string | null) => void;
   onNew: () => void;
@@ -24,7 +26,7 @@ export function TopicPicker({
     <div className="topic-pick-wrap">
       <button
         type="button"
-        className="topic-pick"
+        className={`topic-pick${kicker ? ' is-kicker' : ''}`}
         style={compact ? { padding: '0 8px', height: 24, fontSize: 12.5 } : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}

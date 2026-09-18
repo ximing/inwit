@@ -4,9 +4,9 @@ import { ROUTES } from '@/routes';
 import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
+import { DocTopRow } from './doc-toprow';
 import { EditorService } from './editor.service';
 import { PaperEditor } from './paper-editor';
-import { PaneChrome } from './pane-chrome';
 
 export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | null }) {
   const service = useService(DocsService);
@@ -31,10 +31,10 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
 
   return (
     <div className="pane-doc is-editing">
-      <PaneChrome editing docId={docId} />
       <div className="pane-main">
         <div className="pane-scroll">
           <div className="pane-inner">
+            <DocTopRow editing docId={docId} />
             {editor.phase === 'loading' ? (
               <p className="empty">打开这张纸…</p>
             ) : (

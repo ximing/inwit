@@ -1,3 +1,4 @@
+import type { DocumentChange } from '@/components/document-actions.service';
 import { Service } from '@rabjs/react';
 import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
 import type {
@@ -437,6 +438,23 @@ export class TopicsService extends Service {
     }
   }
 
+  applyDocumentChange(change: DocumentChange): void {
+    const { id, document: updated, topicTitle } = change;
+    const remove = !updated || updated.topicId !== this.topicId;
+    const had = this.documents.some((item) => item.id === id);
+    this.documents = remove
+      ? this.documents.filter((item) => item.id !== id)
+      : this.documents.map((item) => item.id === id ? { ...item, ...updated, topicTitle } : item);
+    if (remove && had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
+    if (this.topicId) this.patchItem(this.topicId, { documentCount: this.documentsTotal });
+    if (this.reader.doc?.id === id) {
+      if (!updated) this.reader.close();
+      else this.reader.doc = { ...this.reader.doc, ...updated, topicTitle };
+    }
+    this.syncDocPolling();
+    if (remove) void this.refreshSummary(true);
+  }
+
   async openTopic(id: string | null): Promise<void> {
     if (this.topicId !== id) this.reader.close();
     const gen = ++this.topicLoadGen;
@@ -663,12 +681,22 @@ export class TopicsService extends Service {
     }
   }
 
-  async refreshSummary(): Promise<void> {
-    if (!this.topicId) return;
+  async refreshSummary(refreshMap = false): Promise<void> {
+    const topicId = this.topicId;
+    const gen = this.topicLoadGen;
+    const nodeId = this.selectedNodeId;
+    if (!topicId) return;
     try {
-      const summary = await getTopicMapSummary(this.topicId);
+      const [summary, map, detail] = await Promise.all([
+        getTopicMapSummary(topicId),
+        refreshMap ? getTopicMap(topicId) : Promise.resolve(null),
+        refreshMap && nodeId ? getMapNodeDetail(nodeId) : Promise.resolve(null),
+      ]);
+      if (this.topicId !== topicId || this.topicLoadGen !== gen) return;
       this.summary = summary;
-      this.patchItem(this.topicId, {
+      if (map) this.applyMap(map.nodes);
+      if (detail && this.selectedNodeId === nodeId) this.nodeDetail = detail;
+      this.patchItem(topicId, {
         cardCount: summary.cardCount,
         totalNodes: summary.totalNodes,
         uncoveredNodes: summary.uncoveredNodes,

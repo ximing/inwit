@@ -92,7 +92,13 @@ export function readTopicContextTool(session: DigestSession): AgentTool<typeof r
             mapNodeId: documents.mapNodeId,
           })
           .from(documents)
-          .where(and(eq(documents.userId, session.userId), eq(documents.topicId, params.topicId)))
+          .where(
+            and(
+              eq(documents.userId, session.userId),
+              eq(documents.topicId, params.topicId),
+              isNull(documents.deletedAt),
+            ),
+          )
           .orderBy(asc(documents.createdAt), asc(documents.id));
 
         const map = await getTopicMapFlat(session.userId, params.topicId);
@@ -243,7 +249,13 @@ export function writeFillDocumentTool(session: DigestSession): AgentTool<typeof 
           contentJson,
           updatedAt: new Date(),
         })
-        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId)))
+        .where(
+          and(
+            eq(documents.id, session.documentId),
+            eq(documents.userId, session.userId),
+            isNull(documents.deletedAt),
+          ),
+        )
         .returning();
       if (!row) throw new Error('document not found');
       session.documentWritten = true;

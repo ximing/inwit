@@ -1,0 +1,39 @@
+.document-context-menu {
+  position: fixed;
+  z-index: 1100;
+  min-width: 190px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+.document-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: 13px;
+  text-align: left;
+}
+.document-context-menu button:hover, .document-context-menu button:focus-visible { background: var(--bg-sunken); outline: none; }
+.document-context-menu button svg { width: 15px; height: 15px; stroke-width: 1.8; }
+.document-context-menu button.is-danger { color: var(--danger, #b84343); }
+.document-context-menu button:disabled { opacity: .5; }
+.document-menu-separator { height: 1px; background: var(--line); margin: 4px 6px; }
+.document-context-menu p { max-width: 240px; padding: 8px; font-size: 12px; }
+.document-action-backdrop { position: fixed; inset: 0; z-index: 1110; display: grid; place-items: center; padding: 20px; background: rgb(0 0 0 / 30%); }
+.document-action-dialog { width: min(420px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: 24px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-2); }
+.document-action-dialog h2 { margin: 0 0 20px; font-size: 18px; }
+.document-action-dialog p { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.document-action-dialog label { display: grid; gap: 8px; font-size: 13px; }
+.document-action-dialog input, .document-action-dialog select { width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); }
+.document-action-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px; }
+.document-delete-button { background: var(--danger, #b84343); color: white; }
+.document-action-notice { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 1120; padding: 10px 18px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-2); font-size: 13px; }

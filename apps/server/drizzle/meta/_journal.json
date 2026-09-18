@@ -183,6 +183,13 @@
       "when": 1789657906293,
       "tag": "0025_heavy_cammi",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1789714513606,
+      "tag": "0026_strong_marten_broadcloak",
+      "breakpoints": true
     }
   ]
 }

@@ -71,7 +71,7 @@ export function readDocumentTool(session: DigestSession): AgentTool<typeof readD
       const [row] = await getDb()
         .select()
         .from(documents)
-        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId)))
+        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId), isNull(documents.deletedAt)))
         .limit(1);
       if (!row) throw new Error('document not found');
       const { blocks, numberedView } = numberedBlocksFromDoc(asPmJson(row.contentJson));
@@ -107,7 +107,7 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
       const [document] = await getDb()
         .select()
         .from(documents)
-        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId)))
+        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId), isNull(documents.deletedAt)))
         .limit(1);
       if (!document) throw new Error('document not found');
 
@@ -319,7 +319,7 @@ export function attributeTopicTool(session: DigestSession): AgentTool<typeof att
       const [document] = await getDb()
         .select()
         .from(documents)
-        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId)))
+        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId), isNull(documents.deletedAt)))
         .limit(1);
       if (!document) throw new Error('document not found');
       if (document.topicId) {
@@ -591,7 +591,7 @@ export function setDocumentMetaTool(session: DigestSession): AgentTool<typeof se
       const [row] = await getDb()
         .select({ title: documents.title, description: documents.description })
         .from(documents)
-        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId)))
+        .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId), isNull(documents.deletedAt)))
         .limit(1);
       if (!row) throw new Error('document not found');
       const written = await persistDocumentMeta({

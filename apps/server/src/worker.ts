@@ -10,6 +10,7 @@ import {
 import { config } from './config.js';
 import { pool } from './db/index.js';
 import { pruneAccessTokenLogs } from './auth/access-tokens.js';
+import { purgeExpiredDocuments } from './documents/document.service.js';
 import { drainJobs, processDueJobs, recoverStuckJobs } from './jobs/queue.js';
 import { ensureRetrievalStores } from './retrieval/registry.js';
 import { abortStaleMultipartUploads } from './storage/multipart-sweep.js';
@@ -20,8 +21,10 @@ const inFlight = new Set<Promise<void>>();
 const running = new Set<() => Promise<void>>();
 const ACCESS_TOKEN_LOG_PRUNE_MS = 60 * 60 * 1000;
 const MULTIPART_SWEEP_MS = 60 * 60 * 1000;
+const RECYCLE_BIN_PURGE_MS = 60 * 60 * 1000;
 let lastAccessTokenLogPrune = 0;
 let lastMultipartSweep = 0;
+let lastRecycleBinPurge = 0;
 
 function track(fn: () => Promise<void>): void {
   if (stopping || running.has(fn)) return;
@@ -64,6 +67,15 @@ async function tick(): Promise<void> {
       if (aborted > 0) logger.info('worker.multipart.sweep', { aborted });
     } catch (err) {
       logger.error('worker.multipart.sweep_failed', err);
+    }
+  }
+  if (now - lastRecycleBinPurge >= RECYCLE_BIN_PURGE_MS) {
+    lastRecycleBinPurge = now;
+    try {
+      const purged = await purgeExpiredDocuments();
+      if (purged > 0) logger.info('worker.recycle_bin.purge', { purged });
+    } catch (err) {
+      logger.error('worker.recycle_bin.purge_failed', err);
     }
   }
 }

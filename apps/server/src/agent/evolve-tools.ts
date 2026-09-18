@@ -320,7 +320,13 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
             await getDb()
               .select()
               .from(documents)
-              .where(and(eq(documents.id, parent.documentId), eq(documents.userId, session.userId)))
+              .where(
+                and(
+                  eq(documents.id, parent.documentId),
+                  eq(documents.userId, session.userId),
+                  isNull(documents.deletedAt),
+                ),
+              )
               .limit(1)
           )[0]
         : undefined;

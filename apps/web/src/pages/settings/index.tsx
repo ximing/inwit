@@ -1,6 +1,6 @@
 import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect, useRef } from 'react';
-import { OCR_DEFAULT_MODEL, type LlmProvider } from '@inwit/dto';
+import { OCR_DEFAULT_MODEL, docDisplayTitle, type LlmProvider } from '@inwit/dto';
 import { UserAvatar } from '@/components/user-avatar';
 import { Tag } from '@/components/tag';
 import { formatDate, formatDateTime } from '@/lib/format';
@@ -573,7 +573,96 @@ const SettingsPageContent = observer(function SettingsPageContent() {
         <div className="section" id="archive">
           <div className="section-title">回收站</div>
           <div className="section-lede">
-            删除的卡片和批注会先到这里，可以恢复；彻底删除后无法找回。
+            删除的文档、卡片和批注会先到这里，可以恢复；文档在 30 天后自动彻底删除，彻底删除后无法找回。
+          </div>
+
+          <div className="archive-group">
+            <div className="archive-group-title">文档 · {service.archivedDocumentsTotal}</div>
+            {service.archivedDocumentsError ? (
+              <p className="banner-error" role="alert">
+                {service.archivedDocumentsError}
+              </p>
+            ) : null}
+            {!service.$model.loadArchivedDocuments.loading &&
+            service.archivedDocuments.length === 0 ? (
+              <p className="empty compact">回收站里没有文档。</p>
+            ) : null}
+            {service.archivedDocuments.length > 0 ? (
+              <table className="hist-table">
+                <thead>
+                  <tr>
+                    <th>标题</th>
+                    <th>删除时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {service.archivedDocuments.map((doc) => (
+                    <tr key={doc.id}>
+                      <td>{clipArchiveText(docDisplayTitle(doc))}</td>
+                      <td>{doc.deletedAt ? formatDateTime(doc.deletedAt) : '—'}</td>
+                      <td>
+                        <div className="row-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => void service.restoreArchivedDocument(doc.id)}
+                          >
+                            恢复
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  '彻底删除后文档、批注和原始文件都会被移除，无法恢复，确定吗？',
+                                )
+                              ) {
+                                void service.destroyArchivedDocument(doc.id);
+                              }
+                            }}
+                          >
+                            彻底删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+            {service.archivedDocumentsTotal > 0 ? (
+              <div className="hist-pager">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={!service.archivedDocumentsHasPrev}
+                  onClick={() =>
+                    void service.loadArchivedDocuments(service.archivedDocumentsPage - 1)
+                  }
+                >
+                  上一页
+                </button>
+                <span>
+                  {service.archivedDocumentsPage} /{' '}
+                  {Math.max(
+                    1,
+                    Math.ceil(service.archivedDocumentsTotal / service.archivedDocumentsLimit),
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={!service.archivedDocumentsHasNext}
+                  onClick={() =>
+                    void service.loadArchivedDocuments(service.archivedDocumentsPage + 1)
+                  }
+                >
+                  下一页
+                </button>
+              </div>
+            ) : null}
           </div>
 
           <div className="archive-group">

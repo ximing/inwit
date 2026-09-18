@@ -31,14 +31,20 @@ const ModeSwitch = observer(function ModeSwitch() {
   );
 });
 
-export const PaneChrome = observer(function PaneChrome({
+/**
+ * 文档题区顶行：左侧主题 kicker，右侧弱视觉工具丸（保存状态 / 模式切换 / 关闭）。
+ * 默认 inline 形态放在 .pane-inner 内与正文列对齐；PDF 等无正文列的场景用 bar 形态置顶。
+ */
+export const DocTopRow = observer(function DocTopRow({
   editing,
   docId,
   hideModeSwitch = false,
+  layout = 'inline',
 }: {
   editing: boolean;
   docId: string | null;
   hideModeSwitch?: boolean;
+  layout?: 'inline' | 'bar';
 }) {
   const service = useService(DocsService);
   const editor = useService(EditorService);
@@ -52,17 +58,16 @@ export const PaneChrome = observer(function PaneChrome({
     navigate(ROUTES.docs);
   };
 
+  const showSave = editing && Boolean(editor.saveLabel);
+  const showMode = !hideModeSwitch;
+
   return (
-    <div className="pane-chrome">
-      <button type="button" className="btn btn-ghost" onClick={close}>
-        <X width={14} height={14} strokeWidth={1.8} />
-        关闭
-      </button>
+    <div className={`doc-toprow${layout === 'bar' ? ' is-bar' : ''}`}>
       <TopicPicker
         topics={service.topics}
         topicId={topicId}
         open={service.paneTopicMenuOpen}
-        compact
+        kicker
         onToggle={() => service.togglePaneTopicMenu()}
         onSelect={(id) => {
           if (editing) editor.setTopicId(id);
@@ -71,14 +76,23 @@ export const PaneChrome = observer(function PaneChrome({
         }}
         onNew={() => service.openNewTopic('pane')}
       />
-      {editing && editor.saveLabel ? (
-        <span className={`save-state is-${editor.saveState}`}>
-          {editor.saveState === 'saved' ? <span className="ok">●</span> : null}
-          {editor.saveLabel}
-        </span>
-      ) : null}
       <span className="spacer" />
-      {hideModeSwitch ? null : <ModeSwitch />}
+      <div className="doc-fab">
+        {showSave ? (
+          <>
+            <span className={`save-state is-${editor.saveState}`}>
+              {editor.saveState === 'saved' ? <span className="ok">●</span> : null}
+              {editor.saveLabel}
+            </span>
+            {showMode ? <span className="divider" /> : null}
+          </>
+        ) : null}
+        {showMode ? <ModeSwitch /> : null}
+        <span className="divider" />
+        <button type="button" className="doc-fab-close" onClick={close} title="关闭" aria-label="关闭">
+          <X width={13} height={13} strokeWidth={1.8} />
+        </button>
+      </div>
     </div>
   );
 });

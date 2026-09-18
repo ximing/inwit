@@ -14,7 +14,7 @@ import { ROUTES } from '@/routes';
 import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
-import { PaneChrome } from './pane-chrome';
+import { DocTopRow } from './doc-toprow';
 import { ReadSelectionToolbar } from './selection-toolbar';
 
 const PdfPane = lazy(() => import('./pdf-pane'));
@@ -69,7 +69,7 @@ export const PaneRead = observer(function PaneRead() {
 
   return (
     <div className="pane-doc">
-      <PaneChrome editing={false} docId={doc.id} hideModeSwitch={isPdf} />
+      {isPdf ? <DocTopRow editing={false} docId={doc.id} hideModeSwitch layout="bar" /> : null}
       <div className="pane-main">
         <div className={`pane-scroll${isPdf ? ' is-pdf' : ''}`}>
           {isPdf ? (
@@ -85,6 +85,7 @@ export const PaneRead = observer(function PaneRead() {
             </Suspense>
           ) : (
             <div className="pane-inner">
+              <DocTopRow editing={false} docId={doc.id} />
               <h1 className="pane-title">
                 {docDisplayTitle(doc)}
                 {isReport ? <Tag tone="ai">AI 复盘</Tag> : null}

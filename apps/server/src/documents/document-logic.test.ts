@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { isBlankDocumentContent, shouldEnqueueDigest } from './document-logic.js';
+import { isBlankDocumentContent, planDigestOnSave } from './document-logic.js';
+
+const IDLE_MS = 10 * 60 * 1000;
 
 function para(text: string) {
   if (text.length === 0) return { type: 'doc' as const, content: [{ type: 'paragraph' }] };
@@ -13,8 +15,8 @@ describe('isBlankDocumentContent', () => {
   it('treats empty, whitespace, and zero-width placeholders as blank', () => {
     expect(isBlankDocumentContent(para(''))).toBe(true);
     expect(isBlankDocumentContent(para('   \n\t'))).toBe(true);
-    expect(isBlankDocumentContent(para('\u200b'))).toBe(true);
-    expect(isBlankDocumentContent(para(' \u200b \n'))).toBe(true);
+    expect(isBlankDocumentContent(para('​'))).toBe(true);
+    expect(isBlankDocumentContent(para(' ​ \n'))).toBe(true);
   });
 
   it('treats any visible text as content', () => {
@@ -29,30 +31,129 @@ describe('isBlankDocumentContent', () => {
   });
 });
 
-describe('shouldEnqueueDigest', () => {
+describe('planDigestOnSave', () => {
   const blank = { contentJson: para('') };
-  const zwsp = { contentJson: para('\u200b') };
   const filled = { contentJson: para('过拟合') };
+  const base = {
+    cardCount: 0,
+    hasPendingDigest: false,
+    hasRunningDigest: false,
+    idleDelayMs: IDLE_MS,
+    contentChanged: true,
+  };
 
-  it('enqueues when blank content becomes non-empty and there are no cards or active jobs', () => {
-    expect(shouldEnqueueDigest(blank, { contentJson: para('过拟合是什么') }, 0, false)).toBe(true);
-    expect(shouldEnqueueDigest(zwsp, { contentJson: para('偏差与方差') }, 0)).toBe(true);
+  it('never plans anything without a content patch or when cards exist', () => {
+    expect(
+      planDigestOnSave({ ...base, source: 'editor', existing: blank, input: {} }).kind,
+    ).toBe('none');
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'editor',
+        existing: blank,
+        input: { contentJson: para('过拟合是什么') },
+        cardCount: 1,
+      }).kind,
+    ).toBe('none');
   });
 
-  it('does not enqueue on create-equivalent blanks or title-only patches', () => {
-    expect(shouldEnqueueDigest(blank, { contentJson: para('') }, 0)).toBe(false);
-    expect(shouldEnqueueDigest(blank, { contentJson: para('  \n') }, 0)).toBe(false);
-    expect(shouldEnqueueDigest(blank, {}, 0)).toBe(false);
-    expect(shouldEnqueueDigest(blank, { contentJson: undefined }, 0)).toBe(false);
+  it('enqueues a delayed digest when an editor document gains content', () => {
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'editor',
+        existing: blank,
+        input: { contentJson: para('过拟合是什么') },
+      }),
+    ).toEqual({ kind: 'enqueue', delayMs: IDLE_MS });
   });
 
-  it('does not re-digest a document that already has content', () => {
-    expect(shouldEnqueueDigest(filled, { contentJson: para('过拟合是什么') }, 0)).toBe(false);
-    expect(shouldEnqueueDigest(filled, { contentJson: para('补充一段') }, 0, false)).toBe(false);
+  it('enqueues immediately when a pasted document gains content', () => {
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'paste',
+        existing: blank,
+        input: { contentJson: para('偏差与方差') },
+      }),
+    ).toEqual({ kind: 'enqueue', delayMs: 0 });
   });
 
-  it('skips when cards already exist or a digest job is pending/running', () => {
-    expect(shouldEnqueueDigest(blank, { contentJson: para('过拟合是什么') }, 1, false)).toBe(false);
-    expect(shouldEnqueueDigest(blank, { contentJson: para('过拟合是什么') }, 0, true)).toBe(false);
+  it('does not enqueue on blank-to-blank saves', () => {
+    for (const source of ['editor', 'paste'] as const) {
+      expect(
+        planDigestOnSave({ ...base, source, existing: blank, input: { contentJson: para('') } })
+          .kind,
+      ).toBe('none');
+    }
+  });
+
+  it('postpones instead of enqueueing when a digest is already pending', () => {
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'editor',
+        existing: blank,
+        input: { contentJson: para('过拟合是什么') },
+        hasPendingDigest: true,
+      }),
+    ).toEqual({ kind: 'postpone', delayMs: IDLE_MS });
+  });
+
+  it('leaves a running digest alone', () => {
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'editor',
+        existing: blank,
+        input: { contentJson: para('过拟合是什么') },
+        hasRunningDigest: true,
+      }).kind,
+    ).toBe('none');
+  });
+
+  it('postpones the pending digest while the user keeps writing', () => {
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'editor',
+        existing: filled,
+        input: { contentJson: para('补充一段') },
+        hasPendingDigest: true,
+      }),
+    ).toEqual({ kind: 'postpone', delayMs: IDLE_MS });
+  });
+
+  it('does not postpone for non-editor sources or unchanged content', () => {
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'paste',
+        existing: filled,
+        input: { contentJson: para('补充一段') },
+        hasPendingDigest: true,
+      }).kind,
+    ).toBe('none');
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'editor',
+        existing: filled,
+        input: { contentJson: para('过拟合') },
+        hasPendingDigest: true,
+        contentChanged: false,
+      }).kind,
+    ).toBe('none');
+  });
+
+  it('does not re-digest a document that already has content and no pending job', () => {
+    expect(
+      planDigestOnSave({
+        ...base,
+        source: 'editor',
+        existing: filled,
+        input: { contentJson: para('补充一段') },
+      }).kind,
+    ).toBe('none');
   });
 });

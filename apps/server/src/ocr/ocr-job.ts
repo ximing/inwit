@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { finishExecution, startExecution } from '../agent/executions.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -272,7 +272,7 @@ export async function processOcr(job: JobRow): Promise<void> {
           failReason: null,
           updatedAt: new Date(),
         })
-        .where(and(eq(documents.id, documentId), eq(documents.userId, job.userId)))
+        .where(and(eq(documents.id, documentId), eq(documents.userId, job.userId), isNull(documents.deletedAt)))
         .returning();
       if (!updated) throw new Error('ocr job document disappeared');
       if (!blank) {

@@ -2,7 +2,7 @@ import { documentIdFromJobPayload, type ImportFormat } from '@inwit/dto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { finishExecution, startExecution } from '../agent/executions.js';
 import { getDb } from '../db/index.js';
 import { documents, type DocumentRow, type JobRow } from '../db/schema.js';
@@ -77,7 +77,7 @@ export async function processExtract(job: JobRow): Promise<void> {
           failReason: null,
           updatedAt: new Date(),
         })
-        .where(and(eq(documents.id, documentId), eq(documents.userId, job.userId)))
+        .where(and(eq(documents.id, documentId), eq(documents.userId, job.userId), isNull(documents.deletedAt)))
         .returning();
       if (!updated) throw new Error('extract job document disappeared');
       if (followUp === 'digest') {

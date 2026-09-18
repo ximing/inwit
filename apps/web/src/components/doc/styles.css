@@ -2,7 +2,7 @@
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) {
   font-family: var(--sans);
   font-size: 15.5px;
-  line-height: 1.8;
+  line-height: 1.7;
   color: var(--prose);
   word-break: break-word;
 }
@@ -22,45 +22,52 @@
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) h1 {
   font-size: 22px;
-  line-height: 30px;
-  margin: 32px 0 12px;
+  line-height: 1.35;
+  margin: 24px 0 8px;
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) h2 {
   font-size: 20px;
-  line-height: 28px;
-  margin: 30px 0 12px;
+  line-height: 1.35;
+  margin: 22px 0 8px;
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) h3,
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) h4,
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) h5,
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) h6 {
   font-size: 16px;
-  line-height: 24px;
-  margin: 26px 0 10px;
+  line-height: 1.4;
+  margin: 18px 0 6px;
 }
 
-:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) p { margin: 0 0 18px; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) p { margin: 0 0 10px; }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) p:empty { display: none; }
 
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) ul,
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) ol {
-  margin: 0 0 18px;
-  padding-left: 24px;
+  margin: 0 0 10px;
+  padding-left: 22px;
 }
-:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) li { margin: 4px 0; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) li { margin: 2px 0; }
+/* tiptap 的 li 内必含 p，避免段落间距叠加导致列表松散 */
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) li > p { margin: 0; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) li > p + p { margin-top: 4px; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) li > ul,
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) li > ol { margin: 2px 0 0; }
 
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) hr {
   border: 0;
   border-top: 1px solid var(--line);
-  margin: 0.75em 0;
+  margin: 14px 0;
 }
 
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) blockquote {
-  margin: 0 0 18px;
+  margin: 0 0 10px;
   padding: 2px 0 2px 14px;
   border-left: 2px solid var(--accent);
   color: var(--ink-2);
 }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) blockquote > :last-child,
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) details > :last-child { margin-bottom: 0; }
 
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) a {
   color: var(--accent);
@@ -76,8 +83,8 @@
   border-radius: var(--r-sm);
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) pre {
-  margin: 0.5em 0 1em;
-  padding: 12px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
   background: var(--bg-sunken);
   overflow-x: auto;
   font-family: var(--mono);
@@ -95,13 +102,13 @@
   display: block;
   overflow-x: auto;
   max-width: 100%;
-  margin: 0 0 18px;
+  margin: 0 0 10px;
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) table {
   display: block;
   overflow-x: auto;
   max-width: 100%;
-  margin: 0 0 18px;
+  margin: 0 0 10px;
   border-collapse: collapse;
   font-size: 0.95em;
 }
@@ -113,7 +120,7 @@
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) th,
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) td {
   border: 1px solid var(--line);
-  padding: 8px 12px;
+  padding: 6px 10px;
   text-align: left;
   vertical-align: top;
 }
@@ -131,10 +138,10 @@
   display: block;
   max-width: 100%;
   height: auto;
-  margin: 18px 0;
+  margin: 12px 0;
   border-radius: var(--r-sm);
 }
-.doc-video { margin: 18px 0; }
+.doc-video { margin: 12px 0; }
 .doc-video video { margin: 0; }
 .doc-video-pending {
   min-height: 120px;
@@ -178,8 +185,8 @@
   line-height: 0;
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) details {
-  margin: 0 0 18px;
-  padding: 12px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
   border-radius: var(--r-sm);
   background: var(--bg-sunken);
 }
@@ -187,11 +194,11 @@
   cursor: pointer;
   font-weight: 600;
 }
-:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) dl { margin: 0 0 18px; }
-:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) dt { font-weight: 600; margin-top: 10px; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) dl { margin: 0 0 10px; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) dt { font-weight: 600; margin-top: 6px; }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) dt:first-child { margin-top: 0; }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) dd {
-  margin: 4px 0 0 24px;
+  margin: 2px 0 0 22px;
   color: var(--ink-2);
 }
 

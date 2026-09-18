@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 文档列表头部重设计 v2</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  /* ===== 设计稿脚手架（非产物） ===== */
+  body { padding: 0 0 120px; }
+  .draft-head { max-width: 1240px; margin: 0 auto; padding: 48px 40px 8px; }
+  .draft-head h1 { font-family: var(--serif); font-size: 26px; font-weight: 700; }
+  .draft-head p { font-size: 13.5px; color: var(--ink-3); line-height: 1.7; margin-top: 8px; max-width: 680px; }
+  .draft-head b { color: var(--ink-2); }
+
+  .opt { max-width: 1240px; margin: 40px auto 0; padding: 0 40px; }
+  .opt-head {
+    display: flex; align-items: baseline; gap: 12px;
+    font-family: var(--serif); font-size: 18px; font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .opt-head .badge {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    color: var(--accent-deep); background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    padding: 2px 8px; border-radius: 999px; letter-spacing: 0.04em;
+  }
+  .opt-sub { font-size: 12.5px; color: var(--ink-3); margin-bottom: 14px; line-height: 1.6; }
+  .measure { font-family: var(--mono); font-size: 11px; color: var(--gold); }
+  .opt-notes {
+    margin: 12px 0 0; padding: 0 0 0 18px;
+    font-size: 12.5px; color: var(--ink-3); line-height: 1.8;
+  }
+  .opt-notes b { color: var(--ink-2); font-weight: 600; }
+
+  /* ===== 左栏画布：384px ===== */
+  .col {
+    width: 384px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--bg);
+    overflow: hidden;
+    box-shadow: var(--shadow-2);
+    display: flex;
+    flex-direction: column;
+    height: 560px;
+    position: relative;
+  }
+  .col.short { height: auto; }
+  .col-rows { flex: 1; padding: 2px 10px 20px; overflow: hidden; }
+  .row {
+    display: block;
+    padding: 8px 12px 7px;
+    border-radius: var(--r-md);
+    border: 1px solid transparent;
+    margin-bottom: 2px;
+  }
+  .row.is-on { background: var(--surface); border-color: var(--line); box-shadow: var(--shadow-1); }
+  .row-title {
+    font-family: var(--serif); font-size: 14.5px; font-weight: 600; line-height: 1.4;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .row-title .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row-meta {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 4px; font-size: 11.5px; color: var(--ink-4);
+  }
+  .tag {
+    display: inline-flex; align-items: center;
+    height: 17px; font-size: 10.5px; padding: 0 6px; border-radius: 5px;
+    background: var(--bg-sunken); color: var(--ink-3);
+  }
+
+  /* ===== 共用零件 ===== */
+  .capture {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-1);
+  }
+  .capture-text { padding: 12px 12px 4px; font-size: 14.5px; line-height: 1.5; color: var(--ink-4); min-height: 42px; }
+  .capture-bar { display: flex; align-items: center; gap: 8px; padding: 8px 8px 10px; }
+  .topic-pick {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 30px; padding: 0 10px; border-radius: var(--r-sm);
+    font-size: 13px; color: var(--ink-3); background: none; border: 0; cursor: pointer;
+    min-width: 0; flex: 1; justify-content: flex-start;
+  }
+  .topic-pick .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+  .topic-pick .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .capture-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    height: 30px; padding: 0 12px; border-radius: var(--r-sm);
+    font-size: 12.5px; cursor: pointer; border: 0; background: none; color: var(--ink-3);
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-ghost:hover { background: var(--bg-sunken); color: var(--ink); }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 8px; flex: none;
+    border: 0; background: none; color: var(--ink-3); cursor: pointer;
+    font-size: 13px;
+  }
+  .icon-btn:hover { background: var(--bg-sunken); color: var(--ink); }
+  .icon-btn.is-on { color: var(--accent-deep); background: var(--accent-soft); }
+
+  /* 常驻主题下拉框（核心新零件） */
+  .filter-select {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 30px; padding: 0 8px 0 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    font-size: 12.5px; color: var(--ink-2);
+    cursor: pointer;
+    min-width: 0;
+  }
+  .filter-select:hover { border-color: var(--ink-4); }
+  .filter-select .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+  .filter-select .dot.is-all { background: var(--ink-4); }
+  .filter-select .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filter-select .cnt { color: var(--ink-4); font-size: 11.5px; flex: none; }
+  .filter-select .chev { color: var(--ink-4); font-size: 10px; flex: none; }
+  .filter-select.is-filtered { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent-deep); }
+  .filter-select.is-filtered .cnt { color: var(--accent-deep); opacity: 0.7; }
+
+  /* 下拉展开菜单 */
+  .menu {
+    position: absolute; z-index: 20;
+    min-width: 200px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-2);
+    padding: 6px;
+  }
+  .menu button {
+    display: flex; width: 100%; align-items: center; gap: 8px;
+    padding: 7px 10px; border-radius: var(--r-sm);
+    font-size: 13px; color: var(--ink-2); text-align: left;
+    background: none; border: 0; cursor: pointer;
+  }
+  .menu button:hover { background: var(--bg-sunken); color: var(--ink); }
+  .menu button.is-on { color: var(--accent-deep); background: var(--accent-soft); font-weight: 500; }
+  .menu .menu-sep { height: 1px; background: var(--line-soft); margin: 4px 6px; }
+  .menu .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+  .menu .dot.is-all { background: var(--ink-4); }
+  .menu .menu-new { color: var(--ink-3); }
+  .menu .n { margin-left: auto; font-size: 11px; color: var(--ink-4); }
+
+  /* ============================================================
+     方案 A · 单行：主题下拉 + 图标组
+     ============================================================ */
+  .a-capture { padding: 12px 12px 8px; }
+  .a-bar {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 12px 8px;
+  }
+  .a-bar .filter-select { flex: 1; }
+
+  /* ============================================================
+     方案 B · 两行：标签行 + 全宽主题下拉
+     ============================================================ */
+  .b-capture { padding: 12px 12px 8px; }
+  .b-listhead {
+    display: flex; align-items: center; gap: 2px;
+    padding: 2px 12px 6px;
+  }
+  .b-listhead .lbl {
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em;
+    color: var(--ink-4); margin-right: auto;
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .b-listhead .lbl .n { font-weight: 400; letter-spacing: 0; }
+  .b-select-row { padding: 0 12px 8px; position: relative; }
+  .b-select-row .filter-select { width: 100%; }
+
+  /* ============================================================
+     全局搜索弹窗（⌕ 或 ⌘K 唤起）
+     ============================================================ */
+  .palette-wrap {
+    position: relative;
+    height: 380px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--bg);
+    overflow: hidden;
+    box-shadow: var(--shadow-2);
+  }
+  .palette-mask { position: absolute; inset: 0; background: var(--overlay-scrim, rgba(40,32,20,0.28)); }
+  .palette {
+    position: absolute; top: 40px; left: 50%; transform: translateX(-50%);
+    width: 520px; max-width: calc(100% - 32px);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-3);
+    overflow: hidden;
+  }
+  .palette-input {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 15px; color: var(--ink);
+  }
+  .palette-input .kbd {
+    margin-left: auto; font-size: 11px; color: var(--ink-4);
+    border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px;
+  }
+  .palette-hits { padding: 6px; }
+  .palette-hit {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 8px 10px; border-radius: var(--r-sm);
+  }
+  .palette-hit:hover, .palette-hit.is-on { background: var(--bg-sunken); }
+  .palette-hit .t { font-size: 13.5px; font-weight: 500; color: var(--ink); }
+  .palette-hit .k { font-size: 11px; color: var(--ink-4); flex: none; }
+  .palette-hit mark { background: var(--hl); padding: 0 1px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="draft-head">
+  <h1>文档列表头部重设计 v2</h1>
+  <p>根据反馈调整方向：<b>主题筛选 = 常驻下拉框</b>（不再藏 chips，一眼能看到当前过滤范围）；<b>搜索 = 唤起全局搜索弹窗</b>（点 ⌕ 或按 ⌘K 都打开同一个 palette，检索体验统一）。列表头只剩一层。捕获盒不动。</p>
+</div>
+
+<!-- ============ 方案 A ============ -->
+<section class="opt">
+  <div class="opt-head">方案 A · 单行：主题下拉 + 图标组 <span class="badge">最省空间 · 2 层 ≈ 130px</span></div>
+  <div class="opt-sub">下拉框横向占满一行，右端 ⌕（唤起全局搜索）和 ＋（新建/导入菜单）。「文档·n」计数并进下拉框。</div>
+  <div style="display:flex; gap:24px; flex-wrap:wrap;">
+    <div>
+      <div class="opt-sub" style="margin-bottom:8px"><span class="measure">默认态</span></div>
+      <div class="col">
+        <div class="a-capture">
+          <div class="capture">
+            <div class="capture-text">扔一句话进来，或以问号结尾问 AI…</div>
+            <div class="capture-bar">
+              <button class="topic-pick"><span class="dot"></span><span class="lbl">机器学习</span>▾</button>
+              <div class="capture-actions">
+                <button class="btn btn-ghost">📷</button>
+                <button class="btn btn-ghost">问 AI</button>
+                <button class="btn btn-primary">扔进去</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="a-bar">
+          <button class="filter-select">
+            <span class="dot is-all"></span><span class="lbl">全部主题</span><span class="cnt">23</span><span class="chev">▾</span>
+          </button>
+          <button class="icon-btn" title="搜索（⌘K）">⌕</button>
+          <button class="icon-btn" title="新建 / 导入">＋</button>
+        </div>
+        <div class="col-rows">
+          <div class="row is-on">
+            <div class="row-title"><span class="t">交叉验证入门</span></div>
+            <div class="row-meta"><span class="tag">机器学习</span><span>12 卡</span><span>·</span><span>3 小时前</span></div>
+          </div>
+          <div class="row">
+            <div class="row-title"><span class="t">利率与债券价格为什么反向</span></div>
+            <div class="row-meta"><span class="tag">投资</span><span>8 卡</span><span>·</span><span>昨天</span></div>
+          </div>
+          <div class="row">
+            <div class="row-title"><span class="t">本周复盘：注意力涣散的原因</span></div>
+            <div class="row-meta"><span>4 卡</span><span>·</span><span>3 天前</span></div>
+          </div>
+          <div class="row">
+            <div class="row-title"><span class="t">如何做用户访谈</span></div>
+            <div class="row-meta"><span class="tag">产品</span><span>6 卡</span><span>·</span><span>上周</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="opt-sub" style="margin-bottom:8px"><span class="measure">筛选激活 / 下拉展开</span></div>
+      <div class="col short">
+        <div class="a-capture">
+          <div class="capture">
+            <div class="capture-text">扔一句话进来，或以问号结尾问 AI…</div>
+            <div class="capture-bar">
+              <button class="topic-pick"><span class="dot"></span><span class="lbl">机器学习</span>▾</button>
+              <div class="capture-actions">
+                <button class="btn btn-ghost">📷</button>
+                <button class="btn btn-ghost">问 AI</button>
+                <button class="btn btn-primary">扔进去</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="a-bar" style="position:relative">
+          <button class="filter-select is-filtered">
+            <span class="dot"></span><span class="lbl">机器学习</span><span class="cnt">9</span><span class="chev">▾</span>
+          </button>
+          <button class="icon-btn" title="搜索（⌘K）">⌕</button>
+          <button class="icon-btn" title="新建 / 导入">＋</button>
+          <div class="menu" style="top:36px; left:12px; right:56px; min-width:0">
+            <button><span class="dot is-all"></span>全部主题 <span class="n">23</span></button>
+            <button class="is-on"><span class="dot"></span>机器学习 <span class="n">9</span></button>
+            <button><span class="dot"></span>投资 <span class="n">7</span></button>
+            <button><span class="dot"></span>产品 <span class="n">5</span></button>
+            <div class="menu-sep"></div>
+            <button class="menu-new">＋ 新建主题</button>
+          </div>
+        </div>
+        <div class="col-rows" style="max-height:120px">
+          <div class="row is-on">
+            <div class="row-title"><span class="t">交叉验证入门</span></div>
+            <div class="row-meta"><span class="tag">机器学习</span><span>12 卡</span><span>·</span><span>3 小时前</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="opt-notes">
+    <li><b>下拉框常驻</b>：始终显示当前范围（全部主题 / 某主题 + 条数），激活筛选时变 accent 底色，状态一眼可见。</li>
+    <li><b>下拉菜单</b>：每个主题带文档计数，底部「＋ 新建主题」，复用现有 TopicPicker 菜单的交互。</li>
+    <li><b>⌕ 唤起全局搜索弹窗</b>（见下方弹窗示意），⌘K 行为不变；左栏不再内嵌搜索框和搜索结果，搜索时列表不被挤占。</li>
+    <li>优点：只有一层工具行，是当前所有方案里占用最小、状态最清楚的。</li>
+  </ul>
+</section>
+
+<!-- ============ 方案 B ============ -->
+<section class="opt">
+  <div class="opt-head">方案 B · 两行：标签行 + 全宽下拉 <span class="badge">层级更松 · ≈ 160px</span></div>
+  <div class="opt-sub">上行「文档 · 23 ｜ ⌕ ＋」，下行全宽主题下拉框。下拉框更醒目，适合主题多、经常切换的人。</div>
+  <div class="col short">
+    <div class="b-capture">
+      <div class="capture">
+        <div class="capture-text">扔一句话进来，或以问号结尾问 AI…</div>
+        <div class="capture-bar">
+          <button class="topic-pick"><span class="dot"></span><span class="lbl">机器学习</span>▾</button>
+          <div class="capture-actions">
+            <button class="btn btn-ghost">📷</button>
+            <button class="btn btn-ghost">问 AI</button>
+            <button class="btn btn-primary">扔进去</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="b-listhead">
+      <span class="lbl">文档 <span class="n">· 23</span></span>
+      <button class="icon-btn" title="搜索（⌘K）">⌕</button>
+      <button class="icon-btn" title="新建 / 导入">＋</button>
+    </div>
+    <div class="b-select-row">
+      <button class="filter-select">
+        <span class="dot is-all"></span><span class="lbl">全部主题</span><span class="chev" style="margin-left:auto">▾</span>
+      </button>
+    </div>
+    <div class="col-rows" style="max-height:120px">
+      <div class="row is-on">
+        <div class="row-title"><span class="t">交叉验证入门</span></div>
+        <div class="row-meta"><span class="tag">机器学习</span><span>12 卡</span><span>·</span><span>3 小时前</span></div>
+      </div>
+    </div>
+  </div>
+  <ul class="opt-notes">
+    <li>与 A 的零件完全相同，只是下拉框独占一行、图标回到标签行。</li>
+    <li>优点：下拉框点击区域大、长主题名不会被挤；缺点：多占 30px。</li>
+  </ul>
+</section>
+
+<!-- ============ 全局搜索弹窗 ============ -->
+<section class="opt">
+  <div class="opt-head">全局搜索弹窗（两个方案共用） <span class="badge">复用 ⌘K palette</span></div>
+  <div class="opt-sub">点 ⌕ 与按 ⌘K 打开同一个弹窗：大输入框 + 结果列表（文档/卡片混排、关键字高亮），回车直达。左栏内不再出现搜索结果。</div>
+  <div class="palette-wrap">
+    <div class="palette-mask"></div>
+    <div class="palette">
+      <div class="palette-input">⌕ <span style="color:var(--ink)">交叉验证</span> <span class="kbd">esc</span></div>
+      <div class="palette-hits">
+        <div class="palette-hit is-on"><span class="k">文档</span><span class="t"><mark>交叉验证</mark>入门</span></div>
+        <div class="palette-hit"><span class="k">卡片</span><span class="t">为什么 <mark>交叉验证</mark> 比单次划分更稳？</span></div>
+        <div class="palette-hit"><span class="k">文档</span><span class="t">模型评估笔记：<mark>交叉验证</mark>与留出法</span></div>
+        <div class="palette-hit"><span class="k">卡片</span><span class="t">k 折 <mark>交叉验证</mark> 中 k 的常见取值</span></div>
+      </div>
+    </div>
+  </div>
+  <ul class="opt-notes">
+    <li>实现上直接复用现有 <span class="measure">SearchPalette</span> 组件（today 页已在用），左栏 ⌕ 按钮和 ⌘K 都改为打开它。</li>
+    <li>检索范围不变（标题/正文/卡片混合检索、RRF 融合），只是入口统一。</li>
+  </ul>
+</section>
+
+</body>
+</html>

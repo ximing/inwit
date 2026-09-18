@@ -82,7 +82,13 @@ export async function applyTopicOutline(opts: {
     const owned = await db
       .select({ id: documents.id, topicId: documents.topicId })
       .from(documents)
-      .where(and(eq(documents.userId, opts.userId), inArray(documents.id, allDocIds)));
+      .where(
+        and(
+          eq(documents.userId, opts.userId),
+          inArray(documents.id, allDocIds),
+          isNull(documents.deletedAt),
+        ),
+      );
     if (owned.length !== allDocIds.length) {
       throw AppError.of(400, 'MAP_ORGANIZE_INVALID', '大纲里有不属于你的资料');
     }

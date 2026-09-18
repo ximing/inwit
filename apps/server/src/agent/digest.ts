@@ -1,8 +1,10 @@
 import { documentIdFromJobPayload } from '@inwit/dto';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { documents, topics, type JobRow } from '../db/schema.js';
 import { findOwnedDocument } from '../documents/document.service.js';
+import { RescheduleJobError } from '../jobs/queue-logic.js';
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
 import { maybeEnqueueTopicSuggest } from '../topics/suggest.js';
 import { logger } from '../utils/logger.js';
@@ -34,7 +36,8 @@ async function markDigested(id: string, extra?: { linkHint?: string | null }): P
       updatedAt: new Date(),
       ...(extra && 'linkHint' in extra ? { linkHint: extra.linkHint ?? null } : {}),
     })
-    .where(eq(documents.id, id));
+    // Skip documents in 回收站: a stale job must not resurrect them.
+    .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
 }
 
 async function verifyDigest(
@@ -100,6 +103,16 @@ export async function processDigest(job: JobRow): Promise<void> {
   if (document.status === 'digested') {
     logger.info('digest.already_done', { jobId: job.id, documentId });
     return;
+  }
+
+  // Editor documents are digested only after an idle window. A save may have
+  // landed after the job was claimed but before its runAt could be postponed;
+  // hand the job back to the queue instead of digesting a draft.
+  if (document.source === 'editor') {
+    const deadline = new Date(document.updatedAt.getTime() + config.DIGEST_IDLE_DELAY_MS);
+    if (deadline.getTime() > Date.now()) {
+      throw new RescheduleJobError(deadline);
+    }
   }
 
   await cleanupDocumentCards(job.userId, documentId);

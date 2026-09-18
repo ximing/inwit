@@ -4,6 +4,7 @@ import { AppError } from '../errors.js';
 import {
   excerptKeyFor,
   isExcerptKeyFor,
+  isExcerptKeyOwnedBy,
   validateExcerptMime,
   validateExcerptUpload,
 } from './excerpt-logic.js';
@@ -93,5 +94,23 @@ describe('isExcerptKeyFor', () => {
       isExcerptKeyFor(`docs/${USER_ID}/${DOC_ID}/excerpts/nested/${FILE_ID}.png`, USER_ID, DOC_ID),
     ).toBe(false);
     expect(isExcerptKeyFor(`docs/${USER_ID}/${DOC_ID}/source.pdf`, USER_ID, DOC_ID)).toBe(false);
+  });
+});
+
+describe('isExcerptKeyOwnedBy', () => {
+  it('accepts excerpt keys under the owner prefix regardless of document', () => {
+    const key = excerptKeyFor(USER_ID, DOC_ID, 'image/png', FILE_ID);
+    expect(isExcerptKeyOwnedBy(key, USER_ID)).toBe(true);
+    const otherDocKey = excerptKeyFor(USER_ID, '33333333-3333-4333-8333-333333333333', 'image/webp', FILE_ID);
+    expect(isExcerptKeyOwnedBy(otherDocKey, USER_ID)).toBe(true);
+  });
+
+  it('rejects other users, traversal, non-excerpt keys, and nested paths', () => {
+    const key = excerptKeyFor(USER_ID, DOC_ID, 'image/png', FILE_ID);
+    expect(isExcerptKeyOwnedBy(key, '33333333-3333-4333-8333-333333333333')).toBe(false);
+    expect(isExcerptKeyOwnedBy(`docs/${USER_ID}/${DOC_ID}/excerpts/../${FILE_ID}.png`, USER_ID)).toBe(false);
+    expect(isExcerptKeyOwnedBy(`docs/${USER_ID}/${DOC_ID}/source.pdf`, USER_ID)).toBe(false);
+    expect(isExcerptKeyOwnedBy(`docs/${USER_ID}/${DOC_ID}/excerpts/nested/${FILE_ID}.png`, USER_ID)).toBe(false);
+    expect(isExcerptKeyOwnedBy(`docs/${USER_ID}/not-a-uuid/excerpts/${FILE_ID}.png`, USER_ID)).toBe(false);
   });
 });

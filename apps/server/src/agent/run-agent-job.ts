@@ -1,7 +1,7 @@
 import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent-core';
 import type { AgentExecutionStep, AgentType } from '@inwit/dto';
 import type { JobRow } from '../db/schema.js';
-import { heartbeatJob } from '../jobs/heartbeat.js';
+import { heartbeatJob, isJobRunning } from '../jobs/heartbeat.js';
 import { modelResponseError, resolveModelFor } from '../llm/pi.js';
 import { logLlmUsage } from '../llm/usage.js';
 import { logger } from '../utils/logger.js';
@@ -150,11 +150,22 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
           }
         });
 
+        let cancelled = false;
         const timeout = setTimeout(() => {
           agent.abort();
         }, RUN_TIMEOUT_MS);
         const heartbeat = setInterval(() => {
           void heartbeatJob(job.id);
+          // Cooperative cancellation: deleting a document (or a manual job
+          // cancel) flips the row out of 'running'; abort the agent instead
+          // of burning model calls on output nobody can use.
+          void isJobRunning(job.id).then((running) => {
+            if (!running && !cancelled) {
+              cancelled = true;
+              logger.info('agent.run_cancelled', { jobId: job.id, agentType: run.agentType });
+              agent.abort();
+            }
+          });
         }, HEARTBEAT_MS);
         heartbeat.unref();
         try {
@@ -171,7 +182,9 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
           // Salvage: a timed-out run may already have produced its output
           // (cards written, answer given). Verify against the domain state
           // before failing — a passing verify settles the job as done.
-          if (failed.stopReason === 'aborted' && run.verify) {
+          // A cancelled run never salvages: the job row is already settled
+          // as cancelled, so there is nothing to rescue.
+          if (failed.stopReason === 'aborted' && run.verify && !cancelled) {
             try {
               const salvaged = await run.verify({ agent, executionId });
               await finishExecution({
@@ -195,6 +208,7 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
           try {
             resultSummary = await verifyOnce();
           } catch (firstErr) {
+            if (cancelled) throw firstErr;
             const nudge =
               run.nudgePrompt === undefined
                 ? null

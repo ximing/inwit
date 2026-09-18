@@ -298,6 +298,8 @@ export async function retryJob(userId: string, id: string): Promise<Job> {
 export async function cancelJob(userId: string, id: string): Promise<Job> {
   await getOwned(userId, id);
   const now = new Date();
+  // Running jobs settle cooperatively: the worker's heartbeat probe notices
+  // the row left 'running' and aborts the agent (see run-agent-job.ts).
   const [row] = await getDb()
     .update(jobs)
     .set({
@@ -306,7 +308,7 @@ export async function cancelJob(userId: string, id: string): Promise<Job> {
       finishedAt: now,
       updatedAt: now,
     })
-    .where(and(eq(jobs.id, id), eq(jobs.userId, userId), eq(jobs.status, 'pending')))
+    .where(and(eq(jobs.id, id), eq(jobs.userId, userId), inArray(jobs.status, ['pending', 'running'])))
     .returning();
   if (!row) throw AppError.of(409, 'JOB_NOT_CANCELABLE');
   return toHydratedJob(userId, row);

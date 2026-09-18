@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 import { documentPlainText } from '../documents/content-json.js';
@@ -47,7 +47,7 @@ export async function persistDocumentMeta(input: {
       ...patch,
       updatedAt: new Date(),
     })
-    .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)))
+    .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId), isNull(documents.deletedAt)))
     .returning({ title: documents.title, description: documents.description });
   return {
     title: row?.title ?? input.existingTitle,
@@ -72,7 +72,7 @@ export async function ensureDocumentMeta(input: {
       contentJson: documents.contentJson,
     })
     .from(documents)
-    .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId)))
+    .where(and(eq(documents.id, input.documentId), eq(documents.userId, input.userId), isNull(documents.deletedAt)))
     .limit(1);
   if (!row) return;
   if (!needsDocumentMeta(row)) return;

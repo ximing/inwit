@@ -240,6 +240,8 @@ export const documents = pgTable(
     pageCount: integer('page_count'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+    /** Soft delete (回收站); non-null rows are hidden from lists and retrieval. */
+    deletedAt: timestamptz('deleted_at'),
   },
   (t) => [
     index('idx_documents_user_created').on(t.userId, t.createdAt),
@@ -247,6 +249,7 @@ export const documents = pgTable(
     index('idx_documents_topic').on(t.topicId),
     index('idx_documents_map_node').on(t.mapNodeId),
     index('idx_documents_user_kind_week').on(t.userId, t.kind, t.reportWeekStart),
+    index('idx_documents_user_deleted').on(t.userId, t.deletedAt),
     enumCheck('documents_kind_check', t.kind, ['document', 'weekly_report']),
     enumCheck('documents_source_check', t.source, DOCUMENT_SOURCES),
     enumCheck('documents_status_check', t.status, DOCUMENT_STATUSES),

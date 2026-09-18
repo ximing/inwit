@@ -87,6 +87,7 @@ export async function countUnattributedDigested(userId: string, now = new Date()
         eq(documents.userId, userId),
         isNull(documents.topicId),
         eq(documents.status, 'digested'),
+        isNull(documents.deletedAt),
         gte(documents.createdAt, cutoff),
       ),
     );
@@ -114,6 +115,7 @@ export async function loadUnattributedPool(
         eq(documents.userId, userId),
         isNull(documents.topicId),
         eq(documents.status, 'digested'),
+        isNull(documents.deletedAt),
         gte(documents.createdAt, cutoff),
       ),
     )
@@ -271,6 +273,7 @@ export async function writeTopicSuggestion(input: {
       and(
         eq(documents.userId, input.userId),
         isNull(documents.topicId),
+        isNull(documents.deletedAt),
         inArray(documents.id, uniqueIds),
       ),
     );
@@ -398,6 +401,7 @@ export async function acceptTopicSuggestion(
           and(
             eq(documents.userId, userId),
             isNull(documents.topicId),
+            isNull(documents.deletedAt),
             inArray(documents.id, content.documentIds),
           ),
         );

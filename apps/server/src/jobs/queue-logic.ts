@@ -1,5 +1,16 @@
 import { AgentTerminalError } from '../agent/terminal-error.js';
 
+/**
+ * Thrown by a job handler to put the job back onto the pending queue at a
+ * later runAt. Not a failure: no lastError, no retry bookkeeping.
+ */
+export class RescheduleJobError extends Error {
+  constructor(public readonly runAt: Date) {
+    super('job rescheduled');
+    this.name = 'RescheduleJobError';
+  }
+}
+
 export type FailureDisposition = 'terminal' | 'exhausted' | 'retry';
 
 /**

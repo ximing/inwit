@@ -200,7 +200,7 @@ async function loadStatsByNode(
   const docRows = await db
     .select({ mapNodeId: documents.mapNodeId, n: count() })
     .from(documents)
-    .where(inArray(documents.mapNodeId, nodeIds))
+    .where(and(inArray(documents.mapNodeId, nodeIds), isNull(documents.deletedAt)))
     .groupBy(documents.mapNodeId);
 
   for (const row of docRows) {
@@ -261,7 +261,13 @@ export async function getMapNodeDetail(userId: string, nodeId: string): Promise<
       updatedAt: documents.updatedAt,
     })
     .from(documents)
-    .where(and(eq(documents.userId, userId), eq(documents.mapNodeId, nodeId)))
+    .where(
+      and(
+        eq(documents.userId, userId),
+        eq(documents.mapNodeId, nodeId),
+        isNull(documents.deletedAt),
+      ),
+    )
     .orderBy(desc(documents.updatedAt), desc(documents.id));
   return {
     node: toPublicMapNode(row, stats),
@@ -334,7 +340,13 @@ export async function placeCardOnMap(
       const [doc] = await tx
         .select()
         .from(documents)
-        .where(and(eq(documents.id, card.documentId), eq(documents.userId, userId)))
+        .where(
+          and(
+            eq(documents.id, card.documentId),
+            eq(documents.userId, userId),
+            isNull(documents.deletedAt),
+          ),
+        )
         .limit(1);
       if (
         doc &&

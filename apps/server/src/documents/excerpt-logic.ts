@@ -57,3 +57,19 @@ export function isExcerptKeyFor(
   if (rest.includes('/')) return false;
   return UUID_FILE.test(rest);
 }
+
+/**
+ * Fallback check for cards whose document was permanently deleted
+ * (`cards.documentId` set to NULL): the excerpt key only has to live under
+ * the owner's `docs/{userId}/` tree with a UUID filename. The card row is
+ * already filtered by userId, so the permission boundary stays per-user.
+ */
+export function isExcerptKeyOwnedBy(key: string, userId: string): boolean {
+  const prefix = `docs/${userId}/`;
+  if (!key.startsWith(prefix) || key.includes('..')) return false;
+  const match = key.slice(prefix.length).match(/^[0-9a-f-]{36}\/excerpts\/(.+)$/i);
+  if (!match) return false;
+  const file = match[1]!;
+  if (file.includes('/')) return false;
+  return UUID_FILE.test(file);
+}

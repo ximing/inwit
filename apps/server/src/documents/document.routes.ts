@@ -1,4 +1,5 @@
 import {
+  archiveListQuerySchema,
   createChatInputSchema,
   createDocumentInputSchema,
   createSelectionCardsInputSchema,
@@ -15,14 +16,17 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/authenticate.js';
 import {
+  archiveDocument,
   createChat,
   createDocument,
-  deleteDocument,
+  destroyDocument,
   enqueueSelectionCards,
   getDocument,
   getDocumentFile,
+  listArchivedDocuments,
   listDocuments,
   requestExcerptUpload,
+  restoreDocument,
   retryDocument,
   updateDocument,
 } from './document.service.js';
@@ -99,6 +103,11 @@ export function registerDocumentRoutes(app: FastifyInstance): void {
     return reply.code(201).send(job);
   });
 
+  app.get('/api/documents/archived', auth, async (req) => {
+    const query = archiveListQuerySchema.parse(req.query ?? {});
+    return listArchivedDocuments(requireUser(req).id, query);
+  });
+
   app.get('/api/documents/:id/file', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     return getDocumentFile(requireUser(req).id, id);
@@ -121,9 +130,22 @@ export function registerDocumentRoutes(app: FastifyInstance): void {
     return updateDocument(requireUser(req).id, id, input);
   });
 
+  /** Soft delete: the document (with its annotations) moves to 回收站. */
   app.delete('/api/documents/:id', auth, async (req, reply) => {
     const { id } = idParamsSchema.parse(req.params);
-    await deleteDocument(requireUser(req).id, id);
+    await archiveDocument(requireUser(req).id, id);
+    return reply.code(204).send();
+  });
+
+  app.post('/api/documents/:id/restore', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    return restoreDocument(requireUser(req).id, id);
+  });
+
+  /** Permanent delete from 回收站; S3 objects are cleaned best-effort. */
+  app.delete('/api/documents/:id/permanent', auth, async (req, reply) => {
+    const { id } = idParamsSchema.parse(req.params);
+    await destroyDocument(requireUser(req).id, id);
     return reply.code(204).send();
   });
 }

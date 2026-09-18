@@ -137,7 +137,13 @@ export async function getLatestWeeklyReport(
     const [doc] = await db
       .select({ id: documents.id, title: documents.title })
       .from(documents)
-      .where(and(eq(documents.id, parsed.documentId), eq(documents.userId, userId)))
+      .where(
+        and(
+          eq(documents.id, parsed.documentId),
+          eq(documents.userId, userId),
+          isNull(documents.deletedAt),
+        ),
+      )
       .limit(1);
     if (doc) {
       return toWeeklyReportLatest({

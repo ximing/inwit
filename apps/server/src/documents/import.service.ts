@@ -22,7 +22,7 @@ import {
   presignUploadPart,
 } from '../storage/client.js';
 import { logger } from '../utils/logger.js';
-import { assertWritableTopic, deleteDocument, getOwnedDocument, toPublicDocument } from './document.service.js';
+import { assertWritableTopic, destroyDocument, getOwnedDocument, toPublicDocument } from './document.service.js';
 import { importSourceKey, isImportSourceKey, titleFromFilename, validateImportFile } from './import-logic.js';
 import { MULTIPART_PART_URL_TTL_SEC, validateCompleteParts, validatePartNumbers } from './multipart-logic.js';
 
@@ -143,5 +143,5 @@ export async function abortImport(
     });
   }
 
-  await deleteDocument(userId, documentId);
+  await destroyDocument(userId, documentId);
 }
