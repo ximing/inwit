@@ -60,6 +60,14 @@ pnpm --filter @inwit/server migrate            # 执行
 - 编辑器是 tiptap（`pages/editor/paper-editor.tsx`）；图标用 lucide-react
 - 文案全中文，语气克制书面；dev 端口 5190，`/api` 代理到 3020
 
+### Web 样式组织规范
+
+- **按功能就近维护**：页面样式放在 `apps/web/src/pages/<功能>/styles.css`；复杂页面按子功能继续拆分，如 `pages/docs/editor.css`、`card-rail.css`、`pdf-pane/styles.css`、`pages/review/reports.css`。组件样式放在对应组件目录的 `styles.css`，或与组件同级的同名 CSS（如 `components/doc-row.css`）；应用骨架样式放在 `shell/styles.css`。
+- **全局边界**：`apps/web/src/styles.css` 只维护主题变量、基础元素/reset、全局可访问性规则，以及按钮、表单、对话框、标签等通用基础样式。禁止向该文件追加页面或业务功能专属样式；跨页面复用的业务组件仍由所属组件目录维护样式。
+- **规则随模块归属**：功能相关的响应式 `@media`、深色主题覆盖、`@keyframes` 和减少动画规则，与该功能的基础样式放在一起。跨模块的组合选择器按归属拆开，避免在全局文件末尾集中堆积适配或补丁。
+- **统一加载入口**：`main.tsx` 只导入 `style-entry.css`，由它使用 `@import` 统一加载全局与模块 CSS。新增样式文件必须在入口登记；全局基础样式先加载，模块之间根据覆盖关系安排顺序，不在路由组件中重复或延迟导入，以免样式依赖页面访问顺序。CSS 文件按模块组织并不提供自动作用域隔离，新增类名应使用功能前缀或所属容器约束。
+- **拆分与验证**：纯样式迁移应保留选择器、声明、媒体查询条件及有效覆盖顺序，尤其注意共享组件、同名选择器和窄屏覆盖。完成后运行 `pnpm --filter @inwit/web build` 与 `git diff --check`；涉及视觉或覆盖关系调整时，检查受影响页面的宽屏/窄屏、浅色/深色表现。
+
 ## DTO 契约
 
 前后端类型都从 `@inwit/dto` 导入。改 API 时：先改 `packages/dto/src/*.ts`（zod schema + index 导出），再同步 server 的 parse/service 和 web 的调用方。DTO 的 types 字段用 `types: "./src/index.ts"`（web 直接吃源码，server 走 dist）。

@@ -7,7 +7,7 @@ import { AuthService } from '@/services/auth.service';
 import { ScreenshotService } from '@/services/screenshot.service';
 import { ThemeService } from '@/services/theme.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
-import '@/styles.css';
+import '@/style-entry.css';
 
 register(AuthService);
 register(ScreenshotService);

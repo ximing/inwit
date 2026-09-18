@@ -1,0 +1,42 @@
+/* ---------- 文档行（T5 仍会用 doc-row） ---------- */
+.doc-row {
+  display: block;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+button.doc-row {
+  width: 100%;
+  text-align: left;
+  background: none;
+}
+.doc-row h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 16.5px;
+  font-weight: 600;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.doc-excerpt {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: 13.5px;
+}
+.doc-digesting,
+.doc-failed {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-4);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.doc-failed { color: var(--accent); }
+.doc-hang { margin: 4px 0 0; color: var(--ink-4); font-size: 12px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .doc-digesting { animation: pulse 1.5s ease-in-out infinite; }
+}

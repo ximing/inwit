@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 复习（重构稿）</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  /* ============================================================
+     复习页重构稿
+     设计原则：一个主角（今日复习），一条时间线（复习节奏），
+     其余信息按「记忆库 → 弱卡 → 设置」逐级降噪。
+     ============================================================ */
+
+  .hub { max-width: 720px; margin: 0 auto; padding: 40px 40px 120px; }
+
+  /* ---------- 页头：标题 + 栏目切换 ---------- */
+  .hub-head { display: flex; align-items: flex-end; gap: 18px; margin-bottom: 26px; }
+  .hub-title { font-family: var(--serif); font-size: 26px; font-weight: 700; letter-spacing: 0.01em; }
+  .hub-date { font-size: 13px; color: var(--ink-3); padding-bottom: 3px; }
+  .hub-tabs { margin-left: auto; display: flex; gap: 4px; background: var(--bg-sunken); border-radius: 999px; padding: 3px; }
+  .hub-tab {
+    height: 28px; padding: 0 14px; border-radius: 999px; font-size: 12.5px;
+    color: var(--ink-3); display: inline-flex; align-items: center; transition: all 0.15s;
+  }
+  .hub-tab:hover { color: var(--ink); }
+  .hub-tab.is-on { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-1); }
+
+  /* ---------- 今日 Hero ---------- */
+  .today {
+    position: relative; overflow: hidden;
+    background:
+      radial-gradient(120% 160% at 100% 0%, rgba(179, 64, 42, 0.06), transparent 55%),
+      linear-gradient(150deg, #fdf4ee, var(--surface) 70%);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-xl);
+    padding: 30px 34px 28px;
+    display: flex; align-items: center; gap: 32px;
+    margin-bottom: 14px;
+  }
+  .today-main { flex: 1; min-width: 0; }
+  .today-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--accent); }
+  .today-count { font-family: var(--serif); margin: 10px 0 4px; line-height: 1.1; }
+  .today-count b { font-size: 44px; font-weight: 700; }
+  .today-count span { font-size: 17px; font-weight: 600; color: var(--ink-2); margin-left: 6px; }
+  .today-sub { font-size: 13px; color: var(--ink-3); }
+  .today-sub b { color: var(--accent-deep); font-weight: 600; }
+  .today-cta { margin-top: 20px; display: flex; align-items: center; gap: 12px; }
+  .today-cta .btn-primary { height: 42px; padding: 0 30px; font-size: 14.5px; border-radius: 10px; }
+  .today-cta .eta { font-size: 12.5px; color: var(--ink-4); }
+
+  /* hero 右侧：连续打卡 */
+  .streak {
+    flex: none; width: 168px; padding: 18px 18px 16px;
+    background: rgba(255, 253, 248, 0.7);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-lg);
+    backdrop-filter: blur(2px);
+  }
+  .streak-top { display: flex; align-items: center; gap: 10px; }
+  .streak-flame {
+    width: 38px; height: 38px; border-radius: 12px; flex: none;
+    background: linear-gradient(150deg, #d0765a, var(--accent));
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+    box-shadow: 0 4px 12px rgba(179, 64, 42, 0.3);
+  }
+  .streak-num { font-family: var(--serif); font-size: 21px; font-weight: 700; line-height: 1.15; }
+  .streak-num small { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+  .streak-best { font-size: 11px; color: var(--ink-4); margin-top: 1px; }
+  .streak-week { display: flex; gap: 5px; margin-top: 12px; }
+  .sw-dot {
+    flex: 1; aspect-ratio: 1; border-radius: 50%;
+    border: 1.5px solid var(--line); display: flex; align-items: center; justify-content: center;
+    font-size: 9px; color: var(--ink-4);
+  }
+  .sw-dot.is-done { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .sw-dot.is-today { border-color: var(--accent); color: var(--accent-deep); font-weight: 700; }
+
+  /* ---------- 记忆库数据带 ---------- */
+  .metrics {
+    display: flex; align-items: stretch;
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg); margin-bottom: 14px; overflow: hidden;
+  }
+  .metric { flex: 1; padding: 16px 20px 14px; position: relative; }
+  .metric + .metric::before {
+    content: ""; position: absolute; left: 0; top: 18px; bottom: 18px; width: 1px; background: var(--line-soft);
+  }
+  .metric-num { font-family: var(--serif); font-size: 24px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .metric-num small { font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+  .metric-num .up { color: var(--green); font-size: 12px; font-family: var(--sans); font-weight: 600; margin-left: 5px; }
+  .metric-label { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+  /* ---------- 复习节奏（过去 7 天 + 未来 7 天 一条时间线） ---------- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg); padding: 20px 24px 18px; margin-bottom: 14px;
+  }
+  .panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 18px; }
+  .panel-title { font-size: 14px; font-weight: 700; }
+  .panel-sub { font-size: 12px; color: var(--ink-4); }
+  .panel-more { margin-left: auto; font-size: 12.5px; color: var(--ink-4); }
+
+  .rhythm { display: flex; gap: 6px; align-items: flex-end; height: 108px; position: relative; }
+  .rhythm::before {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 22px; height: 1px; background: var(--line-soft);
+  }
+  .rh-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; position: relative; }
+  .rh-stack { width: 100%; max-width: 26px; display: flex; flex-direction: column-reverse; border-radius: 5px 5px 0 0; overflow: hidden; }
+  .rh-stack i { display: block; width: 100%; }
+  .rh-good { background: var(--green); }
+  .rh-hazy { background: var(--gold); }
+  .rh-bad { background: #d0765a; }
+  .rh-future {
+    width: 100%; max-width: 26px; border-radius: 5px 5px 0 0;
+    background: var(--accent-soft); border: 1px dashed var(--accent-line); border-bottom: none;
+    display: flex; align-items: flex-start; justify-content: center;
+  }
+  .rh-future b { font-size: 10.5px; color: var(--accent-deep); font-weight: 600; margin-top: 3px; }
+  .rh-day { font-size: 10.5px; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+  .rh-col.is-today .rh-day { color: var(--accent-deep); font-weight: 700; }
+  .rh-col.is-today::after {
+    content: "今天"; position: absolute; top: -4px; font-size: 10px; font-weight: 700;
+    color: #fff; background: var(--accent); border-radius: 4px; padding: 1px 6px; letter-spacing: 0.05em;
+  }
+  .rh-col.is-future { opacity: 0.85; }
+  .rhythm-legend { display: flex; gap: 16px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); font-size: 12px; color: var(--ink-3); }
+  .rhythm-legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .rhythm-legend .sw-future { background: var(--accent-soft); border: 1px dashed var(--accent-line); }
+  .rhythm-legend .hint { margin-left: auto; color: var(--ink-4); }
+
+  /* ---------- 最需要巩固 ---------- */
+  .weak-list { display: flex; flex-direction: column; }
+  .weak-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 4px; border-radius: var(--r-sm);
+    transition: background 0.15s;
+  }
+  .weak-row:hover { background: var(--surface-2); }
+  .weak-row + .weak-row { border-top: 1px solid var(--line-soft); }
+  .weak-heat { display: flex; gap: 3px; flex: none; }
+  .weak-heat i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+  .weak-heat i.is-on { background: #d0765a; }
+  .weak-concept { flex: 1; min-width: 0; font-family: var(--serif); font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .weak-meta { flex: none; font-size: 12px; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+  .weak-arrow { flex: none; color: var(--ink-4); opacity: 0; transition: opacity 0.15s; }
+  .weak-row:hover .weak-arrow { opacity: 1; }
+
+  /* ---------- 复习设置 ---------- */
+  .cfg-head { display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; margin-bottom: 0; }
+  .cfg-head .arrow { margin-left: auto; color: var(--ink-4); transition: transform 0.2s; }
+  .cfg-body { display: none; }
+  .panel.is-open .cfg-body { display: block; }
+  .panel.is-open .cfg-head { margin-bottom: 4px; }
+  .panel.is-open .arrow { transform: rotate(180deg); }
+  .cfg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 28px; margin-top: 16px; }
+  .cfg-item label { display: flex; align-items: baseline; font-size: 13.5px; font-weight: 600; }
+  .cfg-item label .val { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent-deep); font-weight: 700; }
+  .cfg-item .desc { font-size: 12px; color: var(--ink-4); margin-top: 2px; }
+  .cfg-item input[type="range"] { width: 100%; accent-color: var(--accent); margin-top: 8px; }
+  .cfg-steps { display: flex; gap: 6px; margin-top: 8px; }
+  .cfg-step {
+    flex: 1; height: 30px; border-radius: 7px; border: 1px solid var(--line);
+    font-size: 12.5px; color: var(--ink-3); background: var(--surface); transition: all 0.15s;
+  }
+  .cfg-step.is-on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent-deep); font-weight: 600; }
+  .cfg-foot { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+  .cfg-note { font-size: 12px; color: var(--ink-4); margin-right: auto; }
+
+  /* ============================================================
+     复习 Session —— 沉浸式翻牌局
+     顶栏 = 一行进度仪（退出 / 分段进度 / 计数 / 菜单）
+     卡片 = 牌堆，打分后按结果分方向飞出
+     ============================================================ */
+  .stage { max-width: 600px; margin: 0 auto; padding: 24px 28px 36px; min-height: 100vh; display: flex; flex-direction: column; }
+
+  .stage-top { display: flex; align-items: center; gap: 14px; }
+  .stage-exit, .stage-menu {
+    width: 30px; height: 30px; border-radius: 8px; flex: none;
+    color: var(--ink-3); display: inline-flex; align-items: center; justify-content: center;
+    transition: all 0.15s; position: relative;
+  }
+  .stage-exit:hover, .stage-menu:hover { background: var(--bg-sunken); color: var(--ink); }
+  .stage-count { font-size: 12.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; flex: none; }
+
+  /* 分段进度：顶栏的主角 */
+  .segs { flex: 1; display: flex; gap: 4px; }
+  .seg { flex: 1; height: 4px; border-radius: 2px; background: var(--line-soft); overflow: hidden; }
+  .seg i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 2px; transition: width 0.35s ease; }
+  .seg.is-done i { width: 100%; }
+  .seg.is-now i { width: 100%; opacity: 0.35; }
+
+  /* 卡片菜单 */
+  .menu-wrap { position: relative; flex: none; }
+  .menu-pop {
+    position: absolute; right: 0; top: 36px; z-index: 20; min-width: 168px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md);
+    box-shadow: var(--shadow-2); padding: 5px; display: none;
+  }
+  .menu-pop.is-open { display: block; }
+  .menu-pop button {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    padding: 8px 10px; border-radius: 7px; font-size: 13px; color: var(--ink-2); text-align: left;
+  }
+  .menu-pop button:hover { background: var(--bg-sunken); color: var(--ink); }
+  .menu-pop button.is-danger { color: var(--accent-deep); }
+  .menu-pop button.is-danger:hover { background: var(--accent-soft); }
+
+  /* 牌堆 */
+  .deck-zone { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 30px 0 4px; }
+  .deck { position: relative; perspective: 1600px; }
+  .deck-under {
+    position: absolute; inset: 0; border-radius: var(--r-xl);
+    background: var(--surface); border: 1px solid var(--line-soft);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+  .deck-under.d1 { transform: translateY(-10px) scale(0.965); }
+  .deck-under.d2 { transform: translateY(-19px) scale(0.93); opacity: 0.65; }
+  .deck.last-two .d2 { opacity: 0; transform: translateY(0) scale(1); }
+  .deck.last-one .d1, .deck.last-one .d2 { opacity: 0; transform: translateY(0) scale(1); }
+
+  .flip-wrap { position: relative; }
+  .flip-card { position: relative; width: 100%; min-height: 330px; transform-style: preserve-3d; transition: transform 0.55s cubic-bezier(0.34, 1.2, 0.5, 1); cursor: pointer; }
+  .flip-card.is-flipped { transform: rotateY(180deg); }
+  .flip-face {
+    position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-xl);
+    box-shadow: var(--shadow-2); padding: 22px 30px 26px; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .flip-back { transform: rotateY(180deg); background: var(--surface-2); }
+
+  /* 卡面顶行：出处 */
+  .flip-crumb { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-4); }
+  .flip-crumb .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flip-crumb .src { flex: none; color: var(--ink-3); border-bottom: 1px solid var(--line); }
+  .flip-crumb .src:hover { color: var(--accent-deep); border-color: var(--accent-line); }
+
+  /* 角落水印：问 / 答 */
+  .flip-mark {
+    position: absolute; right: 22px; bottom: 6px;
+    font-family: var(--serif); font-size: 96px; font-weight: 700; line-height: 1;
+    color: var(--ink); opacity: 0.05; pointer-events: none; user-select: none;
+  }
+  .flip-back .flip-mark { color: var(--accent); opacity: 0.1; }
+
+  .flip-kicker { font-size: 11.5px; font-weight: 600; letter-spacing: 0.12em; color: var(--accent); }
+  .flip-q { font-family: var(--serif); font-size: 20px; font-weight: 600; line-height: 1.75; margin-top: 16px; flex: 1; position: relative; }
+  .flip-a { font-family: var(--serif); font-size: 16.5px; line-height: 1.9; color: #2b251c; margin-top: 16px; flex: 1; overflow: auto; position: relative; }
+  .flip-tip { font-size: 12px; color: var(--ink-4); text-align: center; margin-top: 16px; position: relative; }
+
+  /* 打分飞出：忘了←左 / 模糊↑上 / 想起来→右 */
+  .flip-wrap.fly-left { animation: fly-left 0.3s ease-in forwards; }
+  .flip-wrap.fly-right { animation: fly-right 0.3s ease-in forwards; }
+  .flip-wrap.fly-up { animation: fly-up 0.3s ease-in forwards; }
+  @keyframes fly-left { to { opacity: 0; transform: translate(-64px, 12px) rotate(-4deg); } }
+  @keyframes fly-right { to { opacity: 0; transform: translate(64px, 12px) rotate(4deg); } }
+  @keyframes fly-up { to { opacity: 0; transform: translateY(-46px) scale(1.02); } }
+  .flip-wrap.is-entering { animation: card-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.05); }
+  @keyframes card-in { from { opacity: 0; transform: translateY(-10px) scale(0.96); } }
+
+  .grade-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 28px; visibility: hidden; opacity: 0; transform: translateY(8px); transition: all 0.25s ease; }
+  .grade-row.is-show { visibility: visible; opacity: 1; transform: none; }
+  .grade { border-radius: var(--r-md); border: 1.5px solid var(--line); background: var(--surface); padding: 13px 0 11px; text-align: center; transition: all 0.15s; }
+  .grade b { display: block; font-size: 15px; font-weight: 600; }
+  .grade span { display: block; font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+  .grade-again { border-color: #e2b8ac; color: var(--accent-deep); }
+  .grade-again:hover { background: var(--accent-soft); border-color: var(--accent); transform: translateY(-1px); }
+  .grade-hazy { border-color: var(--gold-line); color: var(--gold); }
+  .grade-hazy:hover { background: var(--gold-soft); border-color: var(--gold); transform: translateY(-1px); }
+  .grade-good { border-color: var(--green-line); color: var(--green); }
+  .grade-good:hover { background: var(--green-soft); border-color: var(--green); transform: translateY(-1px); }
+
+  /* 底部键盘提示 */
+  .stage-foot { display: flex; justify-content: center; align-items: center; gap: 14px; font-size: 12px; color: var(--ink-4); margin-top: 26px; }
+  .stage-foot .kbd { margin-right: 4px; }
+  .stage-foot .sep { color: var(--line); }
+
+  /* ---------- 完成态 ---------- */
+  .done { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .done-seal {
+    width: 76px; height: 76px; border-radius: 50%;
+    background: var(--green-soft); border: 1.5px solid var(--green-line);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--green); margin-bottom: 22px;
+  }
+  .done h2 { font-family: var(--serif); font-size: 24px; font-weight: 700; }
+  .done-sub { font-size: 13.5px; color: var(--ink-3); margin-top: 6px; }
+  .done-recap { display: flex; gap: 10px; margin-top: 24px; }
+  .done-chip { display: flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 999px; font-size: 12.5px; background: var(--surface); border: 1px solid var(--line-soft); color: var(--ink-2); }
+  .done-chip .dot { width: 8px; height: 8px; border-radius: 50%; }
+  /* ============================================================
+     学习周报 —— 期刊感：本期 featured + 过刊档案 + 阅读页
+     ============================================================ */
+  .reports { max-width: 720px; margin: 0 auto; padding: 40px 40px 120px; }
+
+  /* 本期 */
+  .rp-latest {
+    position: relative; display: block; overflow: hidden;
+    background:
+      radial-gradient(120% 160% at 100% 0%, rgba(179, 64, 42, 0.06), transparent 55%),
+      linear-gradient(150deg, #fdf4ee, var(--surface) 70%);
+    border: 1px solid var(--accent-line);
+    border-radius: var(--r-xl);
+    padding: 30px 34px 28px; margin-bottom: 14px;
+    transition: box-shadow 0.2s;
+  }
+  .rp-latest:hover { box-shadow: var(--shadow-2); }
+  .rp-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--accent); }
+  .rp-period { font-family: var(--serif); font-size: 30px; font-weight: 700; margin-top: 10px; letter-spacing: 0.01em; }
+  .rp-period small { font-size: 15px; font-weight: 500; color: var(--ink-3); margin-left: 10px; }
+  .rp-lede { font-size: 13.5px; color: var(--ink-3); line-height: 1.75; margin-top: 10px; max-width: 480px; }
+  .rp-read { margin-top: 18px; display: inline-flex; align-items: center; gap: 6px; color: var(--accent-deep); font-size: 13.5px; font-weight: 600; }
+  .rp-read svg { transition: transform 0.15s; }
+  .rp-latest:hover .rp-read svg { transform: translateX(3px); }
+  .rp-seal {
+    position: absolute; right: 30px; top: 28px;
+    width: 58px; height: 58px; border-radius: 50%;
+    border: 1.5px solid var(--accent-line); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-size: 26px; font-weight: 700;
+    transform: rotate(-8deg); opacity: 0.55; user-select: none;
+  }
+
+  /* 过刊档案 */
+  .rp-archive { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 6px 22px; margin-bottom: 14px; }
+  .rp-row { display: flex; align-items: baseline; gap: 18px; padding: 15px 4px; border-radius: var(--r-sm); transition: background 0.15s; }
+  .rp-row + .rp-row { border-top: 1px solid var(--line-soft); }
+  .rp-row:hover { background: var(--surface-2); }
+  .rp-no { flex: none; width: 54px; font-size: 12px; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+  .rp-row-period { flex: none; width: 128px; font-family: var(--serif); font-size: 14.5px; font-weight: 600; }
+  .rp-row-title { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rp-row-arrow { flex: none; color: var(--ink-4); opacity: 0; transition: opacity 0.15s; }
+  .rp-row:hover .rp-row-arrow { opacity: 1; }
+  .rp-more { display: block; margin: 4px auto 0; }
+
+  /* 阅读页 */
+  .rd { max-width: 700px; margin: 0 auto; padding: 32px 40px 120px; }
+  .rd-top { display: flex; align-items: center; }
+  .rd-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-3); }
+  .rd-back:hover { color: var(--ink); }
+  .rd-head { text-align: center; margin: 40px 0 34px; }
+  .rd-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.18em; color: var(--accent); }
+  .rd-title { font-family: var(--serif); font-size: 30px; font-weight: 700; margin-top: 12px; letter-spacing: 0.01em; }
+  .rd-meta { font-size: 12.5px; color: var(--ink-4); margin-top: 10px; }
+  .rd-ornament { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 auto 34px; color: var(--ink-4); }
+  .rd-ornament::before, .rd-ornament::after { content: ""; width: 64px; height: 1px; background: var(--line); }
+  .rd-paper {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl); box-shadow: var(--shadow-1);
+    padding: 46px 54px 50px;
+    font-family: var(--serif); font-size: 16.5px; line-height: 1.9; color: #2b251c;
+  }
+  .rd-paper h2 { font-size: 19px; font-weight: 700; margin: 1.7em 0 0.5em; }
+  .rd-paper h2:first-child { margin-top: 0; }
+  .rd-paper p { margin: 0 0 1em; }
+  .rd-paper a { color: var(--accent-deep); border-bottom: 1px solid var(--accent-line); }
+  .rd-paper a:hover { background: var(--accent-soft); }
+  .rd-paper .nums { display: flex; gap: 0; margin: 1.2em 0 1.4em; border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden; font-family: var(--sans); }
+  .rd-paper .nums div { flex: 1; padding: 12px 16px 10px; text-align: center; position: relative; }
+  .rd-paper .nums div + div::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 1px; background: var(--line-soft); }
+  .rd-paper .nums b { display: block; font-family: var(--serif); font-size: 22px; }
+  .rd-paper .nums span { font-size: 11.5px; color: var(--ink-3); }
+  .rd-colophon { text-align: center; font-size: 12px; color: var(--ink-4); margin-top: 30px; letter-spacing: 0.06em; }
+  .done-cta { margin-top: 28px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <div class="brand-name">Inwit</div>
+      <div class="brand-tag">扔进去，它来消化</div>
+    </div>
+    <nav class="nav">
+      <a class="nav-item" href="today.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 9 9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+        首页
+      </a>
+      <a class="nav-item" href="docs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5a2 2 0 012-2h12a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V5z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        文档
+      </a>
+      <a class="nav-item is-on" href="review-redesign.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 01-4 4H3"/></svg>
+        复习
+        <span class="nav-badge">7</span>
+      </a>
+      <a class="nav-item" href="topics.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7l10 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+        主题
+      </a>
+      <a class="nav-item" href="jobs.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        任务
+      </a>
+      <a class="nav-item" href="settings.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 00-2-1.2L14 3h-4l-.5 2.6a7 7 0 00-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 005 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 002 1.2L10 21h4l.5-2.6a7 7 0 002-1.2l2.4 1 2-3.4-2-1.6c.07-.4.1-.8.1-1.2z"/></svg>
+        设置
+      </a>
+    </nav>
+    <div class="rail-foot">
+      <a class="rail-user" href="settings.html"><span class="avatar">R</span><span>regression@inwit.dev</span></a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- ================= Hub ================= -->
+    <div class="hub" id="hub">
+      <div class="hub-head">
+        <span class="hub-title">复习</span>
+        <span class="hub-date">9月18日 · 周四</span>
+        <div class="hub-tabs">
+          <a class="hub-tab is-on" data-tab="hub">复习概览</a>
+          <a class="hub-tab" data-tab="reports">学习周报</a>
+        </div>
+      </div>
+
+      <!-- 今日 Hero -->
+      <section class="today">
+        <div class="today-main">
+          <span class="today-kicker">今日复习</span>
+          <div class="today-count"><b>7</b><span>张卡片到期</span></div>
+          <div class="today-sub">另有 <b>12</b> 张积压卡片会顺延到明天</div>
+          <div class="today-cta">
+            <button class="btn btn-primary" id="btn-start">开始复习</button>
+            <span class="eta">约 3 分钟</span>
+          </div>
+        </div>
+        <div class="streak">
+          <div class="streak-top">
+            <span class="streak-flame">🔥</span>
+            <div>
+              <div class="streak-num">5 <small>天连续</small></div>
+              <div class="streak-best">最长纪录 12 天</div>
+            </div>
+          </div>
+          <div class="streak-week" title="本周打卡">
+            <span class="sw-dot is-done">一</span>
+            <span class="sw-dot is-done">二</span>
+            <span class="sw-dot is-done">三</span>
+            <span class="sw-dot is-today">四</span>
+            <span class="sw-dot">五</span>
+            <span class="sw-dot">六</span>
+            <span class="sw-dot">日</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 记忆库数据带 -->
+      <section class="metrics">
+        <div class="metric">
+          <div class="metric-num">128<small> 张</small></div>
+          <div class="metric-label">总卡片</div>
+        </div>
+        <div class="metric">
+          <div class="metric-num">46<small> 张</small></div>
+          <div class="metric-label">已掌握 · 间隔 ≥ 21 天</div>
+        </div>
+        <div class="metric">
+          <div class="metric-num">80<small>%</small><span class="up">↑ 6</span></div>
+          <div class="metric-label">近 7 天想起率</div>
+        </div>
+        <div class="metric">
+          <div class="metric-num">23<small> 次</small></div>
+          <div class="metric-label">近 7 天复习</div>
+        </div>
+      </section>
+
+      <!-- 复习节奏：过去 7 天结果 + 未来 7 天预报，一条时间线 -->
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">复习节奏</span>
+          <span class="panel-sub">左边是刷过的，右边是排队的</span>
+        </div>
+        <div class="rhythm">
+          <div class="rh-col"><div class="rh-stack" style="height:62%"><i class="rh-good" style="height:70%"></i><i class="rh-hazy" style="height:20%"></i><i class="rh-bad" style="height:10%"></i></div><span class="rh-day">12日</span></div>
+          <div class="rh-col"><div class="rh-stack" style="height:44%"><i class="rh-good" style="height:75%"></i><i class="rh-hazy" style="height:25%"></i></div><span class="rh-day">13日</span></div>
+          <div class="rh-col"><div class="rh-stack" style="height:78%"><i class="rh-good" style="height:80%"></i><i class="rh-bad" style="height:20%"></i></div><span class="rh-day">14日</span></div>
+          <div class="rh-col"><div class="rh-stack" style="height:30%"><i class="rh-good" style="height:100%"></i></div><span class="rh-day">15日</span></div>
+          <div class="rh-col"><div class="rh-stack" style="height:56%"><i class="rh-good" style="height:70%"></i><i class="rh-hazy" style="height:30%"></i></div><span class="rh-day">16日</span></div>
+          <div class="rh-col"><div class="rh-stack" style="height:66%"><i class="rh-good" style="height:82%"></i><i class="rh-bad" style="height:18%"></i></div><span class="rh-day">17日</span></div>
+          <div class="rh-col is-today"><div class="rh-future" style="height:70%"><b>7</b></div><span class="rh-day">18日</span></div>
+          <div class="rh-col is-future"><div class="rh-future" style="height:42%"><b>4</b></div><span class="rh-day">19日</span></div>
+          <div class="rh-col is-future"><div class="rh-future" style="height:22%"><b>2</b></div><span class="rh-day">20日</span></div>
+          <div class="rh-col is-future"><div class="rh-future" style="height:12%"><b>1</b></div><span class="rh-day">21日</span></div>
+          <div class="rh-col is-future"><div class="rh-future" style="height:4%"></div><span class="rh-day">22日</span></div>
+          <div class="rh-col is-future"><div class="rh-future" style="height:30%"><b>3</b></div><span class="rh-day">23日</span></div>
+          <div class="rh-col is-future"><div class="rh-future" style="height:48%"><b>5</b></div><span class="rh-day">24日</span></div>
+        </div>
+        <div class="rhythm-legend">
+          <span><span class="sw" style="background:var(--green)"></span>想起来了</span>
+          <span><span class="sw" style="background:var(--gold)"></span>模糊</span>
+          <span><span class="sw" style="background:#d0765a"></span>忘了</span>
+          <span><span class="sw sw-future"></span>到期卡片</span>
+          <span class="hint">今天之后的柱子是虚线 —— 还没发生</span>
+        </div>
+      </section>
+
+      <!-- 最需要巩固 -->
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">最需要巩固</span>
+          <span class="panel-sub">近 30 天里忘记或模糊最多的卡片</span>
+        </div>
+        <div class="weak-list">
+          <a class="weak-row">
+            <span class="weak-heat"><i class="is-on"></i><i class="is-on"></i><i class="is-on"></i></span>
+            <span class="weak-concept">k 折交叉验证中 k 的选择对估计的影响</span>
+            <span class="weak-meta">忘了 3 次 · 模糊 2 次</span>
+            <svg class="weak-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+          <a class="weak-row">
+            <span class="weak-heat"><i class="is-on"></i><i class="is-on"></i><i></i></span>
+            <span class="weak-concept">贝叶斯误差与不可约噪声的关系</span>
+            <span class="weak-meta">忘了 2 次 · 模糊 1 次</span>
+            <svg class="weak-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+          <a class="weak-row">
+            <span class="weak-heat"><i class="is-on"></i><i></i><i></i></span>
+            <span class="weak-concept">正则化路径上偏差-方差的此消彼长</span>
+            <span class="weak-meta">模糊 3 次</span>
+            <svg class="weak-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+        </div>
+      </section>
+
+      <!-- 复习设置 -->
+      <section class="panel" id="cfg-panel">
+        <div class="cfg-head" id="cfg-head">
+          <span class="panel-title">复习设置</span>
+          <span class="panel-sub">记忆算法（SM-2）参数，默认适合大多数人</span>
+          <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="cfg-body">
+          <div class="cfg-grid">
+            <div class="cfg-item">
+              <label>每日复习上限 <span class="val">20 张</span></label>
+              <input type="range" min="5" max="100" value="20" />
+              <div class="desc">超过的到期卡会顺延到明天</div>
+            </div>
+            <div class="cfg-item">
+              <label>每日新卡上限 <span class="val">5 张</span></label>
+              <input type="range" min="0" max="30" value="5" />
+              <div class="desc">从没刷过的卡，每天最多混入多少</div>
+            </div>
+            <div class="cfg-item">
+              <label>起始难度（ease）<span class="val">2.5×</span></label>
+              <input type="range" min="130" max="300" value="250" />
+              <div class="desc">越大间隔涨得越快，别轻易调高</div>
+            </div>
+            <div class="cfg-item">
+              <label>“模糊”的后果 <span class="val">间隔 ×1.2</span></label>
+              <input type="range" min="10" max="15" value="12" />
+              <div class="desc">往左更严格（接近重来），往右更宽松</div>
+            </div>
+            <div class="cfg-item" style="grid-column: 1 / -1;">
+              <label>学习步长</label>
+              <div class="cfg-steps">
+                <button class="cfg-step is-on">1 天</button>
+                <button class="cfg-step is-on">3 天</button>
+                <button class="cfg-step is-on">6 天</button>
+                <button class="cfg-step">10 天</button>
+              </div>
+              <div class="desc">新卡连续答对时，间隔按这个阶梯走，之后按 ease 倍增</div>
+            </div>
+          </div>
+          <div class="cfg-foot">
+            <span class="cfg-note">改动只影响之后的调度，不会重排已有卡片</span>
+            <button class="btn btn-ghost" style="height:30px; font-size:12.5px;">恢复默认</button>
+            <button class="btn btn-primary" style="height:32px;">保存</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ================= Session ================= -->
+    <div class="stage" id="session" style="display:none;">
+      <div class="stage-top">
+        <button class="stage-exit" id="btn-exit" title="结束复习（Esc）" aria-label="结束复习">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+        <div class="segs" id="segs"></div>
+        <span class="stage-count" id="stage-count">1 / 7</span>
+        <div class="menu-wrap">
+          <button class="stage-menu" id="btn-menu" aria-label="卡片操作" aria-haspopup="menu">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+          </button>
+          <div class="menu-pop" id="menu-pop" role="menu">
+            <button role="menuitem" class="menu-skip">已熟悉，不复习</button>
+            <button role="menuitem" class="is-danger menu-skip">删除（移入回收站）</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="deck-zone">
+        <div class="deck" id="deck">
+          <div class="deck-under d2"></div>
+          <div class="deck-under d1"></div>
+          <div class="flip-wrap" id="flip-wrap">
+            <div class="flip-card" id="card">
+              <div class="flip-face flip-front">
+                <div class="flip-crumb">
+                  <span class="path" id="crumb"></span>
+                  <a class="src">原文</a>
+                </div>
+                <div class="flip-q" id="q"></div>
+                <div class="flip-tip">点击卡片或按空格翻面</div>
+                <span class="flip-mark" aria-hidden="true">问</span>
+              </div>
+              <div class="flip-face flip-back">
+                <span class="flip-kicker">答案</span>
+                <div class="flip-a" id="a"></div>
+                <div class="flip-tip">想起来了吗？诚实打分，间隔才会准</div>
+                <span class="flip-mark" aria-hidden="true">答</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grade-row" id="grades">
+          <button class="grade grade-again" data-grade="forgot"><b>忘了</b><span>明天再见</span></button>
+          <button class="grade grade-hazy" data-grade="fuzzy"><b>模糊</b><span>间隔 ×1.2</span></button>
+          <button class="grade grade-good" data-grade="good"><b>想起来了</b><span>间隔 ×2.5</span></button>
+        </div>
+      </div>
+
+      <div class="stage-foot">
+        <span><span class="kbd">空格</span>翻面</span>
+        <span class="sep">·</span>
+        <span><span class="kbd">1</span>忘了</span>
+        <span><span class="kbd">2</span>模糊</span>
+        <span><span class="kbd">3</span>想起来了</span>
+        <span class="sep">·</span>
+        <span><span class="kbd">Esc</span>结束</span>
+      </div>
+    </div>
+
+    <!-- ================= 完成态 ================= -->
+    <div class="stage" id="done" style="display:none;">
+      <div class="done">
+        <div class="done-seal">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12.5l5 5L20 6.5"/></svg>
+        </div>
+        <h2>今天刷完了</h2>
+        <p class="done-sub">7 张卡片 · 用时 2 分 40 秒 · 明天到期 <b>4</b> 张</p>
+        <div class="done-recap">
+          <span class="done-chip"><span class="dot" style="background:var(--green)"></span>想起来了 5</span>
+          <span class="done-chip"><span class="dot" style="background:var(--gold)"></span>模糊 1</span>
+          <span class="done-chip"><span class="dot" style="background:#d0765a"></span>忘了 1</span>
+        </div>
+        <div class="done-cta">
+          <button class="btn btn-primary" id="btn-back-hub" style="height:38px; padding:0 24px;">返回复习中心</button>
+        </div>
+      </div>
+    </div>
+    <!-- ================= 学习周报：列表 ================= -->
+    <div class="reports" id="reports" style="display:none;">
+      <div class="hub-head">
+        <span class="hub-title">复习</span>
+        <span class="hub-date">回顾每周，找到值得再练一次的概念</span>
+        <div class="hub-tabs">
+          <a class="hub-tab" data-tab="hub">复习概览</a>
+          <a class="hub-tab is-on" data-tab="reports">学习周报</a>
+        </div>
+      </div>
+
+      <!-- 本期 -->
+      <a class="rp-latest" data-open-report>
+        <span class="rp-kicker">本期周报 · 第 12 期</span>
+        <div class="rp-period">9.15 – 9.21<small>学习复盘</small></div>
+        <p class="rp-lede">这周刷得稳：成功率 82%，比上周高 6 个点。但「k 折交叉验证」连续两周在忘，建议重学里有它的专属回顾。</p>
+        <span class="rp-read">阅读周报
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </span>
+        <span class="rp-seal" aria-hidden="true">报</span>
+      </a>
+
+      <!-- 过刊档案 -->
+      <div class="rp-archive">
+        <a class="rp-row" data-open-report>
+          <span class="rp-no">第 11 期</span>
+          <span class="rp-row-period">9.8 – 9.14</span>
+          <span class="rp-row-title">新卡 14 张，关联边 9 条；贝叶斯误差开始模糊了</span>
+          <svg class="rp-row-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </a>
+        <a class="rp-row" data-open-report>
+          <span class="rp-no">第 10 期</span>
+          <span class="rp-row-period">9.1 – 9.7</span>
+          <span class="rp-row-title">主题地图覆盖率到了 68%；正则化那张卡拆成了两张</span>
+          <svg class="rp-row-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </a>
+        <a class="rp-row" data-open-report>
+          <span class="rp-no">第 9 期</span>
+          <span class="rp-row-period">8.25 – 8.31</span>
+          <span class="rp-row-title">这周只刷了两天，老实说进展不大</span>
+          <svg class="rp-row-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+        </a>
+      </div>
+      <button class="btn btn-secondary rp-more">更早的周报</button>
+    </div>
+
+    <!-- ================= 学习周报：阅读页 ================= -->
+    <div class="rd" id="report-detail" style="display:none;">
+      <div class="rd-top">
+        <a class="rd-back" id="rd-back">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 6l-6 6 6 6"/></svg>
+          全部周报
+        </a>
+      </div>
+      <div class="rd-head">
+        <span class="rd-kicker">学习周报 · 第 12 期</span>
+        <h1 class="rd-title">9.15 – 9.21 学习复盘</h1>
+        <div class="rd-meta">Inwit 自动生成 · 2026-09-22</div>
+      </div>
+      <div class="rd-ornament">◆</div>
+
+      <article class="rd-paper">
+        <h2>数据小结</h2>
+        <div class="nums">
+          <div><b style="color:var(--green)">18</b><span>想起来了</span></div>
+          <div><b style="color:var(--gold)">3</b><span>模糊</span></div>
+          <div><b style="color:#d0765a">1</b><span>忘了</span></div>
+          <div><b>82%</b><span>成功率</span></div>
+          <div><b>14</b><span>新卡片</span></div>
+          <div><b>9</b><span>新关联</span></div>
+        </div>
+        <p>这周复习 22 次，成功率 82%，比上周高 6 个点。主题地图覆盖率到了 68%。整体在正轨上：新卡的节奏稳，老卡的遗忘也控制住了——只有一个例外，往下看。</p>
+        <h2>建议重学</h2>
+        <p><a>k 折交叉验证中 k 的选择</a>——连续两周出现在「忘了」名单里，而且每次都卡在 k 与方差的关系上，值得回到原文再过一遍。</p>
+        <p><a>贝叶斯误差与不可约噪声</a>——不是不会，是开始模糊。趁还没忘干净，重看一次成本最低。</p>
+        <h2>批注回顾</h2>
+        <p>你在<a>《统计学习方法》第 7 章的批注</a>里写「正则化本质是先验」——这周新出的卡正好考了这个角度，你的直觉是对的。</p>
+      </article>
+      <div class="rd-colophon">INWIT 学习周报 · 每周一自动生成</div>
+    </div>
+  </main>
+</div>
+
+<script>
+  const hub = document.getElementById('hub');
+  const session = document.getElementById('session');
+  const done = document.getElementById('done');
+
+  /* ---------- 演示数据 ---------- */
+  const CARDS = [
+    { crumb: '机器学习基础 · 模型评估与验证 / 交叉验证',
+      q: '比较 k=5 与 k=10 的 k 折交叉验证：在计算开销、估计稳定性、对数据划分敏感性三方面有何差异？',
+      a: 'k=5：计算开销更小（只训练 5 次），估计稳定性略低于 k=10，对单次划分的敏感性更高；k=10：评估更精细、方差更小，但训练次数翻倍。k 过小易受划分影响，k=n（留一法）方差小但偏差大且耗时剧增。' },
+    { crumb: '机器学习基础 · 偏差与方差 / 正则化',
+      q: '为什么增大正则化强度 λ 会先降误差、后又升误差？',
+      a: 'λ 增大 → 模型自由度下降 → 方差减小但偏差增大。测试误差 = 偏差² + 方差 + 噪声，呈 U 形：左端过拟合（方差主导），右端欠拟合（偏差主导），谷底是最优 λ。' },
+    { crumb: '统计学习 · 概率基础 / 贝叶斯',
+      q: '贝叶斯误差为什么不可约？',
+      a: '它来自数据生成分布本身的重叠：同一 x 可能以不同概率属于多个类别，最优分类器也只能按后验最大者决策，剩余错误率即贝叶斯误差。任何模型都无法低于它。' },
+  ];
+  const TOTAL = 7; // 演示：总数 7，实际卡片 3 张循环
+  let idx = 0;
+  const recap = { good: 0, fuzzy: 0, forgot: 0 };
+
+  /* ---------- 视图切换 ---------- */
+  const reports = document.getElementById('reports');
+  const reportDetail = document.getElementById('report-detail');
+  function show(el) { [hub, session, done, reports, reportDetail].forEach((x) => { x.style.display = x === el ? '' : 'none'; }); window.scrollTo(0, 0); }
+  document.getElementById('btn-start').addEventListener('click', () => { idx = 0; renderCard(); show(session); });
+  document.getElementById('btn-exit').addEventListener('click', () => show(hub));
+  document.getElementById('btn-back-hub').addEventListener('click', () => show(hub));
+
+  /* 栏目切换 + 周报导航 */
+  document.querySelectorAll('.hub-tab').forEach((t) =>
+    t.addEventListener('click', () => show(t.dataset.tab === 'reports' ? reports : hub)));
+  document.querySelectorAll('[data-open-report]').forEach((r) =>
+    r.addEventListener('click', () => show(reportDetail)));
+  document.getElementById('rd-back').addEventListener('click', () => show(reports));
+
+  /* ---------- 分段进度 ---------- */
+  const segs = document.getElementById('segs');
+  for (let i = 0; i < TOTAL; i++) {
+    const s = document.createElement('div');
+    s.className = 'seg';
+    s.innerHTML = '<i></i>';
+    segs.appendChild(s);
+  }
+  function renderSegs() {
+    [...segs.children].forEach((s, i) => {
+      s.classList.toggle('is-done', i < idx);
+      s.classList.toggle('is-now', i === idx);
+    });
+    document.getElementById('stage-count').textContent = `${Math.min(idx + 1, TOTAL)} / ${TOTAL}`;
+  }
+
+  /* ---------- 牌堆厚度 ---------- */
+  const deck = document.getElementById('deck');
+  function renderDeck() {
+    const left = TOTAL - idx;
+    deck.classList.toggle('last-two', left === 2);
+    deck.classList.toggle('last-one', left === 1);
+  }
+
+  /* ---------- 卡片 ---------- */
+  const wrap = document.getElementById('flip-wrap');
+  const card = document.getElementById('card');
+  const grades = document.getElementById('grades');
+  let flipped = false;
+
+  function renderCard(animate = false) {
+    const c = CARDS[idx % CARDS.length];
+    document.getElementById('crumb').textContent = c.crumb;
+    document.getElementById('q').textContent = c.q;
+    document.getElementById('a').textContent = c.a;
+    flipped = false;
+    card.classList.remove('is-flipped');
+    grades.classList.remove('is-show');
+    renderSegs();
+    renderDeck();
+    if (animate) {
+      wrap.classList.add('is-entering');
+      setTimeout(() => wrap.classList.remove('is-entering'), 320);
+    }
+  }
+
+  function flip() {
+    flipped = !flipped;
+    card.classList.toggle('is-flipped', flipped);
+    grades.classList.toggle('is-show', flipped);
+  }
+  card.addEventListener('click', flip);
+
+  /* 打分：按结果分方向飞出 */
+  const FLY = { forgot: 'fly-left', fuzzy: 'fly-up', good: 'fly-right' };
+  let flying = false;
+  function grade(kind) {
+    if (!flipped || flying) return;
+    flying = true;
+    recap[kind]++;
+    wrap.classList.add(FLY[kind]);
+    setTimeout(() => {
+      wrap.classList.remove(FLY[kind]);
+      flying = false;
+      idx++;
+      if (idx >= TOTAL) { show(done); renderDone(); return; }
+      renderCard(true);
+    }, 280);
+  }
+  grades.querySelectorAll('.grade').forEach((b) =>
+    b.addEventListener('click', () => grade(b.dataset.grade)));
+
+  document.addEventListener('keydown', (e) => {
+    if (session.style.display === 'none') return;
+    if (e.repeat) return;
+    if (e.code === 'Space') { e.preventDefault(); flip(); }
+    if (e.key === '1') grade('forgot');
+    if (e.key === '2') grade('fuzzy');
+    if (e.key === '3') grade('good');
+    if (e.key === 'Escape') show(hub);
+  });
+
+  /* ---------- 卡片菜单 ---------- */
+  const menuPop = document.getElementById('menu-pop');
+  document.getElementById('btn-menu').addEventListener('click', (e) => {
+    e.stopPropagation();
+    menuPop.classList.toggle('is-open');
+  });
+  document.addEventListener('click', () => menuPop.classList.remove('is-open'));
+  menuPop.querySelectorAll('.menu-skip').forEach((b) =>
+    b.addEventListener('click', () => { flipped = true; grade('good'); }));
+
+  function renderDone() {
+    document.querySelector('.done-recap').innerHTML = `
+      <span class="done-chip"><span class="dot" style="background:var(--green)"></span>想起来了 ${recap.good}</span>
+      <span class="done-chip"><span class="dot" style="background:var(--gold)"></span>模糊 ${recap.fuzzy}</span>
+      <span class="done-chip"><span class="dot" style="background:#d0765a"></span>忘了 ${recap.forgot}</span>`;
+  }
+
+  renderCard();
+
+  /* ---------- 设置面板 ---------- */
+  document.getElementById('cfg-head').addEventListener('click', () =>
+    document.getElementById('cfg-panel').classList.toggle('is-open'));
+  document.querySelectorAll('.cfg-step').forEach((s) =>
+    s.addEventListener('click', () => s.classList.toggle('is-on')));
+</script>
+</body>
+</html>

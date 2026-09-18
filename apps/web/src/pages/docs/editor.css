@@ -1,0 +1,74 @@
+/* ---------- 纸张（阅读态） ---------- */
+.paper {
+  /* Hang past the reading column so inner text aligns with the title / edit body. */
+  --paper-hang: 32px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-1);
+  padding: var(--write-gap, 28px) var(--paper-hang) 40px;
+  margin-inline: calc((var(--paper-hang) + 1px) * -1);
+}
+
+/* 写作面：无盒，排版与阅读态 .md-body 对齐 */
+.ws-writer {
+  background: none;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  margin: 0;
+  padding-top: var(--write-gap, 28px);
+}
+.ws-writer .ProseMirror {
+  min-height: 55vh;
+  outline: none;
+  caret-color: var(--ink);
+}
+.ws-writer .ProseMirror ::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.ws-writer .ProseMirror p.is-empty::before,
+.ws-writer .ProseMirror h1.is-empty::before,
+.ws-writer .ProseMirror .is-empty.has-focus::before,
+.ws-writer .ProseMirror p.is-editor-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-4);
+}
+html[data-theme='dark'] .ws-writer .ProseMirror p.is-empty::before,
+html[data-theme='dark'] .ws-writer .ProseMirror h1.is-empty::before,
+html[data-theme='dark'] .ws-writer .ProseMirror .is-empty.has-focus::before,
+html[data-theme='dark'] .ws-writer .ProseMirror p.is-editor-empty::before {
+  color: var(--ink-3);
+}
+
+.title-input {
+  width: 100%;
+  display: block;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  border-radius: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.title-input:focus,
+.title-input:focus-visible { outline: none; box-shadow: none; }
+.title-input::placeholder { color: var(--ink-4); font-weight: 600; }
+html[data-theme='dark'] .title-input::placeholder { color: var(--ink-3); font-weight: 600; }
+.save-state { font-size: 12.5px; color: var(--ink-4); display: inline-flex; align-items: center; gap: 6px; }
+.save-state .ok { color: var(--green); }
+.save-state.is-error { color: var(--accent); }
+
+@media (min-width: 1600px) {
+  .paper { --paper-hang: 40px; padding: var(--write-gap) var(--paper-hang) 48px; }
+}
+
+@media (max-width: 760px) {
+  .paper { --paper-hang: 0px; padding: var(--write-gap) 20px 32px; margin-inline: 0; }
+}

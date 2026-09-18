@@ -1,0 +1,326 @@
+.pdf-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pdf-viewer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pdf-viewer > * {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.pdf-pane-head {
+  padding: 16px 20px 4px;
+  flex: none;
+}
+.pdf-pane-head .pane-title {
+  margin-bottom: 6px;
+}
+.pdf-doc-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  flex: none;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-soft);
+  min-height: 40px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.pdf-toolbar-start,
+.pdf-toolbar-end {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.pdf-toolbar-end {
+  justify-content: flex-end;
+}
+.pdf-toolbar-mid {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pdf-toolbar .pdf-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.pdf-toolbar .pdf-tool-text {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12.5px;
+}
+.pdf-toolbar .pdf-icon-btn svg,
+.pdf-toolbar .pdf-tool-text svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.pdf-toolbar .btn.is-on {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+.pdf-page-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pdf-page-input {
+  width: 3.2em;
+  height: 28px;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+  color: var(--ink);
+  padding: 0 4px;
+}
+.pdf-page-input:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
+}
+.pdf-page-total {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.pdf-zoom {
+  position: relative;
+}
+.pdf-zoom-btn {
+  height: 28px;
+  min-width: 52px;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
+}
+.pdf-zoom-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  min-width: 132px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-2);
+}
+.pdf-zoom-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.pdf-zoom-menu button:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.pdf-zoom-menu button.is-on {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+.pdf-toolbar-hint {
+  margin-left: 4px;
+  color: var(--ink-4);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.pdf-search {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--duration-hover) ease;
+  background: var(--surface);
+  border-bottom: 1px solid transparent;
+  flex: none;
+}
+.pdf-search.is-open {
+  grid-template-rows: 1fr;
+  border-bottom-color: var(--line-soft);
+}
+.pdf-search-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+.pdf-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 8px;
+}
+.pdf-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  font-size: 13px;
+  color: var(--ink);
+}
+.pdf-search-input::placeholder { color: var(--ink-4); }
+.pdf-search-input:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
+}
+.pdf-search-input[type='search']::-webkit-search-cancel-button,
+.pdf-search-input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.pdf-search-count {
+  flex: none;
+  min-width: 3.2em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.pdf-search .pdf-icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+.pdf-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+}
+.pdf-thumbs {
+  width: 160px;
+  flex: none;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  border-right: 1px solid var(--line-soft);
+}
+.pdf-thumbs-pane {
+  height: 100%;
+}
+.pdf-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+}
+.pdf-thumb-frame {
+  display: block;
+  flex: none;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #fffdf8;
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-1);
+}
+.pdf-thumb.is-current .pdf-thumb-frame {
+  box-shadow: 0 0 0 2px var(--accent), var(--shadow-1);
+}
+.pdf-thumb-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fffdf8;
+}
+.pdf-thumb-label {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.pdf-thumb.is-current .pdf-thumb-label {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.pdf-viewport {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  outline: none;
+}
+.pdf-page {
+  background: #fffdf8;
+  box-shadow: 0 0 0 1px rgba(60, 48, 30, 0.12), var(--shadow-2);
+}
+/* 渲染层是 <img>，默认可被原生拖拽：拖出幽灵图并触发 pointercancel，划词/框选被打断 */
+.pdf-page img,
+.pdf-thumb-img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+html[data-theme='dark'] .pdf-page {
+  background: #14120e;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 12px 28px rgba(0, 0, 0, 0.32);
+}
+/* 暗色下反色渲染页面，hue-rotate 把色相翻回来，避免白纸刺眼 */
+html[data-theme='dark'] .pdf-page > img,
+html[data-theme='dark'] .pdf-thumb-img {
+  filter: invert(0.93) hue-rotate(180deg) brightness(1.02) contrast(0.92);
+}
+/* 划词高亮层是 multiply 混合，压在反色后的深底上会糊掉，暗色改回普通混合 */
+html[data-theme='dark'] .pdf-page [style*='mix-blend-mode'] {
+  mix-blend-mode: normal;
+}
+html[data-theme='dark'] .pdf-thumb-frame,
+html[data-theme='dark'] .pdf-thumb-img {
+  background: #14120e;
+}
+.pdf-sel-hint {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--ink-3);
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-1);
+}

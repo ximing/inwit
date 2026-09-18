@@ -51,6 +51,12 @@ export class ReviewService extends Service {
   struggling: ReviewStrugglingCard[] = [];
   settings: ReviewSettings = cloneSettings(DEFAULT_REVIEW_SETTINGS);
   lastFeedback: ReviewFeedback | null = null;
+  /** 打分飞出方向：忘了←左 / 模糊↑上 / 想起来→右；null 表示无动画。 */
+  flyDir: 'left' | 'up' | 'right' | null = null;
+  /** 正在飞出的卡片 id，防止下一张卡继承飞出样式。 */
+  flyCardId: string | null = null;
+  /** 本场打小结，完成页回顾用。 */
+  sessionRecap: Record<ReviewFeedback, number> = { remembered: 0, fuzzy: 0, forgot: 0 };
   toast: string | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
   cardImageUrls: Record<string, PresignedUrlEntry> = {};
@@ -245,6 +251,8 @@ export class ReviewService extends Service {
     this.error = null;
     this.flipped = false;
     this.lastFeedback = null;
+    this.flyDir = null;
+    this.sessionRecap = { remembered: 0, fuzzy: 0, forgot: 0 };
     try {
       const today = await getReviewToday();
       this.applyToday(today);
@@ -262,6 +270,18 @@ export class ReviewService extends Service {
     await this.load();
   }
 
+  /** 打分前先播一个飞出动画，再提交反馈。 */
+  async gradeAnimated(feedback: ReviewFeedback): Promise<void> {
+    const item = this.current;
+    if (!item || this.grading || !this.flipped || this.flyDir !== null) return;
+    this.flyDir = feedback === 'forgot' ? 'left' : feedback === 'fuzzy' ? 'up' : 'right';
+    this.flyCardId = item.card.id;
+    await new Promise((resolve) => setTimeout(resolve, 240));
+    await this.grade(feedback);
+    this.flyDir = null;
+    this.flyCardId = null;
+  }
+
   async grade(feedback: ReviewFeedback): Promise<void> {
     const item = this.current;
     if (!item || this.grading || !this.flipped) return;
@@ -270,6 +290,7 @@ export class ReviewService extends Service {
     try {
       await submitReviewFeedback(item.card.id, feedback);
       this.reviewedToday += 1;
+      this.sessionRecap = { ...this.sessionRecap, [feedback]: this.sessionRecap[feedback] + 1 };
       this.items = this.items.slice(1);
       this.flipped = false;
       this.lastFeedback = null;

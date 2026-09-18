@@ -1,0 +1,76 @@
+/* ---------- 捕获框 ---------- */
+.capture {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.capture:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: var(--shadow-2), 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.capture.hero-capture { overflow: visible; }
+.capture textarea {
+  display: block;
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  background: none;
+  padding: 18px 20px 8px;
+  font-size: 16px;
+  line-height: 1.65;
+  min-height: 66px;
+}
+.capture textarea::placeholder { color: var(--ink-4); }
+.capture textarea:focus,
+.capture textarea:focus-visible { outline: none; }
+.capture-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+.capture-hint { margin-left: auto; margin-right: 4px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-4); }
+
+/* ---------- 捕获编辑器（扔进去富文本） ---------- */
+.capture-editor .ProseMirror {
+  display: block;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  padding: 18px 20px 8px;
+  font-size: 16px;
+  line-height: 1.65;
+  min-height: 66px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.capture-editor .ProseMirror:focus,
+.capture-editor .ProseMirror:focus-visible { outline: none; }
+.capture-editor .ProseMirror p { margin: 0 0 2px; }
+.capture-editor .ProseMirror ul,
+.capture-editor .ProseMirror ol { padding-left: 20px; margin: 2px 0; }
+.capture-editor .ProseMirror blockquote {
+  margin: 2px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+  color: var(--ink-3);
+}
+.capture-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-4);
+}
+.pane-capture .capture-editor .ProseMirror,
+.ws-capture .capture-editor .ProseMirror {
+  padding: 12px 12px 4px;
+  font-size: 14.5px;
+  min-height: 42px;
+}
+.capture-editor.is-disabled .ProseMirror { opacity: 0.55; }

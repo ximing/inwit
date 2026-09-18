@@ -1,0 +1,55 @@
+/* ---------- 登录 / 启动 ---------- */
+.splash {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.auth-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.auth-panel {
+  width: min(26rem, 100%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-3);
+  padding: 32px 24px 24px;
+}
+
+.auth-panel h1 {
+  margin: 8px 0 0;
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 20px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mode-switch button {
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 0;
+  min-height: 32px;
+  color: var(--ink-4);
+}
+
+.mode-switch button.is-on {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}

@@ -1,0 +1,64 @@
+.float-toolbar {
+  --float-bg: #2a251f;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px;
+  background: var(--float-bg);
+  color: #f7f1e8;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(42, 37, 31, 0.28), 0 1px 2px rgba(0, 0, 0, 0.16);
+  z-index: 25;
+  white-space: nowrap;
+}
+.float-toolbar::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  margin-left: -6px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid var(--float-bg);
+  pointer-events: none;
+}
+.float-tool {
+  width: 30px;
+  height: 28px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(247, 241, 232, 0.88);
+  transition: background 0.12s, color 0.12s;
+}
+.float-tool:hover,
+.float-tool.is-on {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.float-tool:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.float-tool.is-wide {
+  width: auto;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.float-tool-sep {
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.16);
+  margin: 0 4px;
+}
+.float-tool svg { width: 15px; height: 15px; }
+html[data-theme='dark'] .float-toolbar {
+  --float-bg: #3a342c;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}

@@ -1,0 +1,24 @@
+/* Global primitives first; feature styles are kept beside their owning modules.
+   Keep this eager entry so shared styles do not depend on route visitation order. */
+@import './styles.css';
+@import './shell/styles.css';
+@import './pages/today/styles.css';
+@import './pages/review/styles.css';
+@import './components/capture/styles.css';
+@import './components/search/styles.css';
+@import './pages/docs/topic-picker.css';
+@import './components/doc/styles.css';
+@import './pages/login/styles.css';
+@import './pages/settings/styles.css';
+@import './pages/jobs/styles.css';
+@import './pages/topics/styles.css';
+@import './components/doc-row.css';
+@import './pages/docs/styles.css';
+@import './pages/docs/editor.css';
+@import './components/reader/mini-card.css';
+@import './pages/docs/card-rail.css';
+@import './pages/docs/selection-toolbar.css';
+@import './pages/docs/pdf-pane/styles.css';
+@import './components/reader/styles.css';
+@import './pages/docs/card-edit-dialog.css';
+@import './pages/review/reports.css';

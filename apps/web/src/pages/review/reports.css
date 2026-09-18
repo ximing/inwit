@@ -1,0 +1,71 @@
+/* ---------- 学习周报：期刊感 ---------- */
+.reports { max-width: 720px; margin: 0 auto; padding: 40px 40px 120px; }
+
+/* 本期 */
+.rp-latest {
+  position: relative; display: block; overflow: hidden;
+  background:
+    radial-gradient(120% 160% at 100% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 55%),
+    linear-gradient(150deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface) 70%);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-xl);
+  padding: 30px 34px 28px; margin-bottom: 14px;
+  color: inherit; text-decoration: none;
+  transition: box-shadow 0.2s;
+}
+.rp-latest:hover { box-shadow: var(--shadow-2); }
+.rp-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--accent); }
+.rp-period { font-family: var(--serif); font-size: 30px; font-weight: 700; margin-top: 10px; letter-spacing: 0.01em; }
+.rp-period small { font-size: 15px; font-weight: 500; color: var(--ink-3); margin-left: 10px; }
+.rp-lede { font-size: 13.5px; color: var(--ink-3); line-height: 1.75; margin: 10px 0 0; max-width: 480px; }
+.rp-read { margin-top: 18px; display: inline-flex; align-items: center; gap: 6px; color: var(--accent-deep); font-size: 13.5px; font-weight: 600; }
+.rp-read svg { transition: transform 0.15s; }
+.rp-latest:hover .rp-read svg { transform: translateX(3px); }
+.rp-seal {
+  position: absolute; right: 30px; top: 28px;
+  width: 58px; height: 58px; border-radius: 50%;
+  border: 1.5px solid var(--accent-line); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-size: 26px; font-weight: 700;
+  transform: rotate(-8deg); opacity: 0.55; user-select: none;
+}
+
+/* 过刊档案 */
+.rp-archive { background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r-lg); padding: 6px 22px; margin-bottom: 14px; }
+.rp-row { display: flex; align-items: baseline; gap: 18px; padding: 15px 4px; border-radius: var(--r-sm); color: inherit; text-decoration: none; transition: background 0.15s; }
+.rp-row + .rp-row { border-top: 1px solid var(--line-soft); }
+.rp-row:hover { background: var(--surface-2); }
+.rp-no { flex: none; width: 54px; font-size: 12px; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+.rp-row-period { flex: none; width: 128px; font-family: var(--serif); font-size: 14.5px; font-weight: 600; }
+.rp-row-title { flex: 1; min-width: 0; font-size: 13.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-row-arrow { flex: none; color: var(--ink-4); opacity: 0; transition: opacity 0.15s; align-self: center; }
+.rp-row:hover .rp-row-arrow { opacity: 1; }
+.rp-more { display: flex; margin: 4px auto 0; }
+.rp-empty h2 { font-family: var(--serif); font-size: 18px; margin: 0 0 6px; }
+.rp-empty p { color: var(--ink-3); line-height: 1.8; margin: 0 0 14px; }
+.rp-empty .btn { text-decoration: none; }
+
+/* 阅读页 */
+.rd { max-width: 700px; margin: 0 auto; padding: 32px 40px 120px; }
+.rd-top { display: flex; align-items: center; }
+.rd-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-3); text-decoration: none; }
+.rd-back:hover { color: var(--ink); }
+.rd-head { text-align: center; margin: 40px 0 34px; }
+.rd-kicker { font-size: 12px; font-weight: 600; letter-spacing: 0.18em; color: var(--accent); }
+.rd-title { font-family: var(--serif); font-size: 30px; font-weight: 700; margin: 12px 0 0; letter-spacing: 0.01em; }
+.rd-meta { font-size: 12.5px; color: var(--ink-4); margin-top: 10px; }
+.rd-ornament { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 auto 34px; color: var(--ink-4); font-size: 10px; }
+.rd-ornament::before, .rd-ornament::after { content: ""; width: 64px; height: 1px; background: var(--line); }
+.rd-paper {
+  background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: var(--r-xl); box-shadow: var(--shadow-1);
+  padding: 46px 54px 50px;
+}
+.rd-colophon { text-align: center; font-size: 12px; color: var(--ink-4); margin-top: 30px; letter-spacing: 0.06em; }
+
+@media (max-width: 700px) {
+  .reports, .rd { padding: 24px 20px 80px; }
+  .rp-row { flex-wrap: wrap; gap: 4px 12px; }
+  .rp-row-title { flex-basis: 100%; }
+  .rd-paper { padding: 28px 22px; }
+}

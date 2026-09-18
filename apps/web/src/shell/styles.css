@@ -1,0 +1,362 @@
+/* ---------- 应用骨架 ---------- */
+.shell {
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background-color: var(--bg);
+}
+
+.rail {
+  width: 200px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 10px 14px;
+  border-right: 1px solid var(--line-soft);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 4;
+  overflow: visible;
+  transition:
+    width var(--duration-rail) ease,
+    padding var(--duration-rail) ease,
+    color var(--duration-theme) ease,
+    background-color var(--duration-theme) ease;
+}
+.brand {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px 4px 14px;
+  min-width: 0;
+}
+.brand-text { min-width: 0; flex: 1; overflow: hidden; }
+.brand-name,
+.brand-mark {
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.brand-tag { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; white-space: nowrap; }
+.rail-collapse {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  flex: none;
+  margin-top: 1px;
+  transition: background 0.15s, color 0.15s;
+}
+.rail-collapse:hover { background: var(--bg-sunken); color: var(--ink); }
+.rail-collapse svg { width: 16px; height: 16px; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  font-size: 13.5px;
+  color: var(--ink-2);
+  transition: background 0.15s, color 0.15s;
+  position: relative;
+  white-space: nowrap;
+}
+.nav-item:hover { background: var(--bg-sunken); color: var(--ink); }
+.nav-item.is-on {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+.nav-item.is-on::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 7px;
+  bottom: 7px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.nav-ico {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+.nav-item svg { width: 17px; height: 17px; flex: none; }
+.nav-label { min-width: 0; }
+.nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.nav-item.is-on .nav-badge { background: var(--accent-deep); }
+.nav-sep {
+  font-size: 11px;
+  color: var(--ink-4);
+  letter-spacing: 0.08em;
+  padding: 18px 12px 6px;
+}
+
+.rail-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+  min-width: 0;
+}
+.rail-account { min-width: 0; }
+.rail-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  min-width: 0;
+}
+.rail-user:hover { background: var(--bg-sunken); }
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  object-fit: cover;
+}
+img.avatar { background: var(--bg-sunken); }
+.avatar-fallback {
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+}
+.avatar-fallback svg { width: 16px; height: 16px; }
+.rail-user-meta {
+  min-width: 0;
+  flex: 1;
+}
+.rail-email {
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  display: block;
+}
+
+.rail-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px 2px;
+}
+.rail-icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  flex: none;
+  transition: background 0.15s, color 0.15s;
+}
+.rail-icon-btn:hover { background: var(--bg-sunken); color: var(--ink); }
+.rail-icon-btn svg { width: 16px; height: 16px; }
+.rail-tool-label { display: none; }
+
+@media (min-width: 761px) {
+  .rail.is-collapsed {
+    width: 56px;
+    padding: 12px 8px 12px;
+  }
+  .rail.is-collapsed .brand {
+    justify-content: center;
+    padding: 0 0 12px;
+  }
+  .rail.is-collapsed .brand-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .rail.is-collapsed .nav-item {
+    justify-content: center;
+    padding: 9px 0;
+    gap: 0;
+  }
+  .rail.is-collapsed .nav-item.is-on::before {
+    left: -8px;
+    width: 2px;
+    top: 6px;
+    bottom: 6px;
+  }
+  .rail.is-collapsed .nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .rail.is-collapsed .nav-badge {
+    position: absolute;
+    top: 2px;
+    right: 0;
+    margin-left: 0;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+  }
+  .rail.is-collapsed .nav-item::after {
+    content: attr(data-label);
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-2);
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 8;
+    transition: opacity 0.12s ease;
+  }
+  .rail.is-collapsed .nav-item:hover::after,
+  .rail.is-collapsed .nav-item:focus-visible::after {
+    opacity: 1;
+  }
+  .rail.is-collapsed .rail-user-meta { display: none; }
+  .rail.is-collapsed .rail-user {
+    justify-content: center;
+    padding: 6px 0;
+  }
+  .rail.is-collapsed .rail-account { position: relative; }
+  .rail.is-collapsed .rail-tools {
+    display: none;
+    position: absolute;
+    left: calc(100% - 2px);
+    bottom: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    padding: 6px;
+    min-width: 112px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-2);
+    z-index: 8;
+  }
+  .rail.is-collapsed .rail-account:hover .rail-tools,
+  .rail.is-collapsed .rail-account:focus-within .rail-tools {
+    display: flex;
+  }
+  .rail.is-collapsed .rail-icon-btn {
+    width: auto;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0 8px;
+    height: 32px;
+  }
+  .rail.is-collapsed .rail-tool-label {
+    display: inline;
+    font-size: 13px;
+  }
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background-color: var(--bg);
+}
+
+@media (max-width: 760px) {
+  .shell { flex-direction: column; }
+  .rail {
+    width: 100%;
+    height: auto;
+    position: sticky;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 10px 12px;
+    gap: 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { padding: 0 8px 0 0; flex: none; }
+  .rail-collapse { display: none; }
+  .brand-tag,
+  .rail-user { display: none; }
+  .nav {
+    flex-direction: row;
+    flex: 1;
+    overflow-x: auto;
+    min-width: 0;
+  }
+  .nav-item { flex: none; padding: 8px 10px; }
+  .nav-item.is-on::before { display: none; }
+  .nav-item.is-on { box-shadow: inset 0 -2px 0 var(--accent); }
+  .rail-foot {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    flex-direction: row;
+    align-items: center;
+    flex: none;
+    gap: 0;
+  }
+  .rail-tools { padding: 0; }
+}
