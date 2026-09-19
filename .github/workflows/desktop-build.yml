@@ -177,15 +177,14 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Install NDK 27.1 (React Native pin)
+      - name: Export Android SDK paths
         run: |
-          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
-          # ubuntu-latest already ships the Android SDK, platforms, and build-tools.
-          # android-actions/setup-android currently fails because Google dropped the
-          # deprecated `tools` package it tries to install by default.
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "ndk;27.1.12297006"
+          sdk_root="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$sdk_root" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk_root" >> "$GITHUB_ENV"
+          echo "$sdk_root/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$sdk_root/platform-tools" >> "$GITHUB_PATH"
+          ls "$sdk_root/cmdline-tools/latest/bin/sdkmanager"
 
       - name: Stamp app version and API URL
         id: ver
