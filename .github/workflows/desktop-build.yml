@@ -1,24 +1,31 @@
-# Build Inwit desktop (Tauri 2) for Windows, macOS, and Linux.
+# Build Inwit desktop (Tauri 2) and the Android APK, then attach both to a GitHub Release.
 #
-#   Actions → Build Desktop → Run workflow
-#   GitHub Release published → attach installers to that release
+#   Actions → Build Desktop and Android → Run workflow
+#   GitHub Release published → attach installers + APK to that release
 #
-# Production API origin is baked into the web bundle as VITE_TAURI_API_URL.
-# Override with repository secret or variable VITE_TAURI_API_URL; otherwise
-# https://inwit.aimo.plus. The origin is not confidential — a variable is enough.
-name: Build Desktop
+# Production API origin is baked into the clients:
+#   desktop  → VITE_TAURI_API_URL
+#   android  → EXPO_PUBLIC_API_BASE_URL (and Expo extra.apiBaseUrl)
+# Override with workflow input, repository variable/secret INWIT_API_URL
+# (or the legacy VITE_TAURI_API_URL). Default: https://inwit.aimo.plus
+name: Build Desktop and Android
 
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'Production API origin baked into desktop and Android clients'
+        required: false
+        default: 'https://inwit.aimo.plus'
 
 concurrency:
-  group: desktop-build-${{ github.event.release.tag_name || github.sha }}
+  group: client-build-${{ github.event.release.tag_name || github.sha }}
   cancel-in-progress: false
 
 env:
-  VITE_TAURI_API_URL: ${{ secrets.VITE_TAURI_API_URL || vars.VITE_TAURI_API_URL || 'https://inwit.aimo.plus' }}
+  INWIT_API_URL: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.api_url) || secrets.INWIT_API_URL || vars.INWIT_API_URL || secrets.VITE_TAURI_API_URL || vars.VITE_TAURI_API_URL || 'https://inwit.aimo.plus' }}
 
 jobs:
   build-desktop:
@@ -120,7 +127,7 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VITE_TAURI_API_URL: ${{ env.VITE_TAURI_API_URL }}
+          VITE_TAURI_API_URL: ${{ env.INWIT_API_URL }}
           APPLE_SIGNING_IDENTITY: '-'
         with:
           projectPath: apps/desktop
@@ -129,3 +136,144 @@ jobs:
           uploadUpdaterJson: 'false'
           workflowArtifactNamePattern: inwit-desktop-[platform]-[arch]-[bundle]
           releaseId: ${{ github.event_name == 'release' && github.event.release.id || '' }}
+
+  build-android:
+    name: android-apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      EXPO_NO_TELEMETRY: 1
+      EXPO_NO_GIT_STATUS: 1
+      EXPO_PUBLIC_API_BASE_URL: ${{ env.INWIT_API_URL }}
+      VITE_TAURI_API_URL: ${{ env.INWIT_API_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK / platform / CMake
+        run: |
+          sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;27.1.12297006" \
+            "cmake;3.22.1"
+
+      - name: Stamp app version and API URL
+        id: ver
+        shell: bash
+        run: |
+          tag="${{ github.event.release.tag_name }}"
+          if [[ -z "$tag" ]]; then
+            tag="${{ github.ref_name }}"
+          fi
+          if [[ "$tag" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
+          else
+            version="0.0.0"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          python3 - "$version" "$EXPO_PUBLIC_API_BASE_URL" <<'PY'
+          import json, pathlib, sys
+          version, api_url = sys.argv[1], sys.argv[2].rstrip("/")
+          major, minor, patch = (int(p) for p in version.split("."))
+          version_code = major * 10000 + minor * 100 + patch
+          app_json = pathlib.Path("apps/mobile/app.json")
+          data = json.loads(app_json.read_text())
+          data["expo"]["version"] = version
+          android = data["expo"].setdefault("android", {})
+          android["versionCode"] = version_code
+          extra = data["expo"].setdefault("extra", {})
+          extra["apiBaseUrl"] = api_url
+          app_json.write_text(json.dumps(data, indent=2) + "\n")
+          pkg = pathlib.Path("apps/mobile/package.json")
+          pkg_data = json.loads(pkg.read_text())
+          pkg_data["version"] = version
+          pkg.write_text(json.dumps(pkg_data, indent=2) + "\n")
+          print(f"stamped mobile {version} versionCode={version_code} api={api_url}")
+          PY
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build doc-engine and sync into mobile
+        run: |
+          pnpm --filter @inwit/doc-engine build
+          pnpm --filter @inwit/mobile sync:engine
+
+      - name: Expo prebuild (Android)
+        working-directory: apps/mobile
+        run: pnpm exec expo prebuild --platform android --non-interactive --no-install --clean
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-${{ hashFiles('apps/mobile/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-android-
+
+      - name: Assemble release APK
+        working-directory: apps/mobile/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError"
+        run: |
+          chmod +x gradlew
+          echo "EXPO_PUBLIC_API_BASE_URL=$EXPO_PUBLIC_API_BASE_URL"
+          ./gradlew :app:assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
+
+      - name: Package APK
+        id: apk
+        working-directory: apps/mobile/android
+        run: |
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/release/*.apk)
+          if [[ ${#apks[@]} -eq 0 ]]; then
+            echo "No APK produced" >&2
+            find app/build/outputs -type f >&2 || true
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          dest="$GITHUB_WORKSPACE/dist/inwit-${{ steps.ver.outputs.version }}-android-arm64.apk"
+          cp "${apks[0]}" "$dest"
+          ls -lh "$dest"
+          echo "path=$dest" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inwit-android-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+
+      - name: Attach APK to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            "${{ steps.apk.outputs.path }}" \
+            --clobber

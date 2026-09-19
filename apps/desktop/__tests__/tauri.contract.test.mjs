@@ -123,7 +123,7 @@ describe('Tauri desktop contract', () => {
     assert.match(conf.build.beforeBuildCommand, /@inwit\/web\.\.\./);
   });
 
-  it('has a GitHub workflow that builds Windows, macOS, and Linux', () => {
+  it('has a GitHub workflow that builds Windows, macOS, Linux, and an Android APK', () => {
     const workflow = read('../../.github/workflows/desktop-build.yml');
     assert.match(workflow, /windows-latest/);
     assert.match(workflow, /macos-latest/);
@@ -131,8 +131,12 @@ describe('Tauri desktop contract', () => {
     assert.match(workflow, /tauri-apps\/tauri-action@v1/);
     assert.match(workflow, /projectPath: apps\/desktop/);
     assert.match(workflow, /VITE_TAURI_API_URL/);
+    assert.match(workflow, /INWIT_API_URL/);
+    assert.match(workflow, /EXPO_PUBLIC_API_BASE_URL/);
     assert.match(workflow, /inwit\.aimo\.plus/);
     assert.match(workflow, /\[platform\]-\[arch\]-\[bundle\]/);
+    assert.match(workflow, /assembleRelease/);
+    assert.match(workflow, /expo prebuild --platform android/);
   });
 
   it('has a GitHub workflow that pushes the server image to GHCR', () => {

@@ -80,9 +80,11 @@ pnpm --filter @inwit/server worker     # 消化 / 问答 / 进化 / 周报 Agent
 pnpm --filter @inwit/desktop dev     # 等 Vite :5190，连本地 API :3020
 ```
 
-macOS 点红灯会藏到菜单栏，并不退出；「退出 Inwit」才退出。全局快捷键 ⌘⇧2 / Ctrl+Shift+2 区域截图（macOS 需「屏幕录制」权限）。生产包把 `VITE_TAURI_API_URL`（默认 `https://inwit.aimo.plus`）打进前端。
+macOS 点红灯会藏到菜单栏，并不退出；「退出 Inwit」才退出。全局快捷键 ⌘⇧2 / Ctrl+Shift+2 区域截图（macOS 需「屏幕录制」权限）。
 
-GitHub Release 打 `v*.*.*` tag 后，Actions「Build Desktop」会把 macOS / Windows / Linux 安装包挂到该 Release。Server 镜像推 `ghcr.io/ximing/inwit-server`（同一镜像 `node dist/worker.js` 跑 worker）。
+生产桌面包把 `VITE_TAURI_API_URL` 打进前端；Android APK 把 `EXPO_PUBLIC_API_BASE_URL`（以及 Expo `extra.apiBaseUrl`）打进客户端。两者都由仓库变量 / workflow 输入 `INWIT_API_URL` 注入，默认 `https://inwit.aimo.plus`。本地 `expo start` 仍走 `app.json` 的 `extra.apiBaseUrl`（默认 `http://localhost:3020`）。
+
+GitHub Release 打 `v*.*.*` tag 后，Actions「Build Desktop and Android」会把 macOS / Windows / Linux 安装包和 Android APK 挂到该 Release。Server 镜像推 `ghcr.io/ximing/inwit-server`（同一镜像 `node dist/worker.js` 跑 worker）。
 
 ## 页面路由
 

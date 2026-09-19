@@ -1,12 +1,12 @@
 import Constants from 'expo-constants';
+import { resolveApiBaseUrl } from './config-logic';
 
-/**
- * Dev default talks to the local Fastify server.
- * On a physical device, localhost is the phone itself — override via
- * app.json `expo.extra.apiBaseUrl` with the machine LAN IP, e.g.
- * `http://192.168.1.12:3020`.
- */
-const DEFAULT_API_BASE_URL = 'http://localhost:3020';
+export {
+  DEFAULT_API_BASE_URL,
+  DEFAULT_PROD_API_BASE_URL,
+  resolveApiBaseUrl,
+  stripTrailingSlash,
+} from './config-logic';
 
 type Extra = {
   apiBaseUrl?: string;
@@ -21,9 +21,7 @@ export const docEngineDevUrl = '';
 
 export function getApiBaseUrl(): string {
   const extra = Constants.expoConfig?.extra as Extra | undefined;
-  const fromExtra = extra?.apiBaseUrl?.trim();
-  const raw = fromExtra && fromExtra.length > 0 ? fromExtra : DEFAULT_API_BASE_URL;
-  return raw.replace(/\/$/, '');
+  return resolveApiBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL, extra?.apiBaseUrl);
 }
 
 export function getDocEngineDevUrl(): string {
