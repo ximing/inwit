@@ -19,6 +19,14 @@ on:
         description: 'Production API origin baked into desktop and Android clients'
         required: false
         default: 'https://inwit.aimo.plus'
+      targets:
+        description: 'What to build: all, desktop, or android'
+        required: false
+        default: 'all'
+      release_tag:
+        description: 'Existing GitHub Release tag to attach artifacts to'
+        required: false
+        default: ''
 
 concurrency:
   group: client-build-${{ github.event.release.tag_name || github.sha }}
@@ -29,6 +37,7 @@ env:
 
 jobs:
   build-desktop:
+    if: ${{ github.event_name == 'release' || github.event.inputs.targets == 'all' || github.event.inputs.targets == 'desktop' || github.event.inputs.targets == '' }}
     permissions:
       contents: write
     strategy:
@@ -139,6 +148,7 @@ jobs:
 
   build-android:
     name: android-apk
+    if: ${{ github.event_name == 'release' || github.event.inputs.targets == 'all' || github.event.inputs.targets == 'android' || github.event.inputs.targets == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -167,16 +177,15 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android NDK / platform / CMake
+      - name: Install NDK 27.1 (React Native pin)
         run: |
-          sdkmanager \
-            "platforms;android-36" \
-            "build-tools;36.0.0" \
-            "ndk;27.1.12297006" \
-            "cmake;3.22.1"
+          echo "ANDROID_HOME=${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          # ubuntu-latest already ships the Android SDK, platforms, and build-tools.
+          # android-actions/setup-android currently fails because Google dropped the
+          # deprecated `tools` package it tries to install by default.
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;27.1.12297006"
 
       - name: Stamp app version and API URL
         id: ver
@@ -271,10 +280,11 @@ jobs:
           if-no-files-found: error
 
       - name: Attach APK to GitHub Release
-        if: github.event_name == 'release'
+        if: ${{ github.event_name == 'release' || github.event.inputs.release_tag != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.event.release.tag_name }}" \
+          tag="${{ github.event.release.tag_name || github.event.inputs.release_tag }}"
+          gh release upload "$tag" \
             "${{ steps.apk.outputs.path }}" \
             --clobber
