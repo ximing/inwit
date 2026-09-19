@@ -146,8 +146,6 @@ jobs:
     env:
       EXPO_NO_TELEMETRY: 1
       EXPO_NO_GIT_STATUS: 1
-      EXPO_PUBLIC_API_BASE_URL: ${{ env.INWIT_API_URL }}
-      VITE_TAURI_API_URL: ${{ env.INWIT_API_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -194,7 +192,7 @@ jobs:
             version="0.0.0"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          python3 - "$version" "$EXPO_PUBLIC_API_BASE_URL" <<'PY'
+          python3 - "$version" "$INWIT_API_URL" <<'PY'
           import json, pathlib, sys
           version, api_url = sys.argv[1], sys.argv[2].rstrip("/")
           major, minor, patch = (int(p) for p in version.split("."))
@@ -224,6 +222,8 @@ jobs:
 
       - name: Expo prebuild (Android)
         working-directory: apps/mobile
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ env.INWIT_API_URL }}
         run: pnpm exec expo prebuild --platform android --non-interactive --no-install --clean
 
       - name: Cache Gradle
@@ -239,6 +239,7 @@ jobs:
       - name: Assemble release APK
         working-directory: apps/mobile/android
         env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ env.INWIT_API_URL }}
           GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError"
         run: |
           chmod +x gradlew
