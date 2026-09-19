@@ -1,7 +1,9 @@
 module.exports = function (api) {
   api.cache(true);
   return {
-    presets: ['babel-preset-expo'],
-    plugins: ['react-native-reanimated/plugin'],
+    // Absolute paths so Metro/Babel still find these under pnpm's .pnpm store
+    // (release bundling starts from expo-router/entry.js, not apps/mobile).
+    presets: [require.resolve('babel-preset-expo')],
+    plugins: [require.resolve('react-native-reanimated/plugin')],
   };
 };

@@ -245,6 +245,7 @@ jobs:
         working-directory: apps/mobile/android
         env:
           EXPO_PUBLIC_API_BASE_URL: ${{ env.INWIT_API_URL }}
+          NODE_PATH: ${{ github.workspace }}/apps/mobile/node_modules:${{ github.workspace }}/node_modules
           GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError"
         run: |
           chmod +x gradlew
