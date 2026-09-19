@@ -1,4 +1,10 @@
-import { AnnotationMark, CardAnchorMark, PageBreak, VitalEntity } from '@inwit/doc-schema';
+import {
+  AnnotationMark,
+  CardAnchorMark,
+  createTextAlignExtension,
+  PageBreak,
+  VitalEntity,
+} from '@inwit/doc-schema';
 import { mergeAttributes, Node, type AnyExtension, type NodeViewRendererProps } from '@tiptap/core';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Image from '@tiptap/extension-image';
@@ -149,6 +155,9 @@ function createVideoNode(assetUrls: AssetUrlProvider) {
         video.addEventListener('error', onError);
 
         const sync = (): void => {
+          const align = attrString(current, 'textAlign');
+          wrapper.classList.toggle('is-align-center', align === 'center');
+          wrapper.classList.toggle('is-align-right', align === 'right');
           const src = attrString(current, 'src');
           const poster = attrString(current, 'poster');
           const url = assetUrls.urlFor(src);
@@ -215,6 +224,7 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
     PageBreak,
     AnnotationMark,
     CardAnchorMark,
+    createTextAlignExtension(),
   ];
   if (opts.editable) {
     extensions.push(

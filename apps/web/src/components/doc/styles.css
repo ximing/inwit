@@ -170,6 +170,24 @@
   border-radius: var(--r-sm);
 }
 
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) [style*='text-align: center'] :is(img, .doc-image, .doc-video, video),
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) [style*='text-align:center'] :is(img, .doc-image, .doc-video, video),
+.doc-video.is-align-center {
+  margin-left: auto;
+  margin-right: auto;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) [style*='text-align: right'] :is(img, .doc-image, .doc-video, video),
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) [style*='text-align:right'] :is(img, .doc-image, .doc-video, video),
+.doc-video.is-align-right {
+  margin-left: auto;
+  margin-right: 0;
+}
+.doc-video.is-align-center,
+.doc-video.is-align-right {
+  width: fit-content;
+  max-width: 100%;
+}
+
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) kbd {
   font-family: var(--mono);
   font-size: 0.85em;

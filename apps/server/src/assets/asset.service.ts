@@ -1,5 +1,6 @@
 import {
   ASSET_MULTIPART_PART_SIZE,
+  type AssetImportResponse,
   type AssetMultipartCompleteInput,
   type AssetMultipartCompleteResponse,
   type AssetMultipartInitInput,
@@ -10,6 +11,7 @@ import {
   type AssetUploadInput,
   type AssetUploadResponse,
 } from '@inwit/dto';
+import { lookup } from 'node:dns/promises';
 import { AppError } from '../errors.js';
 import {
   completeMultipartUpload,
@@ -18,6 +20,7 @@ import {
   presignGet,
   presignPut,
   presignUploadPart,
+  putObject,
 } from '../storage/client.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -29,11 +32,83 @@ import {
   validateAssetPartNumbers,
   validateAssetUpload,
 } from './asset-logic.js';
+import {
+  ASSET_IMPORT_MAX_REDIRECTS,
+  ASSET_IMPORT_TIMEOUT_MS,
+  classifyImportedBytes,
+  importDownloadCap,
+  isBlockedIp,
+  parseImportUrl,
+  readResponseBytes,
+} from './import-logic.js';
 
 const MULTIPART_PART_URL_TTL_SEC = 15 * 60;
 
 function requireStorage(): void {
   if (!isStorageConfigured()) throw AppError.of(503, 'STORAGE_NOT_CONFIGURED');
+}
+
+export async function importAssetFromUrl(
+  userId: string,
+  url: string,
+): Promise<AssetImportResponse> {
+  requireStorage();
+  const { bytes, contentType } = await downloadPublicMedia(url);
+  const classified = classifyImportedBytes(contentType, bytes);
+  const key = assetKeyFor(userId, classified.ext);
+  await putObject(key, bytes, classified.mime);
+  return { key, assetSrc: assetSrcFromKey(key) };
+}
+
+async function downloadPublicMedia(raw: string): Promise<{ bytes: Uint8Array; contentType: string }> {
+  let current = parseImportUrl(raw);
+  await assertPublicHost(current.hostname);
+  const signal = AbortSignal.timeout(ASSET_IMPORT_TIMEOUT_MS);
+  for (let hop = 0; hop <= ASSET_IMPORT_MAX_REDIRECTS; hop += 1) {
+    let res: Response;
+    try {
+      res = await fetch(current, {
+        method: 'GET',
+        redirect: 'manual',
+        signal,
+        headers: { Accept: 'image/*,video/*,*/*;q=0.1' },
+      });
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+      throw AppError.of(400, 'ASSET_IMPORT_FAILED');
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location');
+      if (!location || hop === ASSET_IMPORT_MAX_REDIRECTS) {
+        throw AppError.of(400, 'ASSET_IMPORT_FAILED');
+      }
+      try {
+        current = parseImportUrl(new URL(location, current).href);
+      } catch (err) {
+        if (err instanceof AppError) throw err;
+        throw AppError.of(400, 'ASSET_IMPORT_FAILED');
+      }
+      await assertPublicHost(current.hostname);
+      continue;
+    }
+    if (!res.ok) throw AppError.of(400, 'ASSET_IMPORT_FAILED');
+    const contentType = res.headers.get('content-type') ?? '';
+    const bytes = await readResponseBytes(res, importDownloadCap(contentType));
+    return { bytes, contentType };
+  }
+  throw AppError.of(400, 'ASSET_IMPORT_FAILED');
+}
+
+async function assertPublicHost(hostname: string): Promise<void> {
+  let records: Array<{ address: string }>;
+  try {
+    records = await lookup(hostname, { all: true });
+  } catch {
+    throw AppError.of(400, 'ASSET_IMPORT_FAILED');
+  }
+  if (records.length === 0 || records.some((record) => isBlockedIp(record.address))) {
+    throw AppError.of(400, 'ASSET_IMPORT_BLOCKED');
+  }
 }
 
 export async function requestAssetUpload(

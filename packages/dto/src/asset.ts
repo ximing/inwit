@@ -92,3 +92,14 @@ export const assetMultipartCompleteResponseSchema = z.object({
   assetSrc: z.string().min(1).max(520),
 });
 export type AssetMultipartCompleteResponse = z.infer<typeof assetMultipartCompleteResponseSchema>;
+
+export const assetImportInputSchema = z.object({
+  url: z.string().url().max(2048),
+});
+export type AssetImportInput = z.infer<typeof assetImportInputSchema>;
+
+export const assetImportResponseSchema = z.object({
+  key: z.string().min(1).max(500),
+  assetSrc: z.string().min(1).max(520),
+});
+export type AssetImportResponse = z.infer<typeof assetImportResponseSchema>;

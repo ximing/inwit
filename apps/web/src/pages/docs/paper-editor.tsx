@@ -3,35 +3,10 @@ import { observer, useService } from '@rabjs/react';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
-import {
-  Bold,
-  Code,
-  Film,
-  Heading1,
-  Heading2,
-  ImageIcon,
-  Italic,
-  Link as LinkIcon,
-  List,
-  ListChecks,
-  ListOrdered,
-  Minus,
-  Quote,
-  Strikethrough,
-  Table as TableIcon,
-} from 'lucide-react';
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type MouseEvent,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   completeAssetMultipart,
+  importAsset,
   initAssetMultipart,
   presignAsset,
   signAssetMultipart,
@@ -41,7 +16,6 @@ import { docEntities } from '@/lib/anchors';
 import {
   createDocEditorHost,
   ensureEntityMarksOnEditor,
-  selectionAnchorFromEditor,
   stripEntityMarksFromSlice,
   type DocEditorHost,
 } from '@/lib/entity-marks';
@@ -49,11 +23,20 @@ import { asPmJson, clonePmJson } from '@/lib/pm-doc';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { DialogService } from '@/services/dialog.service';
 import { AnchorHighlight } from './anchor-highlight';
-import { SelectionActions } from './selection-toolbar';
+import { fetchMediaAsFile, filesFromDataTransfer } from './paste-media';
+import {
+  decidePasteAction,
+  needsRehostSrc,
+  rehostMediaSrc,
+  rehostPastedHtml,
+} from './paste-media-logic';
+import { PaperToolbar, SelectionFormatBar } from './paper-toolbar';
 import {
   AssetUploadError,
+  classifyAssetFile,
   ingestAssetFiles,
   putViaFetch,
+  storeDocAsset,
   UPLOAD_FAILED_MESSAGE,
   type UploadDocAssetApi,
 } from './upload-asset';
@@ -62,8 +45,6 @@ const NEW_DOC_JSON = {
   type: 'doc',
   content: [{ type: 'paragraph' }],
 };
-
-const TOOL_ICON = 15;
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
 const VIDEO_ACCEPT = 'video/mp4,video/webm,video/quicktime';
@@ -82,37 +63,6 @@ function contentFromSeed(seedDoc: unknown | null) {
   const content = json.content;
   if (!Array.isArray(content) || content.length === 0) return NEW_DOC_JSON;
   return json;
-}
-
-function ToolButton({
-  label,
-  active,
-  disabled,
-  onAction,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onAction: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      className={`float-tool${active ? ' is-on' : ''}`}
-      aria-label={label}
-      aria-pressed={active}
-      disabled={disabled}
-      onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {
-        event.preventDefault();
-        if (disabled) return;
-        onAction();
-      }}
-    >
-      {children}
-    </button>
-  );
 }
 
 type PaperEditorProps = {
@@ -158,6 +108,8 @@ export const PaperEditor = observer(function PaperEditor({
   const activeAnnotationIdRef = useRef(activeAnnotationId);
   const editorRef = useRef<Editor | null>(null);
   const ingestRef = useRef<(files: FileList | File[]) => Promise<void>>(async () => undefined);
+  const pasteRef = useRef<(dt: DataTransfer, insertAt: number) => boolean>(() => false);
+  const rehostRef = useRef<() => Promise<void>>(async () => undefined);
   const uploadingRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -170,7 +122,6 @@ export const PaperEditor = observer(function PaperEditor({
   annotationsRef.current = annotations;
   activeCardIdRef.current = activeCardId;
   activeAnnotationIdRef.current = activeAnnotationId;
-  const [, setTick] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<{ text: string; error: boolean } | null>(null);
 
@@ -209,6 +160,110 @@ export const PaperEditor = observer(function PaperEditor({
   );
   ingestRef.current = ingestFiles;
 
+  const rehostDeps = useMemo(
+    () => ({
+      storeFile: async (file: File) => (await storeDocAsset(file, assetApi)).assetSrc,
+      fetchSrc: fetchMediaAsFile,
+      importUrl: async (url: string) => (await importAsset({ url })).assetSrc,
+    }),
+    [],
+  );
+
+  const ingestPastedHtml = useCallback(
+    async (html: string, files: File[], insertAt: number) => {
+      const instance = editorRef.current;
+      if (!instance || uploadingRef.current) return;
+      const extra = files.filter((file) => classifyAssetFile(file).ok);
+      uploadingRef.current = true;
+      setUploading(true);
+      setUploadNotice({ text: '上传中…', error: false });
+      try {
+        const result = await rehostPastedHtml(html, extra, rehostDeps);
+        if (result.assetSrcs.length > 0) await assetUrls.ensure(result.assetSrcs);
+        instance.chain().focus().insertContentAt(insertAt, result.html).run();
+        if (result.failed.length > 0) {
+          setUploadNotice({ text: '部分图片或视频未能转存', error: true });
+        } else {
+          setUploadNotice(null);
+        }
+      } catch (err) {
+        const invalid = err instanceof AssetUploadError && err.code === 'invalid';
+        setUploadNotice({
+          text: invalid ? err.message : UPLOAD_FAILED_MESSAGE,
+          error: true,
+        });
+        console.error(err);
+      } finally {
+        uploadingRef.current = false;
+        setUploading(false);
+      }
+    },
+    [assetUrls, rehostDeps],
+  );
+
+  const rehostExternalInEditor = useCallback(async () => {
+    const instance = editorRef.current;
+    if (!instance || uploadingRef.current) return;
+    const srcs: string[] = [];
+    instance.state.doc.descendants((node) => {
+      if (node.type.name !== 'image' && node.type.name !== 'video') return;
+      const src = typeof node.attrs.src === 'string' ? node.attrs.src : '';
+      if (needsRehostSrc(src)) srcs.push(src);
+    });
+    const unique = [...new Set(srcs)];
+    if (unique.length === 0) return;
+    uploadingRef.current = true;
+    setUploading(true);
+    setUploadNotice({ text: '上传中…', error: false });
+    try {
+      const map = new Map<string, string>();
+      const failed: string[] = [];
+      for (const src of unique) {
+        const assetSrc = await rehostMediaSrc(src, () => null, rehostDeps);
+        if (assetSrc) map.set(src, assetSrc);
+        else failed.push(src);
+      }
+      if (map.size > 0) {
+        const { tr } = instance.state;
+        instance.state.doc.descendants((node, pos) => {
+          if (node.type.name !== 'image' && node.type.name !== 'video') return;
+          const src = typeof node.attrs.src === 'string' ? node.attrs.src : '';
+          const next = map.get(src);
+          if (next) tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: next });
+        });
+        instance.view.dispatch(tr);
+        await assetUrls.ensure([...map.values()]);
+      }
+      if (failed.length > 0) {
+        setUploadNotice({ text: '部分图片或视频未能转存', error: true });
+      } else {
+        setUploadNotice(null);
+      }
+    } catch (err) {
+      setUploadNotice({ text: UPLOAD_FAILED_MESSAGE, error: true });
+      console.error(err);
+    } finally {
+      uploadingRef.current = false;
+      setUploading(false);
+    }
+  }, [assetUrls, rehostDeps]);
+
+  pasteRef.current = (dt, insertAt) => {
+    const html = dt.getData('text/html') ?? '';
+    const files = filesFromDataTransfer(dt);
+    const action = decidePasteAction(html, files.length);
+    if (action === 'rehost-html') {
+      void ingestPastedHtml(html, files, insertAt);
+      return true;
+    }
+    if (action === 'ingest-files') {
+      void ingestFiles(files);
+      return true;
+    }
+    return false;
+  };
+  rehostRef.current = rehostExternalInEditor;
+
   const anchorHighlight = useMemo(
     () =>
       AnchorHighlight.configure({
@@ -243,17 +298,26 @@ export const PaperEditor = observer(function PaperEditor({
         spellcheck: 'false',
       },
       transformPasted: (slice) => stripEntityMarksFromSlice(slice),
-      handlePaste: (_view, event) => {
-        const files = event.clipboardData?.files;
-        if (files && files.length > 0) {
+      handlePaste: (view, event) => {
+        const dt = event.clipboardData;
+        if (!dt) return false;
+        if (pasteRef.current(dt, view.state.selection.from)) {
           event.preventDefault();
-          void ingestRef.current(files);
           return true;
         }
+        queueMicrotask(() => void rehostRef.current());
         return false;
       },
-      handleDrop: (_view, event) => {
-        const files = event.dataTransfer?.files;
+      handleDrop: (view, event) => {
+        const dt = event.dataTransfer;
+        if (!dt) return false;
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+        const insertAt = coords?.pos ?? view.state.selection.from;
+        if (pasteRef.current(dt, insertAt)) {
+          event.preventDefault();
+          return true;
+        }
+        const files = dt.files;
         if (files && files.length > 0) {
           event.preventDefault();
           void ingestRef.current(files);
@@ -302,15 +366,6 @@ export const PaperEditor = observer(function PaperEditor({
 
   useEffect(() => {
     if (!editor) return;
-    const refresh = () => setTick((n) => n + 1);
-    editor.on('selectionUpdate', refresh);
-    return () => {
-      editor.off('selectionUpdate', refresh);
-    };
-  }, [editor]);
-
-  useEffect(() => {
-    if (!editor) return;
     editor.commands.updateDecorations('anchorHighlight');
   }, [editor, entities, activeCardId, activeAnnotationId]);
 
@@ -353,18 +408,24 @@ export const PaperEditor = observer(function PaperEditor({
 
   return (
     <div className="ws-writer" aria-busy={uploading}>
-      {uploadNotice ? (
-        <p
-          className={`save-state${uploadNotice.error ? ' is-error' : ''}`}
-          role={uploadNotice.error ? 'alert' : 'status'}
-        >
+      {uploadNotice?.error ? (
+        <p className="save-state is-error" role="alert">
           {uploadNotice.text}
         </p>
       ) : null}
+      <PaperToolbar
+        editor={editor}
+        uploading={uploading}
+        canInsertMedia={canInsertMedia}
+        onInsertLink={insertLink}
+        onPickImage={() => imageInputRef.current?.click()}
+        onPickVideo={() => videoInputRef.current?.click()}
+        onToggleTable={toggleTable}
+      />
       <BubbleMenu
         editor={editor}
         className="float-toolbar"
-        aria-label="编辑工具"
+        aria-label="划词工具"
         updateDelay={10}
         appendTo={() => document.body}
         shouldShow={({ editor: instance, from, to, state, view }) => {
@@ -383,134 +444,7 @@ export const PaperEditor = observer(function PaperEditor({
           scrollTarget,
         }}
       >
-        <ToolButton
-          label="粗体"
-          active={editor.isActive('bold')}
-          onAction={() => editor.chain().focus().toggleBold().run()}
-        >
-          <Bold width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="斜体"
-          active={editor.isActive('italic')}
-          onAction={() => editor.chain().focus().toggleItalic().run()}
-        >
-          <Italic width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="划线"
-          active={editor.isActive('strike')}
-          onAction={() => editor.chain().focus().toggleStrike().run()}
-        >
-          <Strikethrough width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <span className="float-tool-sep" />
-        <ToolButton
-          label="一级标题"
-          active={editor.isActive('heading', { level: 1 })}
-          onAction={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        >
-          <Heading1 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="二级标题"
-          active={editor.isActive('heading', { level: 2 })}
-          onAction={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        >
-          <Heading2 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="引用"
-          active={editor.isActive('blockquote')}
-          onAction={() => editor.chain().focus().toggleBlockquote().run()}
-        >
-          <Quote width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <span className="float-tool-sep" />
-        <ToolButton
-          label="无序列表"
-          active={editor.isActive('bulletList')}
-          onAction={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          <List width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="有序列表"
-          active={editor.isActive('orderedList')}
-          onAction={() => editor.chain().focus().toggleOrderedList().run()}
-        >
-          <ListOrdered width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="任务列表"
-          active={editor.isActive('taskList')}
-          onAction={() => editor.chain().focus().toggleTaskList().run()}
-        >
-          <ListChecks width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="代码块"
-          active={editor.isActive('codeBlock')}
-          onAction={() => editor.chain().focus().toggleCodeBlock().run()}
-        >
-          <Code width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <span className="float-tool-sep" />
-        <ToolButton label="链接" active={editor.isActive('link')} onAction={insertLink}>
-          <LinkIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="图片"
-          disabled={!canInsertMedia}
-          onAction={() => imageInputRef.current?.click()}
-        >
-          <ImageIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="视频"
-          disabled={!canInsertMedia}
-          onAction={() => videoInputRef.current?.click()}
-        >
-          <Film width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="表格"
-          active={editor.isActive('table')}
-          onAction={toggleTable}
-        >
-          <TableIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        <ToolButton
-          label="分割线"
-          onAction={() => editor.chain().focus().setHorizontalRule().run()}
-        >
-          <Minus width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </ToolButton>
-        {uploading ? (
-          <span className="float-tool is-wide" aria-live="polite">
-            上传中…
-          </span>
-        ) : null}
-        <span className="float-tool-sep" />
-        <SelectionActions
-          text={editor.state.doc.textBetween(
-            editor.state.selection.from,
-            editor.state.selection.to,
-            ' ',
-          )}
-          documentId={documentId}
-          getSelection={() => selectionAnchorFromEditor(editor)}
-          getRect={() => {
-            const { from, to } = editor.state.selection;
-            const start = editor.view.coordsAtPos(from);
-            const end = editor.view.coordsAtPos(to);
-            return {
-              left: (start.left + end.right) / 2,
-              top: Math.min(start.top, end.top),
-              bottom: Math.max(start.bottom, end.bottom),
-            };
-          }}
-        />
+        <SelectionFormatBar editor={editor} documentId={documentId} onInsertLink={insertLink} />
       </BubbleMenu>
       <input
         ref={imageInputRef}

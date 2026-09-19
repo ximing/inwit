@@ -1,9 +1,15 @@
 import { Service } from '@rabjs/react';
+import {
+  CARD_RAIL_WIDTH_DEFAULT,
+  clampCardRailWidth,
+  parseCardRailWidth,
+} from './ui-prefs-logic';
 
 export type DocMode = 'edit' | 'preview';
 
 export const DOC_MODE_STORAGE_KEY = 'inwit-doc-mode';
 export const CARD_RAIL_COLLAPSED_KEY = 'inwit-card-rail-collapsed';
+export const CARD_RAIL_WIDTH_KEY = 'inwit-card-rail-width';
 export const NAV_RAIL_COLLAPSED_KEY = 'inwit-nav-rail-collapsed';
 
 /** Pane narrower than this docks the card rail as an overlay instead of a column. */
@@ -38,6 +44,7 @@ function writeStorage(key: string, value: string): void {
 export class UiPrefsService extends Service {
   docMode: DocMode = 'edit';
   cardRailCollapsed = false;
+  cardRailWidth = CARD_RAIL_WIDTH_DEFAULT;
   navRailCollapsed = false;
 
   constructor() {
@@ -45,6 +52,11 @@ export class UiPrefsService extends Service {
     this.docMode = readDocMode();
     this.cardRailCollapsed = readFlag(CARD_RAIL_COLLAPSED_KEY);
     this.navRailCollapsed = readFlag(NAV_RAIL_COLLAPSED_KEY);
+    try {
+      this.cardRailWidth = parseCardRailWidth(localStorage.getItem(CARD_RAIL_WIDTH_KEY));
+    } catch {
+      this.cardRailWidth = CARD_RAIL_WIDTH_DEFAULT;
+    }
   }
 
   get editing(): boolean {
@@ -61,6 +73,13 @@ export class UiPrefsService extends Service {
     if (this.cardRailCollapsed === collapsed) return;
     this.cardRailCollapsed = collapsed;
     writeStorage(CARD_RAIL_COLLAPSED_KEY, collapsed ? '1' : '0');
+  }
+
+  setCardRailWidth(width: number, paneWidth = 0): void {
+    const next = clampCardRailWidth(width, paneWidth);
+    if (next === this.cardRailWidth) return;
+    this.cardRailWidth = next;
+    writeStorage(CARD_RAIL_WIDTH_KEY, String(next));
   }
 
   setNavRailCollapsed(collapsed: boolean): void {

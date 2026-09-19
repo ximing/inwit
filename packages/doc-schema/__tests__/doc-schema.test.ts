@@ -258,3 +258,17 @@ describe('thematicBreaksToPageBreaks', () => {
     );
   });
 });
+
+describe('textAlign', () => {
+  it('round-trips paragraph and heading alignment on the headless schema', () => {
+    const source = doc(
+      { type: 'paragraph', attrs: { textAlign: 'center' }, content: [t('居中')] },
+      { type: 'heading', attrs: { level: 2, textAlign: 'right' }, content: [t('靠右')] },
+    );
+    const pm = Node.fromJSON(getHeadlessSchema(), source);
+    expect(pm.child(0).attrs.textAlign).toBe('center');
+    expect(pm.child(1).attrs.textAlign).toBe('right');
+    expect(pm.child(1).attrs.level).toBe(2);
+    expect((pm.toJSON() as PmJson).content?.[0]?.attrs?.textAlign).toBe('center');
+  });
+});

@@ -269,6 +269,24 @@ body.is-native .harness { display: none; }
   color: var(--accent);
 }
 
+.doc-view .ProseMirror [style*='text-align: center'] :is(img, .doc-image, .doc-video, video),
+.doc-view .ProseMirror [style*='text-align:center'] :is(img, .doc-image, .doc-video, video),
+.doc-video.is-align-center {
+  margin-left: auto;
+  margin-right: auto;
+}
+.doc-view .ProseMirror [style*='text-align: right'] :is(img, .doc-image, .doc-video, video),
+.doc-view .ProseMirror [style*='text-align:right'] :is(img, .doc-image, .doc-video, video),
+.doc-video.is-align-right {
+  margin-left: auto;
+  margin-right: 0;
+}
+.doc-video.is-align-center,
+.doc-video.is-align-right {
+  width: fit-content;
+  max-width: 100%;
+}
+
 .doc-image-pending {
   min-height: 80px;
   background: var(--bg-sunken);

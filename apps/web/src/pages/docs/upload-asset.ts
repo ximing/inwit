@@ -164,12 +164,11 @@ async function uploadMultipart(
   return done.assetSrc;
 }
 
-export async function uploadDocAsset(
+export async function storeDocAsset(
   file: File,
   api: UploadDocAssetApi,
-  editor: UploadDocAssetEditor,
   options: UploadDocAssetOptions = {},
-): Promise<string> {
+): Promise<{ assetSrc: string; kind: AssetKind; mime: string }> {
   const classified = classifyAssetFile(file);
   if (!classified.ok) throw new AssetUploadError(classified.message, 'invalid');
 
@@ -178,11 +177,20 @@ export async function uploadDocAsset(
     file.size > threshold
       ? await uploadMultipart(file, classified.kind, classified.mime, api)
       : await uploadSimple(file, classified.kind, classified.mime, api);
+  return { assetSrc, kind: classified.kind, mime: classified.mime };
+}
 
-  if (classified.kind === 'image') editor.insertImage(assetSrc, file.name);
-  else editor.insertVideo(assetSrc, classified.mime);
-  await editor.ensure([assetSrc]);
-  return assetSrc;
+export async function uploadDocAsset(
+  file: File,
+  api: UploadDocAssetApi,
+  editor: UploadDocAssetEditor,
+  options: UploadDocAssetOptions = {},
+): Promise<string> {
+  const stored = await storeDocAsset(file, api, options);
+  if (stored.kind === 'image') editor.insertImage(stored.assetSrc, file.name);
+  else editor.insertVideo(stored.assetSrc, stored.mime);
+  await editor.ensure([stored.assetSrc]);
+  return stored.assetSrc;
 }
 
 export async function ingestAssetFiles(

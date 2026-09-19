@@ -89,6 +89,22 @@ function getClient(): { cfg: StorageConfig; client: S3Client } {
   return cached;
 }
 
+export async function putObject(
+  key: string,
+  body: Uint8Array,
+  contentType: string,
+): Promise<void> {
+  const { cfg, client } = getClient();
+  await client.send(
+    new PutObjectCommand({
+      Bucket: cfg.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+}
+
 export async function presignPut(
   key: string,
   contentType: string,

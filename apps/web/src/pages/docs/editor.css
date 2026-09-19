@@ -17,7 +17,76 @@
   box-shadow: none;
   border-radius: 0;
   margin: 0;
-  padding-top: var(--write-gap, 28px);
+  padding-top: 0;
+}
+
+/* 扁平工具行：不成药丸；编辑态下收起 .pane-meta 的分线，只保留工具行下面一条 */
+.pane-doc.is-editing .pane-meta {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 10px;
+}
+.paper-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: var(--bg);
+  margin: 0 0 14px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.paper-toolbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* 让首个图标与正文左边线视觉对齐（按钮自身有内距） */
+  margin-left: -8px;
+}
+.paper-toolbar-inner::-webkit-scrollbar { display: none; }
+.paper-tool {
+  width: 30px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  color: var(--ink-3);
+  transition: background 0.12s, color 0.12s;
+}
+.paper-tool:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.paper-tool.is-on {
+  background: var(--bg-sunken);
+  color: var(--accent);
+}
+.paper-tool:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.paper-tool.is-wide {
+  width: auto;
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-4);
+}
+.paper-tool-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+  margin: 0 6px;
+  flex: none;
+}
+.paper-tool svg { width: 15px; height: 15px; }
+.paper-tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .ws-writer .ProseMirror {
   min-height: 55vh;

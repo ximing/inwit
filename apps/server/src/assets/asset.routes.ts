@@ -1,4 +1,5 @@
 import {
+  assetImportInputSchema,
   assetMultipartCompleteInputSchema,
   assetMultipartInitInputSchema,
   assetMultipartSignInputSchema,
@@ -9,6 +10,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireUser } from '../auth/authenticate.js';
 import {
   completeAssetMultipart,
+  importAssetFromUrl,
   initAssetMultipart,
   requestAssetUpload,
   resolveAssetUrls,
@@ -21,6 +23,11 @@ export function registerAssetRoutes(app: FastifyInstance): void {
   app.post('/api/assets/presign', auth, async (req) => {
     const input = assetUploadInputSchema.parse(req.body);
     return requestAssetUpload(requireUser(req).id, input);
+  });
+
+  app.post('/api/assets/import', auth, async (req) => {
+    const input = assetImportInputSchema.parse(req.body);
+    return importAssetFromUrl(requireUser(req).id, input.url);
   });
 
   app.post('/api/assets/resolve', auth, async (req) => {

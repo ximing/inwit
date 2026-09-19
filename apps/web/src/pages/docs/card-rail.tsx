@@ -11,11 +11,18 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { Link } from 'react-router';
 import { MiniCard } from '@/components/reader/mini-card';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
 import { ROUTES } from '@/routes';
+import {
+  CARD_RAIL_WIDTH_DEFAULT,
+  CARD_RAIL_WIDTH_MAX,
+  CARD_RAIL_WIDTH_MIN,
+  cardRailWidthFromDrag,
+  cardRailWidthFromKey,
+} from '@/services/ui-prefs-logic';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { DocsService } from './docs.service';
 
@@ -226,6 +233,50 @@ export const CardRail = observer(function CardRail() {
   const visible = docked || showOverlay;
   const pending = service.doc?.status === 'pending';
   const badge = cards.length + notes.length;
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const stopResize = () => {
+    dragRef.current = null;
+    document.documentElement.classList.remove('is-resizing-card-rail');
+  };
+
+  useEffect(() => {
+    return () => stopResize();
+  }, []);
+
+  const applyWidth = (width: number) => {
+    prefs.setCardRailWidth(width, service.paneWidth);
+  };
+
+  const onResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = prefs.cardRailWidth;
+    dragRef.current = { startX, startWidth };
+    document.documentElement.classList.add('is-resizing-card-rail');
+
+    const onMove = (move: globalThis.PointerEvent) => {
+      if (!dragRef.current) return;
+      applyWidth(cardRailWidthFromDrag(startWidth, startX, move.clientX));
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      stopResize();
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  const onResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const next = cardRailWidthFromKey(prefs.cardRailWidth, event.key);
+    if (next == null) return;
+    event.preventDefault();
+    applyWidth(next);
+  };
 
   return (
     <>
@@ -240,7 +291,21 @@ export const CardRail = observer(function CardRail() {
         <aside
           className={`card-rail${showOverlay ? ' is-overlay' : ''}`}
           aria-label="批注与卡片"
+          style={{ width: prefs.cardRailWidth }}
         >
+          <div
+            className="card-rail-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整卡片栏宽度"
+            aria-valuemin={CARD_RAIL_WIDTH_MIN}
+            aria-valuemax={CARD_RAIL_WIDTH_MAX}
+            aria-valuenow={prefs.cardRailWidth}
+            tabIndex={0}
+            onPointerDown={onResizePointerDown}
+            onDoubleClick={() => applyWidth(CARD_RAIL_WIDTH_DEFAULT)}
+            onKeyDown={onResizeKeyDown}
+          />
           <div className="card-rail-head">
             <span className="card-rail-title">本文</span>
             <Link className="go" to={ROUTES.review}>

@@ -1,4 +1,6 @@
 import type {
+  AssetImportInput,
+  AssetImportResponse,
   AssetMultipartCompleteInput,
   AssetMultipartCompleteResponse,
   AssetMultipartInitInput,
@@ -14,6 +16,13 @@ import { request } from './client';
 
 export function presignAsset(input: AssetUploadInput): Promise<AssetUploadResponse> {
   return request<AssetUploadResponse>('/api/assets/presign', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function importAsset(input: AssetImportInput): Promise<AssetImportResponse> {
+  return request<AssetImportResponse>('/api/assets/import', {
     method: 'POST',
     body: JSON.stringify(input),
   });

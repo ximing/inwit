@@ -9,6 +9,8 @@ export const ERROR_MESSAGES = {
   ACCESS_TOKEN_NOT_FOUND: '接口令牌不存在',
   ACCESS_TOKEN_LIMIT: '最多 20 个接口令牌',
   STORAGE_NOT_CONFIGURED: '对象存储未配置',
+  ASSET_IMPORT_FAILED: '无法转存该图片或视频',
+  ASSET_IMPORT_BLOCKED: '不能转存这个地址',
   LLM_NOT_CONFIGURED: '还没有配置大模型',
   LLM_PROVIDER_NOT_FOUND: '模型配置不存在',
   LLM_OUTPUT_TRUNCATED: '模型输出被截断',

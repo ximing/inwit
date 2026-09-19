@@ -5,6 +5,7 @@ export { thematicBreaksToPageBreaks } from './page-breaks.js';
 export { AnnotationMark } from './schema/annotation-mark.js';
 export { CardAnchorMark } from './schema/card-anchor-mark.js';
 export { getHeadlessExtensions, getHeadlessSchema } from './schema/headless.js';
+export { createTextAlignExtension, DOC_TEXT_ALIGN_TYPES } from './schema/text-align.js';
 export { PageBreak } from './schema/page-break.js';
 export { Video } from './schema/video.js';
 export { VitalEntity } from './schema/vital-entity.js';

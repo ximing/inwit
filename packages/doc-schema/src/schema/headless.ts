@@ -10,6 +10,7 @@ import type { Schema } from 'prosemirror-model';
 import { AnnotationMark } from './annotation-mark.js';
 import { CardAnchorMark } from './card-anchor-mark.js';
 import { PageBreak } from './page-break.js';
+import { createTextAlignExtension } from './text-align.js';
 import { Video } from './video.js';
 import { VitalEntity } from './vital-entity.js';
 
@@ -38,6 +39,7 @@ export function getHeadlessExtensions(): AnyExtension[] {
     CardAnchorMark,
     Video,
     VitalEntity,
+    createTextAlignExtension(),
   ];
 }
 
