@@ -27,11 +27,17 @@
 .mini-wrap { position: relative; }
 .mini-wrap .mini-ops {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: auto;
+  bottom: 14px;
+  right: 8px;
+  z-index: 1;
   display: flex;
   gap: 2px;
   opacity: 1;
   pointer-events: auto;
+}
+.mini-wrap .mini-card.is-open .mini-foot {
+  min-height: 24px;
+  padding-right: 84px;
 }
 .mini-wrap .note-op.is-on { color: var(--accent); background: var(--accent-soft); }
