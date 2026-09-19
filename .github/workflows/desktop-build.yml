@@ -190,10 +190,7 @@ jobs:
         id: ver
         shell: bash
         run: |
-          tag="${{ github.event.release.tag_name }}"
-          if [[ -z "$tag" ]]; then
-            tag="${{ github.ref_name }}"
-          fi
+          tag="${{ github.event.release.tag_name || github.event.inputs.release_tag || github.ref_name }}"
           if [[ "$tag" =~ ^v?([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
             version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
           else
@@ -225,7 +222,7 @@ jobs:
 
       - name: Build doc-engine and sync into mobile
         run: |
-          pnpm --filter @inwit/doc-engine build
+          pnpm --filter @inwit/doc-engine... build
           pnpm --filter @inwit/mobile sync:engine
 
       - name: Expo prebuild (Android)
