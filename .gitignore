@@ -17,3 +17,5 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 
 deploy/info.md
+# grok CLI 本地目录
+.grok/

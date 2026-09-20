@@ -165,6 +165,8 @@ export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>;
 
 /** Open-API (PAT) creation: raw html/markdown in, server converts to PM JSON. */
 export const MAX_OPEN_CONTENT_BYTES = 3 * 1024 * 1024;
+/** Unique http(s) image/video URLs rehosted per open-document create. */
+export const OPEN_MEDIA_REHOST_MAX = 40;
 export const openCreateDocumentInputSchema = z
   .object({
     title: z.string().trim().min(1).max(500),
@@ -177,6 +179,27 @@ export const openCreateDocumentInputSchema = z
     message: 'exactly one of html or markdown is required',
   });
 export type OpenCreateDocumentInput = z.infer<typeof openCreateDocumentInputSchema>;
+
+export const openMediaFailureSchema = z.object({
+  src: z.string().min(1).max(2048),
+  code: z.string().min(1).max(64),
+});
+export type OpenMediaFailure = z.infer<typeof openMediaFailureSchema>;
+
+export const openMediaReportSchema = z.object({
+  rehosted: z.number().int().nonnegative(),
+  failed: z.array(openMediaFailureSchema),
+});
+export type OpenMediaReport = z.infer<typeof openMediaReportSchema>;
+
+export const EMPTY_OPEN_MEDIA_REPORT: OpenMediaReport = { rehosted: 0, failed: [] };
+
+/** PAT document view: TipTap stored, markdown for agents. */
+export const openDocumentSchema = documentSchema.extend({
+  markdown: z.string(),
+  media: openMediaReportSchema,
+});
+export type OpenDocument = z.infer<typeof openDocumentSchema>;
 
 export const updateDocumentInputSchema = z
   .object({

@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { OPEN_MEDIA_REHOST_MAX } from '@inwit/dto';
 import type { PmJson } from '@inwit/doc-schema';
 import { AppError } from '../errors.js';
 import { htmlToContentJson } from './content-json.js';
-import { buildFinalMarkdown, checkOpenTokenRate, resetOpenTokenRate } from './open-documents-logic.js';
+import {
+  applySrcRewrites,
+  buildFinalMarkdown,
+  checkOpenTokenRate,
+  collectHttpMediaSrcs,
+  partitionRehostSrcs,
+  resetOpenTokenRate,
+} from './open-documents-logic.js';
 
 function collect(node: PmJson, type: string, acc: PmJson[] = []): PmJson[] {
   if (node.type === type) acc.push(node);
@@ -113,5 +121,78 @@ describe('checkOpenTokenRate', () => {
     expect(() => checkOpenTokenRate('token-3', now)).not.toThrow();
     const hourLater = now + 60 * 60 * 1000 + 1;
     expect(() => checkOpenTokenRate('token-2', hourLater)).not.toThrow();
+  });
+});
+
+const ASSET_SRC =
+  'asset:users/11111111-1111-4111-8111-111111111111/doc-assets/22222222-2222-4222-8222-222222222222.png';
+
+describe('collectHttpMediaSrcs', () => {
+  it('collects unique http srcs and posters, skips asset: keys', () => {
+    const doc: PmJson = {
+      type: 'doc',
+      content: [
+        { type: 'image', attrs: { src: 'https://cdn.example/a.png' } },
+        { type: 'image', attrs: { src: 'https://cdn.example/a.png' } },
+        { type: 'image', attrs: { src: ASSET_SRC } },
+        {
+          type: 'video',
+          attrs: { src: 'https://cdn.example/v.mp4', poster: 'https://cdn.example/p.jpg' },
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'no media' }] },
+      ],
+    };
+    expect(collectHttpMediaSrcs(doc)).toEqual([
+      'https://cdn.example/a.png',
+      'https://cdn.example/v.mp4',
+      'https://cdn.example/p.jpg',
+    ]);
+  });
+});
+
+describe('applySrcRewrites', () => {
+  it('rewrites matching src and poster and leaves other nodes untouched', () => {
+    const original: PmJson = {
+      type: 'doc',
+      content: [
+        { type: 'image', attrs: { src: 'https://cdn.example/a.png', alt: 'pic' } },
+        {
+          type: 'video',
+          attrs: { src: 'https://cdn.example/v.mp4', poster: 'https://cdn.example/p.jpg' },
+        },
+        { type: 'paragraph', content: [{ type: 'text', text: 'keep' }] },
+      ],
+    };
+    const rewritten = applySrcRewrites(
+      original,
+      new Map([
+        ['https://cdn.example/a.png', ASSET_SRC],
+        ['https://cdn.example/p.jpg', `${ASSET_SRC}.poster`],
+      ]),
+    );
+    expect(rewritten.content?.[0]).toMatchObject({ attrs: { src: ASSET_SRC, alt: 'pic' } });
+    expect(rewritten.content?.[1]).toMatchObject({
+      attrs: { src: 'https://cdn.example/v.mp4', poster: `${ASSET_SRC}.poster` },
+    });
+    expect(rewritten.content?.[2]).toBe(original.content?.[2]);
+  });
+});
+
+describe('partitionRehostSrcs', () => {
+  it('keeps all srcs at or under the cap', () => {
+    expect(partitionRehostSrcs(['https://a/1.png'])).toEqual({
+      toRehost: ['https://a/1.png'],
+      skipped: [],
+    });
+  });
+
+  it('skips srcs past OPEN_MEDIA_REHOST_MAX', () => {
+    const srcs = Array.from(
+      { length: OPEN_MEDIA_REHOST_MAX + 1 },
+      (_, i) => `https://cdn.example/${String(i)}.png`,
+    );
+    const { toRehost, skipped } = partitionRehostSrcs(srcs);
+    expect(toRehost).toHaveLength(OPEN_MEDIA_REHOST_MAX);
+    expect(skipped).toEqual([`https://cdn.example/${String(OPEN_MEDIA_REHOST_MAX)}.png`]);
   });
 });
