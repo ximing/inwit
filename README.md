@@ -7,12 +7,16 @@
 <p align="center"><strong>只管往里扔。它替你消化，并催你复习。</strong></p>
 
 <p align="center">
-  一个 AI 制卡、推送驱动的学习伴侣。<br />
-  你负责输入，Agent 负责切成原子卡片、排出每日队列、维护知识地图。
+  <strong>AI First</strong> 的学习伴侣：收集（资料）→ 消化（卡片）→ 复盘（复习）。<br />
+  你负责扔进去；Agent 负责切卡、出题、排每日队列、维护知识地图。
 </p>
 
 <p align="center">
   <a href="https://inwit.aimo.plus">inwit.aimo.plus</a>
+  ·
+  <a href="#产品理念">理念</a>
+  ·
+  <a href="#agent--ai-first-的两条路径">AI First</a>
   ·
   <a href="#快速开始">快速开始</a>
   ·
@@ -32,19 +36,18 @@
 
 ---
 
-## 理念
+## 产品理念
 
-知识工具默认你愿意整理。Anki 默认你愿意制卡。大多数人两件事都做不到，于是笔记躺着，卡片荒着。
+Inwit 是 **AI First**，同时追求 **纸上学习**。打开后先看到今天该回忆什么，而不是文件夹和标签；Agent 在后台切卡、出题、画地图，提议开题要你点头才落地。
 
-Inwit 把学习收成四个动作，不多不少：
+学习收成四个动作，不多不少：**输入 → 消化 → 记住 → 贯通**。
 
-**输入 → 消化 → 记住 → 贯通**
+- **一个闭环，而不是一堆工具。** 笔记、问号、截图先丢进资料；消化 Agent 切成原子卡片并出题；复习按遗忘曲线推到今天的队列；三档反馈再驱动换讲法、拆卡和周报。编码 Agent 也可以当投喂口，但不另起一套笔记。
+- **你只做输入。** 不要求分类、打标签、选文件夹。主题不是文件夹，是 Agent 替你维护的知识地图；空白节点可以让 AI 补一张入门卡。
+- **回忆必须是你自己的。** 切卡和出题可以交给模型；翻面之前先想，三档反馈才写进 SM-2。偷看作对，下次只会隔得更远。
+- **基础层不依赖 AI。** 卡片 + 间隔重复在没有模型时也能跑。AI 只做增强：换讲法、拆小、对比专题、周报。密钥按需配置（BYOK），用量在任务页可见。
 
-你只做第一件：把笔记、论文片段、截图、或一句问号扔进来。切卡、出题、打标签、排间隔、画知识地图，都交给后台的 Agent。复习不是打开驱动的课表，是按遗忘曲线推到今天的队列——打开就刷，刷完即走。
-
-输入不只来自网页或桌面。你正在用的编码 Agent（Claude Code、Codex、Cursor、Grok…）也可以当投喂口：对话里冒出来的片段，直接送进 Inwit。外部 Agent **不整理、不制卡、不排复习**——那些仍是 Inwit 后台的事。仓库里的 skill 只教它怎么把碎片送进来、怎么读今天的队列。
-
-基础层（卡片 + SM-2）不依赖 AI 也能跑。AI 只做增强：换讲法、拆小、出对比专题、写周报。越用越懂你忘在哪里。
+视觉主题为 **纸上学习**：宣纸底、暖墨字、朱批红。浅色是白日书桌，深色是灯下夜读。规范见 [docs/design-system.md](docs/design-system.md)。
 
 ## 它不是什么
 
@@ -55,7 +58,58 @@ Inwit 把学习收成四个动作，不多不少：
 | 聊天机器人 | 回答完就散 | 回答落成卡片，进入复习队列 |
 | 编码 Agent 自己记笔记 | 再做一个第二大脑 | 只负责投喂，消化和复习仍在 Inwit |
 
-主题不是文件夹。资料按时间流入主题或未归属池；Agent 维护一张概念大纲树。空白节点可以让 AI 补一张入门卡——这是复习之外的第二个学习驱动。
+主题不是文件夹。资料按时间流入主题或未归属池；Agent 维护一张概念大纲树。空白节点可以让 AI 补——这是复习之外的第二个学习驱动。
+
+## Agent · AI First 的两条路径
+
+Inwit 把 Agent 当成产品的一部分，而不是外挂聊天窗。
+
+1. **对内**：worker 里的后台 Agent 消化资料、回答问题、整理地图、根据复习反馈进化，并按周写复盘。
+2. **对外**：仓库里的 [skills/inwit](skills/inwit/SKILL.md) 让其他 Agent 用个人访问令牌调用同一套 HTTP API。
+
+<p align="center">
+  <img src="docs/diagrams/ai-first-paths.zh.svg#gh-light-mode-only" alt="对内 Inwit Agent 与对外 skill 汇入同一份数据" width="880" />
+  <img src="docs/diagrams/ai-first-paths.zh-dark.svg#gh-dark-mode-only" alt="对内 Inwit Agent 与对外 skill 汇入同一份数据" width="880" />
+</p>
+
+### 对内：Agent 怎么工作
+
+配置好模型（设置 → 模型配置，用户 BYOK；系统可走百炼兜底）之后，独立 worker 轮询 `jobs` 表。状态不在进程内存里：领取、超时回收、失败重试都落在 PostgreSQL，进程重启也能接着跑。所有查询按 `userId` 隔离。没有 worker，文档会停在「消化中…」。
+
+| 能力 | 做什么 | 何时跑 |
+|---|---|---|
+| 消化 `digest` | 把长内容切成原子卡片（概念 + 例子 + 易混点），出题，挂到知识地图 | 资料入库后入队 |
+| 问答 `chat` | 直接提问，中文回答落成文档，并自动转卡片 | 以问号结尾发送 |
+| 主题 `topic` | 整理 / 补全知识地图，未归属资料聚成一类时提议开题 | 用户点「整理地图」，或后台建议 |
+| 进化 `evolve` | 反复忘的换讲法、拆小、出混淆对比 | 复习反馈触发 |
+| 周报 `weekly_report` | 回忆成功率、建议重学的概念 | 按周自动入队 |
+| 提取 / 识别 `extract` `ocr` | 从原件抽文本，识别扫描页 | 导入 PDF 等 |
+
+切卡会直接写入，开题要你点头。三档反馈（忘了 / 模糊 / 想起来了）才改间隔。任务页能看见 Agent 在跑什么、失败了什么、用了多少 token。
+
+<p align="center">
+  <img src="docs/screenshots/readme/07-jobs.png" alt="任务队列：消化、问答、进化与用量" width="920" />
+</p>
+
+### 对外：Skill 让其他 Agent 接入
+
+仓库自带可安装的 skill：[skills/inwit/SKILL.md](skills/inwit/SKILL.md)。Claude、Codex、Cursor 或其他能跑 skill 的 Agent 都可以用它操作你的 Inwit，而不必再做一个第二大脑。
+
+1. 在 **设置 → 接口令牌** 签发 `iwt_` 前缀的个人访问令牌（明文只显示一次，可随时撤销）。
+2. 按下面的 [编码 Agent](#编码-agent) 把 skill 装到对应工具，并设置 `INWIT_TOKEN` / `INWIT_BASE_URL`。
+3. 接口目录按域拆开（[skills/inwit/references/](skills/inwit/references/)），Agent 只加载当前意图的那一个模块，不要靠记忆编字段，也不要手搓文档 JSON。
+
+外部 Agent **只负责投喂和读取**：把笔记、问号送进来，看今天的队列。消化、SM-2、知识地图仍在服务端跑。
+
+Skill 里写好的典型工作流：
+
+- **投喂笔记**：`POST /api/open/documents`（markdown 或 html）。
+- **提问并制卡**：`POST /api/chat`，问题以 `？` / `?` 结尾。
+- **今日复习**：`GET /api/review/today`，反馈 `POST /api/review/:cardId/feedback`。
+- **主题 / 地图**：见 topics 模块。
+- **任务进度**：`GET /api/jobs/queue`。
+
+对内 Agent 和对外 skill 操作的是同一份数据：你在网页里扔的，Claude 看得到；Claude 投喂的笔记，首页和文档列表立刻出现。
 
 ---
 
@@ -96,11 +150,10 @@ Inwit 把学习收成四个动作，不多不少：
   <img src="docs/screenshots/readme/06-topics-map.png" alt="主题知识地图" width="920" />
 </p>
 
-每周会自动写一份复盘：成功率、反复打滑的概念、下一周该补哪块。任务页能看见消化、问答、进化这些 Agent 跑得怎样。
+每周会自动写一份复盘：成功率、反复打滑的概念、下一周该补哪块。
 
 <p align="center">
-  <img src="docs/screenshots/readme/08-weekly-report.png" alt="每周学习复盘" width="48%" />
-  <img src="docs/screenshots/readme/07-jobs.png" alt="任务队列与 Token 用量" width="48%" />
+  <img src="docs/screenshots/readme/08-weekly-report.png" alt="每周学习复盘" width="920" />
 </p>
 
 ---
@@ -219,9 +272,9 @@ docker compose -f docker-compose.prod.yml up -d
 
 ## 编码 Agent
 
-仓库 [`skills/inwit`](skills/inwit) 是给外部编码 Agent 的 skill：用个人访问令牌（PAT）把笔记、问号送进你的 Inwit 实例，并读取今日复习。消化、SM-2、知识地图仍在服务端跑，Agent 不要手搓文档 JSON、不要自己排卡片。
+Inwit 在 [`skills/`](skills) 下内置 [Agent Skills](https://code.claude.com/docs/en/claude-code/skills)，教编程 Agent 通过 HTTP API 操作同一份数据。技能本体是纯 `SKILL.md`（外加按域拆开的 `references/`），同一份文件适用于各编程工具。安装方式因工具而异——多个工具同时使用时，需要分别为每个工具安装。理念与工作流见 [Agent · AI First 的两条路径](#agent--ai-first-的两条路径)。
 
-插件清单的布局与 [CSI](https://github.com/ximing/csi) 相同（`.claude-plugin` / `.codex-plugin` / `.cursor-plugin` 等），同一份 `skills/` 给各工具用。装过一个再装另一个，各自装一次。
+插件清单的布局与 [CSI](https://github.com/ximing/csi) 相同（`.claude-plugin` / `.codex-plugin` / `.cursor-plugin` 等）。装过一个再装另一个，各自装一次。
 
 先在 Inwit **设置 → 接口令牌** 创建令牌（前缀 `iwt_`），写入环境变量，不要贴进对话或仓库：
 
