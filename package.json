@@ -3,9 +3,20 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "description": "Inwit — throw notes in; the app digests them into cards and pushes review. Coding-agent skill included.",
   "packageManager": "pnpm@10.30.3",
   "engines": {
     "node": ">=22"
+  },
+  "main": ".opencode/plugins/inwit.js",
+  "keywords": [
+    "pi-package",
+    "skills"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
   },
   "scripts": {
     "dev": "pnpm -r --parallel --filter @inwit/server --filter @inwit/web dev",

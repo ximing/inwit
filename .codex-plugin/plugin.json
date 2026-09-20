@@ -1,0 +1,32 @@
+{
+  "name": "inwit",
+  "version": "0.1.3",
+  "description": "Inwit skill for coding agents: throw notes, questions, and clips into the user's Inwit instance over HTTP (PAT). The app still digests, reviews, and maintains the knowledge map.",
+  "author": {
+    "name": "ximing",
+    "url": "https://github.com/ximing"
+  },
+  "homepage": "https://github.com/ximing/inwit",
+  "repository": "https://github.com/ximing/inwit",
+  "keywords": [
+    "inwit",
+    "learning",
+    "spaced-repetition",
+    "notes",
+    "skills"
+  ],
+  "skills": "./skills/",
+  "hooks": {},
+  "interface": {
+    "displayName": "Inwit",
+    "shortDescription": "Feed notes into Inwit from the coding agent",
+    "longDescription": "The Inwit skill lets the agent capture notes, ask questions that become cards, and read the review queue of the user's Inwit instance over HTTP with a personal access token. Digestion, SM-2 review, and the knowledge map stay in Inwit.",
+    "developerName": "ximing",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/ximing/inwit"
+  }
+}

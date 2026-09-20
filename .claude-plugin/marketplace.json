@@ -1,0 +1,25 @@
+{
+  "name": "inwit",
+  "owner": {
+    "name": "ximing"
+  },
+  "plugins": [
+    {
+      "name": "inwit",
+      "source": "./",
+      "description": "Inwit skill for coding agents: throw notes, questions, and clips into the user's Inwit instance over HTTP (PAT). The app still digests, reviews, and maintains the knowledge map.",
+      "version": "0.1.3",
+      "author": {
+        "name": "ximing"
+      },
+      "homepage": "https://github.com/ximing/inwit",
+      "keywords": [
+        "inwit",
+        "learning",
+        "spaced-repetition",
+        "notes",
+        "skills"
+      ]
+    }
+  ]
+}

@@ -16,6 +16,8 @@
   ·
   <a href="#快速开始">快速开始</a>
   ·
+  <a href="#编码-agent">编码 Agent</a>
+  ·
   <a href="#架构">架构</a>
   ·
   <a href="#贡献">贡献</a>
@@ -40,6 +42,8 @@ Inwit 把学习收成四个动作，不多不少：
 
 你只做第一件：把笔记、论文片段、截图、或一句问号扔进来。切卡、出题、打标签、排间隔、画知识地图，都交给后台的 Agent。复习不是打开驱动的课表，是按遗忘曲线推到今天的队列——打开就刷，刷完即走。
 
+输入不只来自网页或桌面。你正在用的编码 Agent（Claude Code、Codex、Cursor、Grok…）也可以当投喂口：对话里冒出来的片段，直接送进 Inwit。外部 Agent **不整理、不制卡、不排复习**——那些仍是 Inwit 后台的事。仓库里的 skill 只教它怎么把碎片送进来、怎么读今天的队列。
+
 基础层（卡片 + SM-2）不依赖 AI 也能跑。AI 只做增强：换讲法、拆小、出对比专题、写周报。越用越懂你忘在哪里。
 
 ## 它不是什么
@@ -48,6 +52,8 @@ Inwit 把学习收成四个动作，不多不少：
 |---|---|---|
 | Notion / Obsidian | 打开驱动，手动整理 | 输入驱动，Agent 整理 |
 | Anki | 手动制卡，机械重复 | AI 制卡，推送驱动的复习闭环 |
+| 聊天机器人 | 回答完就散 | 回答落成卡片，进入复习队列 |
+| 编码 Agent 自己记笔记 | 再做一个第二大脑 | 只负责投喂，消化和复习仍在 Inwit |
 
 主题不是文件夹。资料按时间流入主题或未归属池；Agent 维护一张概念大纲树。空白节点可以让 AI 补一张入门卡——这是复习之外的第二个学习驱动。
 
@@ -161,6 +167,7 @@ inwit/
 ├── packages/dto      前后端共享 zod schema（API 契约的唯一来源）
 ├── packages/doc-schema / doc-engine / markdown
 ├── packages/brand    App 图标源（改 logo.svg 后 raster-icons）
+├── skills/inwit      给外部编码 Agent 的 skill（HTTP 投喂 / 复习）
 └── docs/             PRD、设计稿、任务与开发日志
 ```
 
@@ -207,6 +214,79 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 生产 compose 需 `.env`，见 [`.env.production.example`](.env.production.example)。
+
+---
+
+## 编码 Agent
+
+仓库 [`skills/inwit`](skills/inwit) 是给外部编码 Agent 的 skill：用个人访问令牌（PAT）把笔记、问号送进你的 Inwit 实例，并读取今日复习。消化、SM-2、知识地图仍在服务端跑，Agent 不要手搓文档 JSON、不要自己排卡片。
+
+插件清单的布局与 [CSI](https://github.com/ximing/csi) 相同（`.claude-plugin` / `.codex-plugin` / `.cursor-plugin` 等），同一份 `skills/` 给各工具用。装过一个再装另一个，各自装一次。
+
+先在 Inwit **设置 → 接口令牌** 创建令牌（前缀 `iwt_`），写入环境变量，不要贴进对话或仓库：
+
+```bash
+export INWIT_TOKEN='iwt_…'
+export INWIT_BASE_URL='https://inwit.aimo.plus'   # 本地可省略，默认 http://localhost:3020
+```
+
+### Claude Code
+
+```bash
+/plugin marketplace add ximing/inwit
+/plugin install inwit@inwit
+```
+
+或：`cp -r skills/inwit ~/.claude/skills/`
+
+### Codex App / Codex CLI
+
+本仓库同时是 Codex plugin marketplace（[`.agents/plugins/marketplace.json`](.agents/plugins/marketplace.json)）：
+
+```bash
+codex plugin marketplace add ximing/inwit
+codex plugin add inwit@inwit
+```
+
+### Cursor
+
+清单在 [`.cursor-plugin/plugin.json`](.cursor-plugin/plugin.json)。在 Cursor Agent 对话里执行 `/add-plugin inwit`，或把 `skills/inwit` 拷进项目的 `.cursor/skills/`。
+
+### Grok Build CLI
+
+```bash
+cp -r skills/inwit ~/.grok/skills/
+```
+
+若正在本仓库里工作，也可把 skill 放到当前项目能扫到的 skills 目录。调用：`/inwit`。
+
+### Kimi Code
+
+```text
+/plugins install https://github.com/ximing/inwit
+```
+
+然后 `/new` 开一个新会话，让插件加载。
+
+### OpenCode
+
+在 `opencode.json`（全局或项目）里注册 `skills/`：
+
+```json
+{
+  "plugin": ["inwit@git+https://github.com/ximing/inwit.git"]
+}
+```
+
+### Pi
+
+```bash
+pi install git:github.com/ximing/inwit
+```
+
+根目录 [`package.json`](package.json) 的 `pi.skills` 指向 `./skills`。
+
+装好后对 Agent 说「投喂这段笔记到 Inwit」或「今日复习」即可。约定与模块索引见 [`skills/inwit/SKILL.md`](skills/inwit/SKILL.md)。接口目录按模块拆在 `skills/inwit/references/`，Agent 只应打开当前意图对应的那一个 md。
 
 ---
 
@@ -303,7 +383,8 @@ UI 视觉以 [`docs/design/v2/`](docs/design/v2/) 为设计稿。产品需求见
 | [docs/prd.md](docs/prd.md) | 产品需求与概念模型 |
 | [docs/design-system.md](docs/design-system.md) | 「纸上学习」设计系统 |
 | [docs/design/v2/](docs/design/v2/) | UI 重构设计稿 |
-| [CLAUDE.md](CLAUDE.md) | 给编码代理的仓库约定 |
+| [skills/inwit/SKILL.md](skills/inwit/SKILL.md) | 给外部编码 Agent：HTTP 投喂与复习 |
+| [CLAUDE.md](CLAUDE.md) | 给在本仓库里改代码的代理 |
 | [docs/dev-log.md](docs/dev-log.md) | 开发日志 |
 | [docs/tasks/](docs/tasks/) | 历史任务与报告 |
 

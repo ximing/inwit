@@ -1,0 +1,30 @@
+{
+  "name": "inwit",
+  "version": "0.1.3",
+  "description": "Inwit skill for coding agents: throw notes, questions, and clips into the user's Inwit instance over HTTP (PAT). The app still digests, reviews, and maintains the knowledge map.",
+  "author": {
+    "name": "ximing",
+    "homepage": "https://github.com/ximing"
+  },
+  "homepage": "https://github.com/ximing/inwit",
+  "keywords": [
+    "inwit",
+    "learning",
+    "spaced-repetition",
+    "notes",
+    "skills"
+  ],
+  "skills": "./skills/",
+  "skillInstructions": "Inwit skill tool mapping for Kimi Code:\n\n- Read `skills/inwit/SKILL.md`, then only the one `references/<module>.md` that matches the current intent. Do not read `api.json` or open several modules at once.\n- Call the HTTP API with Kimi Code's `Bash` tool via `node skills/inwit/scripts/inwit.mjs` (or curl). The skill documents METHOD/PATH and env vars `INWIT_TOKEN` / `INWIT_BASE_URL`.\n- Never print the full PAT. Never invent endpoints.\n- Invoke the Inwit skill with Kimi Code's native `Skill` tool.",
+  "interface": {
+    "displayName": "Inwit",
+    "shortDescription": "Feed notes into Inwit from the coding agent",
+    "longDescription": "The Inwit skill lets the agent capture notes, ask questions that become cards, and read the review queue of the user's Inwit instance over HTTP with a personal access token. Digestion, SM-2 review, and the knowledge map stay in Inwit.",
+    "developerName": "ximing",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/ximing/inwit"
+  }
+}
