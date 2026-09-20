@@ -28,7 +28,7 @@
 </p>
 
 <p align="center">
-  <img alt="Node.js >= 22" src="https://img.shields.io/static/v1?label=Node.js&amp;message=%3E%3D22&amp;color=5FA04E&amp;logo=nodedotjs&amp;logoColor=white" />
+  <img alt="Node.js >= 22" src="docs/badges/nodejs.svg" />
   <img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&amp;logoColor=white" />
   <img alt="TypeScript 7" src="https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&amp;logoColor=white" />
   <img alt="License" src="https://img.shields.io/badge/license-see%20README-lightgrey" />
