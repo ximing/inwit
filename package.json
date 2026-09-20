@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "pnpm -r --parallel --filter @inwit/server --filter @inwit/web dev",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "gen:inwit-skill": "node scripts/generate-inwit-skill-api.mjs"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

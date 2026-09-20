@@ -1,0 +1,3747 @@
+{
+  "generatedAt": "2026-09-20T05:12:01.638Z",
+  "modules": [
+    {
+      "id": "open",
+      "title": "开放文档（PAT）",
+      "count": 2
+    },
+    {
+      "id": "documents",
+      "title": "文档与问答",
+      "count": 21
+    },
+    {
+      "id": "cards",
+      "title": "卡片",
+      "count": 13
+    },
+    {
+      "id": "review",
+      "title": "复习",
+      "count": 8
+    },
+    {
+      "id": "topics",
+      "title": "主题与知识地图",
+      "count": 19
+    },
+    {
+      "id": "search",
+      "title": "搜索",
+      "count": 1
+    },
+    {
+      "id": "jobs",
+      "title": "任务与周报",
+      "count": 11
+    },
+    {
+      "id": "annotations",
+      "title": "批注",
+      "count": 10
+    },
+    {
+      "id": "assets",
+      "title": "媒体资源",
+      "count": 6
+    },
+    {
+      "id": "account",
+      "title": "账号与设置",
+      "count": 22
+    },
+    {
+      "id": "admin",
+      "title": "管理",
+      "count": 5
+    }
+  ],
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/admin/executions",
+      "module": "admin",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "listAdminExecutionsQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "optional": true,
+              "default": 1
+            },
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 100,
+              "optional": true,
+              "default": 20
+            },
+            "agentType": {
+              "type": "string",
+              "enum": [
+                "digest",
+                "evolve",
+                "weekly_report",
+                "topic",
+                "chat",
+                "selection",
+                "extract",
+                "ocr"
+              ],
+              "optional": true
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "running",
+                "done",
+                "failed"
+              ],
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/executions/:id",
+      "module": "admin",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/jobs",
+      "module": "admin",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "listAdminJobsQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "optional": true,
+              "default": 1
+            },
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 100,
+              "optional": true,
+              "default": 20
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "running",
+                "done",
+                "failed"
+              ],
+              "optional": true
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "digest",
+                "evolve",
+                "weekly_report",
+                "topic",
+                "chat",
+                "selection",
+                "extract",
+                "ocr",
+                "annotation_resurface"
+              ],
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/admin/jobs/:id/retry",
+      "module": "admin",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/admin/usage/summary",
+      "module": "admin",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "usageSummaryQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "days": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 365,
+              "optional": true,
+              "default": 30
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/annotation-resurface",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/annotation-resurface/:key/accept",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "resurfaceKeyParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ key: z.string().min(1).max(200) })"
+      },
+      "body": {
+        "name": "acceptAnnotationResurfaceInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "annotationId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "annotationId"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/annotation-resurface/:key/dismiss",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "resurfaceKeyParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ key: z.string().min(1).max(200) })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/annotations",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "createAnnotationInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "quote": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20000
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 20000,
+              "optional": true
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "text",
+                "pdf",
+                "media"
+              ],
+              "optional": true
+            },
+            "pageIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "optional": true
+            },
+            "geometry": {
+              "type": "object",
+              "properties": {
+                "quads": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "color": {
+                  "type": "string",
+                  "optional": true
+                }
+              },
+              "required": [
+                "quads"
+              ],
+              "additionalProperties": false,
+              "optional": true
+            },
+            "imageKey": {
+              "type": "string",
+              "minLength": 1,
+              "optional": true
+            },
+            "positionMs": {
+              "type": "integer",
+              "minimum": 0,
+              "optional": true
+            },
+            "anchorBlockIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "optional": true
+            }
+          },
+          "required": [
+            "documentId",
+            "quote"
+          ],
+          "additionalProperties": false,
+          "refined": true
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/annotations/:id",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "comment": "Soft delete: the annotation moves to 回收站 and can be restored.",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/annotations/:id",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "updateAnnotationInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "string",
+              "maxLength": 20000
+            }
+          },
+          "required": [
+            "note"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/annotations/:id/image",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/annotations/:id/permanent",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/annotations/:id/restore",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/annotations/archived",
+      "module": "annotations",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "archiveListQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "optional": true,
+              "default": 1
+            },
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 50,
+              "optional": true,
+              "default": 20
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/import",
+      "module": "assets",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "assetImportInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/multipart/complete",
+      "module": "assets",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "assetMultipartCompleteInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "uploadId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "partNumber": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 10000
+                  },
+                  "etag": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "partNumber",
+                  "etag"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 10000
+            }
+          },
+          "required": [
+            "uploadId",
+            "key",
+            "parts"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/multipart/init",
+      "module": "assets",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "assetMultipartInitInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "image",
+                "video"
+              ]
+            },
+            "contentType": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 127
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true
+            }
+          },
+          "required": [
+            "kind",
+            "contentType",
+            "sizeBytes"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/multipart/sign",
+      "module": "assets",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "assetMultipartSignInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "uploadId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "partNumbers": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true,
+                "maximum": 10000
+              },
+              "minItems": 1,
+              "maxItems": 1000
+            }
+          },
+          "required": [
+            "uploadId",
+            "key",
+            "partNumbers"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/presign",
+      "module": "assets",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "assetUploadInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "image",
+                "video"
+              ]
+            },
+            "contentType": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 127
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true
+            }
+          },
+          "required": [
+            "kind",
+            "contentType",
+            "sizeBytes"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/assets/resolve",
+      "module": "assets",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "assetResolveInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "srcs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 50
+            }
+          },
+          "required": [
+            "srcs"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/login",
+      "module": "account",
+      "auth": "none",
+      "status": [],
+      "body": {
+        "name": "loginInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "email": {
+              "type": "string",
+              "format": "email",
+              "maxLength": 255
+            },
+            "password": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "email",
+            "password"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/logout",
+      "module": "account",
+      "auth": "none",
+      "status": [
+        204
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/me",
+      "module": "account",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/refresh",
+      "module": "account",
+      "auth": "none",
+      "status": [],
+      "body": {
+        "name": "refreshInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "refreshToken": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "refreshToken"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/register",
+      "module": "account",
+      "auth": "none",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "registerInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "email": {
+              "type": "string",
+              "format": "email",
+              "maxLength": 255
+            },
+            "password": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "email",
+            "password"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/card-links/:id",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/cards",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "createCardInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "concept": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "example": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "anchorText": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000,
+              "optional": true
+            },
+            "anchorBlockIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "optional": true
+            },
+            "imageKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "optional": true
+            },
+            "annotationId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "required": [
+            "documentId",
+            "concept",
+            "example"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/cards/:id",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "comment": "Soft delete: the card moves to 回收站 and can be restored.",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/:id",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/cards/:id",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "updateCardInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "concept": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "optional": true
+            },
+            "example": {
+              "type": "string",
+              "maxLength": 4000,
+              "optional": true
+            },
+            "confusionPoint": {
+              "type": "string",
+              "maxLength": 4000,
+              "optional": true
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 50
+              },
+              "maxItems": 20,
+              "optional": true
+            },
+            "questions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "optional": true
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "cloze",
+                      "compare",
+                      "judge"
+                    ]
+                  },
+                  "question": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "answer": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  }
+                },
+                "required": [
+                  "type",
+                  "question",
+                  "answer"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 50,
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/:id/image",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/:id/links",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/cards/:id/map-node",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "setMapNodeInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "nodeId": {
+              "type": "string",
+              "format": "uuid",
+              "nullable": true
+            }
+          },
+          "required": [
+            "nodeId"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/cards/:id/permanent",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/cards/:id/restore",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/cards/:id/suspend",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/cards/:id/suspend",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "comment": "已熟悉：leave the review queue until the suspend mark is removed.",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/cards/archived",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "archiveListQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "optional": true,
+              "default": 1
+            },
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 50,
+              "optional": true,
+              "default": 20
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/chat",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "createChatInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "question": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100000
+            },
+            "topicId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "required": [
+            "question"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "listDocumentsQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 100,
+              "optional": true,
+              "default": 20
+            },
+            "offset": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 0,
+              "optional": true,
+              "default": 0
+            },
+            "topicId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "digested",
+                "failed"
+              ],
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "createDocumentInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "optional": true
+            },
+            "contentJson": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "doc"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": true
+            },
+            "topicId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "editor",
+                "paste"
+              ],
+              "optional": true
+            }
+          },
+          "required": [
+            "contentJson"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/documents/:id",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "comment": "Soft delete: the document (with its annotations) moves to 回收站.",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/:id",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/documents/:id",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "updateDocumentInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500,
+              "optional": true,
+              "nullable": true
+            },
+            "contentJson": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "doc"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": true,
+              "optional": true
+            },
+            "topicId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true,
+              "nullable": true
+            }
+          },
+          "additionalProperties": false,
+          "constraints": [
+            "title, contentJson, or topicId required"
+          ]
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/:id/annotations",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/:id/excerpts",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "excerptUploadInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "contentType": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 127
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 5242880
+            }
+          },
+          "required": [
+            "contentType",
+            "sizeBytes"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/:id/file",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/documents/:id/map-node",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "setMapNodeInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "nodeId": {
+              "type": "string",
+              "format": "uuid",
+              "nullable": true
+            }
+          },
+          "required": [
+            "nodeId"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/documents/:id/permanent",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "comment": "Permanent delete from 回收站; S3 objects are cleaned best-effort.",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/:id/restore",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/:id/retry",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/:id/selection-cards",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "createSelectionCardsInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100000
+            },
+            "blockIndex": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true
+            }
+          },
+          "required": [
+            "text",
+            "blockIndex"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/archived",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "archiveListQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "page": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "optional": true,
+              "default": 1
+            },
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 50,
+              "optional": true,
+              "default": 20
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/import/:id/abort",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "importAbortInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "uploadId": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "uploadId"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/import/:id/complete",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "importCompleteInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "uploadId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "partNumber": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 10000
+                  },
+                  "etag": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  }
+                },
+                "required": [
+                  "partNumber",
+                  "etag",
+                  "size"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 1,
+              "maxItems": 10000
+            }
+          },
+          "required": [
+            "uploadId",
+            "parts"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/import/:id/parts",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "importPartsInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "uploadId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "partNumbers": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true,
+                "maximum": 10000
+              },
+              "minItems": 1,
+              "maxItems": 1000
+            }
+          },
+          "required": [
+            "uploadId",
+            "partNumbers"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/import/init",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "importInitInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "filename": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "mime": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 127
+            },
+            "size": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true
+            },
+            "topicId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "required": [
+            "filename",
+            "mime",
+            "size"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/screenshot/:id/complete",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/screenshot/init",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "screenshotInitInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "contentType": {
+              "type": "string",
+              "enum": [
+                "image/png",
+                "image/jpeg",
+                "image/webp"
+              ]
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 10485760
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "optional": true
+            },
+            "topicId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "required": [
+            "contentType",
+            "sizeBytes"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/evolve/analyze",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "listJobsQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 100,
+              "optional": true,
+              "default": 20
+            },
+            "offset": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 0,
+              "optional": true,
+              "default": 0
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "running",
+                "done",
+                "failed"
+              ],
+              "optional": true
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "digest",
+                "evolve",
+                "weekly_report",
+                "topic",
+                "chat",
+                "selection",
+                "extract",
+                "ocr",
+                "annotation_resurface"
+              ],
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/:id",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/cancel",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/:id/executions",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/jobs/:id/retry",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/queue",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs/usage",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/llm-configs",
+      "module": "account",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/llm-configs",
+      "module": "account",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "createLlmConfigInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "openai",
+                "deepseek",
+                "claude",
+                "zhipu",
+                "dashscope"
+              ]
+            },
+            "apiKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "isDefault": {
+              "type": "boolean",
+              "optional": true
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 512,
+              "optional": true,
+              "nullable": true
+            }
+          },
+          "required": [
+            "provider",
+            "apiKey",
+            "model"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/llm-configs/:id",
+      "module": "account",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/llm-configs/:id",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "updateLlmConfigInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "apiKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "optional": true
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "optional": true
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 512,
+              "optional": true,
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "PUT",
+      "path": "/api/llm-configs/:id/default",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/llm-configs/:id/test",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/map-nodes/:id",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/map-nodes/:id",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/map-nodes/:id",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "updateMapNodeInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "optional": true
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 4000,
+              "optional": true,
+              "nullable": true
+            },
+            "parentId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true,
+              "nullable": true
+            },
+            "position": {
+              "type": "integer",
+              "minimum": 0,
+              "optional": true
+            }
+          },
+          "additionalProperties": false,
+          "constraints": [
+            "at least one of title, note, parentId, position is required"
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/map-nodes/:id/fill",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/me",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "updateProfileInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "displayName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "optional": true
+            },
+            "email": {
+              "type": "string",
+              "format": "email",
+              "maxLength": 255,
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/access-token-logs",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "listAccessTokenLogsQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 100,
+              "optional": true,
+              "default": 20
+            },
+            "offset": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 0,
+              "optional": true,
+              "default": 0
+            },
+            "accessTokenId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/access-tokens",
+      "module": "account",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/access-tokens",
+      "module": "account",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "createAccessTokenInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/access-tokens/:id/reveal",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/avatar",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "confirmAvatarInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/avatar/upload-url",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "avatarUploadUrlInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "contentType": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 127
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 5242880
+            }
+          },
+          "required": [
+            "contentType",
+            "sizeBytes"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/ocr-config",
+      "module": "account",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/ocr-config",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "upsertOcrConfigInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "apiKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "optional": true
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "optional": true,
+              "default": "qwen-vl-ocr"
+            },
+            "baseUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 512,
+              "optional": true,
+              "nullable": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/ocr-config/test",
+      "module": "account",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/open/documents",
+      "module": "open",
+      "auth": "pat",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "openCreateDocumentInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "html": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3145728,
+              "optional": true
+            },
+            "markdown": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3145728,
+              "optional": true
+            },
+            "sourceUrl": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048,
+              "optional": true
+            },
+            "topicId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false,
+          "constraints": [
+            "exactly one of html or markdown is required"
+          ]
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/open/documents/:id",
+      "module": "open",
+      "auth": "pat",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/latest",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports/weekly",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "paginationQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 100,
+              "optional": true,
+              "default": 20
+            },
+            "offset": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 0,
+              "optional": true,
+              "default": 0
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/reports/weekly/generate",
+      "module": "jobs",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/review/:cardId/feedback",
+      "module": "review",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "cardIdParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "cardId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "cardId"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ cardId: z.string().uuid() })"
+      },
+      "body": {
+        "name": "submitReviewFeedbackSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "feedback": {
+              "type": "string",
+              "enum": [
+                "forgot",
+                "fuzzy",
+                "remembered"
+              ]
+            }
+          },
+          "required": [
+            "feedback"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/review/checkins",
+      "module": "review",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "checkinsQuerySchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "month": {
+              "type": "string",
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          },
+          "required": [
+            "month"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({\n  month: z.string().regex(/^\\d{4}-(0[1-9]|1[0-2])$/),\n})"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/review/settings",
+      "module": "review",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "PUT",
+      "path": "/api/review/settings",
+      "module": "review",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "reviewSettingsSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "dailyReviewLimit": {
+              "type": "integer",
+              "minimum": 5,
+              "maximum": 100
+            },
+            "dailyNewLimit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30
+            },
+            "startingEase": {
+              "type": "number",
+              "minimum": 1.3,
+              "maximum": 3
+            },
+            "fuzzyScale": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 1.5
+            },
+            "learningSteps": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 30
+              },
+              "minItems": 1,
+              "maxItems": 4,
+              "refined": true
+            }
+          },
+          "required": [
+            "dailyReviewLimit",
+            "dailyNewLimit",
+            "startingEase",
+            "fuzzyScale",
+            "learningSteps"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/review/stats",
+      "module": "review",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/review/stats/topics",
+      "module": "review",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/review/struggling",
+      "module": "review",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "strugglingQuerySchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 20,
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        },
+        "source": "z.object({\n  limit: z.coerce.number().int().min(1).max(20).optional(),\n})"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/review/today",
+      "module": "review",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "module": "search",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "searchQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "q": {
+              "type": "string",
+              "minLength": 1
+            },
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 50,
+              "optional": true,
+              "default": 8
+            },
+            "topicId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "required": [
+            "q"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/topic-suggestions",
+      "module": "topics",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "POST",
+      "path": "/api/topic-suggestions/:key/accept",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "suggestionKeyParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({\n  key: z.string().trim().min(1).max(200),\n})"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/topic-suggestions/:key/dismiss",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "suggestionKeyParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({\n  key: z.string().trim().min(1).max(200),\n})"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/topics",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "listTopicsQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "archived"
+              ],
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/topics",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "createTopicInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "goal": {
+              "type": "string",
+              "maxLength": 4000,
+              "optional": true
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/topics/:id",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/topics/:id",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/topics/:id",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "updateTopicInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "optional": true
+            },
+            "goal": {
+              "type": "string",
+              "maxLength": 4000,
+              "optional": true,
+              "nullable": true
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "active",
+                "archived"
+              ],
+              "optional": true
+            }
+          },
+          "additionalProperties": false,
+          "constraints": [
+            "at least one of title, goal, status is required"
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/topics/:id/archive",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/topics/:id/map",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/topics/:id/map/job",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/topics/:id/map/nodes",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "createMapNodeInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "parentId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 4000,
+              "optional": true
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/topics/:id/map/organize",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/topics/:id/map/summary",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/topics/suggest-scan",
+      "module": "topics",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "module": "account",
+      "auth": "none",
+      "status": []
+    }
+  ]
+}
