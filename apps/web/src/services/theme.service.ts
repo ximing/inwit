@@ -1,4 +1,5 @@
 import { Service } from '@rabjs/react';
+import { syncNativeWindowTheme } from './native-window-theme';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export type ResolvedTheme = 'light' | 'dark';
@@ -40,7 +41,7 @@ export class ThemeService extends Service {
     this.apply();
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     media.addEventListener('change', () => {
-      if (this.preference === 'system') this.apply();
+      this.apply();
     });
   }
 
@@ -61,5 +62,6 @@ export class ThemeService extends Service {
   private apply(): void {
     this.resolved = resolveTheme(this.preference);
     document.documentElement.dataset.theme = this.resolved;
+    void syncNativeWindowTheme(this.resolved);
   }
 }

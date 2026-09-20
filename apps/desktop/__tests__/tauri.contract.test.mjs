@@ -21,15 +21,18 @@ describe('Tauri desktop contract', () => {
     assert.equal(conf.build.frontendDist, '../../web/dist');
   });
 
-  it('uses a 1280x800 window, min 960x640, paper-light titlebar', () => {
+  it('uses a 1280x800 window, min 960x640, and the default system titlebar', () => {
     const win = conf.app.windows[0];
     assert.equal(win.label, 'main');
     assert.equal(win.width, 1280);
     assert.equal(win.height, 800);
     assert.equal(win.minWidth, 960);
     assert.equal(win.minHeight, 640);
-    assert.equal(win.theme, 'Light');
-    assert.equal(win.backgroundColor, '#F6F3EC');
+    assert.equal(win.theme, undefined);
+    assert.equal(win.backgroundColor, undefined);
+    assert.notEqual(win.decorations, false);
+    assert.notEqual(win.titleBarStyle, 'Overlay');
+    assert.notEqual(win.hiddenTitle, true);
   });
 
   it('registers plugin-http, plugin-store, window-state, notification, and global-shortcut', () => {
@@ -87,6 +90,8 @@ describe('Tauri desktop contract', () => {
     assert.ok(urls.includes('http://127.0.0.1:3020/*'));
     assert.ok(urls.includes('http://localhost:3020/*'));
     assert.ok(urls.some((u) => u.startsWith('https://')));
+    assert.ok(caps.permissions.includes('core:window:allow-set-theme'));
+    assert.ok(caps.permissions.includes('core:window:allow-set-background-color'));
     assert.ok(caps.permissions.includes('store:default'));
     assert.ok(caps.permissions.includes('window-state:default'));
     assert.ok(caps.permissions.includes('notification:default'));

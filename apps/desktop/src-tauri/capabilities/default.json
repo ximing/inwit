@@ -8,6 +8,8 @@
   },
   "permissions": [
     "core:default",
+    "core:window:allow-set-theme",
+    "core:window:allow-set-background-color",
     "store:default",
     "window-state:default",
     "notification:default",
