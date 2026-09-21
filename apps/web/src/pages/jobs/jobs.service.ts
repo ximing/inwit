@@ -7,7 +7,8 @@ import { formatTimeHm } from '@/lib/format';
 const POLL_MS = 5000;
 const TICK_MS = 1000;
 const HISTORY_LIMIT = 20;
-const FAILED_LIMIT = 5;
+const FAILED_LIMIT = 3;
+const RECENT_LIMIT = 8;
 
 export const JOB_TYPES: JobType[] = [
   'digest',
@@ -142,16 +143,29 @@ export function barHeightPct(tokens: number, max: number): number {
   return Math.max(4, Math.round((tokens / max) * 100));
 }
 
+export function parseJobStatus(raw: string | null | undefined): JobStatus | '' {
+  if (raw && (JOB_STATUSES as readonly string[]).includes(raw)) return raw as JobStatus;
+  return '';
+}
+
+export function parseJobType(raw: string | null | undefined): JobType | '' {
+  if (raw && (JOB_TYPES as readonly string[]).includes(raw)) return raw as JobType;
+  return '';
+}
+
 export class JobsService extends Service {
   queue: JobQueue | null = null;
   usage: JobUsage | null = null;
   error: string | null = null;
 
   jobStatus: JobStatus | '' = '';
+  jobType: JobType | '' = '';
   jobs: Job[] = [];
   jobsTotal = 0;
   jobsPage = 1;
   jobsLimit = HISTORY_LIMIT;
+  /** 大盘「最近动态」：不受历史筛选项影响。 */
+  recentJobs: Job[] = [];
   /** 失败待处理区（首屏主角）：最近几条失败 job。 */
   failedJobs: Job[] = [];
   failedTotal = 0;
@@ -194,9 +208,21 @@ export class JobsService extends Service {
     return Math.max(0, ...this.usage.daily.map((day) => day.tokens));
   }
 
+  /** 大盘动态：去掉正在进行 / 排队里已经单独展示的条目。 */
+  get feedJobs(): Job[] {
+    const live = new Set([...this.running, ...this.pending].map((job) => job.id));
+    return this.recentJobs.filter((job) => !live.has(job.id));
+  }
+
   async load(): Promise<void> {
     this.error = null;
-    await Promise.all([this.loadQueue(), this.loadUsage(), this.loadHistory(), this.loadFailed()]);
+    await Promise.all([
+      this.loadQueue(),
+      this.loadUsage(),
+      this.loadRecent(),
+      this.loadHistory(),
+      this.loadFailed(),
+    ]);
     this.syncPolling();
   }
 
@@ -217,12 +243,22 @@ export class JobsService extends Service {
     }
   }
 
+  async loadRecent(): Promise<void> {
+    try {
+      const page = await listJobs({ limit: RECENT_LIMIT, offset: 0 });
+      this.recentJobs = page.items;
+    } catch (err) {
+      if (this.recentJobs.length === 0) this.error = errorMessage(err, '加载任务失败');
+    }
+  }
+
   async loadHistory(): Promise<void> {
     try {
       const page = await listJobs({
         limit: this.jobsLimit,
         offset: (this.jobsPage - 1) * this.jobsLimit,
         ...(this.jobStatus !== '' ? { status: this.jobStatus } : {}),
+        ...(this.jobType !== '' ? { type: this.jobType } : {}),
       });
       this.jobs = page.items;
       this.jobsTotal = page.total;
@@ -242,8 +278,22 @@ export class JobsService extends Service {
   }
 
   setJobStatus(value: JobStatus | ''): void {
-    this.jobStatus = value;
+    this.applyHistoryFilters(value, this.jobType);
+  }
+
+  setJobType(value: JobType | ''): void {
+    this.applyHistoryFilters(this.jobStatus, value);
+  }
+
+  hydrateHistoryFilters(status: JobStatus | '', type: JobType | ''): void {
+    this.jobStatus = status;
+    this.jobType = type;
     this.jobsPage = 1;
+  }
+
+  applyHistoryFilters(status: JobStatus | '', type: JobType | ''): void {
+    if (this.jobStatus === status && this.jobType === type) return;
+    this.hydrateHistoryFilters(status, type);
     void this.loadHistory();
   }
 
@@ -257,7 +307,7 @@ export class JobsService extends Service {
     this.error = null;
     try {
       await cancelJob(id);
-      await Promise.all([this.loadQueue(), this.loadHistory()]);
+      await Promise.all([this.loadQueue(), this.loadHistory(), this.loadRecent()]);
       this.syncPolling();
     } catch (err) {
       this.error = errorMessage(err, '取消失败');
@@ -271,7 +321,7 @@ export class JobsService extends Service {
     this.error = null;
     try {
       await retryJob(id);
-      await Promise.all([this.loadQueue(), this.loadHistory(), this.loadFailed()]);
+      await Promise.all([this.loadQueue(), this.loadHistory(), this.loadFailed(), this.loadRecent()]);
       this.syncPolling();
     } catch (err) {
       this.error = errorMessage(err, '重试失败');
@@ -312,7 +362,9 @@ export class JobsService extends Service {
   async tickQueue(): Promise<void> {
     const prev = this.queueSignature();
     await this.loadQueue();
-    if (this.queueSignature() !== prev) await Promise.all([this.loadHistory(), this.loadFailed()]);
+    if (this.queueSignature() !== prev) {
+      await Promise.all([this.loadHistory(), this.loadFailed(), this.loadRecent()]);
+    }
     this.syncPolling();
   }
 

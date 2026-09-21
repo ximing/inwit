@@ -80,3 +80,17 @@ export function weeklyReportsPath(id?: string): string {
   if (id) params.set('report', id);
   return `${ROUTES.review}?${params.toString()}`;
 }
+
+export function jobsPath(opts?: {
+  tab?: 'history';
+  status?: string;
+  type?: string;
+}): string {
+  const params = new URLSearchParams();
+  const history = opts?.tab === 'history' || Boolean(opts?.status) || Boolean(opts?.type);
+  if (history) params.set('tab', 'history');
+  if (opts?.status) params.set('status', opts.status);
+  if (opts?.type) params.set('type', opts.type);
+  const qs = params.toString();
+  return qs ? `${ROUTES.jobs}?${qs}` : ROUTES.jobs;
+}

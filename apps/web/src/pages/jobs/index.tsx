@@ -11,10 +11,11 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Chip } from '@/components/chip';
-import { PageHead } from '@/components/page-head';
 import { Tag } from '@/components/tag';
-import { formatDuration, formatTokens } from '@/lib/format';
+import { formatDuration, formatRelativeTime, formatTokens } from '@/lib/format';
+import { jobsPath } from '@/routes';
 import {
   barHeightPct,
   formatElapsedSec,
@@ -24,8 +25,11 @@ import {
   jobContent,
   jobDurationMs,
   JOB_STATUS_LABELS,
+  JOB_TYPES,
   JOB_TYPE_LABELS,
   JobsService,
+  parseJobStatus,
+  parseJobType,
   usageSwatch,
   usageTypeLabel,
   weekdayShort,
@@ -169,6 +173,7 @@ const FailCard = observer(function FailCard({ job }: { job: Job }) {
 
 const FailedBoard = observer(function FailedBoard() {
   const service = useService(JobsService);
+  const navigate = useNavigate();
   if (service.failedJobs.length === 0) return null;
   const rest = service.failedTotal - service.failedJobs.length;
   return (
@@ -184,7 +189,7 @@ const FailedBoard = observer(function FailedBoard() {
         <button
           type="button"
           className="detail-toggle"
-          onClick={() => service.setJobStatus('failed')}
+          onClick={() => navigate(jobsPath({ tab: 'history', status: 'failed' }))}
         >
           {`还有 ${String(rest)} 条，在执行历史中查看全部`}
         </button>
@@ -322,21 +327,35 @@ const HistoryRow = observer(function HistoryRow({
 
 const HistoryBoard = observer(function HistoryBoard() {
   const service = useService(JobsService);
+  const navigate = useNavigate();
   const loading = service.$model.loadHistory.loading && service.jobs.length === 0;
+  const go = (status: JobStatus | '', type: JobType | '') => {
+    navigate(jobsPath({ tab: 'history', status, type }));
+  };
   return (
     <>
-      <div className="jobs-sec">
-        执行历史
-        <span className="line" />
-      </div>
       <div className="hist-filters">
         {STATUS_CHIPS.map((chip) => (
           <Chip
-            key={chip.value}
+            key={chip.value || 'all-status'}
             isOn={service.jobStatus === chip.value}
-            onClick={() => service.setJobStatus(chip.value)}
+            onClick={() => go(chip.value, service.jobType)}
           >
             {chip.label}
+          </Chip>
+        ))}
+      </div>
+      <div className="hist-filters">
+        <Chip isOn={service.jobType === ''} onClick={() => go(service.jobStatus, '')}>
+          全部类型
+        </Chip>
+        {JOB_TYPES.map((type) => (
+          <Chip
+            key={type}
+            isOn={service.jobType === type}
+            onClick={() => go(service.jobStatus, type)}
+          >
+            {JOB_TYPE_LABELS[type]}
           </Chip>
         ))}
       </div>
@@ -404,10 +423,11 @@ const UsagePanel = observer(function UsagePanel() {
   const usage = service.usage;
   const max = service.usageMax;
   return (
-    <>
+    <section className="jobs-usage">
       <div className="jobs-sec">
-        {`Token 用量 · 近 7 天 · 今日完成 ${String(service.counts.doneToday)} 任务`}
+        近 7 天用量
         <span className="line" />
+        {usage ? <span className="jobs-sec-note">{formatTokens(usage.total)}</span> : null}
       </div>
       <div className="usage-panel">
         {!usage ? (
@@ -433,6 +453,9 @@ const UsagePanel = observer(function UsagePanel() {
                   <span className="v">{formatTokens(row.tokens)}</span>
                 </div>
               ))}
+              {usage.byType.length === 0 ? (
+                <p className="empty compact">这周还没有用量。</p>
+              ) : null}
               <div className="usage-legend-row is-total">
                 <b>合计</b>
                 <span className="v">
@@ -443,34 +466,148 @@ const UsagePanel = observer(function UsagePanel() {
           </div>
         )}
       </div>
-    </>
+    </section>
+  );
+});
+
+const PulseStrip = observer(function PulseStrip() {
+  const service = useService(JobsService);
+  const counts = service.counts;
+  return (
+    <div className="jobs-pulse" aria-label="此刻">
+      <div className="jobs-pulse-cell">
+        <div className={`jobs-pulse-n${counts.running > 0 ? ' is-live' : ''}`}>{counts.running}</div>
+        <div className="jobs-pulse-k">进行中</div>
+      </div>
+      <div className="jobs-pulse-cell">
+        <div className="jobs-pulse-n">{counts.pending}</div>
+        <div className="jobs-pulse-k">排队</div>
+      </div>
+      <div className="jobs-pulse-cell">
+        <div className="jobs-pulse-n">{counts.doneToday}</div>
+        <div className="jobs-pulse-k">今日完成</div>
+      </div>
+      <div className="jobs-pulse-cell">
+        <div className={`jobs-pulse-n${counts.failed > 0 ? ' is-bad' : ''}`}>{counts.failed}</div>
+        <div className="jobs-pulse-k">失败待处理</div>
+      </div>
+    </div>
+  );
+});
+
+const RecentFeed = observer(function RecentFeed() {
+  const service = useService(JobsService);
+  const items = service.feedJobs;
+  const loading = service.$model.loadRecent.loading && service.recentJobs.length === 0;
+  return (
+    <section className="jobs-feed">
+      <div className="jobs-sec">
+        最近动态
+        <span className="line" />
+        <Link className="jobs-sec-more" to={jobsPath({ tab: 'history' })}>
+          全部
+        </Link>
+      </div>
+      {loading ? <p className="empty compact">读取动态…</p> : null}
+      {!loading && items.length === 0 ? (
+        <p className="empty compact">还没有任务动态。</p>
+      ) : null}
+      {items.length > 0 ? (
+        <div className="jobs-feed-list">
+          {items.map((job) => (
+            <div className="jobs-feed-item" key={job.id}>
+              <JobIcon type={job.type} size="sm" />
+              <div className="jobs-feed-body">
+                <b>{JOB_TYPE_LABELS[job.type]}</b>
+                {jobContent(job.summary) ? ` · ${jobContent(job.summary)}` : null}
+              </div>
+              {job.status !== 'done' ? <StatusTag status={job.status} /> : null}
+              <span className="jobs-feed-time">
+                {formatRelativeTime(job.finishedAt ?? job.createdAt)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+});
+
+const JobsHead = observer(function JobsHead({ tab }: { tab: 'board' | 'history' }) {
+  const service = useService(JobsService);
+  return (
+    <div className="jobs-head">
+      <h1 className="jobs-title">任务</h1>
+      <p className="jobs-lede">
+        {tab === 'board' ? '此刻在消化什么，近一周用了多少。' : '全部任务记录，按状态和类型筛。'}
+      </p>
+      <nav className="jobs-tabs" aria-label="任务栏目">
+        <Link
+          className={tab === 'board' ? 'jobs-tab is-on' : 'jobs-tab'}
+          to={jobsPath()}
+          aria-current={tab === 'board' ? 'page' : undefined}
+        >
+          大盘
+        </Link>
+        <Link
+          className={tab === 'history' ? 'jobs-tab is-on' : 'jobs-tab'}
+          to={jobsPath({ tab: 'history', status: service.jobStatus, type: service.jobType })}
+          aria-current={tab === 'history' ? 'page' : undefined}
+        >
+          执行历史
+        </Link>
+      </nav>
+    </div>
   );
 });
 
 const JobsPageContent = observer(function JobsPageContent() {
   const service = useService(JobsService);
+  const [params] = useSearchParams();
+  const historyActive = params.get('tab') === 'history';
+  const statusParam = parseJobStatus(params.get('status'));
+  const typeParam = parseJobType(params.get('type'));
 
+  // Initial URL only; later tab/filter changes go through applyHistoryFilters.
   useEffect(() => {
+    if (historyActive) service.hydrateHistoryFilters(statusParam, typeParam);
     void service.load();
     return () => {
       service.stopPolling();
       service.stopTick();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount load
   }, [service]);
+
+  useEffect(() => {
+    if (!historyActive) return;
+    service.applyHistoryFilters(statusParam, typeParam);
+  }, [historyActive, statusParam, typeParam, service]);
 
   return (
     <div className="jobs-col">
-      <PageHead title="任务与用量" lede="Agent 系统此刻在做什么，一目了然。" />
+      <JobsHead tab={historyActive ? 'history' : 'board'} />
       {service.error ? (
         <p className="banner-error" role="alert">
           {service.error}
         </p>
       ) : null}
-      <FailedBoard />
-      <RunningList />
-      <PendingList />
-      <HistoryBoard />
-      <UsagePanel />
+      {historyActive ? (
+        <HistoryBoard />
+      ) : (
+        <>
+          <PulseStrip />
+          <div className="jobs-board">
+            <div className="jobs-now">
+              <FailedBoard />
+              <RunningList />
+              <PendingList />
+              <RecentFeed />
+            </div>
+            <UsagePanel />
+          </div>
+        </>
+      )}
     </div>
   );
 });

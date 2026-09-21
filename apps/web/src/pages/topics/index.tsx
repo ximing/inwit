@@ -1,16 +1,21 @@
-import { agentDocumentMetaLabel, docDisplayTitle, type DocumentListItem } from '@inwit/dto';
+import {
+  agentDocumentMetaLabel,
+  BLANK_DOCUMENT_LABEL,
+  docCardFace,
+  docCardLabel,
+  type DocumentListItem,
+} from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { ChevronDown, ChevronRight, Tags } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { DocumentActions, useDocumentMenu } from '@/components/document-actions';
-import { docSummaryLine } from '@/components/doc-row';
 import { ReaderOverlay } from '@/components/reader/ReaderOverlay';
 import { ReaderService } from '@/components/reader/reader.service';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
-import { formatRelativeTime, summarizeAnswer } from '@/lib/format';
+import { formatRelativeTime } from '@/lib/format';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { ROUTES, topicPath } from '@/routes';
 import { AssetUrlsService } from '@/services/asset-urls.service';
@@ -538,13 +543,6 @@ const DocsTab = observer(function DocsTab() {
   );
 });
 
-function cardExcerpt(doc: DocumentListItem): string | null {
-  const summary = docSummaryLine(doc);
-  if (summary) return summary;
-  if (doc.source === 'chat' && doc.answer) return summarizeAnswer(doc.answer, 96);
-  return null;
-}
-
 const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentListItem }) {
   const service = useService(TopicsService);
   const navigate = useNavigate();
@@ -553,30 +551,45 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
     if (to) navigate(to);
   });
   const kind = rowKindTag(doc);
-  const excerpt = cardExcerpt(doc);
+  const face = docCardFace(doc, 180);
   const hanging = service.hangingTitle(doc);
+  const chips = (
+    <>
+      {kind ? (
+        <Tag tone={kind.tone}>
+          {kind.pulse ? <span className="pulse" /> : null}
+          {kind.pulse ? '\u00a0' : null}
+          {kind.label}
+        </Tag>
+      ) : null}
+      {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
+    </>
+  );
+  const hasChips = Boolean(kind || doc.status === 'failed');
   return (
     <button
       type="button"
-      className="topic-doc-card"
+      className={`topic-doc-card${face.title ? '' : ' is-untitled'}`}
+      aria-label={docCardLabel(face)}
       {...menu}
       onClick={() => {
         const to = service.readerNavForDoc(doc.id);
         if (to) navigate(to);
       }}
     >
-      <h3>
-        {docDisplayTitle(doc)}
-        {kind ? (
-          <Tag tone={kind.tone}>
-            {kind.pulse ? <span className="pulse" /> : null}
-            {kind.pulse ? '\u00a0' : null}
-            {kind.label}
-          </Tag>
-        ) : null}
-        {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
-      </h3>
-      {excerpt ? <p className="excerpt">{excerpt}</p> : null}
+      {face.title ? (
+        <h3>
+          {face.title}
+          {chips}
+        </h3>
+      ) : hasChips ? (
+        <div className="card-chips">{chips}</div>
+      ) : null}
+      {face.preview ? (
+        <p className={face.title ? 'excerpt' : 'snippet'}>{face.preview}</p>
+      ) : !face.title ? (
+        <p className="snippet is-blank">{BLANK_DOCUMENT_LABEL}</p>
+      ) : null}
       <p className="meta">
         {`${String(doc.cardCount)} 张卡 · ${formatRelativeTime(doc.updatedAt)}`}
       </p>

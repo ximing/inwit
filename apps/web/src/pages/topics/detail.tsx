@@ -1,5 +1,5 @@
 import { observer, useService } from '@rabjs/react';
-import { docDisplayTitle, type MapNodeStatus, type MapTreeNode } from '@inwit/dto';
+import { docCardFace, docCardLabel, type MapNodeStatus, type MapTreeNode } from '@inwit/dto';
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
@@ -371,7 +371,7 @@ export const NodeDrawer = observer(function NodeDrawer() {
                     if (to) navigate(to);
                   }}
                 >
-                  {docDisplayTitle(doc)}
+                  {docCardLabel(docCardFace(doc, 80))}
                 </button>
               </li>
             ))}

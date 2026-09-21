@@ -1,4 +1,4 @@
-import { agentDocumentMetaLabel, docDisplayTitle, type DocumentListItem } from '@inwit/dto';
+import { agentDocumentMetaLabel, docCardFace, docCardLabel, type DocumentListItem } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { ChevronDown, FilePlus, Loader2, Plus, Search, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
@@ -47,24 +47,35 @@ const DocStreamRow = observer(function DocStreamRow({
   }, () => navigate(docsPath(doc.id)), () => service.prepareDocumentChange(doc.id));
   const stage = service.stageFor(doc);
   const kind = rowKindTag(doc, stage);
+  const face = docCardFace(doc, 120);
+  const tags = (
+    <>
+      {kind ? (
+        <Tag tone={kind.tone}>
+          {kind.pulse ? <span className="pulse" /> : null}
+          {kind.pulse ? '\u00a0' : null}
+          {kind.label}
+        </Tag>
+      ) : null}
+      {doc.status === 'failed' ? (
+        <span className="doc-failed" title={doc.failReason ?? undefined}>
+          失败{doc.failReason ? `：${doc.failReason}` : ''}
+        </span>
+      ) : null}
+    </>
+  );
+  const hasTags = Boolean(kind || doc.status === 'failed');
   return (
-    <div className={`row ws-doc-row${selected ? ' is-on' : ''}`} {...menu}>
-      <Link to={docsPath(doc.id)} className="ws-doc-row-link">
-        <div className="row-title">
-          <span className="t">{docDisplayTitle(doc)}</span>
-          {kind ? (
-            <Tag tone={kind.tone}>
-              {kind.pulse ? <span className="pulse" /> : null}
-              {kind.pulse ? '\u00a0' : null}
-              {kind.label}
-            </Tag>
-          ) : null}
-          {doc.status === 'failed' ? (
-            <span className="doc-failed" title={doc.failReason ?? undefined}>
-              失败{doc.failReason ? `：${doc.failReason}` : ''}
-            </span>
-          ) : null}
-        </div>
+    <div className={`row ws-doc-row${selected ? ' is-on' : ''}${face.title ? '' : ' is-untitled'}`} {...menu}>
+      <Link to={docsPath(doc.id)} className="ws-doc-row-link" aria-label={docCardLabel(face)}>
+        {face.title ? (
+          <div className="row-title">
+            <span className="t">{face.title}</span>
+            {tags}
+          </div>
+        ) : hasTags ? (
+          <div className="row-title is-chips">{tags}</div>
+        ) : null}
         <DocRowSummary doc={doc} />
         <div className="row-meta">
           {doc.source === 'import' ? <Tag className="tag-import">导入</Tag> : null}

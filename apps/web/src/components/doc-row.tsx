@@ -1,25 +1,30 @@
-import { agentDocumentMetaLabel, docDisplayTitle, type DocumentListItem } from '@inwit/dto';
+import {
+  agentDocumentMetaLabel,
+  BLANK_DOCUMENT_LABEL,
+  docCardFace,
+  docCardLabel,
+  type DocumentListItem,
+} from '@inwit/dto';
 import { Link } from 'react-router';
-import { formatRelativeTime, summarizeAnswer } from '@/lib/format';
+import { formatRelativeTime } from '@/lib/format';
 import { docPath } from '@/routes';
-
-export function docSummaryLine(doc: {
-  title?: string | null;
-  description?: string | null;
-}): string | null {
-  if (!(doc.title?.trim())) return null;
-  const text = doc.description?.trim() ?? '';
-  return text.length > 0 ? text : null;
-}
 
 export function DocRowSummary({
   doc,
 }: {
-  doc: { title?: string | null; description?: string | null };
+  doc: {
+    title?: string | null;
+    description?: string | null;
+    answer?: string | null;
+    contentJson?: unknown;
+  };
 }) {
-  const text = docSummaryLine(doc);
-  if (!text) return null;
-  return <div className="row-desc">{text}</div>;
+  const face = docCardFace(doc, 120);
+  if (face.preview) {
+    return <div className={`row-desc${face.title ? '' : ' is-lead'}`}>{face.preview}</div>;
+  }
+  if (!face.title) return <div className="row-desc is-blank">{BLANK_DOCUMENT_LABEL}</div>;
+  return null;
 }
 
 export function DocRow({
@@ -32,22 +37,31 @@ export function DocRow({
   onOpen?: (docId: string) => void;
 }) {
   const agentLabel = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
-  const summary = docSummaryLine(doc);
+  const face = docCardFace(doc, 160);
+  const status = (
+    <>
+      {doc.status === 'pending' ? (
+        <span className="doc-digesting" aria-busy>
+          消化中…
+        </span>
+      ) : null}
+      {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
+    </>
+  );
   const body = (
     <>
-      <h2>
-        {docDisplayTitle(doc)}
-        {doc.status === 'pending' ? (
-          <span className="doc-digesting" aria-busy>
-            消化中…
-          </span>
-        ) : null}
-        {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
-      </h2>
-      {summary ? (
-        <p className="doc-excerpt">{summary}</p>
-      ) : doc.source === 'chat' && doc.answer ? (
-        <p className="doc-excerpt">{summarizeAnswer(doc.answer)}</p>
+      {face.title ? (
+        <h2>
+          {face.title}
+          {status}
+        </h2>
+      ) : doc.status === 'pending' || doc.status === 'failed' ? (
+        <h2 className="doc-row-chips">{status}</h2>
+      ) : null}
+      {face.preview ? (
+        <p className={face.title ? 'doc-excerpt' : 'doc-snippet'}>{face.preview}</p>
+      ) : !face.title ? (
+        <p className="doc-snippet is-blank">{BLANK_DOCUMENT_LABEL}</p>
       ) : null}
       <p className="meta">
         {doc.cardCount} 张卡 · {formatRelativeTime(doc.updatedAt)}
@@ -57,15 +71,17 @@ export function DocRow({
       {hanging ? <p className="doc-hang">挂在：{hanging}</p> : null}
     </>
   );
+  const className = `doc-row${face.title ? '' : ' is-untitled'}`;
+  const label = docCardLabel(face);
   if (onOpen) {
     return (
-      <button type="button" className="doc-row" onClick={() => onOpen(doc.id)}>
+      <button type="button" className={className} aria-label={label} onClick={() => onOpen(doc.id)}>
         {body}
       </button>
     );
   }
   return (
-    <Link to={docPath(doc.id)} className="doc-row">
+    <Link to={docPath(doc.id)} className={className} aria-label={label}>
       {body}
     </Link>
   );

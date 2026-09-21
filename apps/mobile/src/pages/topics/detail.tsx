@@ -1,6 +1,8 @@
 import {
   agentDocumentMetaLabel,
-  docDisplayTitle,
+  BLANK_DOCUMENT_LABEL,
+  docCardFace,
+  docCardLabel,
   type DocumentListItem,
   type MapNodeStatus,
   type MapTreeNode,
@@ -25,7 +27,7 @@ import { CaptureBox } from '@/components/capture-box';
 import { ProgressBar } from '@/components/progress-bar';
 import { StackHeader } from '@/components/stack-header';
 import { confirmAction } from '@/lib/confirm';
-import { formatRelativeTime, summarizeAnswer } from '@/lib/format';
+import { formatRelativeTime } from '@/lib/format';
 import { ROUTES } from '@/routes';
 import { useTheme, type ThemeTokens } from '@/theme';
 import { flattenMapTree, TopicsService, type TopicTab } from './topics.service';
@@ -42,12 +44,7 @@ function statusLabel(status: MapNodeStatus): string {
   return '未覆盖';
 }
 
-function cardExcerpt(doc: DocumentListItem): string | null {
-  const desc = doc.description?.trim() ?? '';
-  if (doc.title?.trim() && desc) return desc;
-  if (doc.source === 'chat' && doc.answer) return summarizeAnswer(doc.answer, 96);
-  return desc || null;
-}
+
 
 const TopicDetailContent = observer(function TopicDetailContent() {
   const service = useService(TopicsService);
@@ -355,19 +352,26 @@ const DocCard = observer(function DocCard({
   const service = useService(TopicsService);
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
-  const excerpt = cardExcerpt(doc);
+  const face = docCardFace(doc, 180);
   const hanging = service.hangingTitle(doc);
   const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   const pending = doc.status === 'pending';
   return (
-    <Pressable onPress={onOpen} style={styles.docCard}>
-      <Text style={styles.docTitle} numberOfLines={2}>
-        {docDisplayTitle(doc)}
-      </Text>
-      {excerpt ? (
-        <Text style={styles.docExcerpt} numberOfLines={2}>
-          {excerpt}
+    <Pressable onPress={onOpen} style={styles.docCard} accessibilityLabel={docCardLabel(face)}>
+      {face.title ? (
+        <Text style={styles.docTitle} numberOfLines={2}>
+          {face.title}
         </Text>
+      ) : null}
+      {face.preview ? (
+        <Text
+          style={face.title ? styles.docExcerpt : styles.docSnippet}
+          numberOfLines={face.title ? 2 : 4}
+        >
+          {face.preview}
+        </Text>
+      ) : !face.title ? (
+        <Text style={styles.docBlank}>{BLANK_DOCUMENT_LABEL}</Text>
       ) : null}
       <View style={styles.docMeta}>
         {pending ? <Text style={styles.gold}>消化中</Text> : null}
@@ -560,7 +564,9 @@ const NodeSheet = observer(function NodeSheet({ onOpenDoc }: { onOpenDoc: (id: s
                 onOpenDoc(doc.id);
               }}
             >
-              <Text style={styles.docTitle}>{docDisplayTitle(doc)}</Text>
+              <Text style={styles.docTitle} numberOfLines={2}>
+                {docCardLabel(docCardFace(doc, 80))}
+              </Text>
             </Pressable>
           ))}
         </>
@@ -665,6 +671,8 @@ function makeStyles(theme: ThemeTokens) {
     },
     docTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.ink },
     docExcerpt: { fontSize: 13.5, color: theme.colors.ink3, marginTop: 4, lineHeight: 20 },
+    docSnippet: { fontSize: 14.5, color: theme.colors.ink2, lineHeight: 22 },
+    docBlank: { fontSize: 13.5, color: theme.colors.ink4, fontStyle: 'italic' },
     docMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6, alignItems: 'center' },
     metaText: { fontSize: 12, color: theme.colors.ink4 },
     gold: { fontSize: 12, color: theme.colors.gold },

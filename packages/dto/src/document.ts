@@ -130,6 +130,146 @@ export function docDisplayTitle(doc: {
   return UNNAMED_DOCUMENT_TITLE;
 }
 
+export const BLANK_DOCUMENT_LABEL = '空白文档';
+
+const CARD_PREVIEW_DEFAULT = 160;
+const PM_WALK_NODE_MAX = 400;
+
+const PM_BLOCK_TYPES = new Set([
+  'paragraph',
+  'heading',
+  'blockquote',
+  'codeBlock',
+  'listItem',
+  'taskItem',
+  'tableCell',
+]);
+
+function collapseWs(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function plainFromMarkup(text: string): string {
+  return collapseWs(text.replace(/```[\s\S]*?```/g, ' ').replace(/[#>*_`[\]]/g, ' '));
+}
+
+/** Real title for list cards; empty and 「未命名文档」 are untitled. */
+export function docOwnedTitle(title: string | null | undefined): string | null {
+  const trimmed = title?.trim() ?? '';
+  if (trimmed.length === 0 || trimmed === UNNAMED_DOCUMENT_TITLE) return null;
+  return trimmed;
+}
+
+type PmWalkState = { nodes: number };
+
+function collectPmInline(node: unknown, out: string[], state: PmWalkState): void {
+  if (state.nodes >= PM_WALK_NODE_MAX || !isRecord(node)) return;
+  state.nodes += 1;
+  const type = typeof node.type === 'string' ? node.type : '';
+  if (type === 'pageBreak') return;
+  if (type === 'hardBreak') {
+    out.push(' ');
+    return;
+  }
+  if (typeof node.text === 'string') {
+    const text = node.text.replaceAll('\u200b', '');
+    if (text) out.push(text);
+    return;
+  }
+  const children = Array.isArray(node.content) ? node.content : [];
+  for (const child of children) {
+    if (state.nodes >= PM_WALK_NODE_MAX) return;
+    if (isRecord(child) && typeof child.type === 'string' && PM_BLOCK_TYPES.has(child.type)) {
+      const nested: string[] = [];
+      collectPmInline(child, nested, state);
+      const joined = collapseWs(nested.join(''));
+      if (joined) {
+        if (out.length > 0) out.push(' ');
+        out.push(joined);
+      }
+    } else {
+      collectPmInline(child, out, state);
+    }
+  }
+}
+
+/** Lightweight body text from PM JSON (no ProseMirror). Stops once `max` characters are collected. */
+export function textFromPmJson(value: unknown, max = CARD_PREVIEW_DEFAULT): string {
+  const blocks: string[] = [];
+  const state: PmWalkState = { nodes: 0 };
+  let used = 0;
+
+  const takeBlock = (node: unknown): boolean => {
+    const inner: string[] = [];
+    collectPmInline(node, inner, state);
+    const joined = collapseWs(inner.join(''));
+    if (joined) {
+      blocks.push(joined);
+      used += joined.length + 1;
+    }
+    return used >= max;
+  };
+
+  const walk = (node: unknown): boolean => {
+    if (state.nodes >= PM_WALK_NODE_MAX || !isRecord(node)) return used >= max;
+    const type = typeof node.type === 'string' ? node.type : '';
+    if (type === 'pageBreak') {
+      state.nodes += 1;
+      return false;
+    }
+    if (PM_BLOCK_TYPES.has(type)) return takeBlock(node);
+    state.nodes += 1;
+    const children = Array.isArray(node.content) ? node.content : [];
+    for (const child of children) {
+      if (walk(child)) return true;
+    }
+    return used >= max;
+  };
+
+  walk(value);
+  return clipUnicode(collapseWs(blocks.join(' ')), max);
+}
+
+function stripTitlePrefix(preview: string, title: string): string {
+  if (!preview.startsWith(title)) return preview;
+  return collapseWs(preview.slice(title.length).replace(/^[\s，。、：:；;！!？?\-—–]+/u, ''));
+}
+
+export type DocCardFace = {
+  title: string | null;
+  preview: string | null;
+};
+
+/** List/card face: keep a real title; untitled docs show a body preview instead of 「未命名文档」. */
+export function docCardFace(
+  doc: {
+    title?: string | null;
+    description?: string | null;
+    answer?: string | null;
+    contentJson?: unknown;
+  },
+  previewMax = CARD_PREVIEW_DEFAULT,
+): DocCardFace {
+  const title = docOwnedTitle(doc.title);
+  const fromContent = textFromPmJson(doc.contentJson, previewMax);
+  const fromDesc = collapseWs(doc.description ?? '');
+  const fromAnswer = doc.answer ? plainFromMarkup(doc.answer) : '';
+
+  if (title) {
+    const raw = fromDesc || fromContent || fromAnswer;
+    const preview = raw ? clipUnicode(stripTitlePrefix(raw, title), previewMax) : '';
+    return { title, preview: preview.length > 0 ? preview : null };
+  }
+
+  const raw = fromContent || fromDesc || fromAnswer;
+  const preview = raw ? clipUnicode(raw, previewMax) : '';
+  return { title: null, preview: preview.length > 0 ? preview : null };
+}
+
+export function docCardLabel(face: DocCardFace): string {
+  return face.title ?? face.preview ?? BLANK_DOCUMENT_LABEL;
+}
+
 export const documentSchema = z.object({
   id: z.string().uuid(),
   userId: z.string().uuid(),

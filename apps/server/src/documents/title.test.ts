@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   agentDocumentMetaLabel,
+  BLANK_DOCUMENT_LABEL,
   cardDetailSchema,
   createDocumentInputSchema,
   createSelectionCardsInputSchema,
+  docCardFace,
+  docCardLabel,
   docDisplayTitle,
+  docOwnedTitle,
   documentIdFromJobPayload,
   documentSourceSchema,
   EMPTY_PM_DOC,
+  textFromPmJson,
   titleFromDoc,
   updateDocumentInputSchema,
 } from '@inwit/dto';
@@ -73,6 +78,85 @@ describe('docDisplayTitle', () => {
   it('falls back to 未命名文档 when both are empty', () => {
     expect(docDisplayTitle({ title: null, description: null })).toBe('未命名文档');
     expect(docDisplayTitle({ title: '', description: '   ' })).toBe('未命名文档');
+  });
+});
+
+describe('textFromPmJson', () => {
+  it('joins block text and skips blank / page-break nodes', () => {
+    expect(textFromPmJson(paras('梯度消失', '反向传播会把它放大'))).toBe('梯度消失 反向传播会把它放大');
+    expect(
+      textFromPmJson({
+        type: 'doc',
+        content: [
+          { type: 'paragraph' },
+          { type: 'pageBreak' },
+          { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: '过拟合' }] },
+          { type: 'paragraph', content: [{ type: 'text', text: '训练集很好，测试集不行。' }] },
+        ],
+      }),
+    ).toBe('过拟合 训练集很好，测试集不行。');
+  });
+
+  it('clips to max Unicode characters', () => {
+    expect(textFromPmJson(para('a'.repeat(50)), 12)).toBe('a'.repeat(12));
+  });
+});
+
+describe('docCardFace', () => {
+  it('keeps a real title and uses description as preview', () => {
+    expect(
+      docCardFace({ title: '过拟合', description: '讲模型记样本', contentJson: para('正文更长一些') }),
+    ).toEqual({ title: '过拟合', preview: '讲模型记样本' });
+  });
+
+  it('treats empty and 未命名文档 as untitled', () => {
+    expect(docOwnedTitle(null)).toBeNull();
+    expect(docOwnedTitle('  ')).toBeNull();
+    expect(docOwnedTitle('未命名文档')).toBeNull();
+    expect(docOwnedTitle('交叉验证')).toBe('交叉验证');
+  });
+
+  it('untitled docs show body preview instead of 未命名文档', () => {
+    expect(
+      docCardFace({
+        title: null,
+        description: null,
+        contentJson: paras('学习率太大时会在最优点附近震荡。', '可以把步长调小。'),
+      }),
+    ).toEqual({
+      title: null,
+      preview: '学习率太大时会在最优点附近震荡。 可以把步长调小。',
+    });
+    expect(docCardLabel(docCardFace({ title: null, contentJson: EMPTY_PM_DOC }))).toBe(
+      BLANK_DOCUMENT_LABEL,
+    );
+  });
+
+  it('untitled docs prefer content over description, then chat answer', () => {
+    expect(
+      docCardFace({
+        title: '  未命名文档  ',
+        description: '摘要一行',
+        contentJson: para('正文才是卡片上该看到的。'),
+      }).preview,
+    ).toBe('正文才是卡片上该看到的。');
+    expect(
+      docCardFace({
+        title: null,
+        description: null,
+        contentJson: EMPTY_PM_DOC,
+        answer: '**偏差** 来自假设空间太窄。',
+      }).preview,
+    ).toBe('偏差 来自假设空间太窄。');
+  });
+
+  it('does not repeat the title inside the preview', () => {
+    expect(
+      docCardFace({
+        title: '过拟合',
+        contentJson: para('过拟合：模型把噪声也记住了。'),
+      }).preview,
+    ).toBe('模型把噪声也记住了。');
   });
 });
 

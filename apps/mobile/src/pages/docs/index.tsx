@@ -1,6 +1,8 @@
 import {
   agentDocumentMetaLabel,
-  docDisplayTitle,
+  BLANK_DOCUMENT_LABEL,
+  docCardFace,
+  docCardLabel,
   type DocumentListItem,
 } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
@@ -20,16 +22,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CaptureBox } from '@/components/capture-box';
-import { formatRelativeTime, summarizeAnswer } from '@/lib/format';
+import { formatRelativeTime } from '@/lib/format';
 import { useTheme, type ThemeTokens } from '@/theme';
 import { DocsService } from './docs.service';
-
-function docSummary(doc: DocumentListItem): string | null {
-  const desc = doc.description?.trim() ?? '';
-  if (doc.title?.trim() && desc) return desc;
-  if (doc.source === 'chat' && doc.answer) return summarizeAnswer(doc.answer);
-  return desc || null;
-}
 
 const PulseLabel = observer(function PulseLabel({ text }: { text: string }) {
   const theme = useTheme();
@@ -55,7 +50,7 @@ const DocRow = observer(function DocRow({ doc }: { doc: DocumentListItem }) {
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const stage = service.stageFor(doc);
   const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
-  const summary = docSummary(doc);
+  const face = docCardFace(doc, 120);
   const failed = doc.status === 'failed' || stage.kind === 'failed';
   const pulse = stage.pulse && stage.label;
 
@@ -63,14 +58,22 @@ const DocRow = observer(function DocRow({ doc }: { doc: DocumentListItem }) {
     <Pressable
       onPress={() => router.push({ pathname: '/docs/[id]', params: { id: doc.id } })}
       style={[styles.row, failed && styles.rowFailed]}
+      accessibilityLabel={docCardLabel(face)}
     >
-      <Text style={[styles.rowTitle, failed && styles.rowTitleFailed]} numberOfLines={2}>
-        {docDisplayTitle(doc)}
-      </Text>
-      {summary ? (
-        <Text style={styles.rowSummary} numberOfLines={2}>
-          {summary}
+      {face.title ? (
+        <Text style={[styles.rowTitle, failed && styles.rowTitleFailed]} numberOfLines={2}>
+          {face.title}
         </Text>
+      ) : null}
+      {face.preview ? (
+        <Text
+          style={face.title ? styles.rowSummary : styles.rowLead}
+          numberOfLines={face.title ? 2 : 3}
+        >
+          {face.preview}
+        </Text>
+      ) : !face.title ? (
+        <Text style={styles.rowBlank}>{BLANK_DOCUMENT_LABEL}</Text>
       ) : null}
       <View style={styles.rowMeta}>
         {pulse ? <PulseLabel text={stage.label.replace(/…$/, '') || '消化中'} /> : null}
@@ -293,6 +296,8 @@ function makeStyles(theme: ThemeTokens) {
     rowTitle: { fontSize: 16, fontWeight: '600', color: theme.colors.ink },
     rowTitleFailed: { color: theme.colors.accent },
     rowSummary: { fontSize: 13.5, color: theme.colors.ink3, marginTop: 4, lineHeight: 20 },
+    rowLead: { fontSize: 15, color: theme.colors.ink2, lineHeight: 22 },
+    rowBlank: { fontSize: 14, color: theme.colors.ink4, fontStyle: 'italic' },
     rowMeta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 6 },
     tag: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
     tagAi: { backgroundColor: theme.colors.accentSoft },
