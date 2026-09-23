@@ -7,7 +7,8 @@
     "./logo.svg": "./src/logo.svg"
   },
   "scripts": {
-    "raster-icons": "node scripts/raster-icons.mjs"
+    "raster-icons": "node scripts/raster-icons.mjs",
+    "social-preview": "node scripts/social-preview.mjs"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

@@ -3,10 +3,17 @@ import {
   CARD_RAIL_WIDTH_DEFAULT,
   CARD_RAIL_WIDTH_MAX,
   CARD_RAIL_WIDTH_MIN,
+  DOC_LIST_WIDTH_DEFAULT,
+  DOC_LIST_WIDTH_MAX,
+  DOC_LIST_WIDTH_MIN,
   cardRailWidthFromDrag,
   cardRailWidthFromKey,
   clampCardRailWidth,
+  clampDocListWidth,
+  docListWidthFromDrag,
+  docListWidthFromKey,
   parseCardRailWidth,
+  parseDocListWidth,
 } from './ui-prefs-logic';
 
 describe('clampCardRailWidth', () => {
@@ -43,5 +50,35 @@ describe('cardRailWidthFromDrag / cardRailWidthFromKey', () => {
     expect(cardRailWidthFromKey(300, 'Home')).toBe(CARD_RAIL_WIDTH_MAX);
     expect(cardRailWidthFromKey(300, 'End')).toBe(CARD_RAIL_WIDTH_MIN);
     expect(cardRailWidthFromKey(300, 'Enter')).toBeNull();
+  });
+});
+
+describe('clampDocListWidth / parseDocListWidth', () => {
+  it('clamps to the absolute min and max', () => {
+    expect(clampDocListWidth(100)).toBe(DOC_LIST_WIDTH_MIN);
+    expect(clampDocListWidth(900)).toBe(DOC_LIST_WIDTH_MAX);
+    expect(clampDocListWidth(400)).toBe(400);
+  });
+
+  it('falls back to the default for missing or junk values', () => {
+    expect(parseDocListWidth(null)).toBe(DOC_LIST_WIDTH_DEFAULT);
+    expect(parseDocListWidth('')).toBe(DOC_LIST_WIDTH_DEFAULT);
+    expect(parseDocListWidth('nope')).toBe(DOC_LIST_WIDTH_DEFAULT);
+    expect(parseDocListWidth('420')).toBe(420);
+  });
+});
+
+describe('docListWidthFromDrag / docListWidthFromKey', () => {
+  it('grows the list when the pointer moves right', () => {
+    expect(docListWidthFromDrag(384, 500, 560)).toBe(444);
+    expect(docListWidthFromDrag(384, 500, 440)).toBe(324);
+  });
+
+  it('maps arrow keys to width deltas', () => {
+    expect(docListWidthFromKey(384, 'ArrowRight')).toBe(400);
+    expect(docListWidthFromKey(384, 'ArrowLeft')).toBe(368);
+    expect(docListWidthFromKey(384, 'Home')).toBe(DOC_LIST_WIDTH_MAX);
+    expect(docListWidthFromKey(384, 'End')).toBe(DOC_LIST_WIDTH_MIN);
+    expect(docListWidthFromKey(384, 'Enter')).toBeNull();
   });
 });

@@ -1,8 +1,11 @@
 import { Service } from '@rabjs/react';
 import {
   CARD_RAIL_WIDTH_DEFAULT,
+  DOC_LIST_WIDTH_DEFAULT,
   clampCardRailWidth,
+  clampDocListWidth,
   parseCardRailWidth,
+  parseDocListWidth,
 } from './ui-prefs-logic';
 
 export type DocMode = 'edit' | 'preview';
@@ -10,6 +13,7 @@ export type DocMode = 'edit' | 'preview';
 export const DOC_MODE_STORAGE_KEY = 'inwit-doc-mode';
 export const CARD_RAIL_COLLAPSED_KEY = 'inwit-card-rail-collapsed';
 export const CARD_RAIL_WIDTH_KEY = 'inwit-card-rail-width';
+export const DOC_LIST_WIDTH_KEY = 'inwit-doc-list-width';
 export const NAV_RAIL_COLLAPSED_KEY = 'inwit-nav-rail-collapsed';
 
 /** Pane narrower than this docks the card rail as an overlay instead of a column. */
@@ -45,6 +49,7 @@ export class UiPrefsService extends Service {
   docMode: DocMode = 'edit';
   cardRailCollapsed = false;
   cardRailWidth = CARD_RAIL_WIDTH_DEFAULT;
+  docListWidth = DOC_LIST_WIDTH_DEFAULT;
   navRailCollapsed = false;
 
   constructor() {
@@ -54,8 +59,10 @@ export class UiPrefsService extends Service {
     this.navRailCollapsed = readFlag(NAV_RAIL_COLLAPSED_KEY);
     try {
       this.cardRailWidth = parseCardRailWidth(localStorage.getItem(CARD_RAIL_WIDTH_KEY));
+      this.docListWidth = parseDocListWidth(localStorage.getItem(DOC_LIST_WIDTH_KEY));
     } catch {
       this.cardRailWidth = CARD_RAIL_WIDTH_DEFAULT;
+      this.docListWidth = DOC_LIST_WIDTH_DEFAULT;
     }
   }
 
@@ -80,6 +87,13 @@ export class UiPrefsService extends Service {
     if (next === this.cardRailWidth) return;
     this.cardRailWidth = next;
     writeStorage(CARD_RAIL_WIDTH_KEY, String(next));
+  }
+
+  setDocListWidth(width: number): void {
+    const next = clampDocListWidth(width);
+    if (next === this.docListWidth) return;
+    this.docListWidth = next;
+    writeStorage(DOC_LIST_WIDTH_KEY, String(next));
   }
 
   setNavRailCollapsed(collapsed: boolean): void {

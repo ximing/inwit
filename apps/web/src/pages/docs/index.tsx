@@ -1,5 +1,5 @@
 import { bindServices, observer, useService } from '@rabjs/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { SearchService } from '@/components/search';
 import { ANCHOR_HIT_SELECTOR } from '@/lib/anchors';
@@ -227,7 +227,10 @@ const DocsPageContent = observer(function DocsPageContent() {
   const showRead = Boolean(docId) && !editing;
 
   return (
-    <div className="ws">
+    <div
+      className="ws"
+      style={{ '--doc-list-w': `${prefs.docListWidth}px` } as CSSProperties}
+    >
       <WorkbenchList selectedId={docId} />
       <div className="ws-pane" ref={paneRef}>
         {showEmpty ? <PaneEmpty /> : null}

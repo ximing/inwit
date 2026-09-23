@@ -31,7 +31,7 @@
   <img alt="Node.js >= 22" src="docs/badges/nodejs.svg" />
   <img alt="pnpm 10" src="https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&amp;logoColor=white" />
   <img alt="TypeScript 7" src="https://img.shields.io/badge/TypeScript-7-3178C6?logo=typescript&amp;logoColor=white" />
-  <img alt="License" src="https://img.shields.io/badge/license-see%20README-lightgrey" />
+  <img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue" />
 </p>
 
 ---
@@ -445,4 +445,4 @@ UI 视觉以 [`docs/design/v2/`](docs/design/v2/) 为设计稿。产品需求见
 
 ## 许可证
 
-源码目前公开在 GitHub，**尚未选择 SPDX 许可证**。个人学习、阅读和提 PR 欢迎；二次分发或商用请先开 issue 与维护者沟通。
+[AGPL-3.0](LICENSE)。个人学习、阅读和提 PR 欢迎；基于源码的二次分发或网络服务需遵守 AGPL-3.0 开源义务，商用授权请开 issue 与维护者沟通。

@@ -12,6 +12,7 @@ import { formatRelativeTime } from '@/lib/format';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { docsPath } from '@/routes';
 import { UiPrefsService } from '@/services/ui-prefs.service';
+import { DocListResizer } from './doc-list-resizer';
 import { DocsService } from './docs.service';
 import { TopicPicker } from './topic-picker';
 
@@ -453,6 +454,7 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
         ) : null}
       </div>
       <SearchPalette />
+      <DocListResizer />
     </div></DocumentActions>
   );
 });

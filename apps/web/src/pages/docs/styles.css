@@ -7,7 +7,7 @@
 
 .ws {
   display: grid;
-  grid-template-columns: 384px minmax(0, 1fr);
+  grid-template-columns: var(--doc-list-w, 384px) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   height: 100%;
@@ -26,11 +26,49 @@
 .ws-topics .pane-inner { max-width: 1160px; }
 
 .ws-list {
+  position: relative;
   border-right: 1px solid var(--line-soft);
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--bg);
+}
+
+/* 列表右缘拖拽手柄：与卡片栏 resizer 同一交互 */
+.doc-list-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  margin-right: -4px;
+  z-index: 3;
+  cursor: col-resize;
+  touch-action: none;
+}
+.doc-list-resizer::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  right: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 0.12s;
+}
+.doc-list-resizer:hover::after,
+.doc-list-resizer:focus-visible::after,
+html.is-resizing-doc-list .doc-list-resizer::after {
+  background: var(--accent);
+}
+.doc-list-resizer:focus-visible {
+  outline: none;
+}
+html.is-resizing-doc-list,
+html.is-resizing-doc-list * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 .ws-capture { padding: 12px 12px 8px; }
 .ws-capture .capture {
@@ -460,7 +498,8 @@
 }
 
 @media (max-width: 1080px) {
-  .ws,
+  /* 窗口变窄时给拖拽出的列表宽度封顶，保证正文区不被挤没 */
+  .ws { grid-template-columns: min(var(--doc-list-w, 320px), 320px) minmax(0, 1fr); }
   .ws.ws-topics { grid-template-columns: 320px minmax(0, 1fr); }
 }
 
@@ -474,5 +513,6 @@
     border-right: 0;
     border-bottom: 1px solid var(--line-soft);
   }
+  .doc-list-resizer { display: none; }
   .pane-inner { --write-gap: 22px; }
 }

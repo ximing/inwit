@@ -29,3 +29,32 @@ export function cardRailWidthFromKey(current: number, key: string, step = 16): n
   if (key === 'End') return CARD_RAIL_WIDTH_MIN;
   return null;
 }
+
+export const DOC_LIST_WIDTH_DEFAULT = 384;
+export const DOC_LIST_WIDTH_MIN = 280;
+export const DOC_LIST_WIDTH_MAX = 560;
+
+export function clampDocListWidth(width: number): number {
+  if (!Number.isFinite(width)) return DOC_LIST_WIDTH_DEFAULT;
+  return Math.min(DOC_LIST_WIDTH_MAX, Math.max(DOC_LIST_WIDTH_MIN, Math.round(width)));
+}
+
+export function parseDocListWidth(raw: string | null | undefined): number {
+  if (raw == null || raw === '') return DOC_LIST_WIDTH_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DOC_LIST_WIDTH_DEFAULT;
+  return clampDocListWidth(n);
+}
+
+/** List sits on the left: dragging the right edge rightward increases width. */
+export function docListWidthFromDrag(startWidth: number, startX: number, clientX: number): number {
+  return startWidth + (clientX - startX);
+}
+
+export function docListWidthFromKey(current: number, key: string, step = 16): number | null {
+  if (key === 'ArrowLeft') return current - step;
+  if (key === 'ArrowRight') return current + step;
+  if (key === 'Home') return DOC_LIST_WIDTH_MAX;
+  if (key === 'End') return DOC_LIST_WIDTH_MIN;
+  return null;
+}
