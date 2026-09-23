@@ -17,6 +17,7 @@ import { getDb } from '../db/index.js';
 import { llmConfigs, type LlmConfigRow } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { decryptSecret } from './crypto.js';
+import { resolveModelLimits } from './model-limits-logic.js';
 
 export const DASHSCOPE_COMPATIBLE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 export const DASHSCOPE_FALLBACK_MODEL = 'qwen-plus';
@@ -43,6 +44,7 @@ function openaiCompatModel(
   modelId: string,
   baseUrl: string,
 ): Model<'openai-completions'> {
+  const limits = resolveModelLimits(modelId);
   return {
     id: modelId,
     name: modelId,
@@ -52,8 +54,8 @@ function openaiCompatModel(
     reasoning: false,
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 128_000,
-    maxTokens: 8_192,
+    contextWindow: limits.contextWindow,
+    maxTokens: limits.maxOutputTokens,
   };
 }
 

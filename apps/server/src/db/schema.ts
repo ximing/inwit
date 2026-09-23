@@ -39,6 +39,7 @@ import {
 import type {
   AgentExecutionStatus,
   AgentExecutionStep,
+  AgentExecutionTurn,
   AgentType,
   AnnotationGeometry,
   AnnotationKind,
@@ -484,7 +485,8 @@ export const jobs = pgTable(
   },
   (t) => [
     index('idx_jobs_status_run_at').on(t.status, t.runAt),
-    index('idx_jobs_user').on(t.userId),
+    index('idx_jobs_user_created').on(t.userId, t.createdAt),
+    index('idx_jobs_status_created').on(t.status, t.createdAt),
     index('idx_jobs_user_type').on(t.userId, t.type),
     enumCheck('jobs_type_check', t.type, JOB_TYPES),
     enumCheck('jobs_status_check', t.status, JOB_STATUSES),
@@ -530,6 +532,10 @@ export const agentExecutions = pgTable(
       .$type<AgentExecutionStep[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    turns: jsonb('turns')
+      .$type<AgentExecutionTurn[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     error: text('error'),
     resultSummary: text('result_summary'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
@@ -537,6 +543,7 @@ export const agentExecutions = pgTable(
   (t) => [
     index('idx_agent_executions_job').on(t.jobId),
     index('idx_agent_executions_user_started').on(t.userId, t.startedAt),
+    index('idx_agent_executions_status_started').on(t.status, t.startedAt),
     index('idx_agent_executions_type_status').on(t.agentType, t.status),
     enumCheck('agent_executions_agent_type_check', t.agentType, AGENT_TYPES),
     enumCheck('agent_executions_status_check', t.status, AGENT_EXECUTION_STATUSES),
@@ -564,6 +571,7 @@ export const llmUsageLogs = pgTable(
   },
   (t) => [
     index('idx_llm_usage_logs_user_created').on(t.userId, t.createdAt),
+    index('idx_llm_usage_logs_created').on(t.createdAt),
     index('idx_llm_usage_logs_execution').on(t.executionId),
     index('idx_llm_usage_logs_capability_created').on(t.capability, t.createdAt),
     enumCheck('llm_usage_logs_capability_check', t.capability, LLM_CAPABILITIES),

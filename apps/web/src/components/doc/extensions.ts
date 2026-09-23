@@ -43,6 +43,7 @@ function createUploadedImage(assetUrls: AssetUrlsService) {
         let current = node;
         const img = document.createElement('img');
         img.className = 'doc-image';
+        img.draggable = false;
 
         const sync = (): void => {
           const src = attrString(current, 'src');
@@ -53,13 +54,11 @@ function createUploadedImage(assetUrls: AssetUrlsService) {
           if (title) img.title = title;
           else img.removeAttribute('title');
 
-          const url = assetUrls.urlFor(src);
+          const url = src ? assetUrls.urlFor(src) : null;
           if (url) {
-            img.src = url;
-            img.classList.remove('doc-image-pending');
-          } else {
+            if (img.getAttribute('src') !== url) img.src = url;
+          } else if (img.hasAttribute('src')) {
             img.removeAttribute('src');
-            img.classList.add('doc-image-pending');
           }
           if (src) void assetUrls.ensure([src]);
         };

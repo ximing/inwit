@@ -1,14 +1,15 @@
 import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent-core';
-import type { AgentExecutionStep, AgentType } from '@inwit/dto';
+import type { AgentExecutionStep, AgentExecutionTurn, AgentTurnPhase, AgentType } from '@inwit/dto';
 import type { JobRow } from '../db/schema.js';
 import { heartbeatJob, isJobRunning } from '../jobs/heartbeat.js';
 import { modelResponseError, resolveModelFor } from '../llm/pi.js';
 import { logLlmUsage } from '../llm/usage.js';
 import { logger } from '../utils/logger.js';
-import { finishExecution, saveExecutionSteps, startExecution, summarizeValue } from './executions.js';
+import { finishExecution, measureValue, saveExecutionSteps, saveExecutionTurns, startExecution, summarizeValue } from './executions.js';
 import { extractAssistantText, isAssistantMessage } from './messages.js';
 import { runWithAgentContext, type AgentRunContext } from './run-context.js';
 import { AgentTerminalError } from './terminal-error.js';
+import { outputLimitSummary, summarizeAssistantTurn } from './turn-audit-logic.js';
 
 export { AgentTerminalError } from './terminal-error.js';
 
@@ -66,6 +67,8 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
     agentType: run.agentType,
   });
   const steps: AgentExecutionStep[] = [];
+  const turns: AgentExecutionTurn[] = [];
+  let phase: AgentTurnPhase = 'run';
   let closingTail: string | null = null;
 
   try {
@@ -85,6 +88,7 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
         }
 
         const resolved = await resolveModelFor(job.userId);
+        const maxTokens = typeof resolved.model.maxTokens === 'number' ? resolved.model.maxTokens : null;
         const toolStarted = new Map<string, { name: string; args: unknown; t: number }>();
         const maxTurns = run.maxTurns ?? DEFAULT_MAX_TURNS;
         let turnCount = 0;
@@ -125,6 +129,7 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
               output_summary: event.isError
                 ? `error: ${summarizeValue(event.result)}`
                 : summarizeValue(event.result),
+              output_chars: measureValue(event.result),
               duration_ms: started ? Math.max(0, Date.now() - started.t) : 0,
             });
             await saveExecutionSteps(executionId, steps);
@@ -135,6 +140,20 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
             const usage = event.message.usage;
             const promptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
             const completionTokens = usage.output;
+            const turn = summarizeAssistantTurn({
+              phase,
+              index: turns.length,
+              maxTokens,
+              message: event.message,
+            });
+            turns.push(turn);
+            logger.info('agent.turn', {
+              jobId: job.id,
+              executionId,
+              agentType: run.agentType,
+              turn,
+            });
+            await saveExecutionTurns(executionId, turns);
             await logLlmUsage({
               userId: job.userId,
               executionId,
@@ -151,9 +170,6 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
         });
 
         let cancelled = false;
-        const timeout = setTimeout(() => {
-          agent.abort();
-        }, RUN_TIMEOUT_MS);
         const heartbeat = setInterval(() => {
           void heartbeatJob(job.id);
           // Cooperative cancellation: deleting a document (or a manual job
@@ -168,78 +184,81 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
           });
         }, HEARTBEAT_MS);
         heartbeat.unref();
+        const runPrompt = async (prompt: string) => {
+          const timer = setTimeout(() => {
+            agent.abort();
+          }, RUN_TIMEOUT_MS);
+          try {
+            await agent.prompt(prompt);
+          } finally {
+            clearTimeout(timer);
+          }
+        };
         try {
-          await agent.prompt(run.userPrompt);
+          await runPrompt(run.userPrompt);
+
+          const assistant = agent.state.messages.filter(isAssistantMessage);
+          const failed = assistant.find((m) => m.stopReason === 'error' || m.stopReason === 'aborted');
+          if (failed) {
+            // Salvage: a timed-out run may already have produced its output
+            // (cards written, answer given). Verify against the domain state
+            // before failing — a passing verify settles the job as done.
+            // A cancelled run never salvages: the job row is already settled
+            // as cancelled, so there is nothing to rescue.
+            if (failed.stopReason === 'aborted' && run.verify && !cancelled) {
+              try {
+                const salvaged = await run.verify({ agent, executionId });
+                await finishExecution({
+                  executionId,
+                  status: 'done',
+                  resultSummary: salvaged !== null ? `${salvaged} salvaged=1` : 'salvaged=1',
+                });
+                logger.info('agent.run_salvaged', { jobId: job.id, agentType: run.agentType });
+                return;
+              } catch {
+                // Output didn't pass verification — fall through to the timeout
+                // error, which stays retryable.
+              }
+            }
+            throw modelResponseError(failed.stopReason, failed.errorMessage ?? '');
+          }
+
+          const verifyOnce = async () => (await run.verify?.({ agent, executionId })) ?? null;
+          let resultSummary: string | null;
+          try {
+            try {
+              resultSummary = await verifyOnce();
+            } catch (firstErr) {
+              if (cancelled) throw firstErr;
+              const nudge =
+                run.nudgePrompt === undefined
+                  ? null
+                  : typeof run.nudgePrompt === 'function'
+                    ? run.nudgePrompt(firstErr)
+                    : run.nudgePrompt;
+              if (!nudge) throw firstErr;
+              logger.info('agent.verify_nudge', {
+                jobId: job.id,
+                agentType: run.agentType,
+                error: firstErr instanceof Error ? firstErr.message : String(firstErr),
+              });
+              phase = 'nudge';
+              await runPrompt(nudge);
+              const nudgedFail = agent.state.messages
+                .filter(isAssistantMessage)
+                .find((m) => m.stopReason === 'error' || m.stopReason === 'aborted');
+              if (nudgedFail) throw modelResponseError(nudgedFail.stopReason, nudgedFail.errorMessage ?? '');
+              resultSummary = await verifyOnce();
+            }
+          } catch (err) {
+            closingTail = closingTextTail(agent.state.messages);
+            throw err;
+          }
+          await finishExecution({ executionId, status: 'done', resultSummary });
         } finally {
-          clearTimeout(timeout);
           clearInterval(heartbeat);
           unsubscribe();
         }
-
-        const assistant = agent.state.messages.filter(isAssistantMessage);
-        const failed = assistant.find((m) => m.stopReason === 'error' || m.stopReason === 'aborted');
-        if (failed) {
-          // Salvage: a timed-out run may already have produced its output
-          // (cards written, answer given). Verify against the domain state
-          // before failing — a passing verify settles the job as done.
-          // A cancelled run never salvages: the job row is already settled
-          // as cancelled, so there is nothing to rescue.
-          if (failed.stopReason === 'aborted' && run.verify && !cancelled) {
-            try {
-              const salvaged = await run.verify({ agent, executionId });
-              await finishExecution({
-                executionId,
-                status: 'done',
-                resultSummary: salvaged !== null ? `${salvaged} salvaged=1` : 'salvaged=1',
-              });
-              logger.info('agent.run_salvaged', { jobId: job.id, agentType: run.agentType });
-              return;
-            } catch {
-              // Output didn't pass verification — fall through to the timeout
-              // error, which stays retryable.
-            }
-          }
-          throw modelResponseError(failed.stopReason, failed.errorMessage ?? '');
-        }
-
-        const verifyOnce = async () => (await run.verify?.({ agent, executionId })) ?? null;
-        let resultSummary: string | null;
-        try {
-          try {
-            resultSummary = await verifyOnce();
-          } catch (firstErr) {
-            if (cancelled) throw firstErr;
-            const nudge =
-              run.nudgePrompt === undefined
-                ? null
-                : typeof run.nudgePrompt === 'function'
-                  ? run.nudgePrompt(firstErr)
-                  : run.nudgePrompt;
-            if (!nudge) throw firstErr;
-            logger.info('agent.verify_nudge', {
-              jobId: job.id,
-              agentType: run.agentType,
-              error: firstErr instanceof Error ? firstErr.message : String(firstErr),
-            });
-            const nudgeTimeout = setTimeout(() => {
-              agent.abort();
-            }, RUN_TIMEOUT_MS);
-            try {
-              await agent.prompt(nudge);
-            } finally {
-              clearTimeout(nudgeTimeout);
-            }
-            const nudgedFail = agent.state.messages
-              .filter(isAssistantMessage)
-              .find((m) => m.stopReason === 'error' || m.stopReason === 'aborted');
-            if (nudgedFail) throw modelResponseError(nudgedFail.stopReason, nudgedFail.errorMessage ?? '');
-            resultSummary = await verifyOnce();
-          }
-        } catch (err) {
-          closingTail = closingTextTail(agent.state.messages);
-          throw err;
-        }
-        await finishExecution({ executionId, status: 'done', resultSummary });
       },
     );
   } catch (err) {
@@ -250,6 +269,8 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
     } else if (steps.length > 0) {
       audit.push(`steps=${String(steps.length)}`);
     }
+    const limit = outputLimitSummary(turns);
+    if (limit) audit.push(limit);
     if (closingTail) audit.push(`tail=${closingTail}`);
     await finishExecution({
       executionId,

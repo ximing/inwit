@@ -1,3 +1,4 @@
+import { pruneAgentLogs } from './agent/audit-log.js';
 import {
   scanAndEnqueueWeeklyReports,
   weeklyScanEnabled,
@@ -22,9 +23,11 @@ const running = new Set<() => Promise<void>>();
 const ACCESS_TOKEN_LOG_PRUNE_MS = 60 * 60 * 1000;
 const MULTIPART_SWEEP_MS = 60 * 60 * 1000;
 const RECYCLE_BIN_PURGE_MS = 60 * 60 * 1000;
+const AGENT_LOG_PRUNE_MS = 60 * 60 * 1000;
 let lastAccessTokenLogPrune = 0;
 let lastMultipartSweep = 0;
 let lastRecycleBinPurge = 0;
+let lastAgentLogPrune = 0;
 
 function track(fn: () => Promise<void>): void {
   if (stopping || running.has(fn)) return;
@@ -76,6 +79,17 @@ async function tick(): Promise<void> {
       if (purged > 0) logger.info('worker.recycle_bin.purge', { purged });
     } catch (err) {
       logger.error('worker.recycle_bin.purge_failed', err);
+    }
+  }
+  if (now - lastAgentLogPrune >= AGENT_LOG_PRUNE_MS) {
+    lastAgentLogPrune = now;
+    try {
+      const pruned = await pruneAgentLogs();
+      if (pruned.executions > 0 || pruned.usageLogs > 0 || pruned.jobs > 0) {
+        logger.info('worker.agent_log.prune', pruned);
+      }
+    } catch (err) {
+      logger.error('worker.agent_log.prune_failed', err);
     }
   }
 }

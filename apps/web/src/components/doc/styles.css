@@ -164,12 +164,6 @@
   margin-top: 8px;
   color: var(--accent);
 }
-.doc-image-pending {
-  min-height: 80px;
-  background: var(--bg-sunken);
-  border-radius: var(--r-sm);
-}
-
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) [style*='text-align: center'] :is(img, .doc-image, .doc-video, video),
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) [style*='text-align:center'] :is(img, .doc-image, .doc-video, video),
 .doc-video.is-align-center {

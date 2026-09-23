@@ -1,4 +1,4 @@
-import type { AgentExecutionStep, AgentExecutionStatus, AgentType } from '@inwit/dto';
+import type { AgentExecutionStep, AgentExecutionStatus, AgentExecutionTurn, AgentType } from '@inwit/dto';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { agentExecutions } from '../db/schema.js';
@@ -30,6 +30,17 @@ export async function saveExecutionSteps(executionId: string, steps: AgentExecut
   }
 }
 
+export async function saveExecutionTurns(
+  executionId: string,
+  turns: AgentExecutionTurn[],
+): Promise<void> {
+  try {
+    await getDb().update(agentExecutions).set({ turns }).where(eq(agentExecutions.id, executionId));
+  } catch (err) {
+    logger.error('agent.execution.turns_failed', err);
+  }
+}
+
 export async function finishExecution(input: {
   executionId: string;
   status: AgentExecutionStatus;
@@ -51,7 +62,7 @@ export async function finishExecution(input: {
   }
 }
 
-export function summarizeValue(value: unknown, max = 400): string {
+function auditText(value: unknown): string {
   if (value === undefined || value === null) return '';
   let text: string;
   if (typeof value === 'string') {
@@ -79,6 +90,15 @@ export function summarizeValue(value: unknown, max = 400): string {
       text = String(value);
     }
   }
-  const collapsed = text.replace(/\s+/g, ' ').trim();
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+/** Character length of a tool payload before the stored summary is clipped. */
+export function measureValue(value: unknown): number {
+  return auditText(value).length;
+}
+
+export function summarizeValue(value: unknown, max = 400): string {
+  const collapsed = auditText(value);
   return collapsed.length > max ? `${collapsed.slice(0, max)}…` : collapsed;
 }

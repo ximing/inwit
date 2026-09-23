@@ -82,6 +82,7 @@ describe('job routes', () => {
         startedAt: '2026-09-14T02:10:00.000Z',
         finishedAt: '2026-09-14T02:11:00.000Z',
         steps: [{ tool: 'write_cards', input_summary: '{}', output_summary: 'ok', duration_ms: 12 }],
+        turns: [],
         error: 'digest produced no cards',
         resultSummary: 'cards=0',
         createdAt: '2026-09-14T02:10:00.000Z',

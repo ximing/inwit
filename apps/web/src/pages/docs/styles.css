@@ -271,10 +271,13 @@
   flex: 1;
   min-width: 0;
   overflow-y: auto;
+  /* Scrollbar must not change the column width, or loaded images reflow forever. */
+  scrollbar-gutter: stable;
   container-type: inline-size;
 }
 .pane-scroll.is-pdf {
   overflow: hidden;
+  scrollbar-gutter: auto;
   display: flex;
   flex-direction: column;
 }

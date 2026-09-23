@@ -1,4 +1,5 @@
 import { observer, useService } from '@rabjs/react';
+import { useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { ROUTES } from '@/routes';
 import { CardRail } from './card-rail';
@@ -12,6 +13,15 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
   const service = useService(DocsService);
   const editor = useService(EditorService);
   const navigate = useNavigate();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const justCreatedRef = useRef(false);
+  justCreatedRef.current = editor.justCreated;
+
+  useLayoutEffect(() => {
+    if (justCreatedRef.current) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = 0;
+  }, [docId]);
 
   if (editor.phase === 'missing') {
     return (
@@ -32,7 +42,7 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
   return (
     <div className="pane-doc is-editing">
       <div className="pane-main">
-        <div className="pane-scroll">
+        <div className="pane-scroll" ref={scrollRef}>
           <div className="pane-inner">
             <DocTopRow editing docId={docId} />
             {editor.phase === 'loading' ? (

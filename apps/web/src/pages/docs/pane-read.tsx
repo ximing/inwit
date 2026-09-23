@@ -5,7 +5,7 @@ import {
 } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { Loader2, PenLine } from 'lucide-react';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { DocView } from '@/components/doc/DocView';
 import { Tag } from '@/components/tag';
@@ -35,6 +35,14 @@ export const PaneRead = observer(function PaneRead() {
   const [params] = useSearchParams();
   const urlAnchor = params.get('anchor');
   const doc = service.doc;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const docId = doc?.id ?? null;
+
+  useLayoutEffect(() => {
+    if (!docId || urlAnchor) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = 0;
+  }, [docId, urlAnchor]);
 
   if (service.$model.loadDoc.loading && !doc) {
     return (
@@ -71,7 +79,7 @@ export const PaneRead = observer(function PaneRead() {
     <div className="pane-doc">
       {isPdf ? <DocTopRow editing={false} docId={doc.id} hideModeSwitch layout="bar" /> : null}
       <div className="pane-main">
-        <div className={`pane-scroll${isPdf ? ' is-pdf' : ''}`}>
+        <div className={`pane-scroll${isPdf ? ' is-pdf' : ''}`} ref={scrollRef}>
           {isPdf ? (
             <Suspense
               fallback={

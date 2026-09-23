@@ -335,8 +335,24 @@ export const PaperEditor = observer(function PaperEditor({
   useEffect(() => {
     if (!editor) return;
     editor.commands.setContent(contentFromSeed(seedDoc), { emitUpdate: false });
-    editor.commands.focus('end');
+    editor.commands.focus('start', { scrollIntoView: false });
     ensureEntityMarksOnEditor(editor, cardsRef.current, annotationsRef.current);
+    const pinTop = () => {
+      if (editor.isDestroyed) return;
+      const scroller = editor.view.dom.closest('.pane-scroll');
+      if (scroller instanceof HTMLElement) scroller.scrollTop = 0;
+    };
+    // setContent keeps the previous scroll offset, and focus() may scroll the caret on the next frame.
+    pinTop();
+    let nested = 0;
+    const outer = requestAnimationFrame(() => {
+      pinTop();
+      nested = requestAnimationFrame(pinTop);
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(nested);
+    };
   }, [editor, seedKey]);
 
   const bindHostRef = useRef(bindHost);

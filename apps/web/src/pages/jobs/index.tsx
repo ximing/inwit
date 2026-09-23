@@ -1,5 +1,5 @@
 import { bindServices, observer, useService } from '@rabjs/react';
-import type { Job, JobStatus, JobType } from '@inwit/dto';
+import { formatAgentTurn, type AgentExecutionTurn, type Job, type JobStatus, type JobType } from '@inwit/dto';
 import {
   BookOpen,
   BrainCircuit,
@@ -99,6 +99,13 @@ const ExecutionCard = observer(function ExecutionCard({ models }: { models?: str
               <div className="exec-summary">{execution.resultSummary}</div>
             ) : null}
             {execution.error ? <div className="exec-err">{execution.error}</div> : null}
+            {(execution.turns ?? []).length > 0 ? (
+              <ul className="exec-turns">
+                {(execution.turns ?? []).map((turn) => (
+                  <TurnRow key={`${turn.phase}-${String(turn.index)}`} turn={turn} />
+                ))}
+              </ul>
+            ) : null}
             {execution.steps.length > 0 ? (
               <ul className="exec-steps">
                 {execution.steps.map((step, stepIndex) => (
@@ -106,7 +113,10 @@ const ExecutionCard = observer(function ExecutionCard({ models }: { models?: str
                     <span className="exec-tool" title={step.input_summary || undefined}>
                       {step.tool}
                     </span>
-                    <span className="exec-ms">{`${String(step.duration_ms)}ms`}</span>
+                    <span className="exec-ms">
+                      {`${String(step.duration_ms)}ms`}
+                      {step.output_chars != null ? ` · ${String(step.output_chars)}字` : ''}
+                    </span>
                     {step.output_summary ? (
                       <span className="exec-io">{step.output_summary}</span>
                     ) : null}
@@ -120,6 +130,16 @@ const ExecutionCard = observer(function ExecutionCard({ models }: { models?: str
     </div>
   );
 });
+
+function TurnRow({ turn }: { turn: AgentExecutionTurn }) {
+  return (
+    <li>
+      <div>{formatAgentTurn(turn)}</div>
+      {turn.text_tail ? <div className="exec-io">{turn.text_tail}</div> : null}
+      {turn.reasoning_tail ? <div className="exec-io">{`思考 ${turn.reasoning_tail}`}</div> : null}
+    </li>
+  );
+}
 
 const FailCard = observer(function FailCard({ job }: { job: Job }) {
   const service = useService(JobsService);
@@ -539,7 +559,9 @@ const JobsHead = observer(function JobsHead({ tab }: { tab: 'board' | 'history' 
     <div className="jobs-head">
       <h1 className="jobs-title">任务</h1>
       <p className="jobs-lede">
-        {tab === 'board' ? '此刻在消化什么，近一周用了多少。' : '全部任务记录，按状态和类型筛。'}
+        {tab === 'board'
+          ? '此刻在消化什么，近一周用了多少。'
+          : '按状态和类型筛。已结束的任务、执行明细和用量保留 30 天。'}
       </p>
       <nav className="jobs-tabs" aria-label="任务栏目">
         <Link

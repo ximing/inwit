@@ -1,5 +1,5 @@
 import { bindServices, observer, useService } from '@rabjs/react';
-import type { Job, JobStatus, JobType } from '@inwit/dto';
+import { formatAgentTurn, type Job, type JobStatus, type JobType } from '@inwit/dto';
 import {
   BookOpen,
   BrainCircuit,
@@ -326,11 +326,29 @@ const ExecutionDetail = observer(function ExecutionDetail({
               <Text style={styles.execSummary}>{execution.resultSummary}</Text>
             ) : null}
             {execution.error ? <Text style={styles.errDetail}>{execution.error}</Text> : null}
+            {(execution.turns ?? []).map((turn) => (
+              <View key={`${turn.phase}-${String(turn.index)}`} style={styles.execStep}>
+                <Text style={styles.execTurn}>{formatAgentTurn(turn)}</Text>
+                {turn.text_tail ? (
+                  <Text style={styles.execIo} numberOfLines={3}>
+                    {turn.text_tail}
+                  </Text>
+                ) : null}
+                {turn.reasoning_tail ? (
+                  <Text style={styles.execIo} numberOfLines={3}>
+                    {`思考 ${turn.reasoning_tail}`}
+                  </Text>
+                ) : null}
+              </View>
+            ))}
             {execution.steps.map((step, stepIndex) => (
               <View key={stepIndex} style={styles.execStep}>
                 <Text style={styles.execTool}>
                   {step.tool}
-                  <Text style={styles.execMs}>{` ${String(step.duration_ms)}ms`}</Text>
+                  <Text style={styles.execMs}>
+                    {` ${String(step.duration_ms)}ms`}
+                    {step.output_chars != null ? ` · ${String(step.output_chars)}字` : ''}
+                  </Text>
                 </Text>
                 {step.output_summary ? (
                   <Text style={styles.execIo} numberOfLines={3}>
@@ -528,6 +546,7 @@ function makeStyles(theme: ThemeTokens) {
     },
     execHead: { fontSize: 12, color: theme.colors.ink3, fontWeight: '600' },
     execSummary: { fontSize: 12, color: theme.colors.ink4, marginTop: 2 },
+    execTurn: { fontSize: 12, color: theme.colors.ink2, lineHeight: 18 },
     execStep: { marginTop: 6 },
     execTool: { fontSize: 12, color: theme.colors.ink2, fontWeight: '600' },
     execMs: { color: theme.colors.ink4, fontWeight: '400' },

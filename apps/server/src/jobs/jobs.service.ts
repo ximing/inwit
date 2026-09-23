@@ -150,6 +150,7 @@ function toPublicExecution(row: typeof agentExecutions.$inferSelect): AgentExecu
     startedAt: row.startedAt.toISOString(),
     finishedAt: row.finishedAt ? row.finishedAt.toISOString() : null,
     steps: row.steps,
+    turns: row.turns ?? [],
     error: row.error,
     resultSummary: row.resultSummary,
     createdAt: row.createdAt.toISOString(),
