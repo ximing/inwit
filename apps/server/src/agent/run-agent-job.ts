@@ -6,6 +6,7 @@ import { modelResponseError, resolveModelFor } from '../llm/pi.js';
 import { logLlmUsage } from '../llm/usage.js';
 import { logger } from '../utils/logger.js';
 import { finishExecution, measureValue, saveExecutionSteps, saveExecutionTurns, startExecution, summarizeValue } from './executions.js';
+import { auditMemoryToolPayload } from './memory-audit-logic.js';
 import { extractAssistantText, isAssistantMessage } from './messages.js';
 import { runWithAgentContext, type AgentRunContext } from './run-context.js';
 import { AgentTerminalError } from './terminal-error.js';
@@ -123,12 +124,21 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
           }
           if (event.type === 'tool_execution_end') {
             const started = toolStarted.get(event.toolCallId);
+            // Memory tools echo entry bodies and collection descriptions. Project
+            // them before the 400-character summary so steps keep ids and lengths.
+            const inputValue = auditMemoryToolPayload(event.toolName, started?.args, 'args');
+            const outputValue = auditMemoryToolPayload(
+              event.toolName,
+              event.result,
+              'result',
+              event.isError,
+            );
             steps.push({
               tool: event.toolName,
-              input_summary: summarizeValue(started?.args),
+              input_summary: summarizeValue(inputValue),
               output_summary: event.isError
-                ? `error: ${summarizeValue(event.result)}`
-                : summarizeValue(event.result),
+                ? `error: ${summarizeValue(outputValue)}`
+                : summarizeValue(outputValue),
               output_chars: measureValue(event.result),
               duration_ms: started ? Math.max(0, Date.now() - started.t) : 0,
             });

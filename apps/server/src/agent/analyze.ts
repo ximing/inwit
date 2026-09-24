@@ -31,6 +31,7 @@ export async function processAnalyzePatterns(job: JobRow): Promise<void> {
     systemPrompt: ANALYZE_SYSTEM_PROMPT,
     userPrompt: analyzeUserPrompt(),
     tools: analyzeTools(session),
+    maxTurns: 40,
     beforeRun: () => {
       if (struggling.length < 2) {
         return analyzeResultSummary({

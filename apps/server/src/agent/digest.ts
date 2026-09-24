@@ -190,6 +190,7 @@ export async function processDigest(job: JobRow): Promise<void> {
       avoid,
     }),
     tools: digestTools(session),
+    maxTurns: 72,
     context: { documentId },
     verify: ({ executionId }) => verifyDigest(job, documentId, session, executionId),
     nudgePrompt: (err) =>

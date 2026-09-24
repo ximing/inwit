@@ -33,6 +33,7 @@ import {
   documentOnCooldown,
   parseConfusableKey,
 } from './analyze-logic.js';
+import { memoryLoadTools } from './memory-tools.js';
 import { asToolError, cardDraftSchema, writeCardsTool, writeQuestionsTool, type DigestSession } from './tools.js';
 
 export interface AnalyzeSession {
@@ -653,6 +654,7 @@ export function analyzeWriteQuestionsTool(
 
 export function analyzeTools(session: AnalyzeSession): AgentTool[] {
   return [
+    ...memoryLoadTools(session),
     readStrugglingCardsTool(session),
     analyzeLinkCardsTool(session),
     analyzeWriteMemoryTool(session),
