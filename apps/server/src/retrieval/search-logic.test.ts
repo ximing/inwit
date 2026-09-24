@@ -15,6 +15,7 @@ import {
   orderByIds,
   qdrantScopeFilter,
   withSearchFallback,
+  type PayloadEqual,
 } from './search-logic.js';
 
 describe('annotationEmbeddingText', () => {
@@ -123,6 +124,42 @@ describe('scope filters', () => {
     expect(meiliScopeFilter(userId, topicId)).toBe(
       `user_id = '${userId}' AND topic_id = '${topicId}'`,
     );
+  });
+
+  it('appends payloadEquals after user and topic, escaping meili values', () => {
+    const userId = '11111111-1111-4111-8111-111111111111';
+    const topicId = '22222222-2222-4222-8222-222222222222';
+    const collectionId = '33333333-3333-4333-8333-333333333333';
+    const weird = "o'brien\\x";
+    const equals: PayloadEqual[] = [
+      { key: 'collection_id', value: collectionId },
+      { key: 'entry_id', value: weird },
+    ];
+    expect(qdrantScopeFilter(userId, topicId, equals)).toEqual({
+      must: [
+        { key: 'user_id', match: { value: userId } },
+        { key: 'topic_id', match: { value: topicId } },
+        { key: 'collection_id', match: { value: collectionId } },
+        { key: 'entry_id', match: { value: weird } },
+      ],
+    });
+    expect(
+      meiliScopeFilter(userId, undefined, [{ key: 'collection_id', value: collectionId }]),
+    ).toBe(`user_id = '${userId}' AND collection_id = '${collectionId}'`);
+    expect(meiliScopeFilter(userId, topicId, equals)).toBe(
+      [
+        `user_id = '${userId}'`,
+        `topic_id = '${topicId}'`,
+        `collection_id = '${collectionId}'`,
+        `entry_id = '${escapeMeiliValue(weird)}'`,
+      ].join(' AND '),
+    );
+  });
+
+  it('does not add clauses for an empty payloadEquals list', () => {
+    const userId = '11111111-1111-4111-8111-111111111111';
+    expect(qdrantScopeFilter(userId, undefined, [])).toEqual(qdrantScopeFilter(userId));
+    expect(meiliScopeFilter(userId, undefined, [])).toBe(meiliScopeFilter(userId));
   });
 });
 

@@ -8,6 +8,12 @@ import {
   ensureRetrievalStores,
   getRetrievalClients,
 } from './registry.js';
+import {
+  collectionEmbeddingText,
+  entryEmbeddingText,
+  memoryCollectionsStoreName,
+  memoryEntriesStoreName,
+} from './memory-index-logic.js';
 import { rrfMerge } from './rrf.js';
 import {
   ANNOTATION_QUOTE_CHARS,
@@ -17,6 +23,7 @@ import {
   documentEmbeddingText,
   meiliScopeFilter,
   qdrantScopeFilter,
+  type PayloadEqual,
 } from './search-logic.js';
 
 export { annotationEmbeddingText, documentEmbeddingText } from './search-logic.js';
@@ -365,16 +372,125 @@ export async function tryDeleteDocumentFromIndex(documentId: string): Promise<vo
   }
 }
 
-async function hybridSearchIds(input: {
+export interface IndexableMemoryCollection {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+}
+
+export interface IndexableMemoryEntry {
+  id: string;
+  userId: string;
+  collectionId: string;
+  collectionTitle: string;
+  body: string;
+}
+
+/** Index one collection. Callers skip retired rows; this upsert does not check status. */
+export async function indexMemoryCollection(collection: IndexableMemoryCollection): Promise<void> {
+  await ensureRetrievalStores();
+  const { embedding } = getRetrievalClients();
+  const name = memoryCollectionsStoreName();
+  const title = collection.title.trim();
+  const description = collection.description.trim();
+  const text = collectionEmbeddingText(title, description);
+  const vectors = await embedding.embedTexts([text], { userId: collection.userId });
+  const vector = vectors[0];
+  if (!vector || vector.length === 0) {
+    throw new Error('embedding returned no vector for memory collection');
+  }
+  const payload = {
+    collection_id: collection.id,
+    user_id: collection.userId,
+    title,
+    description,
+    text,
+  };
+  await upsertBoth(
+    name,
+    collection.id,
+    vector,
+    payload,
+    { id: collection.id, ...payload },
+    'indexMemoryCollection',
+  );
+}
+
+/** Remove one collection point from Qdrant and Meili. */
+export async function deleteMemoryCollectionFromIndex(collectionId: string): Promise<void> {
+  await ensureRetrievalStores();
+  await deleteBoth(memoryCollectionsStoreName(), collectionId, 'deleteMemoryCollectionFromIndex');
+}
+
+/** Index one entry. Callers skip retired rows; this upsert does not check status. */
+export async function indexMemoryEntry(entry: IndexableMemoryEntry): Promise<void> {
+  await ensureRetrievalStores();
+  const { embedding } = getRetrievalClients();
+  const name = memoryEntriesStoreName();
+  const text = entryEmbeddingText(entry.collectionTitle, entry.body);
+  const vectors = await embedding.embedTexts([text], { userId: entry.userId });
+  const vector = vectors[0];
+  if (!vector || vector.length === 0) {
+    throw new Error('embedding returned no vector for memory entry');
+  }
+  const payload = {
+    entry_id: entry.id,
+    collection_id: entry.collectionId,
+    user_id: entry.userId,
+    text,
+  };
+  await upsertBoth(
+    name,
+    entry.id,
+    vector,
+    payload,
+    { id: entry.id, ...payload },
+    'indexMemoryEntry',
+  );
+}
+
+/** Remove one entry point from Qdrant and Meili. */
+export async function deleteMemoryEntryFromIndex(entryId: string): Promise<void> {
+  await ensureRetrievalStores();
+  await deleteBoth(memoryEntriesStoreName(), entryId, 'deleteMemoryEntryFromIndex');
+}
+
+/**
+ * `score` is the reranker relevance_score. Null when rerank did not produce an order
+ * (failure, or no rerank text); the order is then today's RRF candidate truncation.
+ */
+export interface RankedSearchHit {
+  id: string;
+  score: number | null;
+}
+
+type HitId = (id: string | number, source: Record<string, unknown>) => string;
+type HitText = (source: Record<string, unknown>) => string | null;
+
+interface HybridSearchInput {
   storeName: string;
   userId: string;
   query: string;
   limit: number;
   topicId?: string | undefined;
+  payloadEquals?: readonly PayloadEqual[] | undefined;
   filterIds?: ((ids: string[]) => Promise<string[]>) | undefined;
-  idOf: (id: string | number, source: Record<string, unknown>) => string;
-  textOf: (source: Record<string, unknown>) => string | null;
-}): Promise<string[]> {
+  idOf: HitId;
+  textOf: HitText;
+}
+
+function storedPayloadText(source: Record<string, unknown>): string | null {
+  const stored = asString(source.text);
+  if (stored && stored.trim() !== '') return stored;
+  return null;
+}
+
+function hitKey(id: unknown, source: Record<string, unknown>, idOf: HitId): string {
+  return idOf(typeof id === 'string' || typeof id === 'number' ? id : '', source);
+}
+
+async function hybridSearchRankedHits(input: HybridSearchInput): Promise<RankedSearchHit[]> {
   const trimmed = input.query.trim();
   if (trimmed === '' || input.limit <= 0) return [];
   const { embedding, qdrant, meili, rerank } = getRetrievalClients();
@@ -387,21 +503,19 @@ async function hybridSearchIds(input: {
     qdrant.queryPoints(
       input.storeName,
       vector,
-      qdrantScopeFilter(input.userId, input.topicId),
+      qdrantScopeFilter(input.userId, input.topicId, input.payloadEquals),
       recall,
     ),
     meili.search(input.storeName, {
       q: trimmed,
-      filter: meiliScopeFilter(input.userId, input.topicId),
+      filter: meiliScopeFilter(input.userId, input.topicId, input.payloadEquals),
       limit: recall,
     }),
   ]);
 
   let merged = rrfMerge([
     scored.map((point) => input.idOf(point.id, point.payload)),
-    hits.map((hit) =>
-      input.idOf(typeof hit.id === 'string' || typeof hit.id === 'number' ? hit.id : '', hit),
-    ),
+    hits.map((hit) => hitKey(hit.id, hit, input.idOf)),
   ]).slice(0, recall);
   if (input.filterIds && merged.length > 0) {
     merged = await input.filterIds(merged);
@@ -415,15 +529,12 @@ async function hybridSearchIds(input: {
     if (text) textById.set(id, text);
   };
   for (const point of scored) collect(input.idOf(point.id, point.payload), point.payload);
-  for (const hit of hits) {
-    collect(
-      input.idOf(typeof hit.id === 'string' || typeof hit.id === 'number' ? hit.id : '', hit),
-      hit,
-    );
-  }
+  for (const hit of hits) collect(hitKey(hit.id, hit, input.idOf), hit);
 
   const candidates = merged.filter((id) => textById.has(id));
-  if (candidates.length === 0) return merged.slice(0, input.limit);
+  if (candidates.length === 0) {
+    return merged.slice(0, input.limit).map((id) => ({ id, score: null }));
+  }
 
   try {
     const ranked = await rerank.rerankTexts(
@@ -432,16 +543,50 @@ async function hybridSearchIds(input: {
       input.limit,
       { userId: input.userId },
     );
-    const results: string[] = [];
-    for (const { index } of ranked) {
+    const results: RankedSearchHit[] = [];
+    for (const { index, score } of ranked) {
       const id = candidates[index];
-      if (id) results.push(id);
+      if (id) results.push({ id, score });
     }
     if (results.length > 0) return results.slice(0, input.limit);
   } catch (err) {
     logger.warn('retrieval.rerank.failed', err);
   }
-  return candidates.slice(0, input.limit);
+  return candidates.slice(0, input.limit).map((id) => ({ id, score: null }));
+}
+
+async function hybridSearchIds(input: HybridSearchInput): Promise<string[]> {
+  const ranked = await hybridSearchRankedHits(input);
+  return ranked.map((hit) => hit.id);
+}
+
+/**
+ * Same recall as card search (embed, Qdrant + Meili, RRF, rerank).
+ * `payloadEquals` is ANDed onto both filters; card, document, and annotation search omit it.
+ * Point id is the hit id unless `idOf` is set.
+ */
+export async function hybridSearchRanked(input: {
+  storeName: string;
+  userId: string;
+  query: string;
+  limit: number;
+  topicId?: string | undefined;
+  payloadEquals?: readonly PayloadEqual[] | undefined;
+  filterIds?: ((ids: string[]) => Promise<string[]>) | undefined;
+  idOf?: HitId | undefined;
+  textOf?: HitText | undefined;
+}): Promise<RankedSearchHit[]> {
+  return hybridSearchRankedHits({
+    storeName: input.storeName,
+    userId: input.userId,
+    query: input.query,
+    limit: input.limit,
+    topicId: input.topicId,
+    payloadEquals: input.payloadEquals,
+    filterIds: input.filterIds,
+    idOf: input.idOf ?? ((id) => String(id)),
+    textOf: input.textOf ?? storedPayloadText,
+  });
 }
 
 /**
