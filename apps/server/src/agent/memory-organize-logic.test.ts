@@ -6,6 +6,7 @@ import {
   skippedMemoryOrganizeFeedback,
   memoryBodyPreview,
   memoryOrganizeBatchKey,
+  memoryOrganizeFollowupExclude,
   memoryOrganizeTrigger,
   normalizeMemoryRevision,
   ORGANIZE_BATCH_MAX,
@@ -248,6 +249,14 @@ describe('lockedMemoryOrganizeBatch', () => {
     expect(skippedMemoryOrganizeFeedback({})).toEqual([]);
     expect(skippedMemoryOrganizeFeedback({ skipFeedbackIds: 'nope' })).toEqual([]);
     expect(skippedMemoryOrganizeFeedback({ skipFeedbackIds: [A, 'not-a-uuid', B] })).toEqual([A, B]);
+  });
+
+  it('carries a failed batch and its inherited skips into the next plan', () => {
+    expect(memoryOrganizeFollowupExclude({})).toEqual([]);
+    expect(memoryOrganizeFollowupExclude({ skipFeedbackIds: [B] })).toEqual([B]);
+    expect(
+      memoryOrganizeFollowupExclude({ batchFeedbackIds: [A], skipFeedbackIds: [B, A] }),
+    ).toEqual([A, B]);
   });
 });
 

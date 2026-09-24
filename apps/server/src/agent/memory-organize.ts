@@ -63,8 +63,10 @@ async function lockBatch(job: JobRow): Promise<string[]> {
     const trigger = memoryOrganizeTrigger(job.payload);
     const payload: JobPayload = {
       ...(trigger ? { trigger } : {}),
+      ...(skip.length > 0 ? { skipFeedbackIds: skip } : {}),
       batchFeedbackIds: ids,
     };
+    job.payload = payload;
     const [updated] = await tx
       .update(jobs)
       .set({ payload, updatedAt: new Date() })

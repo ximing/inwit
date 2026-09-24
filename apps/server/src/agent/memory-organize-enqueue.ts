@@ -9,8 +9,10 @@ import { endOfLocalDay, startOfLocalDay } from '../utils/date.js';
 import { logger } from '../utils/logger.js';
 import {
   dispatchMemoryOrganizePlan,
+  lockedMemoryOrganizeBatch,
   memoryOrganizeTrigger,
   planMemoryOrganize,
+  skippedMemoryOrganizeFeedback,
   type MemoryOrganizePending,
   type MemoryOrganizePlan,
   type MemoryOrganizeTrigger,
@@ -91,6 +93,26 @@ async function postpone(jobId: string, plan: Extract<MemoryOrganizePlan, { actio
     .where(and(eq(jobs.id, jobId), eq(jobs.status, 'pending')));
 }
 
+/** A user decision may lock feedback that an earlier failure told this pending job to skip. */
+async function releaseSkippedOnUnlockedPending(userId: string, now: Date): Promise<void> {
+  const rows = await getDb()
+    .select({ id: jobs.id, payload: jobs.payload })
+    .from(jobs)
+    .where(
+      and(eq(jobs.userId, userId), eq(jobs.type, 'memory_organize'), eq(jobs.status, 'pending')),
+    );
+  for (const row of rows) {
+    if (lockedMemoryOrganizeBatch(row.payload) !== undefined) continue;
+    if (skippedMemoryOrganizeFeedback(row.payload).length === 0) continue;
+    const payload: JobPayload = { ...row.payload };
+    delete payload.skipFeedbackIds;
+    await getDb()
+      .update(jobs)
+      .set({ payload, updatedAt: now })
+      .where(and(eq(jobs.id, row.id), eq(jobs.status, 'pending')));
+  }
+}
+
 async function reconcileUnique(userId: string, now: Date): Promise<void> {
   const state = await loadState(userId, now, []);
   if (state.running || !state.pending) return;
@@ -110,7 +132,9 @@ export async function scheduleMemoryOrganize(
   userId: string,
   now = new Date(),
   excludeFeedbackIds: readonly string[] = [],
+  releaseSkip = false,
 ): Promise<void> {
+  if (releaseSkip) await releaseSkippedOnUnlockedPending(userId, now);
   const state = await loadState(userId, now, excludeFeedbackIds);
   const plan = planMemoryOrganize({
     unconsumed: state.unconsumed,
@@ -152,9 +176,10 @@ export async function scheduleMemoryOrganize(
 export async function scheduleMemoryOrganizeSafely(
   userId: string,
   excludeFeedbackIds: readonly string[] = [],
+  releaseSkip = false,
 ): Promise<void> {
   try {
-    await scheduleMemoryOrganize(userId, new Date(), excludeFeedbackIds);
+    await scheduleMemoryOrganize(userId, new Date(), excludeFeedbackIds, releaseSkip);
   } catch (err) {
     logger.error('memory.organize.plan_failed', {
       userId,

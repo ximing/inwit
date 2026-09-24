@@ -309,7 +309,7 @@ export async function acceptCard(userId: string, cardId: string): Promise<CardDe
   if (outcome.kind === 'still_proposed') throw AppError.of(500, 'INTERNAL_ERROR');
   if (outcome.kind === 'accepted') {
     await maybeSuggestAfterAcceptance(userId, outcome.documentId);
-    await scheduleMemoryOrganizeSafely(userId);
+    await scheduleMemoryOrganizeSafely(userId, [], true);
   }
   return getCard(userId, cardId);
 }
@@ -346,7 +346,7 @@ export async function acceptProposedCards(userId: string, documentId: string): P
     }
   }
   await maybeSuggestAfterAcceptance(userId, documentId);
-  if (acceptedIds.length > 0) await scheduleMemoryOrganizeSafely(userId);
+  if (acceptedIds.length > 0) await scheduleMemoryOrganizeSafely(userId, [], true);
   return { acceptedIds, failedIds };
 }
 
@@ -457,7 +457,7 @@ export async function rejectCard(userId: string, cardId: string, input: RejectCa
       cardId,
       reasonChars: reason ? [...reason].length : 0,
     });
-    await scheduleMemoryOrganizeSafely(userId);
+    await scheduleMemoryOrganizeSafely(userId, [], true);
   }
   return getCard(userId, cardId);
 }

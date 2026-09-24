@@ -1,6 +1,9 @@
 import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.js';
-import { lockedMemoryOrganizeBatch } from '../agent/memory-organize-logic.js';
+import {
+  memoryOrganizeFollowupExclude,
+  skippedMemoryOrganizeFeedback,
+} from '../agent/memory-organize-logic.js';
 import { config } from '../config.js';
 import { getDb, type Database } from '../db/index.js';
 import { jobs, type JobRow } from '../db/schema.js';
@@ -162,9 +165,8 @@ async function rescheduleJob(job: JobRow, runAt: Date, now: Date): Promise<void>
 
 async function planOrganizeAfterRelease(job: JobRow): Promise<void> {
   if (job.type !== 'memory_organize') return;
-  // The failed batch stays out until a later decision. Other unconsumed feedback can still queue.
-  const exclude = lockedMemoryOrganizeBatch(job.payload) ?? [];
-  await scheduleMemoryOrganizeSafely(job.userId, exclude);
+  // Keep the failed batch and any skip list it inherited out until a user decision.
+  await scheduleMemoryOrganizeSafely(job.userId, memoryOrganizeFollowupExclude(job.payload));
 }
 
 async function processOne(job: JobRow): Promise<void> {
@@ -175,7 +177,8 @@ async function processOne(job: JobRow): Promise<void> {
     logger.info('job.done', { jobId: job.id, type: job.type, ms: Date.now() - started });
     if (job.type === 'memory_organize') {
       // Leftovers can take the one active slot only after this row leaves running.
-      await scheduleMemoryOrganizeSafely(job.userId);
+      // Inherited skips stay excluded; a later decision is what clears them.
+      await scheduleMemoryOrganizeSafely(job.userId, skippedMemoryOrganizeFeedback(job.payload));
     }
   } catch (err) {
     if (err instanceof RescheduleJobError) {

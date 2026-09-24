@@ -127,6 +127,15 @@ export function skippedMemoryOrganizeFeedback(payload: object): string[] {
   return ids;
 }
 
+/** Locked batch plus inherited skips. Consumed ids in the locked batch are already gone. */
+export function memoryOrganizeFollowupExclude(payload: object): string[] {
+  const ids = [
+    ...(lockedMemoryOrganizeBatch(payload) ?? []),
+    ...skippedMemoryOrganizeFeedback(payload),
+  ];
+  return [...new Set(ids)];
+}
+
 export function memoryOrganizeTrigger(payload: { trigger?: unknown }): MemoryOrganizeTrigger | undefined {
   return payload.trigger === 'count' || payload.trigger === 'slot' ? payload.trigger : undefined;
 }
