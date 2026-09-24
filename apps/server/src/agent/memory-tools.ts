@@ -19,7 +19,6 @@ import {
   keepUuidIds,
   memoryLoadFitsInline,
   selectMemoryLoad,
-  takeMemoryCollectionIds,
 } from './memory-load-logic.js';
 
 const COLLECTION_SEARCH_LIMIT = 5;
@@ -198,7 +197,7 @@ async function loadMemoryCollections(
   query: string,
   collectionIds: readonly string[],
 ) {
-  const ids = takeMemoryCollectionIds(collectionIds);
+  const ids = keepUuidIds(collectionIds).slice(0, MEMORY_LOAD_MAX_COLLECTIONS);
   const owned = await loadOwnedActiveCollections(userId, ids);
   const ownedById = new Map(owned.map((row) => [row.id.toLowerCase(), row]));
   const ordered = ids.flatMap((id) => {

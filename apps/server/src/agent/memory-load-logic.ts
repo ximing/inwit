@@ -21,15 +21,6 @@ export function keepUuidIds(ids: readonly unknown[]): string[] {
   return out;
 }
 
-/** Model-supplied collection ids. At most `max`, so one bad id cannot fail the tool. */
-export function takeMemoryCollectionIds(
-  ids: readonly unknown[],
-  max = MEMORY_LOAD_MAX_COLLECTIONS,
-): string[] {
-  if (max <= 0) return [];
-  return keepUuidIds(ids).slice(0, max);
-}
-
 function codePointLength(value: string): number {
   return [...value].length;
 }
