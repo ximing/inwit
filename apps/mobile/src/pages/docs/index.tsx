@@ -76,6 +76,9 @@ const DocRow = observer(function DocRow({ doc }: { doc: DocumentListItem }) {
         <Text style={styles.rowBlank}>{BLANK_DOCUMENT_LABEL}</Text>
       ) : null}
       <View style={styles.rowMeta}>
+        {doc.proposedCount > 0 ? (
+          <Text style={styles.proposed}>待确认 {doc.proposedCount}</Text>
+        ) : null}
         {pulse ? <PulseLabel text={stage.label.replace(/…$/, '') || '消化中'} /> : null}
         {failed ? (
           <Text style={styles.failed} numberOfLines={1}>
@@ -305,6 +308,7 @@ function makeStyles(theme: ThemeTokens) {
     tagAiText: { fontSize: 11, color: theme.colors.accentDeep },
     tagTopicText: { fontSize: 11, color: theme.colors.green },
     metaText: { fontSize: 12, color: theme.colors.ink4 },
+    proposed: { fontSize: 12, color: theme.colors.gold },
     failed: { fontSize: 12, color: theme.colors.accent, fontWeight: '600' },
     retry: { fontSize: 12.5, color: theme.colors.accentDeep, fontWeight: '600' },
     hint: { fontSize: 13.5, color: theme.colors.ink3, marginTop: 16 },

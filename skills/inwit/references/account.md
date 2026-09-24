@@ -2,7 +2,7 @@
 
 # 账号与设置
 
-Generated 2026-09-20T05:12:01.638Z. 22 endpoints.
+Generated 2026-09-24T08:06:29.100Z. 22 endpoints.
 
 ### POST `/api/auth/login`
 

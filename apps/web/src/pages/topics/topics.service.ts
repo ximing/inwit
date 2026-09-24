@@ -115,6 +115,15 @@ export function chapterMeta(node: MapTreeNode): string {
   return `${cards}卡`;
 }
 
+function findMapNode(nodes: readonly MapTreeNode[], id: string): MapTreeNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = findMapNode(node.children, id);
+    if (child) return child;
+  }
+  return null;
+}
+
 export class TopicsService extends Service {
   items: TopicListItem[] = [];
   /** topicId → 近 7 天复习量/想起率。加载失败时保持为空，UI 静默隐藏。 */
@@ -731,6 +740,10 @@ export class TopicsService extends Service {
 
   async fill(nodeId: string): Promise<void> {
     if (!this.topic || this.topic.status === 'archived' || this.jobRunning) return;
+    if (findMapNode(this.tree, nodeId)?.proposedCount) {
+      this.showToast('有待确认的卡');
+      return;
+    }
     this.detailError = null;
     try {
       const job = await fillMapNode(nodeId);
@@ -738,6 +751,10 @@ export class TopicsService extends Service {
       void this.openNode(nodeId);
     } catch (err) {
       if (await this.resumeFromConflict(err)) return;
+      if (err instanceof ApiError && err.code === 'NODE_HAS_PROPOSED_CARDS') {
+        this.showToast('有待确认的卡');
+        return;
+      }
       this.detailError = errorMessage(err, '补节点失败');
     }
   }

@@ -15,6 +15,18 @@
 .mini-q { font-size: 13.5px; font-weight: 600; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .mini-a { font-size: 12.5px; color: var(--ink-3); line-height: 1.65; margin-top: 8px; }
 .mini-foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 11.5px; color: var(--ink-4); }
+.mini-badge {
+  height: 17px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+}
 .mastery { display: inline-flex; align-items: center; gap: 3px; }
 .mastery i { width: 16px; height: 3px; border-radius: 99px; background: var(--line); }
 .mastery i.on { background: var(--green); }

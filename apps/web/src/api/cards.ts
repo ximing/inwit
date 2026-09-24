@@ -6,6 +6,7 @@ import type {
   CardImageResponse,
   CardLinksResponse,
   CreateCardInput,
+  RejectCardInput,
   ReviewState,
   UpdateCardInput,
 } from '@inwit/dto';
@@ -25,6 +26,17 @@ export function getCard(id: string): Promise<CardDetail> {
 export function updateCard(id: string, input: UpdateCardInput): Promise<CardDetail> {
   return request<CardDetail>(`/api/cards/${id}`, {
     method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function acceptCard(id: string): Promise<CardDetail> {
+  return request<CardDetail>(`/api/cards/${id}/accept`, { method: 'POST' });
+}
+
+export function rejectCard(id: string, input: RejectCardInput = {}): Promise<CardDetail> {
+  return request<CardDetail>(`/api/cards/${id}/reject`, {
+    method: 'POST',
     body: JSON.stringify(input),
   });
 }

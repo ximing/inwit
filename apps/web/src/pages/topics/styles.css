@@ -512,6 +512,13 @@
 }
 .map-concept-fill:hover { color: var(--accent); }
 .map-concept-fill:disabled { opacity: 0.45; }
+.map-concept-fill.is-waiting,
+.map-concept-fill.is-waiting:hover,
+.map-concept-fill.is-waiting:disabled {
+  opacity: 1;
+  color: var(--ink-4);
+  cursor: default;
+}
 .map-tree { padding: 2px 0 40px; }
 .map-row {
   display: flex;

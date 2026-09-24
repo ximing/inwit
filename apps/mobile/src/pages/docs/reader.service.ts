@@ -1,20 +1,23 @@
 import { Service } from '@rabjs/react';
 import {
   type Annotation,
+  type CardDetail,
   type CardLinksResponse,
   type DocumentCard,
   type DocumentDetail,
   type Topic,
 } from '@inwit/dto';
 import { createAnnotation, getAnnotationImage, listDocumentAnnotations } from '@/api/annotations';
-import { createCard, getCard, getCardImage, getCardLinks } from '@/api/cards';
-import { errorMessage } from '@/api/client';
+import { acceptCard, createCard, getCard, getCardImage, getCardLinks, rejectCard } from '@/api/cards';
+import { ApiError, errorMessage } from '@/api/client';
 import {
+  acceptProposedCards,
   enqueueSelectionCards,
   getDocument,
   retryDocument,
   updateDocument,
 } from '@/api/documents';
+import { confirmAction } from '@/lib/confirm';
 import { listTopics } from '@/api/topics';
 import { clipChars } from '@/lib/clip';
 import { asAssetSrc } from '@/lib/internal-links';
@@ -28,6 +31,23 @@ import { AssetUrlsService } from '@/services/asset-urls.service';
 import { ToastService } from '@/services/toast.service';
 import type { TextSelectionAnchor } from '../../../../../packages/doc-engine/src/protocol';
 
+function clipReason(reason: string): string {
+  return clipChars(reason.replaceAll('\0', ''), 500);
+}
+
+function decisionError(err: unknown, action: 'accept' | 'reject'): string {
+  if (err instanceof ApiError) {
+    if (err.code === 'CARD_INDEX_FAILED') {
+      return action === 'accept'
+        ? '这张卡暂时没能进入检索，请再试'
+        : '这张卡暂时没能移出检索，请再试';
+    }
+    if (err.code === 'DIGEST_IN_PROGRESS') return '消化还在进行，暂时不能确认';
+    if (err.code === 'CARD_ALREADY_REVIEWED') return '请用回收站，而不是「有问题」';
+  }
+  return errorMessage(err, '操作没成功');
+}
+
 const POLL_MS = 3000;
 const SELECTION_POLL_MS = 2000;
 const SELECTION_POLL_FOR_MS = 9000;
@@ -36,6 +56,7 @@ const PDF_MIME = 'application/pdf';
 export type ReaderSheet =
   | { kind: 'cards'; cardIds: string[] }
   | { kind: 'card'; cardId: string; fromCards?: string[] }
+  | { kind: 'reject'; cardId: string; fromCards?: string[] }
   | { kind: 'annotations'; annotationIds: string[] }
   | { kind: 'annotate'; anchor: TextSelectionAnchor }
   | { kind: 'card-form'; anchor: TextSelectionAnchor }
@@ -58,6 +79,8 @@ export class ReaderService extends Service {
   noteDraft = '';
   cardQuestion = '';
   cardAnswer = '';
+  rejectDraft = '';
+  deciding = false;
   saving = false;
   focused = false;
   pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -120,6 +143,15 @@ export class ReaderService extends Service {
     this.noteDraft = '';
     this.cardQuestion = '';
     this.cardAnswer = '';
+    this.rejectDraft = '';
+  }
+
+  get proposedCount(): number {
+    return this.doc?.cards.filter((card) => card.acceptance === 'proposed').length ?? 0;
+  }
+
+  get canConfirmCards(): boolean {
+    return this.doc?.status === 'digested' && this.proposedCount > 0;
   }
 
   async load(id: string, anchor?: string | null): Promise<void> {
@@ -221,10 +253,39 @@ export class ReaderService extends Service {
     this.cardAnswer = value;
   }
 
+  beginReject(cardId: string): void {
+    if (this.doc?.status !== 'digested' || this.deciding) return;
+    const fromCards = this.sheet?.kind === 'card' ? this.sheet.fromCards : undefined;
+    this.rejectDraft = '';
+    this.sheet = { kind: 'reject', cardId, fromCards };
+  }
+
+  setRejectDraft(value: string): void {
+    this.rejectDraft = clipReason(value);
+  }
+
+  cancelReject(): void {
+    if (this.deciding) return;
+    if (this.sheet?.kind !== 'reject') {
+      this.closeSheet();
+      return;
+    }
+    const { cardId, fromCards } = this.sheet;
+    this.rejectDraft = '';
+    this.openCard(cardId, fromCards);
+  }
+
   cardsForSheet(): DocumentCard[] {
     if (!this.doc || this.sheet?.kind !== 'cards') return [];
     const want = new Set(this.sheet.cardIds);
-    return this.doc.cards.filter((card) => want.has(card.id));
+    const proposed: DocumentCard[] = [];
+    const rest: DocumentCard[] = [];
+    for (const card of this.doc.cards) {
+      if (!want.has(card.id) || card.acceptance === 'rejected') continue;
+      if (card.acceptance === 'proposed') proposed.push(card);
+      else rest.push(card);
+    }
+    return [...proposed, ...rest];
   }
 
   annotationsForSheet(): Annotation[] {
@@ -322,6 +383,119 @@ export class ReaderService extends Service {
       this.showToast('这张卡没有所属文档');
     } catch (err) {
       this.showToast(errorMessage(err, '打不开这张卡'));
+    }
+  }
+
+  private applyCard(detail: CardDetail): void {
+    if (!this.doc) return;
+    const { documentTitle: _documentTitle, ...card } = detail;
+    if (card.acceptance === 'rejected') {
+      this.removeCard(card.id);
+      return;
+    }
+    const have = this.doc.cards.some((item) => item.id === card.id);
+    this.doc = {
+      ...this.doc,
+      cards: have
+        ? this.doc.cards.map((item) => (item.id === card.id ? card : item))
+        : [...this.doc.cards, card],
+    };
+  }
+
+  private removeCard(id: string): void {
+    if (!this.doc) return;
+    this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
+    if (this.activeCardId === id) this.activeCardId = null;
+    if (this.sheet?.kind === 'cards') {
+      const cardIds = this.sheet.cardIds.filter((cardId) => cardId !== id);
+      this.sheet = cardIds.length > 0 ? { kind: 'cards', cardIds } : null;
+      return;
+    }
+    if (this.sheet?.kind === 'card' && this.sheet.cardId === id) {
+      const fromCards = this.sheet.fromCards?.filter((cardId) => cardId !== id);
+      this.sheet = fromCards && fromCards.length > 0 ? { kind: 'cards', cardIds: fromCards } : null;
+      return;
+    }
+    if (this.sheet?.kind === 'reject' && this.sheet.cardId === id) {
+      const fromCards = this.sheet.fromCards?.filter((cardId) => cardId !== id);
+      this.rejectDraft = '';
+      this.sheet = fromCards && fromCards.length > 0 ? { kind: 'cards', cardIds: fromCards } : null;
+    }
+  }
+
+  async acceptOneCard(id: string): Promise<void> {
+    if (this.deciding || this.doc?.status !== 'digested') return;
+    this.deciding = true;
+    try {
+      const detail = await acceptCard(id);
+      this.applyCard(detail);
+      this.showToast('已确认，会安排复习');
+    } catch (err) {
+      this.showToast(decisionError(err, 'accept'));
+    } finally {
+      this.deciding = false;
+    }
+  }
+
+  async submitReject(): Promise<void> {
+    if (this.deciding || this.sheet?.kind !== 'reject' || this.doc?.status !== 'digested') return;
+    const { cardId } = this.sheet;
+    const trimmed = clipReason(this.rejectDraft.trim());
+    this.deciding = true;
+    try {
+      const detail = await rejectCard(cardId, trimmed ? { reason: trimmed } : {});
+      this.applyCard(detail);
+      this.showToast('不会进入复习');
+    } catch (err) {
+      this.showToast(decisionError(err, 'reject'));
+    } finally {
+      this.deciding = false;
+    }
+  }
+
+  async acceptAllProposed(): Promise<void> {
+    if (!this.doc || this.doc.status !== 'digested' || this.deciding || this.proposedCount === 0) return;
+    const ok = await confirmAction('全部确认', '这篇里待确认的卡片会进入复习。', '全部确认');
+    if (!ok || !this.doc || this.deciding) return;
+    const documentId = this.doc.id;
+    this.deciding = true;
+    try {
+      const result = await acceptProposedCards(documentId);
+      const acceptedIds = new Set(result.acceptedIds);
+      if (this.doc?.id === documentId) {
+        this.doc = {
+          ...this.doc,
+          cards: this.doc.cards.map((card) =>
+            acceptedIds.has(card.id)
+              ? {
+                  ...card,
+                  acceptance: 'accepted',
+                  review: card.review ?? {
+                    dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+                    intervalDays: 1,
+                    suspendedAt: null,
+                  },
+                }
+              : card,
+          ),
+        };
+      }
+      await this.refresh();
+      const accepted = result.acceptedIds.length;
+      const failed = result.failedIds.length;
+      if (failed > 0 && accepted > 0) {
+        this.showToast(`已确认 ${accepted} 张。${failed} 张未能进入检索，可再试`);
+      } else if (failed > 0) {
+        this.showToast(`${failed} 张未能进入检索，可再试`);
+      } else if (accepted > 0) {
+        this.showToast(`已确认 ${accepted} 张`);
+      } else {
+        this.showToast('没有待确认的卡片');
+      }
+    } catch (err) {
+      this.showToast(decisionError(err, 'accept'));
+    } finally {
+      this.deciding = false;
     }
   }
 

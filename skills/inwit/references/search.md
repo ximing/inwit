@@ -2,7 +2,7 @@
 
 # 搜索
 
-Generated 2026-09-20T05:12:01.638Z. 1 endpoints.
+Generated 2026-09-24T08:06:29.100Z. 1 endpoints.
 
 ### GET `/api/search`
 

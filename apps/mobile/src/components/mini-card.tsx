@@ -55,18 +55,22 @@ export const MiniCard = observer(function MiniCard({
   card,
   active,
   lost,
+  digesting = false,
   thumbUrl,
   onPress,
 }: {
   card: DocumentCard;
   active?: boolean;
   lost?: boolean;
+  /** Document is not digested yet, so a proposed card cannot be confirmed. */
+  digesting?: boolean;
   thumbUrl?: string | null;
   onPress: () => void;
 }) {
   const theme = useTheme();
   const styles = makeStyles(theme);
   const question = card.questions[0]?.question ?? card.concept;
+  const proposed = card.acceptance === 'proposed';
   return (
     <Pressable
       onPress={onPress}
@@ -81,8 +85,14 @@ export const MiniCard = observer(function MiniCard({
         </View>
       ) : null}
       <View style={styles.foot}>
-        <MasteryDots level={cardMasteryLevel(card)} />
-        <Text style={styles.meta}>{cardNextReviewLabel(card)}</Text>
+        {proposed ? (
+          <Text style={styles.badge}>{digesting ? '消化中，还不能确认' : '待确认'}</Text>
+        ) : (
+          <>
+            <MasteryDots level={cardMasteryLevel(card)} />
+            <Text style={styles.meta}>{cardNextReviewLabel(card)}</Text>
+          </>
+        )}
         {card.source === 'manual' ? <Text style={styles.hand}>手写</Text> : null}
         {lost ? <Text style={styles.lost}>原文已删除</Text> : null}
       </View>
@@ -106,6 +116,16 @@ function makeStyles(theme: ThemeTokens) {
     q: {},
     foot: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
     meta: { fontSize: 12, color: theme.colors.ink4 },
+    badge: {
+      fontSize: 11,
+      color: theme.colors.ink3,
+      borderWidth: 1,
+      borderColor: theme.colors.line,
+      borderRadius: 5,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      overflow: 'hidden',
+    },
     hand: { fontSize: 11, color: theme.colors.ink3 },
     lost: { fontSize: 11, color: theme.colors.accent, fontWeight: '600' },
   });

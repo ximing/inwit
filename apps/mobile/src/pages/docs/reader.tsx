@@ -152,6 +152,16 @@ const ReaderContent = observer(function ReaderContent() {
         <Text style={styles.headTitle} numberOfLines={1}>
           {title}
         </Text>
+        {service.canConfirmCards ? (
+          <Pressable
+            onPress={() => void service.acceptAllProposed()}
+            disabled={service.deciding}
+            hitSlop={8}
+            style={styles.headBtn}
+          >
+            <Text style={styles.headBtnText}>{service.deciding ? '确认中…' : '全部确认'}</Text>
+          </Pressable>
+        ) : null}
         <Pressable onPress={() => service.openTopicMenu()} hitSlop={8} style={styles.headBtn}>
           <Text style={styles.headBtnText}>主题</Text>
         </Pressable>
@@ -200,6 +210,7 @@ const ReaderContent = observer(function ReaderContent() {
 
       <CardsSheet />
       <CardDetailSheet />
+      <RejectSheet />
       <AnnotationsSheet />
       <AnnotateForm />
       <CardForm />
@@ -225,6 +236,7 @@ const CardsSheet = observer(function CardsSheet() {
             key={card.id}
             card={card}
             active={service.activeCardId === card.id}
+            digesting={service.doc?.status !== 'digested'}
             thumbUrl={card.hasImage ? service.cardImageUrl(card.id) : null}
             onPress={() => service.openCard(card.id, cards.map((item) => item.id))}
           />
@@ -270,10 +282,29 @@ const CardDetailSheet = observer(function CardDetailSheet() {
               <Text style={{ color: theme.colors.ink, fontSize: 14.5, lineHeight: 22 }}>{answer}</Text>
             </>
           ) : null}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
-            <MasteryDots level={cardMasteryLevel(card)} />
-            <Text style={{ color: theme.colors.ink4, fontSize: 12 }}>{cardNextReviewLabel(card)}</Text>
-          </View>
+          {card.acceptance === 'proposed' ? (
+            <Text style={{ color: theme.colors.ink3, fontSize: 12, marginTop: 8 }}>
+              {service.doc?.status === 'digested' ? '待确认' : '消化中，还不能确认'}
+            </Text>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
+              <MasteryDots level={cardMasteryLevel(card)} />
+              <Text style={{ color: theme.colors.ink4, fontSize: 12 }}>{cardNextReviewLabel(card)}</Text>
+            </View>
+          )}
+          {card.acceptance === 'proposed' && service.doc?.status === 'digested' ? (
+            <View style={{ flexDirection: 'row', gap: 16, marginTop: 12 }}>
+              <Pressable
+                disabled={service.deciding}
+                onPress={() => void service.acceptOneCard(card.id)}
+              >
+                <Text style={{ color: theme.colors.accentDeep, fontWeight: '700' }}>确认</Text>
+              </Pressable>
+              <Pressable disabled={service.deciding} onPress={() => service.beginReject(card.id)}>
+                <Text style={{ color: theme.colors.ink2, fontWeight: '600' }}>有问题</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <Text style={{ color: theme.colors.ink, fontWeight: '700', marginTop: 16 }}>脉络</Text>
           {service.links === null ? (
             <Text style={{ color: theme.colors.ink3 }}>脉络加载中…</Text>
@@ -310,6 +341,51 @@ const CardDetailSheet = observer(function CardDetailSheet() {
       ) : (
         <Text>找不到这张卡。</Text>
       )}
+    </BottomSheet>
+  );
+});
+
+const RejectSheet = observer(function RejectSheet() {
+  const service = useService(ReaderService);
+  const theme = useTheme();
+  const sheet = service.sheet;
+  const open = sheet?.kind === 'reject';
+  return (
+    <BottomSheet
+      visible={open}
+      title="这张卡有什么问题"
+      onClose={() => service.cancelReject()}
+      footer={
+        <>
+          <Pressable onPress={() => service.cancelReject()} disabled={service.deciding}>
+            <Text style={{ color: theme.colors.ink2 }}>返回</Text>
+          </Pressable>
+          <Pressable onPress={() => void service.submitReject()} disabled={service.deciding}>
+            <Text style={{ color: theme.colors.accentDeep, fontWeight: '600' }}>
+              {service.deciding ? '提交中…' : '提交'}
+            </Text>
+          </Pressable>
+        </>
+      }
+    >
+      <Text style={{ color: theme.colors.ink3, fontSize: 13 }}>可以不填</Text>
+      <TextInput
+        value={service.rejectDraft}
+        onChangeText={(value) => service.setRejectDraft(value)}
+        placeholder="可以不填"
+        placeholderTextColor={theme.colors.ink4}
+        multiline
+        textAlignVertical="top"
+        style={{
+          minHeight: 88,
+          borderWidth: 1,
+          borderColor: theme.colors.line,
+          borderRadius: 8,
+          padding: 10,
+          color: theme.colors.ink,
+          backgroundColor: theme.colors.surface2,
+        }}
+      />
     </BottomSheet>
   );
 });

@@ -2,7 +2,7 @@
 
 # 批注
 
-Generated 2026-09-20T05:12:01.638Z. 10 endpoints.
+Generated 2026-09-24T08:06:29.100Z. 10 endpoints.
 
 ### GET `/api/annotation-resurface`
 

@@ -217,11 +217,15 @@ const ConceptCard = observer(function ConceptCard({ node }: { node: MapTreeNode 
       {uncovered ? (
         <button
           type="button"
-          className="map-concept-fill"
-          disabled={service.topic?.status === 'archived' || service.jobRunning}
+          className={`map-concept-fill${node.proposedCount > 0 ? ' is-waiting' : ''}`}
+          disabled={
+            node.proposedCount > 0 || service.topic?.status === 'archived' || service.jobRunning
+          }
           onClick={() => void service.fill(node.id)}
         >
-          {filling ? (
+          {node.proposedCount > 0 ? (
+            '有待确认的卡'
+          ) : filling ? (
             <>
               <Loader2 className="icon-spin" width={12} height={12} strokeWidth={1.8} />
               让 AI 补

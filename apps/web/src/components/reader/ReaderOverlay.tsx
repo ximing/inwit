@@ -28,6 +28,7 @@ import {
   MasteryDots,
   cardMasteryLevel,
   cardNextReviewLabel,
+  cardsForRail,
 } from './mini-card';
 import { ReaderService } from './reader.service';
 import { isPdfMime } from '@/lib/mime';
@@ -277,21 +278,23 @@ const ReaderDocBody = observer(function ReaderDocBody({
 const ReaderCardList = observer(function ReaderCardList({ doc }: { doc: DocumentDetail }) {
   const service = useService(ReaderService);
   const pending = doc.status === 'pending';
+  const cards = cardsForRail(doc.cards);
   return (
     <>
-      <div className="reader-overlay-rail-head">本文卡片 · {doc.cards.length}</div>
-      {doc.cards.length === 0 ? (
+      <div className="reader-overlay-rail-head">本文卡片 · {cards.length}</div>
+      {cards.length === 0 ? (
         <p className="hint">
           {pending ? '处理完成后卡片会出现在这里。' : '这篇还没有卡片。'}
         </p>
       ) : (
         <div className="mini-grid">
-          {doc.cards.map((card) => (
+          {cards.map((card) => (
             <MiniCard
               key={card.id}
               card={card}
               open={false}
               active={false}
+              digesting={doc.status !== 'digested'}
               onClick={() => void service.openCard(card.id, doc.id)}
             />
           ))}
@@ -333,8 +336,16 @@ const ReaderCardDetail = observer(function ReaderCardDetail() {
             </>
           ) : null}
           <div className="reader-overlay-card-meta">
-            <MasteryDots level={cardMasteryLevel(card)} />
-            <span>{cardNextReviewLabel(card)}</span>
+            {card.acceptance === 'proposed' ? (
+              <span className="mini-badge">
+                {service.doc?.status === 'digested' ? '待确认' : '消化中，还不能确认'}
+              </span>
+            ) : (
+              <>
+                <MasteryDots level={cardMasteryLevel(card)} />
+                <span>{cardNextReviewLabel(card)}</span>
+              </>
+            )}
             {card.tags.map((tag) => (
               <span key={tag} className="reader-overlay-tag">
                 {tag}

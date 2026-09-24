@@ -52,7 +52,8 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     answer: detail.answer,
     linkHint: detail.linkHint,
     updatedAt: detail.updatedAt,
-    cardCount: detail.cards.length,
+    cardCount: detail.cards.filter((card) => card.acceptance === 'accepted').length,
+    proposedCount: detail.cards.filter((card) => card.acceptance === 'proposed').length,
     topicTitle: detail.topicTitle ?? item.topicTitle,
   };
 }

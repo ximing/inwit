@@ -109,7 +109,8 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     fileMime: detail.fileMime,
     pageCount: detail.pageCount,
     updatedAt: detail.updatedAt,
-    cardCount: detail.cards.length,
+    cardCount: detail.cards.filter((card) => card.acceptance === 'accepted').length,
+    proposedCount: detail.cards.filter((card) => card.acceptance === 'proposed').length,
     topicTitle: detail.topicTitle ?? item.topicTitle,
   };
 }
@@ -130,10 +131,13 @@ export function flattenMapTree(
   return out;
 }
 
-export function firstUncoveredNode(nodes: MapTreeNode[]): MapTreeNode | null {
+export function firstUncoveredNode(
+  nodes: MapTreeNode[],
+  skipProposed = false,
+): MapTreeNode | null {
   for (const node of nodes) {
-    if (node.status === 'uncovered') return node;
-    const child = firstUncoveredNode(node.children);
+    if (node.status === 'uncovered' && !(skipProposed && node.proposedCount > 0)) return node;
+    const child = firstUncoveredNode(node.children, skipProposed);
     if (child) return child;
   }
   return null;
@@ -272,9 +276,15 @@ export class TopicsService extends Service {
   get fillTarget(): MapTreeNode | null {
     if (this.selectedNodeId) {
       const selected = this.findNode(this.tree, this.selectedNodeId);
-      if (selected?.status === 'uncovered') return selected;
+      if (selected?.status === 'uncovered' && selected.proposedCount <= 0) return selected;
     }
-    return firstUncoveredNode(this.tree);
+    // A node that only has proposed cards stays uncovered, but it is not a gap to fill.
+    return firstUncoveredNode(this.tree, true);
+  }
+
+  /** Uncovered nodes exist, and every one of them is waiting on proposed cards. */
+  get fillWaiting(): boolean {
+    return this.fillTarget === null && firstUncoveredNode(this.tree) !== null;
   }
 
   hangingTitle(doc: DocumentListItem): string | null {
@@ -729,9 +739,19 @@ export class TopicsService extends Service {
 
   async fill(nodeId?: string): Promise<void> {
     if (!this.topic || this.topic.status === 'archived' || this.jobRunning) return;
-    const target = nodeId ?? this.fillTarget?.id;
+    let target = nodeId;
+    if (target) {
+      const node = this.findNode(this.tree, target);
+      if (node && node.proposedCount > 0) {
+        this.showToast('有待确认的卡');
+        return;
+      }
+    } else {
+      target = this.fillTarget?.id;
+    }
     if (!target) {
-      this.detailError = '没有可补充的未覆盖节点';
+      if (this.fillWaiting) this.showToast('有待确认的卡');
+      else this.detailError = '没有可补充的未覆盖节点';
       return;
     }
     this.detailError = null;
@@ -741,6 +761,10 @@ export class TopicsService extends Service {
       void this.openNode(target);
     } catch (err) {
       if (await this.resumeFromConflict(err)) return;
+      if (err instanceof ApiError && err.code === 'NODE_HAS_PROPOSED_CARDS') {
+        this.showToast('有待确认的卡');
+        return;
+      }
       this.detailError = errorMessage(err, '补节点失败');
     }
   }

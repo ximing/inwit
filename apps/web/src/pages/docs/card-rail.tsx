@@ -13,9 +13,10 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { Link } from 'react-router';
-import { MiniCard } from '@/components/reader/mini-card';
+import { cardsForRail, MiniCard } from '@/components/reader/mini-card';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
 import { ROUTES } from '@/routes';
+import { DialogService } from '@/services/dialog.service';
 import {
   CARD_RAIL_WIDTH_DEFAULT,
   CARD_RAIL_WIDTH_MAX,
@@ -168,54 +169,93 @@ const DocCardThumb = observer(function DocCardThumb({ cardId }: { cardId: string
   );
 });
 
-const DocCardButton = observer(function DocCardButton({ card }: { card: DocumentCard }) {
+const DocCardButton = observer(function DocCardButton({
+  card,
+  digested,
+}: {
+  card: DocumentCard;
+  digested: boolean;
+}) {
   const service = useService(DocsService);
+  const dialog = useService(DialogService);
   const open = service.expandedCardIds.includes(card.id);
   const active = service.activeCardId === card.id;
   const lost = service.isCardAnchorLost(card);
   const suspended = card.review?.suspendedAt != null;
+  const proposed = card.acceptance === 'proposed';
+  const canDecide = proposed && digested;
+  const busy = service.cardDecisionBusy || dialog.current !== null;
+  const reject = async () => {
+    const reason = await dialog.prompt('可以不填', '', {
+      title: '这张卡有什么问题',
+      ok: '提交',
+      cancel: '返回',
+    });
+    if (reason === null) return;
+    await service.rejectDocCard(card.id, reason);
+  };
   return (
     <div className="mini-wrap">
-      <MiniCard
-        card={card}
-        open={open}
-        active={active}
-        lost={lost}
-        onClick={() => service.toggleCard(card.id)}
-        thumb={card.hasImage ? <DocCardThumb cardId={card.id} /> : null}
-      />
-      {open ? (
-        <div className="note-item-ops mini-ops">
-          <button
-            type="button"
-            className="note-op"
-            aria-label="编辑卡片"
-            title="编辑"
-            onClick={() => service.openCardEdit(card.id)}
-          >
-            <Pencil width={13} height={13} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            className={`note-op${suspended ? ' is-on' : ''}`}
-            aria-label={suspended ? '恢复复习' : '已熟悉，不复习'}
-            title={suspended ? '恢复复习' : '已熟悉，不复习'}
-            onClick={() => void service.toggleCardSuspended(card)}
-          >
-            {suspended ? (
-              <Play width={13} height={13} strokeWidth={1.8} />
-            ) : (
-              <Pause width={13} height={13} strokeWidth={1.8} />
+      <div className="mini-card-stack">
+        <MiniCard
+          card={card}
+          open={open}
+          active={active}
+          lost={lost}
+          digesting={!digested}
+          onClick={() => service.toggleCard(card.id)}
+          thumb={card.hasImage ? <DocCardThumb cardId={card.id} /> : null}
+        />
+        {open ? (
+          <div className="note-item-ops mini-ops">
+            <button
+              type="button"
+              className="note-op"
+              aria-label="编辑卡片"
+              title="编辑"
+              onClick={() => service.openCardEdit(card.id)}
+            >
+              <Pencil width={13} height={13} strokeWidth={1.8} />
+            </button>
+            {proposed ? null : (
+              <button
+                type="button"
+                className={`note-op${suspended ? ' is-on' : ''}`}
+                aria-label={suspended ? '恢复复习' : '已熟悉，不复习'}
+                title={suspended ? '恢复复习' : '已熟悉，不复习'}
+                onClick={() => void service.toggleCardSuspended(card)}
+              >
+                {suspended ? (
+                  <Play width={13} height={13} strokeWidth={1.8} />
+                ) : (
+                  <Pause width={13} height={13} strokeWidth={1.8} />
+                )}
+              </button>
             )}
-          </button>
+            <button
+              type="button"
+              className="note-op"
+              aria-label="删除卡片"
+              title="移入回收站"
+              onClick={() => void service.archiveDocCard(card.id)}
+            >
+              <Trash2 width={13} height={13} strokeWidth={1.8} />
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {open && canDecide ? (
+        <div className="mini-decision">
           <button
             type="button"
-            className="note-op"
-            aria-label="删除卡片"
-            title="移入回收站"
-            onClick={() => void service.archiveDocCard(card.id)}
+            className="is-primary"
+            disabled={busy}
+            onClick={() => void service.acceptDocCard(card.id)}
           >
-            <Trash2 width={13} height={13} strokeWidth={1.8} />
+            确认
+          </button>
+          <button type="button" className="is-quiet" disabled={busy} onClick={() => void reject()}>
+            有问题
           </button>
         </div>
       ) : null}
@@ -225,9 +265,21 @@ const DocCardButton = observer(function DocCardButton({ card }: { card: Document
 
 export const CardRail = observer(function CardRail() {
   const service = useService(DocsService);
+  const dialog = useService(DialogService);
   const prefs = useService(UiPrefsService);
-  const cards = service.doc?.cards ?? [];
+  const cards = cardsForRail(service.doc?.cards ?? []);
+  const digested = service.doc?.status === 'digested';
+  const canAcceptAll = digested && cards.some((card) => card.acceptance === 'proposed');
   const notes = service.annotations;
+  const acceptAll = async () => {
+    const ok = await dialog.confirm('这篇里待确认的卡片会进入复习。', {
+      title: '全部确认',
+      ok: '全部确认',
+      cancel: '返回',
+    });
+    if (!ok) return;
+    await service.acceptAllProposed();
+  };
   const docked = !service.cardRailNarrow && !prefs.cardRailCollapsed;
   const showOverlay = !docked && service.cardRailOverlayOpen;
   const visible = docked || showOverlay;
@@ -308,6 +360,16 @@ export const CardRail = observer(function CardRail() {
           />
           <div className="card-rail-head">
             <span className="card-rail-title">本文</span>
+            {canAcceptAll ? (
+              <button
+                type="button"
+                className="card-rail-accept-all"
+                disabled={service.acceptingProposed || dialog.current !== null}
+                onClick={() => void acceptAll()}
+              >
+                {service.acceptingProposed ? '确认中…' : '全部确认'}
+              </button>
+            ) : null}
             <Link className="go" to={ROUTES.review}>
               去复习 →
             </Link>
@@ -374,7 +436,7 @@ export const CardRail = observer(function CardRail() {
             ) : (
               <div className="mini-grid">
                 {cards.map((card) => (
-                  <DocCardButton key={card.id} card={card} />
+                  <DocCardButton key={card.id} card={card} digested={digested} />
                 ))}
               </div>
             )}

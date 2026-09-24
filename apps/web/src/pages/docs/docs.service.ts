@@ -21,9 +21,18 @@ import {
   type UpdateCardInput,
 } from '@inwit/dto';
 import { listDocumentAnnotations } from '@/api/annotations';
-import { archiveCard, createCard, resumeCard, suspendCard, updateCard } from '@/api/cards';
-import { errorMessage } from '@/api/client';
 import {
+  acceptCard,
+  archiveCard,
+  createCard,
+  rejectCard,
+  resumeCard,
+  suspendCard,
+  updateCard,
+} from '@/api/cards';
+import { ApiError, errorMessage } from '@/api/client';
+import {
+  acceptProposedCards,
   createDocument,
   enqueueSelectionCards,
   getDocument,
@@ -71,6 +80,24 @@ function asDocumentCard(card: Card): DocumentCard {
     questions: [],
     review: { dueAt: new Date().toISOString(), intervalDays: 0, suspendedAt: null },
   };
+}
+
+function clipReason(reason: string): string {
+  const chars = [...reason.replaceAll('\0', '')];
+  return chars.length <= 500 ? chars.join('') : chars.slice(0, 500).join('');
+}
+
+function decisionError(err: unknown, action: 'accept' | 'reject'): string {
+  if (err instanceof ApiError) {
+    if (err.code === 'CARD_INDEX_FAILED') {
+      return action === 'accept'
+        ? '这张卡暂时没能进入检索，请再试'
+        : '这张卡暂时没能移出检索，请再试';
+    }
+    if (err.code === 'DIGEST_IN_PROGRESS') return '消化还在进行，暂时不能确认';
+    if (err.code === 'CARD_ALREADY_REVIEWED') return '请用回收站，而不是「有问题」';
+  }
+  return errorMessage(err, '操作没成功');
 }
 
 export class DocsService extends Service {
@@ -940,6 +967,12 @@ export class DocsService extends Service {
   }
 
   editingCardId: string | null = null;
+  decidingCardId: string | null = null;
+  acceptingProposed = false;
+
+  get cardDecisionBusy(): boolean {
+    return this.decidingCardId !== null || this.acceptingProposed;
+  }
 
   openCardEdit(id: string): void {
     this.editingCardId = id;
@@ -992,6 +1025,94 @@ export class DocsService extends Service {
     } catch (err) {
       this.showToast(errorMessage(err, '没删掉'));
     }
+  }
+
+  async acceptDocCard(id: string): Promise<void> {
+    if (this.cardDecisionBusy || this.doc?.status !== 'digested') return;
+    this.decidingCardId = id;
+    try {
+      const detail = await acceptCard(id);
+      const { documentTitle: _documentTitle, ...card } = detail;
+      this.replaceDocCard(card);
+      this.showToast('已确认，会安排复习');
+    } catch (err) {
+      this.showToast(decisionError(err, 'accept'));
+    } finally {
+      if (this.decidingCardId === id) this.decidingCardId = null;
+    }
+  }
+
+  async rejectDocCard(id: string, reason: string): Promise<void> {
+    if (this.cardDecisionBusy || this.doc?.status !== 'digested') return;
+    const trimmed = clipReason(reason.trim());
+    this.decidingCardId = id;
+    try {
+      await rejectCard(id, trimmed ? { reason: trimmed } : {});
+      this.dropDocCard(id);
+      this.showToast('不会进入复习');
+    } catch (err) {
+      this.showToast(decisionError(err, 'reject'));
+    } finally {
+      if (this.decidingCardId === id) this.decidingCardId = null;
+    }
+  }
+
+  async acceptAllProposed(): Promise<void> {
+    if (!this.doc || this.doc.status !== 'digested' || this.cardDecisionBusy) return;
+    if (!this.doc.cards.some((card) => card.acceptance === 'proposed')) return;
+    const documentId = this.doc.id;
+    this.acceptingProposed = true;
+    try {
+      const result = await acceptProposedCards(documentId);
+      const acceptedIds = new Set(result.acceptedIds);
+      if (this.doc?.id === documentId) {
+        this.doc = {
+          ...this.doc,
+          cards: this.doc.cards.map((card) =>
+            acceptedIds.has(card.id)
+              ? {
+                  ...card,
+                  acceptance: 'accepted',
+                  review: card.review ?? {
+                    dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+                    intervalDays: 1,
+                    suspendedAt: null,
+                  },
+                }
+              : card,
+          ),
+        };
+        this.patchListFromDetail(this.doc);
+      }
+      await this.refreshOne(documentId);
+      const accepted = result.acceptedIds.length;
+      const failed = result.failedIds.length;
+      if (failed > 0 && accepted > 0) {
+        this.showToast(`已确认 ${accepted} 张。${failed} 张未能进入检索，可再试`);
+      } else if (failed > 0) {
+        this.showToast(`${failed} 张未能进入检索，可再试`);
+      } else if (accepted > 0) {
+        this.showToast(`已确认 ${accepted} 张`);
+      } else {
+        this.showToast('没有待确认的卡片');
+      }
+    } catch (err) {
+      this.showToast(decisionError(err, 'accept'));
+    } finally {
+      this.acceptingProposed = false;
+    }
+  }
+
+  private dropDocCard(id: string): void {
+    if (this.doc) {
+      this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
+      this.patchListFromDetail(this.doc);
+    }
+    this.openCardIds = this.openCardIds.filter((cardId) => cardId !== id);
+    this.expandedCardIds = this.expandedCardIds.filter((cardId) => cardId !== id);
+    if (this.activeCardId === id) this.activeCardId = null;
+    if (this.editingCardId === id) this.editingCardId = null;
+    this.editorHost?.ensureEntityMarks(this.doc?.cards ?? [], this.annotations);
   }
 
   /** 已熟悉 ↔ 恢复复习。 */
