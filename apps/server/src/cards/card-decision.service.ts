@@ -115,9 +115,15 @@ async function insertFeedback(
   return row.id;
 }
 
-async function rollbackAccept(userId: string, cardId: string, feedbackId: string, removeReview: boolean): Promise<void> {
-  await getDb().transaction(async (tx) => {
-    await tx
+/** True only when this accept's row was still live and accepted, and is proposed again. */
+async function rollbackAccept(
+  userId: string,
+  cardId: string,
+  feedbackId: string,
+  removeReview: boolean,
+): Promise<boolean> {
+  return getDb().transaction(async (tx) => {
+    const [reverted] = await tx
       .update(cards)
       .set({ acceptance: 'proposed', updatedAt: new Date() })
       .where(
@@ -127,7 +133,9 @@ async function rollbackAccept(userId: string, cardId: string, feedbackId: string
           eq(cards.acceptance, 'accepted'),
           isNull(cards.deletedAt),
         ),
-      );
+      )
+      .returning({ id: cards.id, mapNodeId: cards.mapNodeId });
+    if (!reverted) return false;
     if (removeReview) {
       const [log] = await tx
         .select({ id: reviewLogs.id })
@@ -146,6 +154,8 @@ async function rollbackAccept(userId: string, cardId: string, feedbackId: string
     await tx
       .delete(cardFeedback)
       .where(and(eq(cardFeedback.id, feedbackId), eq(cardFeedback.userId, userId)));
+    if (reverted.mapNodeId) await recalculateMapNodeStatus(reverted.mapNodeId, tx);
+    return true;
   });
 }
 
@@ -225,23 +235,27 @@ async function acceptOne(userId: string, cardId: string): Promise<AcceptOutcome>
       phase: 'accept',
       error: err instanceof Error ? err.message : String(err),
     });
+    let reverted = false;
     try {
-      await rollbackAccept(userId, cardId, prepared.feedbackId, prepared.removeReview);
+      reverted = await rollbackAccept(userId, cardId, prepared.feedbackId, prepared.removeReview);
     } catch (rollbackErr) {
       logger.error('card.index_failed', {
         cardId,
         phase: 'accept_rollback',
         error: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr),
       });
+      throw AppError.of(500, 'INTERNAL_ERROR');
     }
-    try {
-      await deleteCardFromIndex(cardId);
-    } catch (cleanupErr) {
-      logger.error('card.index_failed', {
-        cardId,
-        phase: 'accept_cleanup',
-        error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
-      });
+    if (reverted) {
+      try {
+        await deleteCardFromIndex(cardId);
+      } catch (cleanupErr) {
+        logger.error('card.index_failed', {
+          cardId,
+          phase: 'accept_cleanup',
+          error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+        });
+      }
     }
     return { kind: 'index_failed' };
   }

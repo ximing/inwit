@@ -128,7 +128,6 @@ async function verifyDigest(
   }
   await tryIndexOwnedDocument(job.userId, documentId);
 
-  // Gate on: suggestions wait until the document has no proposed cards left.
   if (!config.DIGEST_CARD_GATE && !session.topicId) {
     try {
       await maybeEnqueueTopicSuggest(job.userId);

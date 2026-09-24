@@ -1,5 +1,5 @@
 import { TOPIC_SUGGESTION_MIN_DOCS, topicJobPayloadFrom } from '@inwit/dto';
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations, cards, documents, mapNodes, type JobRow } from '../db/schema.js';
 import { findOwnedDocument } from '../documents/document.service.js';
@@ -116,12 +116,26 @@ async function processFill(
         nodeTitle: node.title,
       });
     if (pristine) {
-      await getDb()
+      const removed = await getDb()
         .delete(documents)
-        .where(and(eq(documents.id, documentId), eq(documents.userId, job.userId)));
-      await tryDeleteDocumentFromIndex(documentId);
-      logger.info('topic.fill.skipped_proposed', { jobId: job.id, documentId, nodeId: payload.nodeId });
-      return;
+        .where(
+          and(
+            eq(documents.id, documentId),
+            eq(documents.userId, job.userId),
+            eq(documents.status, 'pending'),
+            eq(documents.source, 'editor'),
+            isNull(documents.deletedAt),
+            eq(documents.contentJson, document.contentJson),
+            sql`not exists (select 1 from ${cards} where ${cards.documentId} = ${documents.id} and ${cards.userId} = ${documents.userId})`,
+            sql`not exists (select 1 from ${annotations} where ${annotations.documentId} = ${documents.id} and ${annotations.userId} = ${documents.userId})`,
+          ),
+        )
+        .returning({ id: documents.id });
+      if (removed.length > 0) {
+        await tryDeleteDocumentFromIndex(documentId);
+        logger.info('topic.fill.skipped_proposed', { jobId: job.id, documentId, nodeId: payload.nodeId });
+        return;
+      }
     }
     throw new AgentTerminalError('节点上有待确认的卡片，未开始补卡', 'node_has_proposed');
   }
