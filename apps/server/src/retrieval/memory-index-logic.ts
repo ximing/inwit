@@ -6,18 +6,14 @@ export function entryEmbeddingText(collectionTitle: string, body: string): strin
   return `${collectionTitle.trim()}\n${body.trim()}`;
 }
 
-function memoryStoreSuffix(nodeEnv: string | undefined): 'prod' | 'dev' {
-  return nodeEnv === 'production' ? 'prod' : 'dev';
+export function memoryCollectionsStoreName(): string {
+  return process.env.NODE_ENV === 'production'
+    ? 'inwit_memory_collections_prod'
+    : 'inwit_memory_collections_dev';
 }
 
-export function memoryCollectionsStoreName(
-  nodeEnv: string | undefined = process.env.NODE_ENV,
-): string {
-  return `inwit_memory_collections_${memoryStoreSuffix(nodeEnv)}`;
-}
-
-export function memoryEntriesStoreName(
-  nodeEnv: string | undefined = process.env.NODE_ENV,
-): string {
-  return `inwit_memory_entries_${memoryStoreSuffix(nodeEnv)}`;
+export function memoryEntriesStoreName(): string {
+  return process.env.NODE_ENV === 'production'
+    ? 'inwit_memory_entries_prod'
+    : 'inwit_memory_entries_dev';
 }
