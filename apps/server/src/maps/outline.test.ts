@@ -159,6 +159,7 @@ describe('flattenMapTree', () => {
         position: 0,
         createdAt: at,
         cardCount: 0,
+        proposedCount: 0,
         docCount: 0,
         mastery: 0,
         children: [
@@ -172,6 +173,7 @@ describe('flattenMapTree', () => {
             position: 0,
             createdAt: at,
             cardCount: 1,
+            proposedCount: 0,
             docCount: 0,
             mastery: 0,
             children: [],

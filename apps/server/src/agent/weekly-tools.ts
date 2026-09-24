@@ -3,10 +3,11 @@ import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { docDisplayTitle, type MemoryContent } from '@inwit/dto';
 import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
-import { annotations, cardLinks, cards, documents, mapNodes, reviewLogs, reviewStates, topics } from '../db/schema.js';
+import { annotations, cards, documents, mapNodes, reviewLogs, reviewStates, topics } from '../db/schema.js';
 import { markdownToContentJson } from '../documents/content-json.js';
 import { clipChars } from '../retrieval/search-logic.js';
 import { loadUserMasteryMemory, upsertUserMasteryMemory } from '../review/mastery-memory.js';
+import { countAcceptedNewLinks } from './weekly-enqueue.js';
 import {
   WEEKLY_ANNOTATION_LIMIT,
   WEEKLY_RELEARN_LIMIT,
@@ -94,14 +95,17 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
   const [cardRow] = await db
     .select({ n: count() })
     .from(cards)
-    .where(and(eq(cards.userId, userId), gte(cards.createdAt, start), lt(cards.createdAt, endExclusive), isNull(cards.deletedAt)));
-
-  const [linkRow] = await db
-    .select({ n: count() })
-    .from(cardLinks)
     .where(
-      and(eq(cardLinks.userId, userId), gte(cardLinks.createdAt, start), lt(cardLinks.createdAt, endExclusive)),
+      and(
+        eq(cards.userId, userId),
+        gte(cards.createdAt, start),
+        lt(cards.createdAt, endExclusive),
+        eq(cards.acceptance, 'accepted'),
+        isNull(cards.deletedAt),
+      ),
     );
+
+  const newLinks = await countAcceptedNewLinks(db, userId, start, endExclusive);
 
   const [annotationRow] = await db
     .select({ n: count() })
@@ -239,7 +243,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
     reviews,
     successRate: successRateFromCounts(reviews.remembered, reviews.total),
     newCards: Number(cardRow?.n ?? 0),
-    newLinks: Number(linkRow?.n ?? 0),
+    newLinks,
     topicCoverage,
     relearn,
     annotations: weekAnnotations,

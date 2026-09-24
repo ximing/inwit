@@ -176,6 +176,7 @@ export async function getReviewToday(userId: string, now = new Date()): Promise<
           eq(cards.userId, userId),
           lte(reviewStates.dueAt, dayEnd),
           isNull(reviewStates.suspendedAt),
+          eq(cards.acceptance, 'accepted'),
           isNull(cards.deletedAt),
         ),
       )
@@ -225,11 +226,12 @@ export async function submitReviewFeedback(
 ): Promise<ReviewFeedbackResult> {
   return getDb().transaction(async (tx) => {
     const [card] = await tx
-      .select({ id: cards.id, mapNodeId: cards.mapNodeId })
+      .select({ id: cards.id, mapNodeId: cards.mapNodeId, acceptance: cards.acceptance })
       .from(cards)
       .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
       .limit(1);
     if (!card) throw AppError.of(404, 'CARD_NOT_FOUND');
+    if (card.acceptance !== 'accepted') throw AppError.of(409, 'CARD_NOT_ACCEPTED');
 
     let [state] = await tx
       .select()
@@ -340,7 +342,7 @@ export async function getReviewStats(userId: string, now = new Date()): Promise<
     getDb()
       .select({ n: count() })
       .from(cards)
-      .where(and(eq(cards.userId, userId), isNull(cards.deletedAt)))
+      .where(and(eq(cards.userId, userId), eq(cards.acceptance, 'accepted'), isNull(cards.deletedAt)))
       .then((rows) => rows[0]),
     getDb()
       .select({
@@ -350,7 +352,12 @@ export async function getReviewStats(userId: string, now = new Date()): Promise<
       .from(reviewStates)
       .innerJoin(
         cards,
-        and(eq(cards.id, reviewStates.cardId), eq(cards.userId, userId), isNull(cards.deletedAt)),
+        and(
+          eq(cards.id, reviewStates.cardId),
+          eq(cards.userId, userId),
+          eq(cards.acceptance, 'accepted'),
+          isNull(cards.deletedAt),
+        ),
       )
       .where(and(eq(reviewStates.userId, userId), isNull(reviewStates.suspendedAt))),
   ]);
@@ -449,11 +456,12 @@ export async function getReviewTopicStats(
 
 async function requireActiveOwnedCard(userId: string, cardId: string): Promise<void> {
   const [card] = await getDb()
-    .select({ id: cards.id })
+    .select({ id: cards.id, acceptance: cards.acceptance })
     .from(cards)
     .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
     .limit(1);
   if (!card) throw AppError.of(404, 'CARD_NOT_FOUND');
+  if (card.acceptance !== 'accepted') throw AppError.of(409, 'CARD_NOT_ACCEPTED');
 }
 
 /** 已熟悉：leave the review queue until resumed. Idempotent. */

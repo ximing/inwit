@@ -61,7 +61,7 @@ export function readTopicContextTool(session: DigestSession): AgentTool<typeof r
     name: 'read_topic_context',
     label: '读取主题上下文',
     description:
-      '读取主题目标、全部卡片概念、全部资料标题、当前地图树，以及上次整理快照（若有）。整理前必须先调用。',
+      '读取主题目标、已确认卡片的概念、全部资料标题、当前地图树，以及上次整理快照（若有）。整理前必须先调用。',
     parameters: readTopicContextSchema,
     execute: async (_id, params) => {
       if (params.topicId !== session.topicId) {
@@ -82,7 +82,14 @@ export function readTopicContextTool(session: DigestSession): AgentTool<typeof r
             mapNodeId: cards.mapNodeId,
           })
           .from(cards)
-          .where(and(eq(cards.userId, session.userId), eq(cards.topicId, params.topicId), isNull(cards.deletedAt)))
+          .where(
+            and(
+              eq(cards.userId, session.userId),
+              eq(cards.topicId, params.topicId),
+              eq(cards.acceptance, 'accepted'),
+              isNull(cards.deletedAt),
+            ),
+          )
           .orderBy(asc(cards.createdAt), asc(cards.id));
 
         const docRows = await getDb()
@@ -182,7 +189,8 @@ export function readMapNodeTool(session: DigestSession): AgentTool<typeof readMa
   return {
     name: 'read_map_node',
     label: '读取空白节点',
-    description: '读取当前要补的地图节点、路径、主题目标和该节点已有卡片。补卡前必须先调用。',
+    description:
+      '读取当前要补的地图节点、路径、主题目标和该节点已确认的卡片。pendingConcepts 是待确认概念，不要为它们再写卡。补卡前必须先调用。',
     parameters: readMapNodeSchema,
     execute: async (_id, params) => {
       if (session.mapNodeId && params.nodeId !== session.mapNodeId) {
@@ -201,7 +209,7 @@ export function readMapNodeTool(session: DigestSession): AgentTool<typeof readMa
         const map = await getTopicMapFlat(session.userId, node.topicId);
         const self = map.find((item) => item.id === node.id);
         const nodeCards = await getDb()
-          .select({ id: cards.id, concept: cards.concept })
+          .select({ id: cards.id, concept: cards.concept, acceptance: cards.acceptance })
           .from(cards)
           .where(and(eq(cards.userId, session.userId), eq(cards.mapNodeId, node.id), isNull(cards.deletedAt)));
         const payload = {
@@ -214,7 +222,12 @@ export function readMapNodeTool(session: DigestSession): AgentTool<typeof readMa
             depth: self?.depth ?? 1,
           },
           topic: topic ?? null,
-          existingCards: nodeCards,
+          existingCards: nodeCards
+            .filter((row) => row.acceptance === 'accepted')
+            .map((row) => ({ id: row.id, concept: row.concept })),
+          pendingConcepts: nodeCards
+            .filter((row) => row.acceptance === 'proposed')
+            .map((row) => row.concept),
         };
         return toolResult(JSON.stringify(payload), payload);
       } catch (err) {

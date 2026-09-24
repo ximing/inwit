@@ -7,6 +7,7 @@ import {
   type SearchResult,
 } from '@inwit/dto';
 import { and, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { acceptedCard } from '../cards/accepted-card.js';
 import { toPublicCardBase } from '../cards/card.mapper.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -72,7 +73,7 @@ async function searchCardIdsIlike(
     .where(
       and(
         eq(cards.userId, userId),
-        isNull(cards.deletedAt),
+        acceptedCard(),
         topicEq(cards.topicId, topicId),
         or(ilike(cards.concept, pattern), ilike(cards.example, pattern), ilike(cards.confusionPoint, pattern)),
       ),
@@ -137,7 +138,7 @@ async function idsInTopic(
       .where(
         and(
           eq(cards.userId, userId),
-          isNull(cards.deletedAt),
+          acceptedCard(),
           eq(cards.topicId, topicId),
           inArray(cards.id, ids),
         ),
@@ -168,7 +169,7 @@ async function loadCardsByIds(userId: string, ids: string[]): Promise<SearchCard
     })
     .from(cards)
     .leftJoin(documents, eq(documents.id, cards.documentId))
-    .where(and(eq(cards.userId, userId), isNull(cards.deletedAt), inArray(cards.id, ids)));
+    .where(and(eq(cards.userId, userId), acceptedCard(), inArray(cards.id, ids)));
   const byId = new Map(rows.map((row) => [row.card.id, row]));
   const ordered: SearchCard[] = [];
   for (const id of ids) {

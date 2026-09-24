@@ -1,7 +1,8 @@
 import { isNull } from 'drizzle-orm';
+import { planSearchBackfill, shouldIndexCard } from '../apps/server/src/cards/card-acceptance-logic.js';
 import { getDb, pool } from '../apps/server/src/db/index.js';
 import { annotations, cards, documents } from '../apps/server/src/db/schema.js';
-import { indexAnnotation, indexCard, indexDocument } from '../apps/server/src/retrieval/pipeline.js';
+import { deleteCardFromIndex, indexAnnotation, indexCard, indexDocument } from '../apps/server/src/retrieval/pipeline.js';
 import {
   annotationsStoreName,
   cardsStoreName,
@@ -65,31 +66,48 @@ try {
       example: cards.example,
       confusionPoint: cards.confusionPoint,
       tags: cards.tags,
+      acceptance: cards.acceptance,
+      deletedAt: cards.deletedAt,
     })
-    .from(cards)
-    .where(isNull(cards.deletedAt));
+    .from(cards);
 
-  let cardOk = 0;
-  let cardSkip = 0;
-  let cardFail = 0;
-  for (const [i, card] of cardRows.entries()) {
-    if (indexedCardIds.has(card.id)) {
-      cardSkip += 1;
-    } else {
-      try {
-        await indexCard(card);
-        cardOk += 1;
-      } catch (err) {
-        cardFail += 1;
-        console.error(`card fail ${card.id}: ${failMessage(err)}`);
-      }
+  const plan = planSearchBackfill({
+    indexedIds: [...indexedCardIds],
+    cards: cardRows,
+  });
+
+  let cardDeleted = 0;
+  let cardDeleteFail = 0;
+  for (const id of plan.deleteIds) {
+    try {
+      await deleteCardFromIndex(id);
+      cardDeleted += 1;
+    } catch (err) {
+      cardDeleteFail += 1;
+      console.error(`card delete fail ${id}: ${failMessage(err)}`);
     }
-    if ((i + 1) % 50 === 0 || i + 1 === cardRows.length) {
+  }
+
+  const cardsById = new Map(cardRows.map((row) => [row.id, row]));
+  let cardOk = 0;
+  let cardFail = 0;
+  for (const [i, id] of plan.indexIds.entries()) {
+    const card = cardsById.get(id);
+    if (!card) continue;
+    try {
+      await indexCard(card);
+      cardOk += 1;
+    } catch (err) {
+      cardFail += 1;
+      console.error(`card fail ${card.id}: ${failMessage(err)}`);
+    }
+    if ((i + 1) % 50 === 0 || i + 1 === plan.indexIds.length) {
       console.log(
-        `cards ${String(i + 1)}/${String(cardRows.length)} ok=${String(cardOk)} skip=${String(cardSkip)} fail=${String(cardFail)}`,
+        `cards index ${String(i + 1)}/${String(plan.indexIds.length)} ok=${String(cardOk)} fail=${String(cardFail)}`,
       );
     }
   }
+  const cardSkip = cardRows.filter((row) => shouldIndexCard(row) && indexedCardIds.has(row.id)).length;
 
   let indexedAnnotationIds = new Set<string>();
   try {
@@ -135,7 +153,13 @@ try {
   console.log(
     JSON.stringify({
       documents: { total: docs.length, ok: docOk, fail: docFail },
-      cards: { total: cardRows.length, ok: cardOk, skip: cardSkip, fail: cardFail },
+      cards: {
+        total: cardRows.length,
+        ok: cardOk,
+        skip: cardSkip,
+        deleted: cardDeleted,
+        fail: cardFail + cardDeleteFail,
+      },
       annotations: {
         total: annotationRows.length,
         ok: annotationOk,
@@ -145,7 +169,7 @@ try {
       stores: { documents: docsName, cards: cardsName, annotations: annotationsName },
     }),
   );
-  if (docFail > 0 || cardFail > 0 || annotationFail > 0) process.exitCode = 1;
+  if (docFail > 0 || cardFail > 0 || cardDeleteFail > 0 || annotationFail > 0) process.exitCode = 1;
 } catch (err) {
   console.error('backfill failed', err);
   process.exitCode = 1;

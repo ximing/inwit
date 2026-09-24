@@ -87,6 +87,11 @@ export const envSchema = z.object({
   RECYCLE_BIN_RETENTION_DAYS: z.coerce.number().int().positive().default(30),
   /** When true, GET /api/search skips hybrid retrieval and uses PG ILIKE. */
   INWIT_SEARCH_FALLBACK: boolEnum.default('false'),
+  /**
+   * When true, digest cards stay proposed until the user accepts them.
+   * Unset stays false — same string enum as INWIT_SEARCH_FALLBACK, never coerced.
+   */
+  DIGEST_CARD_GATE: boolEnum.default('false'),
 });
 
 export const config = envSchema.parse(process.env);

@@ -1,4 +1,8 @@
 import type { AnnotationKind } from '@inwit/dto';
+import { eq } from 'drizzle-orm';
+import { shouldIndexCard } from '../cards/card-acceptance-logic.js';
+import { getDb } from '../db/index.js';
+import { cards } from '../db/schema.js';
 import { documentPlainText } from '../documents/content-json.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -162,8 +166,21 @@ async function deleteBoth(name: string, id: string, label: string): Promise<void
   if (errors.length > 0) throw new AggregateError(errors, `${label} failed`);
 }
 
+async function cardIsIndexable(cardId: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ acceptance: cards.acceptance, deletedAt: cards.deletedAt })
+    .from(cards)
+    .where(eq(cards.id, cardId))
+    .limit(1);
+  return row != null && shouldIndexCard(row);
+}
+
 /** Index (or re-index) one card into Qdrant + Meili. */
 export async function indexCard(card: IndexableCard): Promise<void> {
+  // Proposed and rejected rows must not enter search, even if a caller forgets.
+  if (!(await cardIsIndexable(card.id))) {
+    throw new Error('card is not accepted');
+  }
   const { embedding } = getRetrievalClients();
   const name = cardsStoreName();
   const text = cardEmbeddingText(card);
@@ -341,6 +358,10 @@ export async function tryIndexDocument(doc: IndexableDocument): Promise<void> {
 /** Warn-only card indexing for user-facing write paths (manual card creation). */
 export async function tryIndexCard(card: IndexableCard): Promise<void> {
   try {
+    if (!(await cardIsIndexable(card.id))) {
+      logger.warn('retrieval.index_card_skipped', { cardId: card.id });
+      return;
+    }
     await indexCard(card);
   } catch (err) {
     logger.warn('retrieval.index_card_failed', {

@@ -128,7 +128,14 @@ export async function loadUnattributedPool(
     const cardRows = await getDb()
       .select({ documentId: cards.documentId, concept: cards.concept })
       .from(cards)
-      .where(and(eq(cards.userId, userId), inArray(cards.documentId, docIds), isNull(cards.deletedAt)));
+      .where(
+        and(
+          eq(cards.userId, userId),
+          inArray(cards.documentId, docIds),
+          eq(cards.acceptance, 'accepted'),
+          isNull(cards.deletedAt),
+        ),
+      );
     for (const row of cardRows) {
       if (!row.documentId) continue;
       const list = conceptsByDoc.get(row.documentId) ?? [];

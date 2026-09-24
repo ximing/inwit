@@ -43,13 +43,14 @@ function blankToNull(value: string | null | undefined): string | null {
 
 interface NodeStats {
   cardCount: number;
+  proposedCount: number;
   docCount: number;
   mastery: number;
   feedbacks: Array<ReviewFeedback | null>;
 }
 
 function emptyStats(): NodeStats {
-  return { cardCount: 0, docCount: 0, mastery: 0, feedbacks: [] };
+  return { cardCount: 0, proposedCount: 0, docCount: 0, mastery: 0, feedbacks: [] };
 }
 
 function toPublicMapNode(row: MapNodeRow, stats: NodeStats): MapNode {
@@ -64,6 +65,7 @@ function toPublicMapNode(row: MapNodeRow, stats: NodeStats): MapNode {
     position: row.position,
     createdAt: row.createdAt.toISOString(),
     cardCount: stats.cardCount,
+    proposedCount: stats.proposedCount,
     docCount: stats.docCount,
     mastery,
   };
@@ -82,6 +84,25 @@ export async function getOwnedMapNode(
     .limit(1);
   if (!row) throw AppError.of(404, 'MAP_NODE_NOT_FOUND');
   return row.node;
+}
+
+export async function nodeHasProposedCards(
+  userId: string,
+  nodeId: string,
+  db: MapDb = getDb(),
+): Promise<boolean> {
+  const [row] = await db
+    .select({ n: count() })
+    .from(cards)
+    .where(
+      and(
+        eq(cards.userId, userId),
+        eq(cards.mapNodeId, nodeId),
+        eq(cards.acceptance, 'proposed'),
+        isNull(cards.deletedAt),
+      ),
+    );
+  return Number(row?.n ?? 0) > 0;
 }
 
 export async function requireWritableMapNode(
@@ -178,19 +199,30 @@ async function loadStatsByNode(
     .select({
       mapNodeId: cards.mapNodeId,
       lastFeedback: reviewStates.lastFeedback,
+      acceptance: cards.acceptance,
     })
     .from(cards)
     .leftJoin(
       reviewStates,
       and(eq(reviewStates.cardId, cards.id), eq(reviewStates.userId, cards.userId)),
     )
-    .where(and(inArray(cards.mapNodeId, nodeIds), isNull(cards.deletedAt)));
+    .where(
+      and(
+        inArray(cards.mapNodeId, nodeIds),
+        isNull(cards.deletedAt),
+        inArray(cards.acceptance, ['accepted', 'proposed']),
+      ),
+    );
 
   for (const row of cardRows) {
     if (!row.mapNodeId) continue;
     const current = stats.get(row.mapNodeId) ?? emptyStats();
-    current.cardCount += 1;
-    current.feedbacks.push(row.lastFeedback ?? null);
+    if (row.acceptance === 'proposed') {
+      current.proposedCount += 1;
+    } else if (row.acceptance === 'accepted') {
+      current.cardCount += 1;
+      current.feedbacks.push(row.lastFeedback ?? null);
+    }
     stats.set(row.mapNodeId, current);
   }
   for (const current of stats.values()) {
@@ -250,7 +282,14 @@ export async function getMapNodeDetail(userId: string, nodeId: string): Promise<
       tags: cards.tags,
     })
     .from(cards)
-    .where(and(eq(cards.userId, userId), eq(cards.mapNodeId, nodeId), isNull(cards.deletedAt)))
+    .where(
+      and(
+        eq(cards.userId, userId),
+        eq(cards.mapNodeId, nodeId),
+        eq(cards.acceptance, 'accepted'),
+        isNull(cards.deletedAt),
+      ),
+    )
     .orderBy(asc(cards.createdAt), asc(cards.id));
   const docRows = await db
     .select({
