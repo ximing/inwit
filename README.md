@@ -397,7 +397,7 @@ pnpm --filter @inwit/brand raster-icons
 | `EMBEDDING_MODEL` / `EMBEDDING_DIMENSIONS` | 默认 `qwen3-vl-embedding` / `2560` |
 | `RERANK_MODEL` | 默认 `qwen3.7-text-rerank` |
 | `WORKER_POLL_MS` `WORKER_CLAIM_LIMIT` `WORKER_STUCK_MS` `JOB_MAX_ATTEMPTS` | 队列 |
-| `DIGEST_CARD_GATE` | Leave it unset until that mobile build is out; setting true makes new digest cards wait for confirmation. |
+| `DIGEST_CARD_GATE` | 默认 `false`，仓库里不设。仅当带确认按钮的 mobile 构建已是用户正在运行的版本、且 web 已部署后，才在部署环境写成字符串 `true`，并同时重启 server 与 worker。此后新消化卡保持 proposed，直到用户接受。 |
 
 附件走远端 S3，服务端签发预签名 URL；客户端不持有存储密钥，DB 只存对象 key。需要的变量见 `ATTACHMENT_S3_*`（`.env.production.example` 有完整清单）。Bucket CORS 需允许前端来源的 GET、PUT、HEAD，并暴露 `ETag`。
 
