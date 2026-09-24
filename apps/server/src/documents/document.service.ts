@@ -236,6 +236,8 @@ export async function listDocuments(
     items: rows.map((row) => ({
       ...toPublicDocument(row.document),
       cardCount: Number(row.cardCount ?? 0),
+      // PR 3 counts proposed rows.
+      proposedCount: 0,
       topicTitle: row.topicTitle ?? null,
     })),
     total: Number(totalRow?.n ?? 0),
@@ -273,6 +275,8 @@ export async function getDocumentListItemsByIds(
   return rows.map((row) => ({
     ...toPublicDocument(row.document),
     cardCount: Number(row.cardCount ?? 0),
+    // PR 3 counts proposed rows.
+    proposedCount: 0,
     topicTitle: row.topicTitle ?? null,
   }));
 }

@@ -37,6 +37,7 @@ function asListItem(
   return {
     ...doc,
     cardCount: extra.cardCount,
+    proposedCount: 0,
     topicTitle: extra.topicTitle,
   };
 }

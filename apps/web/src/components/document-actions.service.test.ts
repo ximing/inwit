@@ -8,7 +8,7 @@ const doc: DocumentListItem = {
   id: 'doc-1', userId: 'user-1', topicId: null, mapNodeId: null,
   title: '原名', description: null, contentJson: EMPTY_PM_DOC, source: 'editor',
   status: 'digested', failReason: null, answer: null, linkHint: null, fileMime: null,
-  pageCount: null, createdAt: '', updatedAt: '', cardCount: 0, topicTitle: null,
+  pageCount: null, createdAt: '', updatedAt: '', cardCount: 0, proposedCount: 0, topicTitle: null,
 };
 
 beforeEach(() => vi.clearAllMocks());

@@ -204,6 +204,13 @@
       "when": 1790078115889,
       "tag": "0028_magenta_paper_doll",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790226620545,
+      "tag": "0029_big_madame_masque",
+      "breakpoints": true
     }
   ]
 }

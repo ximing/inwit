@@ -5,6 +5,15 @@ export const CARD_SOURCES = ['manual', 'agent', 'chat'] as const;
 export const cardSourceSchema = z.enum(CARD_SOURCES);
 export type CardSource = z.infer<typeof cardSourceSchema>;
 
+export const CARD_ACCEPTANCES = ['proposed', 'accepted', 'rejected'] as const;
+export const cardAcceptanceSchema = z.enum(CARD_ACCEPTANCES);
+export type CardAcceptance = z.infer<typeof cardAcceptanceSchema>;
+
+/** Unicode code points after stripping NUL. Zod `.max()` counts UTF-16 units and keeps NUL. */
+export function codePointsAtMost(max: number) {
+  return (value: string) => [...value.replaceAll('\0', '')].length <= max;
+}
+
 export const CARD_QUESTION_TYPES = ['cloze', 'compare', 'judge'] as const;
 export const cardQuestionTypeSchema = z.enum(CARD_QUESTION_TYPES);
 export type CardQuestionType = z.infer<typeof cardQuestionTypeSchema>;
@@ -28,6 +37,8 @@ export const cardSchema = z.object({
   confusionPoint: z.string(),
   tags: z.array(z.string()),
   source: cardSourceSchema,
+  acceptance: cardAcceptanceSchema,
+  rejectReason: z.string().nullable(),
   anchorText: z.string().nullable(),
   anchorBlockIndex: z.number().int().nullable(),
   hasImage: z.boolean(),
@@ -144,6 +155,17 @@ export const archivedCardsResponseSchema = z.object({
   total: z.number().int().nonnegative(),
 });
 export type ArchivedCardsResponse = z.infer<typeof archivedCardsResponseSchema>;
+
+export const rejectCardInputSchema = z.object({
+  reason: z.string().trim().refine(codePointsAtMost(500)).optional(),
+});
+export type RejectCardInput = z.infer<typeof rejectCardInputSchema>;
+
+export const acceptProposedResultSchema = z.object({
+  acceptedIds: z.array(z.string().uuid()),
+  failedIds: z.array(z.string().uuid()),
+});
+export type AcceptProposedResult = z.infer<typeof acceptProposedResultSchema>;
 
 export const archiveListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

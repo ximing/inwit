@@ -31,6 +31,9 @@ export function toPublicCardBase(row: CardRow): Card {
     confusionPoint: row.confusionPoint,
     tags: row.tags,
     source: row.source,
+    // PR 3 reads the column.
+    acceptance: 'accepted',
+    rejectReason: null,
     anchorText: row.anchorText ?? null,
     anchorBlockIndex: row.anchorBlockIndex ?? null,
     hasImage: Boolean(row.imageKey),
