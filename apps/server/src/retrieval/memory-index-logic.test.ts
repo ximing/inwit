@@ -26,18 +26,14 @@ describe('memory store names', () => {
   });
 
   it('uses _prod only when NODE_ENV is production', () => {
-    expect(memoryCollectionsStoreName('production')).toBe('inwit_memory_collections_prod');
-    expect(memoryEntriesStoreName('production')).toBe('inwit_memory_entries_prod');
-    for (const nodeEnv of ['development', 'test', 'productionx']) {
-      expect(memoryCollectionsStoreName(nodeEnv)).toBe('inwit_memory_collections_dev');
-      expect(memoryEntriesStoreName(nodeEnv)).toBe('inwit_memory_entries_dev');
-    }
     process.env.NODE_ENV = 'production';
     expect(memoryCollectionsStoreName()).toBe('inwit_memory_collections_prod');
     expect(memoryEntriesStoreName()).toBe('inwit_memory_entries_prod');
-    process.env.NODE_ENV = 'test';
-    expect(memoryCollectionsStoreName()).toBe('inwit_memory_collections_dev');
-    expect(memoryEntriesStoreName()).toBe('inwit_memory_entries_dev');
+    for (const nodeEnv of ['development', 'test', 'productionx']) {
+      process.env.NODE_ENV = nodeEnv;
+      expect(memoryCollectionsStoreName()).toBe('inwit_memory_collections_dev');
+      expect(memoryEntriesStoreName()).toBe('inwit_memory_entries_dev');
+    }
     delete process.env.NODE_ENV;
     expect(memoryCollectionsStoreName()).toBe('inwit_memory_collections_dev');
     expect(memoryEntriesStoreName()).toBe('inwit_memory_entries_dev');
