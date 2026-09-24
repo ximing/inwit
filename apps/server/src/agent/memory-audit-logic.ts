@@ -272,3 +272,4 @@ export function projectMemoryToolAudit(tool: string, value: unknown): MemoryTool
 export function auditMemoryToolValue(toolName: string, value: unknown): unknown {
   if (!MEMORY_AUDIT_TOOLS.has(toolName)) return value;
   return projectMemoryToolAudit(toolName, value);
+}
