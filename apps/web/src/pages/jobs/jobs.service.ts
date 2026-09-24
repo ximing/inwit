@@ -373,10 +373,13 @@ export class JobsService extends Service {
       await this.openExecutions(jobId);
     } catch (err) {
       if (token !== this.focusToken) return;
+      const missing = err instanceof ApiError && err.status === 404;
       this.focusedJob = null;
-      this.focusedMissing = true;
-      if (!(err instanceof ApiError) || err.status !== 404) {
-        this.error = errorMessage(err, '这条任务加载失败');
+      this.focusedMissing = missing;
+      if (missing) return;
+      this.error = errorMessage(err, '这条任务加载失败');
+      if (this.jobs.some((job) => job.id === jobId)) {
+        await this.openExecutions(jobId);
       }
     }
   }

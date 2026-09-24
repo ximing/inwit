@@ -43,7 +43,6 @@ export class MemoryService extends Service {
   }
 
   async load(): Promise<void> {
-    this.error = null;
     try {
       const [bundle, page] = await Promise.all([
         listMemoryCollections(),
@@ -53,6 +52,7 @@ export class MemoryService extends Service {
       this.entries = bundle.entries;
       this.revisions = page.items;
       this.revisionTotal = page.total;
+      this.error = null;
     } catch (err) {
       this.error = errorMessage(err, '记忆加载失败，请重试');
     } finally {

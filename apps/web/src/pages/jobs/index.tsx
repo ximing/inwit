@@ -355,29 +355,30 @@ const HistoryRow = observer(function HistoryRow({
 const HistoryBoard = observer(function HistoryBoard() {
   const service = useService(JobsService);
   const navigate = useNavigate();
-  const scrolledFor = useRef<string | null>(null);
-  const historyBusy = service.$model.loadHistory.loading;
-  const loading = historyBusy && service.jobs.length === 0;
+  const [params] = useSearchParams();
+  const jobId = params.get('job');
+  const scrolledNode = useRef<Element | null>(null);
+  const loading = service.$model.loadHistory.loading && service.jobs.length === 0;
+  const focused = service.focusedJob;
   const pinned =
-    !historyBusy &&
-    service.focusedJob &&
-    !service.jobs.some((job) => job.id === service.focusedJob?.id)
-      ? service.focusedJob
-      : null;
+    !loading && focused && !service.jobs.some((job) => job.id === focused.id) ? focused : null;
   const showTable = service.jobs.length > 0 || pinned !== null;
   const go = (status: JobStatus | '', type: JobType | '') => {
-    navigate(jobsPath({ tab: 'history', status, type }));
+    if (status === service.jobStatus && type === service.jobType) return;
+    navigate(jobsPath({ tab: 'history', status, type, job: jobId || undefined }));
   };
 
   useEffect(() => {
     const id = service.focusedJobId;
-    if (!id || scrolledFor.current === id) return;
-    if (!service.jobs.some((job) => job.id === id)) return;
+    if (!id) {
+      scrolledNode.current = null;
+      return;
+    }
     const node = document.getElementById(`job-row-${id}`);
-    if (!node) return;
-    scrolledFor.current = id;
+    if (!node || scrolledNode.current === node) return;
+    scrolledNode.current = node;
     node.scrollIntoView({ block: 'nearest' });
-  }, [service.focusedJobId, service.jobs]);
+  }, [service.focusedJobId, service.jobs, service.focusedJob]);
 
   return (
     <>

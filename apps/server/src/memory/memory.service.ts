@@ -22,8 +22,10 @@ export async function listMemoryCollections(userId: string): Promise<{
     .from(memoryEntries)
     .where(eq(memoryEntries.userId, userId))
     .orderBy(asc(memoryEntries.createdAt), asc(memoryEntries.id));
+  // Active rows only. Retired bodies are still returned for the web list.
   const counts = new Map<string, number>();
   for (const entry of entryRows) {
+    if (entry.status !== 'active') continue;
     counts.set(entry.collectionId, (counts.get(entry.collectionId) ?? 0) + 1);
   }
   return {

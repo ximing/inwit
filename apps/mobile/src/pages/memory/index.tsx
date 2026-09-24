@@ -60,7 +60,10 @@ const MemoryContent = observer(function MemoryContent() {
 
   const active = service.activeCollections;
   const retired = service.retiredCollections;
+  const loading = service.$model.load.loading;
   const more = service.revisions.length < service.revisionTotal;
+  const showCollectionEmpty = !loading && !service.error && active.length === 0;
+  const showRevisionEmpty = !loading && !service.error && service.revisions.length === 0;
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -72,16 +75,22 @@ const MemoryContent = observer(function MemoryContent() {
             <Text style={styles.error} accessibilityRole="alert">
               {service.error}
             </Text>
-            <Pressable onPress={() => void service.load()} style={styles.more}>
+            <Pressable
+              onPress={() => void service.load()}
+              disabled={loading}
+              style={[styles.more, loading && styles.dim]}
+            >
               <Text style={styles.moreText}>重试</Text>
             </Pressable>
           </>
         ) : null}
-        {!service.ready ? <Text style={styles.hint}>正在读取…</Text> : null}
+        {!service.ready || (loading && active.length === 0 && service.revisions.length === 0) ? (
+          <Text style={styles.hint}>正在读取…</Text>
+        ) : null}
         {service.ready ? (
           <>
             <Text style={styles.sec}>集合</Text>
-            {active.length === 0 && !service.error ? (
+            {showCollectionEmpty ? (
               <Text style={styles.hint}>
                 {retired.length === 0
                   ? '还没有记忆集合。整理任务会在处理卡片反馈后写到这里。'
@@ -106,7 +115,7 @@ const MemoryContent = observer(function MemoryContent() {
               </>
             ) : null}
             <Text style={styles.sec}>最近整理</Text>
-            {service.revisions.length === 0 && !service.error ? (
+            {showRevisionEmpty ? (
               <Text style={styles.hint}>还没有整理记录。</Text>
             ) : service.revisions.length === 0 ? null : (
               service.revisions.map((revision) => (
@@ -174,6 +183,7 @@ function makeStyles(theme: ThemeTokens) {
     revSummary: { marginTop: 4, fontSize: 15, lineHeight: 22, color: theme.colors.ink },
     revMeta: { marginTop: 4, fontSize: 12.5, lineHeight: 18, color: theme.colors.ink3 },
     more: { marginTop: 16, alignItems: 'flex-start' },
+    dim: { opacity: 0.45 },
     moreText: { color: theme.colors.accentDeep, fontSize: 14, fontWeight: '600' },
   });
 }

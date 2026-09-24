@@ -68,7 +68,10 @@ const MemoryPageContent = observer(function MemoryPageContent() {
 
   const active = service.activeCollections;
   const retired = service.retiredCollections;
+  const loading = service.$model.load.loading;
   const more = service.revisions.length < service.revisionTotal;
+  const showCollectionEmpty = !loading && !service.error && active.length === 0;
+  const showRevisionEmpty = !loading && !service.error && service.revisions.length === 0;
 
   return (
     <div className="mem-col">
@@ -76,12 +79,17 @@ const MemoryPageContent = observer(function MemoryPageContent() {
       {service.error ? (
         <p className="banner-error" role="alert">
           {service.error}{' '}
-          <button type="button" className="btn btn-ghost" onClick={() => void service.load()}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={loading}
+            onClick={() => void service.load()}
+          >
             重试
           </button>
         </p>
       ) : null}
-      {!service.ready ? (
+      {!service.ready || (loading && active.length === 0 && service.revisions.length === 0) ? (
         <p className="hint" role="status">
           正在读取…
         </p>
@@ -93,7 +101,7 @@ const MemoryPageContent = observer(function MemoryPageContent() {
             集合
             <span className="line" />
           </h2>
-          {active.length === 0 && !service.error ? (
+          {showCollectionEmpty ? (
             <p className="empty compact">
               {retired.length === 0
                 ? '还没有记忆集合。整理任务会在处理卡片反馈后写到这里。'
@@ -130,7 +138,7 @@ const MemoryPageContent = observer(function MemoryPageContent() {
             整理历史
             <span className="line" />
           </h2>
-          {service.revisions.length === 0 && !service.error ? (
+          {showRevisionEmpty ? (
             <p className="empty compact">还没有整理记录。</p>
           ) : service.revisions.length === 0 ? null : (
             service.revisions.map((revision) => <RevisionRow key={revision.id} revision={revision} />)
