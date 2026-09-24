@@ -68,6 +68,7 @@ PATH 参数把 `:id` / `:cardId` / `:key` 换成实值。然后 `call METHOD PAT
 | 搜索 | [references/search.md](references/search.md) | `GET /api/search` |
 | 主题 / 地图 | [references/topics.md](references/topics.md) | 见该模块 |
 | 任务进度 / 周报 | [references/jobs.md](references/jobs.md) | `GET /api/jobs/queue` |
+| 记忆集合 / 整理历史 | [references/memory.md](references/memory.md) | `GET /api/memory/collections` |
 | 批注 | [references/annotations.md](references/annotations.md) | 见该模块 |
 | 媒体上传 | [references/assets.md](references/assets.md) | 见该模块 |
 | 账号 / 模型设置 | [references/account.md](references/account.md) | 见该模块 |
@@ -81,6 +82,7 @@ Query：`--query q=词 --query limit=8`。Body：`--json '{"title":"…","markdo
 
 ## 约束
 
+- 记忆集合与整理历史只读：`GET /api/memory/collections`、`GET /api/memory/revisions`。不要停用或删除。
 - 永久删除（路径含 `/permanent`）、清空主题、取消/重试任务前，先简述影响并得到用户确认。
 - 软删进回收站，可用对应 `restore`。
 - 错误体：`{"error":{"code":"…","message":"…","details":…}}`。把 `code` + `message` 告诉用户，不要把请求头里的 token 一并倒出。

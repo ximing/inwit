@@ -3,6 +3,7 @@ import {
   Activity,
   FileText,
   Home,
+  Library,
   LogOut,
   Moon,
   PanelLeftClose,
@@ -36,6 +37,7 @@ const NAV: ReadonlyArray<{
   { to: ROUTES.review, label: '复习', end: false, icon: Repeat, badge: true },
   { to: ROUTES.topics, label: '主题', end: false, icon: Tags },
   { to: ROUTES.jobs, label: '任务', end: false, icon: Activity },
+  { to: ROUTES.memory, label: '记忆', end: false, icon: Library },
   { to: ROUTES.settings, label: '设置', end: false, icon: Settings },
 ];
 

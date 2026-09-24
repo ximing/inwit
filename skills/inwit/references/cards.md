@@ -2,7 +2,7 @@
 
 # 卡片
 
-Generated 2026-09-24T08:06:29.100Z. 15 endpoints.
+Generated 2026-09-24T10:19:45.342Z. 15 endpoints.
 
 ### DELETE `/api/card-links/:id`
 

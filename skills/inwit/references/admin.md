@@ -2,7 +2,7 @@
 
 # 管理
 
-Generated 2026-09-24T08:06:29.100Z. 5 endpoints.
+Generated 2026-09-24T10:19:45.342Z. 5 endpoints.
 
 ### GET `/api/admin/executions`
 
@@ -38,7 +38,8 @@ auth=bearer
         "chat",
         "selection",
         "extract",
-        "ocr"
+        "ocr",
+        "memory_organize"
       ],
       "optional": true
     },
@@ -123,7 +124,8 @@ auth=bearer
         "selection",
         "extract",
         "ocr",
-        "annotation_resurface"
+        "annotation_resurface",
+        "memory_organize"
       ],
       "optional": true
     }

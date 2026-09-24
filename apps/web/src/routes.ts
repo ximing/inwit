@@ -7,6 +7,7 @@ export const ROUTES = {
   topics: '/topics',
   topic: '/topics/:id',
   jobs: '/jobs',
+  memory: '/memory',
   settings: '/settings',
 } as const;
 
@@ -67,6 +68,7 @@ export const PAGE_LIST: ReadonlyArray<{ path: AppRoute; title: string; auth: boo
   { path: ROUTES.review, title: '复习', auth: true },
   { path: ROUTES.topics, title: '主题', auth: true },
   { path: ROUTES.jobs, title: '任务', auth: true },
+  { path: ROUTES.memory, title: '记忆', auth: true },
   { path: ROUTES.settings, title: '设置', auth: true },
 ];
 
@@ -85,12 +87,15 @@ export function jobsPath(opts?: {
   tab?: 'history';
   status?: string;
   type?: string;
+  job?: string;
 }): string {
   const params = new URLSearchParams();
-  const history = opts?.tab === 'history' || Boolean(opts?.status) || Boolean(opts?.type);
+  const history =
+    opts?.tab === 'history' || Boolean(opts?.status) || Boolean(opts?.type) || Boolean(opts?.job);
   if (history) params.set('tab', 'history');
   if (opts?.status) params.set('status', opts.status);
   if (opts?.type) params.set('type', opts.type);
+  if (opts?.job) params.set('job', opts.job);
   const qs = params.toString();
   return qs ? `${ROUTES.jobs}?${qs}` : ROUTES.jobs;
 }

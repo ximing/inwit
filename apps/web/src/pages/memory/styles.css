@@ -1,0 +1,141 @@
+.mem-col {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 36px 40px 120px;
+}
+
+.mem-sec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 28px 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.mem-sec .line {
+  flex: 1;
+  height: 1px;
+  background: var(--line-soft);
+}
+.mem-sec.is-quiet {
+  margin-top: 36px;
+  color: var(--ink-4);
+}
+
+.mem-card {
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+.mem-card.is-retired {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.mem-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+}
+.mem-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+}
+.mem-card.is-retired .mem-title,
+.mem-card.is-retired .mem-desc,
+.mem-card.is-retired .mem-entry {
+  color: var(--ink-3);
+}
+.mem-meta {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.mem-desc {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mem-entries {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.mem-entry {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 13.5px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mem-entry.is-retired {
+  color: var(--ink-4);
+}
+.mem-flag {
+  margin-right: 6px;
+  font-size: 12px;
+  color: var(--ink-4);
+}
+
+.mem-rev {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.mem-rev-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+.mem-rev time {
+  font-size: 12.5px;
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+.mem-summary {
+  margin-top: 4px;
+  font-size: 14.5px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mem-counts {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.mem-job {
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent-deep);
+}
+.mem-job:hover {
+  text-decoration: underline;
+}
+.mem-more {
+  margin-top: 12px;
+}
+
+@media (max-width: 760px) {
+  .mem-col {
+    padding: 24px 20px 80px;
+  }
+  .mem-card-head {
+    flex-direction: column;
+    gap: 4px;
+  }
+}

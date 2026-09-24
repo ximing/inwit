@@ -12,6 +12,7 @@
 @import './pages/login/styles.css';
 @import './pages/settings/styles.css';
 @import './pages/jobs/styles.css';
+@import './pages/memory/styles.css';
 @import './pages/topics/styles.css';
 @import './components/doc-row.css';
 @import './pages/docs/styles.css';

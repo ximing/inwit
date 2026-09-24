@@ -6,10 +6,12 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { confirmAction } from '@/lib/confirm';
+import { ROUTES } from '@/routes';
 import { AuthService } from '@/services/auth.service';
 import { useTheme, type ThemeTokens } from '@/theme';
 
 const SECTIONS: Array<{ href: string; title: string; lede: string }> = [
+  { href: ROUTES.meMemory, title: '记忆', lede: '集合和最近的整理记录' },
   { href: '/me/profile', title: '个人资料', lede: '头像、用户名和登录邮箱' },
   { href: '/me/appearance', title: '外观', lede: '浅色、深色或跟随系统' },
   { href: '/me/models', title: '模型配置', lede: '自带密钥（BYOK）' },

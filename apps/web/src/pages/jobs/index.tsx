@@ -11,7 +11,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Chip } from '@/components/chip';
 import { Tag } from '@/components/tag';
@@ -289,19 +289,24 @@ const PendingList = observer(function PendingList() {
 const HistoryRow = observer(function HistoryRow({
   job,
   busy,
+  linked,
   onRetry,
 }: {
   job: Job;
   busy: boolean;
+  linked?: boolean;
   onRetry: () => void;
 }) {
   const service = useService(JobsService);
   const duration = formatDuration(jobDurationMs(job));
   const time = formatJobTime(job.finishedAt ?? job.createdAt);
   const expanded = service.executionsJobId === job.id;
+  const rowClass = [job.status === 'failed' ? 'is-err' : '', linked ? 'is-linked' : '']
+    .filter(Boolean)
+    .join(' ');
   return (
     <>
-      <tr className={job.status === 'failed' ? 'is-err' : undefined}>
+      <tr id={`job-row-${job.id}`} className={rowClass || undefined}>
         <td>
           <span className="hist-type">
             <JobIcon type={job.type} size="sm" />
@@ -350,12 +355,35 @@ const HistoryRow = observer(function HistoryRow({
 const HistoryBoard = observer(function HistoryBoard() {
   const service = useService(JobsService);
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const jobId = params.get('job');
+  const scrolledNode = useRef<Element | null>(null);
   const loading = service.$model.loadHistory.loading && service.jobs.length === 0;
+  const focused = service.focusedJob;
+  const pinned =
+    !loading && focused && !service.jobs.some((job) => job.id === focused.id) ? focused : null;
+  const showTable = service.jobs.length > 0 || pinned !== null;
   const go = (status: JobStatus | '', type: JobType | '') => {
-    navigate(jobsPath({ tab: 'history', status, type }));
+    if (status === service.jobStatus && type === service.jobType) return;
+    navigate(jobsPath({ tab: 'history', status, type, job: jobId || undefined }));
   };
+
+  useEffect(() => {
+    const id = service.focusedJobId;
+    if (!id) {
+      scrolledNode.current = null;
+      return;
+    }
+    const node = document.getElementById(`job-row-${id}`);
+    if (!node || scrolledNode.current === node) return;
+    scrolledNode.current = node;
+    node.scrollIntoView({ block: 'nearest' });
+  }, [service.focusedJobId, service.jobs, service.focusedJob]);
+
   return (
     <>
+      {service.focusedMissing ? <p className="hint">这条任务已经不在了。</p> : null}
+      {pinned ? <p className="hint">这条任务不在当前列表里。</p> : null}
       <div className="hist-filters">
         {STATUS_CHIPS.map((chip) => (
           <Chip
@@ -383,10 +411,10 @@ const HistoryBoard = observer(function HistoryBoard() {
       </div>
       <div className="hist">
         {loading ? <p className="empty compact">读取任务…</p> : null}
-        {!loading && service.jobs.length === 0 ? (
+        {!loading && !showTable && !service.focusedMissing ? (
           <p className="empty compact">还没有任务。扔进文档后，消化记录会出现在这里。</p>
         ) : null}
-        {service.jobs.length > 0 ? (
+        {showTable ? (
           <table className="hist-table">
             <thead>
               <tr>
@@ -399,10 +427,20 @@ const HistoryBoard = observer(function HistoryBoard() {
               </tr>
             </thead>
             <tbody>
+              {pinned ? (
+                <HistoryRow
+                  key={pinned.id}
+                  job={pinned}
+                  linked
+                  busy={service.retryingId === pinned.id}
+                  onRetry={() => void service.retry(pinned.id)}
+                />
+              ) : null}
               {service.jobs.map((job) => (
                 <HistoryRow
                   key={job.id}
                   job={job}
+                  linked={job.id === service.focusedJobId}
                   busy={service.retryingId === job.id}
                   onRetry={() => void service.retry(job.id)}
                 />
@@ -555,7 +593,13 @@ const RecentFeed = observer(function RecentFeed() {
   );
 });
 
-const JobsHead = observer(function JobsHead({ tab }: { tab: 'board' | 'history' }) {
+const JobsHead = observer(function JobsHead({
+  tab,
+  jobId,
+}: {
+  tab: 'board' | 'history';
+  jobId?: string | null;
+}) {
   const service = useService(JobsService);
   return (
     <div className="jobs-head">
@@ -575,7 +619,12 @@ const JobsHead = observer(function JobsHead({ tab }: { tab: 'board' | 'history' 
         </Link>
         <Link
           className={tab === 'history' ? 'jobs-tab is-on' : 'jobs-tab'}
-          to={jobsPath({ tab: 'history', status: service.jobStatus, type: service.jobType })}
+          to={jobsPath({
+            tab: 'history',
+            status: service.jobStatus,
+            type: service.jobType,
+            job: jobId || undefined,
+          })}
           aria-current={tab === 'history' ? 'page' : undefined}
         >
           执行历史
@@ -588,7 +637,8 @@ const JobsHead = observer(function JobsHead({ tab }: { tab: 'board' | 'history' 
 const JobsPageContent = observer(function JobsPageContent() {
   const service = useService(JobsService);
   const [params] = useSearchParams();
-  const historyActive = params.get('tab') === 'history';
+  const jobParam = params.get('job');
+  const historyActive = params.get('tab') === 'history' || Boolean(jobParam);
   const statusParam = parseJobStatus(params.get('status'));
   const typeParam = parseJobType(params.get('type'));
 
@@ -608,9 +658,20 @@ const JobsPageContent = observer(function JobsPageContent() {
     service.applyHistoryFilters(statusParam, typeParam);
   }, [historyActive, statusParam, typeParam, service]);
 
+  useEffect(() => {
+    if (!jobParam) {
+      service.clearFocusedJob();
+      return;
+    }
+    void service.focusJob(jobParam);
+    return () => {
+      service.clearFocusedJob();
+    };
+  }, [jobParam, service]);
+
   return (
     <div className="jobs-col">
-      <JobsHead tab={historyActive ? 'history' : 'board'} />
+      <JobsHead tab={historyActive ? 'history' : 'board'} jobId={jobParam} />
       {service.error ? (
         <p className="banner-error" role="alert">
           {service.error}

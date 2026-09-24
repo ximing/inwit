@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-24T08:06:29.100Z",
+  "generatedAt": "2026-09-24T10:19:45.342Z",
   "modules": [
     {
       "id": "open",
@@ -35,6 +35,11 @@
       "id": "jobs",
       "title": "任务与周报",
       "count": 11
+    },
+    {
+      "id": "memory",
+      "title": "记忆",
+      "count": 2
     },
     {
       "id": "annotations",
@@ -95,7 +100,8 @@
                 "chat",
                 "selection",
                 "extract",
-                "ocr"
+                "ocr",
+                "memory_organize"
               ],
               "optional": true
             },
@@ -187,7 +193,8 @@
                 "selection",
                 "extract",
                 "ocr",
-                "annotation_resurface"
+                "annotation_resurface",
+                "memory_organize"
               ],
               "optional": true
             }
@@ -2382,7 +2389,8 @@
                 "selection",
                 "extract",
                 "ocr",
-                "annotation_resurface"
+                "annotation_resurface",
+                "memory_organize"
               ],
               "optional": true
             }
@@ -3016,6 +3024,45 @@
             "contentType",
             "sizeBytes"
           ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/memory/collections",
+      "module": "memory",
+      "auth": "bearer",
+      "status": []
+    },
+    {
+      "method": "GET",
+      "path": "/api/memory/revisions",
+      "module": "memory",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "paginationQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 100,
+              "optional": true,
+              "default": 20
+            },
+            "offset": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 0,
+              "optional": true,
+              "default": 0
+            }
+          },
           "additionalProperties": false
         }
       }

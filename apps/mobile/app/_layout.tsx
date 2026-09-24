@@ -141,6 +141,10 @@ const RootNavigation = observer(function RootNavigation() {
             name="me/tokens"
             options={{ animation: 'slide_from_right', gestureEnabled: true }}
           />
+          <Stack.Screen
+            name="me/memory"
+            options={{ animation: 'slide_from_right', gestureEnabled: true }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!loggedIn}>
           <Stack.Screen name="login" />

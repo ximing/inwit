@@ -3,6 +3,7 @@ import { AppDialog } from '@/components/app-dialog';
 import { DocsPage } from '@/pages/docs';
 import { JobsPage } from '@/pages/jobs';
 import { LoginPage } from '@/pages/login';
+import { MemoryPage } from '@/pages/memory';
 import { ReviewPage } from '@/pages/review';
 import { SettingsPage } from '@/pages/settings';
 import { TodayPage } from '@/pages/today';
@@ -18,6 +19,7 @@ const REQUIRED_PATHS = [
   ROUTES.review,
   ROUTES.topics,
   ROUTES.jobs,
+  ROUTES.memory,
   ROUTES.settings,
 ] as const;
 for (const path of REQUIRED_PATHS) {
@@ -63,6 +65,7 @@ export function App() {
             <Route path={routeSegment(ROUTES.topics)} element={<TopicsPage />} />
             <Route path={routeSegment(ROUTES.topic)} element={<LegacyTopicRedirect />} />
             <Route path={routeSegment(ROUTES.jobs)} element={<JobsPage />} />
+            <Route path={routeSegment(ROUTES.memory)} element={<MemoryPage />} />
             <Route path={routeSegment(ROUTES.settings)} element={<SettingsPage />} />
           </Route>
         </Route>
