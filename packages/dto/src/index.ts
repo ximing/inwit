@@ -9,6 +9,7 @@ export * from './topic.js';
 export * from './map.js';
 export * from './review.js';
 export * from './memory.js';
+export * from './agent-memory.js';
 export * from './job.js';
 export * from './llm.js';
 export * from './ocr.js';

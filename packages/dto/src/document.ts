@@ -383,6 +383,7 @@ export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
 
 export const documentListItemSchema = documentSchema.extend({
   cardCount: z.number().int().nonnegative(),
+  proposedCount: z.number().int().nonnegative(),
   topicTitle: z.string().nullable(),
 });
 export type DocumentListItem = z.infer<typeof documentListItemSchema>;

@@ -260,6 +260,8 @@ describe('cardDetailSchema', () => {
       confusionPoint: '和梯度爆炸相对',
       tags: ['反向传播'],
       source: 'agent',
+      acceptance: 'accepted',
+      rejectReason: null,
       anchorText: '梯度在反向传播中逐层变小',
       anchorBlockIndex: 2,
       hasImage: false,

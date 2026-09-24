@@ -21,6 +21,7 @@ import {
   AGENT_EXECUTION_STATUSES,
   AGENT_TYPES,
   ANNOTATION_KINDS,
+  CARD_ACCEPTANCES,
   CARD_LINK_ORIGINS,
   CARD_LINK_TYPES,
   CARD_QUESTION_TYPES,
@@ -32,6 +33,8 @@ import {
   LLM_CAPABILITIES,
   LLM_PROVIDERS,
   MAP_NODE_STATUSES,
+  MEMORY_COLLECTION_STATUSES,
+  MEMORY_ENTRY_STATUSES,
   MEMORY_LAYERS,
   MEMORY_SCOPES,
   TOPIC_STATUSES,
@@ -43,6 +46,7 @@ import type {
   AgentType,
   AnnotationGeometry,
   AnnotationKind,
+  CardAcceptance,
   CardLinkOrigin,
   CardLinkType,
   CardQuestionType,
@@ -55,8 +59,11 @@ import type {
   LlmCapability,
   LlmProvider,
   MapNodeStatus,
+  MemoryCollectionStatus,
   MemoryContent,
+  MemoryEntryStatus,
   MemoryLayer,
+  MemoryRevision,
   MemoryScope,
   ReviewFeedback,
   ReviewSettings,
@@ -319,6 +326,11 @@ export const cards = pgTable(
     updatedAt: timestamptz('updated_at').notNull().defaultNow(),
     /** Soft delete (回收站); non-null rows are hidden from lists and retrieval. */
     deletedAt: timestamptz('deleted_at'),
+    acceptance: varchar('acceptance', { length: 16 })
+      .$type<CardAcceptance>()
+      .notNull()
+      .default('accepted'),
+    rejectReason: text('reject_reason'),
   },
   (t) => [
     index('idx_cards_user').on(t.userId),
@@ -326,7 +338,50 @@ export const cards = pgTable(
     index('idx_cards_topic').on(t.topicId),
     index('idx_cards_map_node').on(t.mapNodeId),
     index('idx_cards_tags').using('gin', t.tags),
+    index('idx_cards_user_acceptance')
+      .on(t.userId, t.acceptance)
+      .where(sql`${t.deletedAt} IS NULL`),
     enumCheck('cards_source_check', t.source, CARD_SOURCES),
+    enumCheck('cards_acceptance_check', t.acceptance, CARD_ACCEPTANCES),
+    check('cards_reject_reason_len_check', sql`char_length(${t.rejectReason}) <= 500`),
+  ],
+);
+
+const CARD_FEEDBACK_VERDICTS = ['accepted', 'rejected'] as const;
+
+type CardFeedbackVerdict = (typeof CARD_FEEDBACK_VERDICTS)[number];
+
+type CardFeedbackSnapshot = {
+  concept: string;
+  example: string;
+  confusionPoint: string;
+  tags: string[];
+  questions: { type: CardQuestionType; question: string }[];
+};
+
+export const cardFeedback = pgTable(
+  'card_feedback',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    cardId: uuid('card_id').references(() => cards.id, { onDelete: 'set null' }),
+    documentId: uuid('document_id').references(() => documents.id, { onDelete: 'set null' }),
+    verdict: varchar('verdict', { length: 16 }).$type<CardFeedbackVerdict>().notNull(),
+    reason: text('reason'),
+    snapshot: jsonb('snapshot').$type<CardFeedbackSnapshot>().notNull(),
+    consumedAt: timestamptz('consumed_at'),
+    organizeJobId: uuid('organize_job_id').references(() => jobs.id, { onDelete: 'set null' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_card_feedback_unconsumed')
+      .on(t.userId, t.createdAt)
+      .where(sql`${t.consumedAt} IS NULL`),
+    index('idx_card_feedback_user_created').on(t.userId, t.createdAt),
+    enumCheck('card_feedback_verdict_check', t.verdict, CARD_FEEDBACK_VERDICTS),
+    check('card_feedback_reason_len_check', sql`char_length(${t.reason}) <= 500`),
   ],
 );
 
@@ -466,6 +521,81 @@ export const memories = pgTable(
   ],
 );
 
+export const memoryCollections = pgTable(
+  'memory_collections',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 40 }).notNull(),
+    description: varchar('description', { length: 280 }).notNull(),
+    status: varchar('status', { length: 16 })
+      .$type<MemoryCollectionStatus>()
+      .notNull()
+      .default('active'),
+    indexDirty: boolean('index_dirty').notNull().default(true),
+    retiredAt: timestamptz('retired_at'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_memory_collections_user_status').on(t.userId, t.status),
+    enumCheck('memory_collections_status_check', t.status, MEMORY_COLLECTION_STATUSES),
+  ],
+);
+
+export const memoryEntries = pgTable(
+  'memory_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    collectionId: uuid('collection_id')
+      .notNull()
+      .references(() => memoryCollections.id, { onDelete: 'cascade' }),
+    body: varchar('body', { length: 500 }).notNull(),
+    status: varchar('status', { length: 16 })
+      .$type<MemoryEntryStatus>()
+      .notNull()
+      .default('active'),
+    indexDirty: boolean('index_dirty').notNull().default(true),
+    retiredAt: timestamptz('retired_at'),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_memory_entries_collection_status').on(t.collectionId, t.status),
+    index('idx_memory_entries_user_status').on(t.userId, t.status),
+    index('idx_memory_entries_index_dirty')
+      .on(t.updatedAt)
+      .where(sql`${t.indexDirty} = true`),
+    enumCheck('memory_entries_status_check', t.status, MEMORY_ENTRY_STATUSES),
+  ],
+);
+
+export const memoryRevisions = pgTable(
+  'memory_revisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
+    executionId: uuid('execution_id').references(() => agentExecutions.id, { onDelete: 'set null' }),
+    batchKey: varchar('batch_key', { length: 64 }).notNull(),
+    summary: varchar('summary', { length: 300 }).notNull(),
+    diff: jsonb('diff').$type<MemoryRevision['diff']>().notNull(),
+    feedbackIds: uuid('feedback_ids').array().notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    unique('memory_revisions_user_batch_key_uidx').on(t.userId, t.batchKey),
+    index('idx_memory_revisions_user_created').on(t.userId, t.createdAt.desc()),
+  ],
+);
+
 export const jobs = pgTable(
   'jobs',
   {
@@ -591,6 +721,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   reviewStates: many(reviewStates),
   reviewLogs: many(reviewLogs),
   memories: many(memories),
+  cardFeedback: many(cardFeedback),
+  memoryCollections: many(memoryCollections),
+  memoryEntries: many(memoryEntries),
+  memoryRevisions: many(memoryRevisions),
   jobs: many(jobs),
   agentExecutions: many(agentExecutions),
   llmUsageLogs: many(llmUsageLogs),
@@ -642,6 +776,7 @@ export const documentsRelations = relations(documents, ({ one, many }) => ({
   mapNode: one(mapNodes, { fields: [documents.mapNodeId], references: [mapNodes.id] }),
   cards: many(cards),
   annotations: many(annotations),
+  cardFeedback: many(cardFeedback),
   ocrPages: many(ocrPages),
 }));
 
@@ -660,6 +795,7 @@ export const cardsRelations = relations(cards, ({ one, many }) => ({
   reviewLogs: many(reviewLogs),
   outgoingLinks: many(cardLinks, { relationName: 'fromCard' }),
   incomingLinks: many(cardLinks, { relationName: 'toCard' }),
+  feedback: many(cardFeedback),
 }));
 
 export const cardLinksRelations = relations(cardLinks, ({ one }) => ({
@@ -694,10 +830,41 @@ export const memoriesRelations = relations(memories, ({ one }) => ({
   user: one(users, { fields: [memories.userId], references: [users.id] }),
 }));
 
+export const cardFeedbackRelations = relations(cardFeedback, ({ one }) => ({
+  user: one(users, { fields: [cardFeedback.userId], references: [users.id] }),
+  card: one(cards, { fields: [cardFeedback.cardId], references: [cards.id] }),
+  document: one(documents, { fields: [cardFeedback.documentId], references: [documents.id] }),
+  organizeJob: one(jobs, { fields: [cardFeedback.organizeJobId], references: [jobs.id] }),
+}));
+
+export const memoryCollectionsRelations = relations(memoryCollections, ({ one, many }) => ({
+  user: one(users, { fields: [memoryCollections.userId], references: [users.id] }),
+  entries: many(memoryEntries),
+}));
+
+export const memoryEntriesRelations = relations(memoryEntries, ({ one }) => ({
+  user: one(users, { fields: [memoryEntries.userId], references: [users.id] }),
+  collection: one(memoryCollections, {
+    fields: [memoryEntries.collectionId],
+    references: [memoryCollections.id],
+  }),
+}));
+
+export const memoryRevisionsRelations = relations(memoryRevisions, ({ one }) => ({
+  user: one(users, { fields: [memoryRevisions.userId], references: [users.id] }),
+  job: one(jobs, { fields: [memoryRevisions.jobId], references: [jobs.id] }),
+  execution: one(agentExecutions, {
+    fields: [memoryRevisions.executionId],
+    references: [agentExecutions.id],
+  }),
+}));
+
 export const jobsRelations = relations(jobs, ({ one, many }) => ({
   user: one(users, { fields: [jobs.userId], references: [users.id] }),
   executions: many(agentExecutions),
   ocrPages: many(ocrPages),
+  cardFeedback: many(cardFeedback),
+  memoryRevisions: many(memoryRevisions),
 }));
 
 export const ocrPagesRelations = relations(ocrPages, ({ one }) => ({
@@ -709,6 +876,7 @@ export const agentExecutionsRelations = relations(agentExecutions, ({ one, many 
   user: one(users, { fields: [agentExecutions.userId], references: [users.id] }),
   job: one(jobs, { fields: [agentExecutions.jobId], references: [jobs.id] }),
   usageLogs: many(llmUsageLogs),
+  memoryRevisions: many(memoryRevisions),
 }));
 
 export const llmUsageLogsRelations = relations(llmUsageLogs, ({ one }) => ({
@@ -748,6 +916,14 @@ export type ReviewLogRow = typeof reviewLogs.$inferSelect;
 export type NewReviewLog = typeof reviewLogs.$inferInsert;
 export type MemoryRow = typeof memories.$inferSelect;
 export type NewMemory = typeof memories.$inferInsert;
+export type CardFeedbackRow = typeof cardFeedback.$inferSelect;
+export type NewCardFeedback = typeof cardFeedback.$inferInsert;
+export type MemoryCollectionRow = typeof memoryCollections.$inferSelect;
+export type NewMemoryCollection = typeof memoryCollections.$inferInsert;
+export type MemoryEntryRow = typeof memoryEntries.$inferSelect;
+export type NewMemoryEntry = typeof memoryEntries.$inferInsert;
+export type MemoryRevisionRow = typeof memoryRevisions.$inferSelect;
+export type NewMemoryRevision = typeof memoryRevisions.$inferInsert;
 export type JobRow = typeof jobs.$inferSelect;
 export type NewJob = typeof jobs.$inferInsert;
 export type OcrPageRow = typeof ocrPages.$inferSelect;

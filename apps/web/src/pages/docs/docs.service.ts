@@ -543,6 +543,7 @@ export class DocsService extends Service {
           ? {
               ...item,
               cardCount: existing.cardCount,
+              proposedCount: existing.proposedCount,
               topicTitle: item.topicTitle ?? existing.topicTitle,
             }
           : doc,
