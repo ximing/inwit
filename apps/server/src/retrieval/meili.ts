@@ -43,6 +43,18 @@ export const ANNOTATION_INDEX_SETTINGS: MeiliIndexSettings = {
   localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
 };
 
+export const MEMORY_COLLECTION_INDEX_SETTINGS: MeiliIndexSettings = {
+  filterableAttributes: ['user_id', 'collection_id', 'id'],
+  searchableAttributes: ['title', 'description', 'text'],
+  localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
+};
+
+export const MEMORY_ENTRY_INDEX_SETTINGS: MeiliIndexSettings = {
+  filterableAttributes: ['user_id', 'entry_id', 'collection_id', 'id'],
+  searchableAttributes: ['text'],
+  localizedAttributes: [{ attributePatterns: ['*'], locales: ['cmn'] }],
+};
+
 const TASK_TIMEOUT_MS = 30_000;
 
 function asHits(value: unknown): Record<string, unknown>[] {

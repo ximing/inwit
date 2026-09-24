@@ -5,8 +5,11 @@ import {
   CARD_INDEX_SETTINGS,
   createMeiliClient,
   DOCS_INDEX_SETTINGS,
+  MEMORY_COLLECTION_INDEX_SETTINGS,
+  MEMORY_ENTRY_INDEX_SETTINGS,
   type MeiliClient,
 } from './meili.js';
+import { memoryCollectionsStoreName, memoryEntriesStoreName } from './memory-index-logic.js';
 import { createQdrantClient, type QdrantClient } from './qdrant.js';
 import { createRerankClient, type RerankClient } from './rerank.js';
 
@@ -87,15 +90,25 @@ export async function ensureRetrievalStores(): Promise<void> {
     const cards = cardsStoreName();
     const docs = docsStoreName();
     const annotations = annotationsStoreName();
+    const memoryCollections = memoryCollectionsStoreName();
+    const memoryEntries = memoryEntriesStoreName();
     await Promise.all([
       qdrant.ensureCollection(cards, { payloadFields: ['user_id', 'card_id', 'topic_id'] }),
       qdrant.ensureCollection(docs, { payloadFields: ['user_id', 'doc_id', 'topic_id'] }),
       qdrant.ensureCollection(annotations, {
         payloadFields: ['user_id', 'annotation_id', 'doc_id'],
       }),
+      qdrant.ensureCollection(memoryCollections, {
+        payloadFields: ['user_id', 'collection_id'],
+      }),
+      qdrant.ensureCollection(memoryEntries, {
+        payloadFields: ['user_id', 'entry_id', 'collection_id'],
+      }),
       meili.ensureIndex(cards, CARD_INDEX_SETTINGS),
       meili.ensureIndex(docs, DOCS_INDEX_SETTINGS),
       meili.ensureIndex(annotations, ANNOTATION_INDEX_SETTINGS),
+      meili.ensureIndex(memoryCollections, MEMORY_COLLECTION_INDEX_SETTINGS),
+      meili.ensureIndex(memoryEntries, MEMORY_ENTRY_INDEX_SETTINGS),
     ]);
   })().catch((err: unknown) => {
     storesReady = null;

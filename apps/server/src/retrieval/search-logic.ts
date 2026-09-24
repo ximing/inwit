@@ -66,21 +66,35 @@ export function escapeMeiliValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+/** Extra Qdrant `must` / Meili AND clauses. Entry search passes `collection_id`. */
+export type PayloadEqual = { key: string; value: string };
+
 export function qdrantScopeFilter(
   userId: string,
   topicId?: string,
+  payloadEquals?: readonly PayloadEqual[],
 ): { must: Array<{ key: string; match: { value: string } }> } {
   const must: Array<{ key: string; match: { value: string } }> = [
     { key: 'user_id', match: { value: userId } },
   ];
   if (topicId) must.push({ key: 'topic_id', match: { value: topicId } });
+  for (const clause of payloadEquals ?? []) {
+    must.push({ key: clause.key, match: { value: clause.value } });
+  }
   return { must };
 }
 
-export function meiliScopeFilter(userId: string, topicId?: string): string {
-  const user = `user_id = '${escapeMeiliValue(userId)}'`;
-  if (!topicId) return user;
-  return `${user} AND topic_id = '${escapeMeiliValue(topicId)}'`;
+export function meiliScopeFilter(
+  userId: string,
+  topicId?: string,
+  payloadEquals?: readonly PayloadEqual[],
+): string {
+  const parts = [`user_id = '${escapeMeiliValue(userId)}'`];
+  if (topicId) parts.push(`topic_id = '${escapeMeiliValue(topicId)}'`);
+  for (const clause of payloadEquals ?? []) {
+    parts.push(`${clause.key} = '${escapeMeiliValue(clause.value)}'`);
+  }
+  return parts.join(' AND ');
 }
 
 /** Run hybrid search; on throw (or forced) fall back to PG ILIKE. Never rethrows the hybrid error. */
