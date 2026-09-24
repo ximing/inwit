@@ -10,6 +10,7 @@ import {
   topics,
   type JobRow,
 } from '../db/schema.js';
+import { isUniqueViolation } from '../db/pg.js';
 import { AppError } from '../errors.js';
 import { pipelineDocumentId, resetDocumentPipeline } from '../documents/document-status.js';
 import { endOfLocalDay, startOfLocalDay, startOfLocalDayDaysAgo } from '../utils/date.js';
@@ -278,18 +279,24 @@ export async function getJobUsage(userId: string, now = new Date()): Promise<Job
 export async function retryJob(userId: string, id: string): Promise<Job> {
   await getOwned(userId, id);
   const now = new Date();
-  const [row] = await getDb()
-    .update(jobs)
-    .set({
-      status: 'pending',
-      runAt: now,
-      lastError: null,
-      finishedAt: null,
-      attempts: 0,
-      updatedAt: now,
-    })
-    .where(and(eq(jobs.id, id), eq(jobs.userId, userId), eq(jobs.status, 'failed')))
-    .returning();
+  let row: JobRow | undefined;
+  try {
+    [row] = await getDb()
+      .update(jobs)
+      .set({
+        status: 'pending',
+        runAt: now,
+        lastError: null,
+        finishedAt: null,
+        attempts: 0,
+        updatedAt: now,
+      })
+      .where(and(eq(jobs.id, id), eq(jobs.userId, userId), eq(jobs.status, 'failed')))
+      .returning();
+  } catch (err) {
+    if (isUniqueViolation(err)) throw AppError.of(409, 'ORGANIZE_JOB_IN_PROGRESS');
+    throw err;
+  }
   if (!row) throw AppError.of(409, 'JOB_NOT_RETRYABLE');
   const documentId = pipelineDocumentId(row);
   if (documentId) await resetDocumentPipeline(userId, documentId);

@@ -11,6 +11,7 @@ export const JOB_TYPES = [
   'extract',
   'ocr',
   'annotation_resurface',
+  'memory_organize',
 ] as const;
 export const jobTypeSchema = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof jobTypeSchema>;
@@ -199,6 +200,12 @@ export function annotationResurfaceJobPayloadFrom(
   const parsed = annotationResurfaceJobPayloadSchema.safeParse(payload);
   return parsed.success ? parsed.data : undefined;
 }
+
+export const memoryOrganizeJobPayloadSchema = z.object({
+  trigger: z.enum(['count', 'slot']).optional(),
+  batchFeedbackIds: z.array(z.string().uuid()).max(12).optional(),
+});
+export type MemoryOrganizeJobPayload = z.infer<typeof memoryOrganizeJobPayloadSchema>;
 
 const emptyToUndef = (value: unknown) => (value === '' || value === undefined ? undefined : value);
 

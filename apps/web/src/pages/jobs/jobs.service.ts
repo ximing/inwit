@@ -20,6 +20,7 @@ export const JOB_TYPES: JobType[] = [
   'extract',
   'ocr',
   'annotation_resurface',
+  'memory_organize',
 ];
 export const JOB_STATUSES: JobStatus[] = ['pending', 'running', 'done', 'failed'];
 
@@ -33,6 +34,7 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
   extract: '提取',
   ocr: '识别',
   annotation_resurface: '批注回顾',
+  memory_organize: '记忆整理',
 };
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
@@ -53,6 +55,7 @@ const USAGE_TYPE_LABELS: Record<string, string> = {
   ocr: '识别',
   embed: '向量',
   rerank: '精排',
+  memory_organize: '记忆整理',
 };
 
 const WEEKDAY_SHORT = ['日', '一', '二', '三', '四', '五', '六'] as const;

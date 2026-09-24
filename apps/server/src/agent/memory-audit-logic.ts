@@ -165,3 +165,111 @@ export function auditMemoryToolPayload(
   }
   return kind === 'args' ? projectLoadArgs(value) : projectLoadResult(value);
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const MEMORY_AUDIT_TOOLS = new Set([
+  'search_memory_collections',
+  'load_memory_collection',
+  'list_memory_collections',
+  'read_memory_entries',
+  'read_card_feedback',
+  'apply_memory_revision',
+]);
+
+const ID_KEYS = new Set([
+  'id',
+  'ids',
+  'collectionId',
+  'collectionIds',
+  'intoId',
+  'sourceIds',
+  'entryId',
+  'feedbackIds',
+  'loadedIds',
+  'batchFeedbackIds',
+]);
+
+const COUNT_ARRAY_KEYS = new Set([
+  'collections',
+  'entries',
+  'feedback',
+  'ids',
+  'collectionIds',
+  'sourceIds',
+  'loadedIds',
+  'feedbackIds',
+]);
+
+const COUNT_NUMBER_KEYS = new Set(['entryCount', 'feedbackCount', 'count']);
+
+export interface MemoryToolAudit {
+  tool: string;
+  ids: string[];
+  verdicts: string[];
+  counts: number[];
+  scores: Array<number | null>;
+  reasonChars: number[];
+  bodyChars: number[];
+}
+
+function unique(ids: string[]): string[] {
+  return [...new Set(ids)];
+}
+
+function walk(value: unknown, key: string | null, audit: MemoryToolAudit, seen: Set<object>): void {
+  if (Array.isArray(value)) {
+    if (key && COUNT_ARRAY_KEYS.has(key)) audit.counts.push(value.length);
+    for (const item of value) {
+      if (typeof item === 'string') {
+        if (key && ID_KEYS.has(key) && UUID_RE.test(item)) audit.ids.push(item);
+        continue;
+      }
+      walk(item, null, audit, seen);
+    }
+    return;
+  }
+  if (typeof value === 'object' && value !== null) {
+    if (seen.has(value)) return;
+    seen.add(value);
+    for (const [childKey, child] of Object.entries(value)) {
+      walk(child, childKey, audit, seen);
+    }
+    return;
+  }
+  if (key === 'score' && (typeof value === 'number' || value === null)) {
+    audit.scores.push(value);
+    return;
+  }
+  if (typeof value === 'number' && key && COUNT_NUMBER_KEYS.has(key) && Number.isFinite(value)) {
+    audit.counts.push(value);
+    return;
+  }
+  if (typeof value !== 'string' || !key) return;
+  if (ID_KEYS.has(key) && UUID_RE.test(value)) audit.ids.push(value);
+  if (key === 'verdict' && (value === 'accepted' || value === 'rejected')) audit.verdicts.push(value);
+  if (key === 'reason') audit.reasonChars.push([...value].length);
+  if (key === 'body' || key === 'bodyPreview') audit.bodyChars.push([...value].length);
+}
+
+/** Audit projection: ids, verdicts, counts, scores, and lengths. Not reason text or bodies. */
+export function projectMemoryToolAudit(tool: string, value: unknown): MemoryToolAudit {
+  const audit: MemoryToolAudit = {
+    tool,
+    ids: [],
+    verdicts: [],
+    counts: [],
+    scores: [],
+    reasonChars: [],
+    bodyChars: [],
+  };
+  walk(value, null, audit, new Set());
+  audit.ids = unique(audit.ids);
+  return audit;
+}
+
+export function auditMemoryToolValue(toolName: string, value: unknown): unknown {
+  if (!MEMORY_AUDIT_TOOLS.has(toolName)) return value;
+  return projectMemoryToolAudit(toolName, value);
+}

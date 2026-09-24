@@ -92,6 +92,12 @@ export const envSchema = z.object({
    * Unset stays false — same string enum as INWIT_SEARCH_FALLBACK, never coerced.
    */
   DIGEST_CARD_GATE: boolEnum.default('false'),
+  /**
+   * When false, do not insert a new memory_organize job. An existing pending
+   * or running row is pushed an hour ahead by the processor and does not call
+   * the model or consume feedback. Same string enum as DIGEST_CARD_GATE.
+   */
+  MEMORY_ORGANIZE_ENABLED: boolEnum.default('true'),
 });
 
 export const config = envSchema.parse(process.env);

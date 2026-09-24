@@ -618,6 +618,9 @@ export const jobs = pgTable(
     index('idx_jobs_user_created').on(t.userId, t.createdAt),
     index('idx_jobs_status_created').on(t.status, t.createdAt),
     index('idx_jobs_user_type').on(t.userId, t.type),
+    uniqueIndex('jobs_one_active_memory_organize_uidx')
+      .on(t.userId)
+      .where(sql`${t.type} = 'memory_organize' AND ${t.status} IN ('pending', 'running')`),
     enumCheck('jobs_type_check', t.type, JOB_TYPES),
     enumCheck('jobs_status_check', t.status, JOB_STATUSES),
   ],

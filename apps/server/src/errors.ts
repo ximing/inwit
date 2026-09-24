@@ -35,6 +35,7 @@ export const ERROR_MESSAGES = {
   SUGGEST_SCAN_TOO_FEW: '未归属资料还不够聚成一类',
   JOB_NOT_FOUND: '任务不存在',
   JOB_NOT_RETRYABLE: '只有失败的任务可以重试',
+  ORGANIZE_JOB_IN_PROGRESS: '已经有一条记忆整理在排队或进行中',
   JOB_NOT_CANCELABLE: '只有等待中的任务可以取消',
   CARD_NOT_FOUND: '卡片不存在',
   CARD_NOT_ACCEPTED: '这张卡还没有确认，不能进入复习',

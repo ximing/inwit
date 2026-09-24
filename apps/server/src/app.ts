@@ -17,6 +17,7 @@ import { registerJobRoutes } from './jobs/jobs.routes.js';
 import { registerLlmRoutes } from './llm/llm.routes.js';
 import { registerOcrRoutes } from './ocr/ocr.routes.js';
 import { registerMapRoutes } from './maps/map.routes.js';
+import { registerMemoryRoutes } from './memory/memory.routes.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
 import { registerWebStatic } from './web-static.js';
 import { registerEvolveRoutes } from './agent/evolve.routes.js';
@@ -72,6 +73,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerSearchRoutes(app);
   registerAnnotationRoutes(app);
   registerCardRoutes(app);
+  registerMemoryRoutes(app);
   registerTopicRoutes(app);
   registerMapRoutes(app);
   registerReviewRoutes(app);

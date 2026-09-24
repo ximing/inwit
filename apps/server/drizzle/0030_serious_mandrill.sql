@@ -1,0 +1,5 @@
+ALTER TABLE "agent_executions" DROP CONSTRAINT "agent_executions_agent_type_check";--> statement-breakpoint
+ALTER TABLE "jobs" DROP CONSTRAINT "jobs_type_check";--> statement-breakpoint
+CREATE UNIQUE INDEX "jobs_one_active_memory_organize_uidx" ON "jobs" USING btree ("user_id") WHERE "jobs"."type" = 'memory_organize' AND "jobs"."status" IN ('pending', 'running');--> statement-breakpoint
+ALTER TABLE "agent_executions" ADD CONSTRAINT "agent_executions_agent_type_check" CHECK ("agent_executions"."agent_type" IN ('digest', 'evolve', 'weekly_report', 'topic', 'chat', 'selection', 'extract', 'ocr', 'memory_organize'));--> statement-breakpoint
+ALTER TABLE "jobs" ADD CONSTRAINT "jobs_type_check" CHECK ("jobs"."type" IN ('digest', 'evolve', 'weekly_report', 'topic', 'chat', 'selection', 'extract', 'ocr', 'annotation_resurface', 'memory_organize'));

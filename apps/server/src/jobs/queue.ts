@@ -1,4 +1,9 @@
 import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.js';
+import {
+  memoryOrganizeFollowupExclude,
+  skippedMemoryOrganizeFeedback,
+} from '../agent/memory-organize-logic.js';
 import { config } from '../config.js';
 import { getDb, type Database } from '../db/index.js';
 import { jobs, type JobRow } from '../db/schema.js';
@@ -113,6 +118,7 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
   const disposition = failureDisposition(err, attempts, config.JOB_MAX_ATTEMPTS);
   if (disposition === 'terminal') {
     await markFailedTerminal(job, message, now);
+    await planOrganizeAfterRelease(job);
     return;
   }
   if (disposition === 'exhausted') {
@@ -127,6 +133,7 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
       .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
     logger.warn('job.failed', { jobId: job.id, type: job.type, attempts, lastError: message });
     await settleDocumentFailure(job, message);
+    await planOrganizeAfterRelease(job);
     return;
   }
   const wait = backoffMs(attempts, BACKOFF_MS);
@@ -143,11 +150,23 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
 }
 
 async function rescheduleJob(job: JobRow, runAt: Date, now: Date): Promise<void> {
+  const attempts = Math.max(0, job.attempts - 1);
   await getDb()
     .update(jobs)
-    .set({ status: 'pending', runAt, updatedAt: now })
+    .set({ status: 'pending', runAt, attempts, updatedAt: now })
     .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
-  logger.info('job.rescheduled', { jobId: job.id, type: job.type, runAt: runAt.toISOString() });
+  logger.info('job.rescheduled', {
+    jobId: job.id,
+    type: job.type,
+    runAt: runAt.toISOString(),
+    attempts,
+  });
+}
+
+async function planOrganizeAfterRelease(job: JobRow): Promise<void> {
+  if (job.type !== 'memory_organize') return;
+  // Keep the failed batch and any skip list it inherited out until a user decision.
+  await scheduleMemoryOrganizeSafely(job.userId, memoryOrganizeFollowupExclude(job.payload));
 }
 
 async function processOne(job: JobRow): Promise<void> {
@@ -156,6 +175,11 @@ async function processOne(job: JobRow): Promise<void> {
     await processJob(job);
     await markDone(job, new Date());
     logger.info('job.done', { jobId: job.id, type: job.type, ms: Date.now() - started });
+    if (job.type === 'memory_organize') {
+      // Leftovers can take the one active slot only after this row leaves running.
+      // Inherited skips stay excluded; a later decision is what clears them.
+      await scheduleMemoryOrganizeSafely(job.userId, skippedMemoryOrganizeFeedback(job.payload));
+    }
   } catch (err) {
     if (err instanceof RescheduleJobError) {
       try {
