@@ -3,11 +3,10 @@
 #   Actions → Build Desktop and Android → Run workflow
 #   GitHub Release published → attach installers + APK to that release
 #
-# Production API origin is baked into the clients:
-#   desktop  → VITE_TAURI_API_URL
-#   android  → EXPO_PUBLIC_API_BASE_URL (and Expo extra.apiBaseUrl)
-# Override with workflow input, repository variable/secret INWIT_API_URL
-# (or the legacy VITE_TAURI_API_URL). Default: https://inwit.aimo.plus
+# 桌面壳的页面 URL 是 tauri.conf.json 的 frontendDist。
+# Android 仍把 INWIT_API_URL 打进 EXPO_PUBLIC_API_BASE_URL 和 extra.apiBaseUrl。
+# 可用 workflow 输入、仓库变量或 secret INWIT_API_URL 覆盖，默认 https://inwit.aimo.plus。
+# 顶层 env 在 INWIT_API_URL 未设置时仍回退 secrets.VITE_TAURI_API_URL 与 vars.VITE_TAURI_API_URL，供 Android 使用。
 name: Build Desktop and Android
 
 on:
@@ -16,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       api_url:
-        description: 'Production API origin baked into desktop and Android clients'
+        description: 'Production API origin baked into the Android client'
         required: false
         default: 'https://inwit.aimo.plus'
       targets:
@@ -136,7 +135,6 @@ jobs:
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VITE_TAURI_API_URL: ${{ env.INWIT_API_URL }}
           APPLE_SIGNING_IDENTITY: '-'
         with:
           projectPath: apps/desktop

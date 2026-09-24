@@ -6,8 +6,7 @@
   "build": {
     "beforeDevCommand": "node scripts/before-dev.mjs",
     "devUrl": "http://localhost:5190",
-    "beforeBuildCommand": "pnpm --dir ../.. --filter @inwit/web... build",
-    "frontendDist": "../../web/dist"
+    "frontendDist": "https://inwit.aimo.plus"
   },
   "app": {
     "withGlobalTauri": false,
@@ -15,6 +14,7 @@
       {
         "label": "main",
         "title": "Inwit",
+        "create": false,
         "width": 1280,
         "height": 800,
         "minWidth": 960,

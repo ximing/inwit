@@ -5,7 +5,6 @@ declare const __APP_VERSION__: string;
 
 interface ImportMetaEnv {
   readonly DEV: boolean;
-  readonly VITE_TAURI_API_URL?: string;
 }
 
 interface ImportMeta {

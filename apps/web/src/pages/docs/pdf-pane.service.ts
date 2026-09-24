@@ -1,5 +1,4 @@
 import { Service } from '@rabjs/react';
-import { putViaFetch } from './upload-asset';
 import {
   EXCERPT_MAX_BYTES,
   IMAGE_EXCERPT_QUOTE,
@@ -9,6 +8,7 @@ import {
 } from '@inwit/dto';
 import { errorMessage } from '@/api/client';
 import { getDocumentFile, requestExcerptUpload } from '@/api/documents';
+import { putPresigned } from '@/lib/presign-put';
 import { DocsService } from './docs.service';
 import {
   geometryFromRects,
@@ -177,7 +177,7 @@ export class PdfPaneService extends Service {
         contentType,
         sizeBytes: blob.size,
       });
-      const put = await putViaFetch(uploadUrl, blob, contentType);
+      const put = await putPresigned(uploadUrl, blob, contentType);
       if (!put.ok) {
         this.docs.showToast('截图没传上去');
         return null;

@@ -14,17 +14,13 @@ import {
   type AssetUploadInput,
   type AssetUploadResponse,
 } from '@inwit/dto';
-import { readEtagHeader, sliceRanges } from '@/lib/multipart-logic';
+import type { PutResult } from '@/lib/presign-put';
+import { sliceRanges } from '@/lib/multipart-logic';
 
 const IMAGE_MIME_SET = new Set<string>(ASSET_IMAGE_MIMES);
 const VIDEO_MIME_SET = new Set<string>(ASSET_VIDEO_MIMES);
 
 export const UPLOAD_FAILED_MESSAGE = '上传失败，请重试';
-
-export type PutResult = {
-  ok: boolean;
-  etag: string | null;
-};
 
 export type UploadDocAssetApi = {
   presign: (input: AssetUploadInput) => Promise<AssetUploadResponse>;
@@ -95,20 +91,6 @@ export function classifyAssetFile(file: { type: string; size: number }): Classif
     return { ok: true, kind: 'video', mime };
   }
   return { ok: false, message: '不支持的文件类型' };
-}
-
-export async function putViaFetch(
-  url: string,
-  body: Blob,
-  contentType: string | null,
-): Promise<PutResult> {
-  const headers = new Headers();
-  if (contentType) headers.set('Content-Type', contentType);
-  const res = await fetch(url, { method: 'PUT', body, headers });
-  return {
-    ok: res.ok,
-    etag: readEtagHeader((name) => res.headers.get(name)),
-  };
 }
 
 async function uploadSimple(

@@ -14,36 +14,27 @@ import type {
   UpdateProfileInput,
   User,
 } from '@inwit/dto';
-import { persistAuth, request } from './client';
-import { tokenStore } from './tauri';
+import { clearAuth, request } from './client';
 
 export async function registerUser(input: RegisterInput): Promise<AuthResponse> {
-  const response = await request<AuthResponse>('/api/auth/register', {
+  return request<AuthResponse>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(input),
-    skipAuth: true,
-    skipAuthRefresh: true,
   });
-  await persistAuth(response.tokens);
-  return response;
 }
 
 export async function loginUser(input: LoginInput): Promise<AuthResponse> {
-  const response = await request<AuthResponse>('/api/auth/login', {
+  return request<AuthResponse>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(input),
-    skipAuth: true,
-    skipAuthRefresh: true,
   });
-  await persistAuth(response.tokens);
-  return response;
 }
 
 export async function logoutUser(): Promise<void> {
   try {
-    await request<void>('/api/auth/logout', { method: 'POST', skipAuthRefresh: true });
+    await request<void>('/api/auth/logout', { method: 'POST' });
   } finally {
-    await tokenStore.clear();
+    clearAuth();
   }
 }
 

@@ -1,23 +1,14 @@
 {
   "name": "@inwit/desktop",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": true,
   "type": "module",
-  "description": "Tauri 2 shell around @inwit/web. Bearer via plugin-http + plugin-store. Production builds require VITE_TAURI_API_URL.",
+  "description": "Tauri 2 桌面壳。开发加载 http://localhost:5190，生产加载 https://inwit.aimo.plus。会话走 cookie。",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
     "tauri": "tauri",
     "test": "node --test __tests__/tauri.contract.test.mjs"
-  },
-  "dependencies": {
-    "@inwit/web": "workspace:*",
-    "@tauri-apps/api": "^2.9.0",
-    "@tauri-apps/plugin-global-shortcut": "^2.3.1",
-    "@tauri-apps/plugin-http": "^2.5.0",
-    "@tauri-apps/plugin-notification": "^2.3.3",
-    "@tauri-apps/plugin-store": "^2.4.0",
-    "@tauri-apps/plugin-window-state": "^2.4.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.0"

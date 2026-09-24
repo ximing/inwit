@@ -1,8 +1,7 @@
 import { Service } from '@rabjs/react';
 import type { User } from '@inwit/dto';
 import { getMe, loginUser, logoutUser, registerUser } from '@/api/auth';
-import { ApiError, bootAuth, errorMessage, setUnauthorizedHandler } from '@/api/client';
-import { AUTH_CLEARED_EVENT } from '@/api/tauri';
+import { ApiError, errorMessage, setUnauthorizedHandler } from '@/api/client';
 
 const AVATAR_REFRESH_COOLDOWN_MS = 30_000;
 
@@ -20,12 +19,6 @@ export class AuthService extends Service {
       this.user = null;
       this.brokenAvatarUrl = null;
     });
-    if (typeof window !== 'undefined') {
-      window.addEventListener(AUTH_CLEARED_EVENT, () => {
-        this.user = null;
-        this.brokenAvatarUrl = null;
-      });
-    }
     void this.bootstrap();
   }
 
@@ -76,7 +69,6 @@ export class AuthService extends Service {
     this.bootstrapping = true;
     this.bootstrapError = null;
     try {
-      await bootAuth();
       this.user = await getMe();
     } catch (err) {
       this.user = null;

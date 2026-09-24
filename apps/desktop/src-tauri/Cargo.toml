@@ -16,22 +16,14 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 arboard = "3"
 base64 = "0.22"
+open = "5"
 png = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2"
-# cookies off: bearer only. unsafe-headers: Authorization is a forbidden fetch header.
-tauri-plugin-http = { version = "2", default-features = false, features = [
-  "rustls-tls",
-  "http2",
-  "charset",
-  "system-proxy",
-  "unsafe-headers",
-] }
-tauri-plugin-notification = "2"
-tauri-plugin-store = "2"
 tauri-plugin-window-state = "2"
+url = "2"
 
 [profile.release]
 codegen-units = 1

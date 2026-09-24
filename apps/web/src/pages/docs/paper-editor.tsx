@@ -20,6 +20,7 @@ import {
   type DocEditorHost,
 } from '@/lib/entity-marks';
 import { asPmJson, clonePmJson } from '@/lib/pm-doc';
+import { putPresigned } from '@/lib/presign-put';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { DialogService } from '@/services/dialog.service';
 import { AnchorHighlight } from './anchor-highlight';
@@ -35,7 +36,6 @@ import {
   AssetUploadError,
   classifyAssetFile,
   ingestAssetFiles,
-  putViaFetch,
   storeDocAsset,
   UPLOAD_FAILED_MESSAGE,
   type UploadDocAssetApi,
@@ -54,7 +54,7 @@ const assetApi: UploadDocAssetApi = {
   initMultipart: initAssetMultipart,
   signMultipart: signAssetMultipart,
   completeMultipart: completeAssetMultipart,
-  put: putViaFetch,
+  put: putPresigned,
 };
 
 function contentFromSeed(seedDoc: unknown | null) {

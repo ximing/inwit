@@ -35,7 +35,7 @@ import {
   listArchivedDocuments,
   restoreDocument,
 } from '@/api/documents';
-import { putViaFetch } from '@/pages/docs/upload-asset';
+import { putPresigned } from '@/lib/presign-put';
 import {
   createLlmConfig,
   deleteLlmConfig,
@@ -235,7 +235,7 @@ export class SettingsService extends Service {
         contentType,
         sizeBytes: file.size,
       });
-      const put = await putViaFetch(uploadUrl, file, contentType);
+      const put = await putPresigned(uploadUrl, file, contentType);
       if (!put.ok) {
         this.avatarError = '头像上传失败';
         return;

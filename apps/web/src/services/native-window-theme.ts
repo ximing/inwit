@@ -1,4 +1,5 @@
-import { isTauriRuntime } from '@/api/tauri';
+import { loadNativeWindow } from '@/platform/native';
+import { isTauriRuntime } from '@/platform/runtime';
 
 /** Matches `html[data-theme=light] { --bg }` in apps/web/src/styles.css. */
 export const LIGHT_WINDOW_CANVAS = '#F6F3EC';
@@ -29,8 +30,9 @@ function defaultIsTauri(): boolean {
 }
 
 async function defaultLoadWindow(): Promise<NativeWindowHandle> {
-  const { getCurrentWindow } = await import('@tauri-apps/api/window');
-  return getCurrentWindow();
+  const win = await loadNativeWindow();
+  if (!win) throw new Error('native window unavailable');
+  return win;
 }
 
 /**

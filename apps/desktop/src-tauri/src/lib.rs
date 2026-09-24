@@ -13,8 +13,6 @@ pub fn run() {
     let shortcut_for_handler = shortcut;
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(
@@ -23,7 +21,6 @@ pub fn run() {
                 )
                 .build(),
         )
-        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, sc, event| {
@@ -42,6 +39,21 @@ pub fn run() {
             _ => {}
         })
         .setup(move |app| {
+            let main = app
+                .config()
+                .app
+                .windows
+                .iter()
+                .find(|window| window.label == "main")
+                .expect("main window")
+                .clone();
+            tauri::WebviewWindowBuilder::from_config(app.handle(), &main)?
+                .on_navigation(|url| navigation_allowed(url))
+                .on_new_window(|url, _features| {
+                    let _ = open::that(url.as_str());
+                    tauri::webview::NewWindowResponse::Deny
+                })
+                .build()?;
             install_tray(app)?;
             app.global_shortcut().register(shortcut)?;
             Ok(())
@@ -142,9 +154,65 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+fn document_allowed(config: &tauri::Config, url: &url::Url) -> bool {
+    let mut allowed: Vec<&url::Url> = Vec::new();
+    if let Some(dist) = config.build.frontend_dist.as_ref() {
+        if let tauri::utils::config::FrontendDist::Url(prod) = dist {
+            allowed.push(prod);
+        }
+    }
+    // cfg(dev) 由 tauri-build 在未启用 custom-protocol 时设置，与 tauri dev 的 get_app_url 一致。
+    // tauri build --debug 有 debug_assertions，但没有 cfg(dev)，窗口加载的是 frontendDist。
+    if cfg!(dev) {
+        if let Some(dev) = config.build.dev_url.as_ref() {
+            allowed.push(dev);
+        }
+    }
+    allowed.iter().any(|base| {
+        url.scheme() == base.scheme()
+            && url.host() == base.host()
+            && url.port_or_known_default() == base.port_or_known_default()
+    })
+}
+
+/// wry 对子框架同样调用这个回调，且没有 is_main_frame。
+/// 不能在这里按主机拒绝 https，否则 ReaderOverlay 的 PDF iframe 会被取消。
+fn navigation_allowed(url: &url::Url) -> bool {
+    if url.scheme() == "tauri" || url.host_str() == Some("tauri.localhost") {
+        return false;
+    }
+    url.as_str() == "about:blank"
+        || url.scheme() == "about"
+        || url.scheme() == "http"
+        || url.scheme() == "https"
+}
+
+fn app_home(config: &tauri::Config) -> Option<url::Url> {
+    if cfg!(dev) {
+        if let Some(dev) = config.build.dev_url.clone() {
+            return Some(dev);
+        }
+    }
+    match config.build.frontend_dist.as_ref() {
+        Some(tauri::utils::config::FrontendDist::Url(prod)) => Some(prod.clone()),
+        _ => None,
+    }
+}
+
 fn reload_main(app: &tauri::AppHandle) {
-    if let Some(window) = tauri::Manager::get_webview_window(app, "main") {
+    let Some(window) = tauri::Manager::get_webview_window(app, "main") else {
+        return;
+    };
+    let on_app = window
+        .url()
+        .ok()
+        .is_some_and(|url| document_allowed(app.config(), &url));
+    if on_app {
         let _ = window.reload();
+        return;
+    }
+    if let Some(home) = app_home(app.config()) {
+        let _ = window.navigate(home);
     }
 }
 

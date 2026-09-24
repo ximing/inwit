@@ -2,7 +2,9 @@ import { Service } from '@rabjs/react';
 import type { Document, ScreenshotInitInput } from '@inwit/dto';
 import { completeScreenshot, initScreenshot } from '@/api/documents';
 import { errorMessage } from '@/api/client';
-import { isTauriRuntime, tauriFetch } from '@/api/tauri';
+import { putPresigned } from '@/lib/presign-put';
+import { NATIVE_COMMAND, NATIVE_EVENT, invokeNative, listenNative } from '@/platform/native';
+import { isTauriRuntime } from '@/platform/runtime';
 
 const TOAST_MS = 3200;
 
@@ -45,15 +47,14 @@ export class ScreenshotService extends Service {
   }
 
   private async attach(): Promise<void> {
-    const { listen } = await import('@tauri-apps/api/event');
     this.unlisten.push(
-      await listen<string>('screenshot-captured', (event) => {
-        void this.ingestPng(event.payload);
+      await listenNative<string>(NATIVE_EVENT.screenshotCaptured, (payload) => {
+        void this.ingestPng(payload);
       }),
     );
     this.unlisten.push(
-      await listen<string>('screenshot-failed', (event) => {
-        this.error = event.payload;
+      await listenNative<string>(NATIVE_EVENT.screenshotFailed, (payload) => {
+        this.error = payload;
       }),
     );
   }
@@ -63,8 +64,7 @@ export class ScreenshotService extends Service {
     this.error = null;
     this.capturing = true;
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const b64 = await invoke<string | null>('capture_region');
+      const b64 = await invokeNative<string | null>(NATIVE_COMMAND.captureRegion);
       if (b64) await this.ingestPng(b64, topicId);
     } catch (err) {
       this.error = errorMessage(err, '截图失败');
@@ -78,8 +78,7 @@ export class ScreenshotService extends Service {
     this.error = null;
     this.capturing = true;
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const b64 = await invoke<string | null>('clipboard_image');
+      const b64 = await invokeNative<string | null>(NATIVE_COMMAND.clipboardImage);
       if (!b64) {
         this.error = '剪贴板里没有图片';
         return;
@@ -103,12 +102,7 @@ export class ScreenshotService extends Service {
     };
     try {
       const { document, uploadUrl } = await initScreenshot(input);
-      const putFetch = isTauriRuntime() ? tauriFetch : fetch.bind(globalThis);
-      const put = await putFetch(uploadUrl, {
-        method: 'PUT',
-        body: blob,
-        headers: { 'Content-Type': 'image/png' },
-      });
+      const put = await putPresigned(uploadUrl, blob, 'image/png');
       if (!put.ok) {
         this.error = '截图上传失败';
         return;

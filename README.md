@@ -250,14 +250,16 @@ pnpm --filter @inwit/server worker        # 另开一个终端：消化 / 问答
 需要 Rust 与系统 WebView：
 
 ```bash
-pnpm --filter @inwit/desktop dev          # 等 Vite :5190，连本地 API :3020
+pnpm --filter @inwit/desktop dev          # 打开 http://localhost:5190，会话走 cookie
 ```
+
+生产安装包的窗口打开 `https://inwit.aimo.plus`，不再内嵌一份前端。
 
 macOS 点红灯会藏到菜单栏，并不退出；「退出 Inwit」才退出。全局快捷键 ⌘⇧2 / Ctrl+Shift+2 区域截图（macOS 需「屏幕录制」权限）。
 
 ### 生产与安装包
 
-生产桌面包把 `VITE_TAURI_API_URL` 打进前端；Android APK 把 `EXPO_PUBLIC_API_BASE_URL`（以及 Expo `extra.apiBaseUrl`）打进客户端。由仓库变量 / workflow 输入 `INWIT_API_URL` 注入，默认 `https://inwit.aimo.plus`。
+Android APK 把 `EXPO_PUBLIC_API_BASE_URL`（以及 Expo `extra.apiBaseUrl`）打进客户端。由仓库变量 / workflow 输入 `INWIT_API_URL` 注入，默认 `https://inwit.aimo.plus`。桌面壳不再烘焙 `VITE_TAURI_API_URL`，页面地址是 `tauri.conf.json` 的 `frontendDist`。
 
 GitHub Release 打 `v*.*.*` tag 后，Actions「Build Desktop and Android」会把 macOS / Windows / Linux 安装包和 Android APK 挂到该 Release。Server 镜像推 `ghcr.io/ximing/inwit-server`（同一镜像 `node dist/worker.js` 跑 worker）。
 
