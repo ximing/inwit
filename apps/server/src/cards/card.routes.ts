@@ -1,4 +1,9 @@
-import { archiveListQuerySchema, createCardInputSchema, updateCardInputSchema } from '@inwit/dto';
+import {
+  archiveListQuerySchema,
+  createCardInputSchema,
+  rejectCardInputSchema,
+  updateCardInputSchema,
+} from '@inwit/dto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/authenticate.js';
@@ -15,6 +20,7 @@ import {
   restoreCard,
   updateCard,
 } from './card.service.js';
+import { acceptCard, rejectCard } from './card-decision.service.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -53,6 +59,17 @@ export function registerCardRoutes(app: FastifyInstance): void {
   app.post('/api/cards/:id/restore', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     return restoreCard(requireUser(req).id, id);
+  });
+
+  app.post('/api/cards/:id/accept', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    return acceptCard(requireUser(req).id, id);
+  });
+
+  app.post('/api/cards/:id/reject', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const input = rejectCardInputSchema.parse(req.body ?? {});
+    return rejectCard(requireUser(req).id, id, input);
   });
 
   app.delete('/api/cards/:id/permanent', auth, async (req, reply) => {

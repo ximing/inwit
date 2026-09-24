@@ -30,6 +30,7 @@ import {
   retryDocument,
   updateDocument,
 } from './document.service.js';
+import { acceptProposedCards } from '../cards/card-decision.service.js';
 import { abortImport, completeImport, initImport, presignImportParts } from './import.service.js';
 import { completeScreenshot, initScreenshot } from './screenshot.service.js';
 
@@ -101,6 +102,11 @@ export function registerDocumentRoutes(app: FastifyInstance): void {
     const { id } = idParamsSchema.parse(req.params);
     const job = await retryDocument(requireUser(req).id, id);
     return reply.code(201).send(job);
+  });
+
+  app.post('/api/documents/:id/cards/accept-proposed', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    return acceptProposedCards(requireUser(req).id, id);
   });
 
   app.get('/api/documents/archived', auth, async (req) => {

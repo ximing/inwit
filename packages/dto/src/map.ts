@@ -22,6 +22,8 @@ export const mapNodeSchema = z.object({
   position: z.number().int(),
   createdAt: z.string(),
   cardCount: z.number().int().nonnegative(),
+  /** Non-deleted proposed cards. Ignored by mastery and covered status. */
+  proposedCount: z.number().int().nonnegative(),
   docCount: z.number().int().nonnegative(),
   mastery: z.number().min(0).max(1),
 });

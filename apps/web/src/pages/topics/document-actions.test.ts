@@ -10,7 +10,7 @@ vi.mock('@/api/maps', async (original) => ({
 }));
 const node: MapTreeNode = {
   id: 'node-1', topicId: 'topic-1', parentId: null, title: '节点', status: 'learning',
-  note: null, position: 0, createdAt: '', cardCount: 0, docCount: 1, mastery: 0, children: [],
+  note: null, position: 0, createdAt: '', cardCount: 0, proposedCount: 0, docCount: 1, mastery: 0, children: [],
 };
 const summary = { totalNodes: 1, uncoveredNodes: 0, cardCount: 0, masteryPct: 0 };
 beforeEach(() => vi.clearAllMocks());

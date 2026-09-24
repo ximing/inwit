@@ -87,6 +87,7 @@ describe('assembleMapTree', () => {
       position,
       createdAt: at,
       cardCount: 0,
+      proposedCount: 0,
       docCount: 0,
       mastery: 0,
     };
@@ -156,6 +157,7 @@ describe('map dto schemas', () => {
       position: 0,
       createdAt: '2026-09-14T00:00:00.000Z',
       cardCount: 2,
+      proposedCount: 0,
       docCount: 1,
       mastery: 0.5,
       children: [],

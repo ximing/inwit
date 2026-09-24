@@ -19,6 +19,7 @@ import type {
   UpdateDocumentInput,
 } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, like, lte, ne, or, sql, type SQL } from 'drizzle-orm';
+import { shouldIndexCard } from '../cards/card-acceptance-logic.js';
 import { toPublicCard, toPublicQuestion } from '../cards/card.mapper.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -193,6 +194,23 @@ export async function enqueueSelectionCards(
   });
 }
 
+function documentAcceptanceCounts() {
+  return getDb()
+    .select({
+      documentId: cards.documentId,
+      acceptedCount: sql<number>`count(*) filter (where ${cards.acceptance} = 'accepted')::int`.as(
+        'accepted_count',
+      ),
+      proposedCount: sql<number>`count(*) filter (where ${cards.acceptance} = 'proposed')::int`.as(
+        'proposed_count',
+      ),
+    })
+    .from(cards)
+    .where(isNull(cards.deletedAt))
+    .groupBy(cards.documentId)
+    .as('doc_card_counts');
+}
+
 export async function listDocuments(
   userId: string,
   query: ListDocumentsQuery,
@@ -208,20 +226,13 @@ export async function listDocuments(
   const where = and(...conditions);
 
   const [totalRow] = await getDb().select({ n: count() }).from(documents).where(where);
-  const cardCounts = getDb()
-    .select({
-      documentId: cards.documentId,
-      n: count().as('n'),
-    })
-    .from(cards)
-    .where(isNull(cards.deletedAt))
-    .groupBy(cards.documentId)
-    .as('doc_card_counts');
+  const cardCounts = documentAcceptanceCounts();
 
   const rows = await getDb()
     .select({
       document: documents,
-      cardCount: cardCounts.n,
+      cardCount: cardCounts.acceptedCount,
+      proposedCount: cardCounts.proposedCount,
       topicTitle: topics.title,
     })
     .from(documents)
@@ -236,8 +247,7 @@ export async function listDocuments(
     items: rows.map((row) => ({
       ...toPublicDocument(row.document),
       cardCount: Number(row.cardCount ?? 0),
-      // PR 3 counts proposed rows.
-      proposedCount: 0,
+      proposedCount: Number(row.proposedCount ?? 0),
       topicTitle: row.topicTitle ?? null,
     })),
     total: Number(totalRow?.n ?? 0),
@@ -251,20 +261,13 @@ export async function getDocumentListItemsByIds(
   ids: string[],
 ): Promise<DocumentListItem[]> {
   if (ids.length === 0) return [];
-  const cardCounts = getDb()
-    .select({
-      documentId: cards.documentId,
-      n: count().as('n'),
-    })
-    .from(cards)
-    .where(isNull(cards.deletedAt))
-    .groupBy(cards.documentId)
-    .as('doc_card_counts');
+  const cardCounts = documentAcceptanceCounts();
 
   const rows = await getDb()
     .select({
       document: documents,
-      cardCount: cardCounts.n,
+      cardCount: cardCounts.acceptedCount,
+      proposedCount: cardCounts.proposedCount,
       topicTitle: topics.title,
     })
     .from(documents)
@@ -275,8 +278,7 @@ export async function getDocumentListItemsByIds(
   return rows.map((row) => ({
     ...toPublicDocument(row.document),
     cardCount: Number(row.cardCount ?? 0),
-    // PR 3 counts proposed rows.
-    proposedCount: 0,
+    proposedCount: Number(row.proposedCount ?? 0),
     topicTitle: row.topicTitle ?? null,
   }));
 }
@@ -388,7 +390,14 @@ export async function getDocument(userId: string, id: string): Promise<DocumentD
   const cardRows = await getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.userId, userId), eq(cards.documentId, document.id), isNull(cards.deletedAt)))
+    .where(
+      and(
+        eq(cards.userId, userId),
+        eq(cards.documentId, document.id),
+        isNull(cards.deletedAt),
+        ne(cards.acceptance, 'rejected'),
+      ),
+    )
     .orderBy(asc(cards.createdAt), asc(cards.id));
 
   const questionRows: CardQuestionRow[] =
@@ -558,7 +567,7 @@ export async function restoreDocument(userId: string, id: string): Promise<Docum
     await tryIndexAnnotation(annotation);
   }
   for (const card of restoredCards) {
-    await tryIndexCard(card);
+    if (shouldIndexCard(card)) await tryIndexCard(card);
   }
   return toPublicDocument(restored);
 }

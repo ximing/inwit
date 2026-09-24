@@ -30,6 +30,28 @@ export async function cleanupDocumentCards(userId: string, documentId: string): 
   }
 }
 
+/** Digest retries drop only unfinished proposals. Accepted and rejected rows stay. */
+export async function deleteProposedDocumentCards(userId: string, documentId: string): Promise<void> {
+  const removed = await getDb()
+    .delete(cards)
+    .where(
+      and(
+        eq(cards.userId, userId),
+        eq(cards.documentId, documentId),
+        eq(cards.acceptance, 'proposed'),
+        isNull(cards.deletedAt),
+      ),
+    )
+    .returning({ id: cards.id });
+  for (const row of removed) {
+    try {
+      await deleteCardFromIndex(row.id);
+    } catch (err) {
+      logger.warn('harvest.cleanup_index_failed', { cardId: row.id, err: String(err) });
+    }
+  }
+}
+
 export async function loadDocumentCards(userId: string, documentId: string) {
   const cardRows = await getDb()
     .select()

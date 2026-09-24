@@ -1,6 +1,6 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
-import { CARD_LINK_TYPES, type CardLinkType, type CardSource } from '@inwit/dto';
+import { CARD_LINK_TYPES, type CardLinkType, type CardAcceptance, type CardSource } from '@inwit/dto';
 import { and, count, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
@@ -9,6 +9,7 @@ import { asPmJson } from '../documents/content-json.js';
 import { AppError } from '../errors.js';
 import { getTopicMapFlat, placeCardOnMap, recalculateMapNodeStatus } from '../maps/map.service.js';
 import { OutlineError, parsePlaceOnMapTarget } from '../maps/outline.js';
+import { acceptedCard } from '../cards/accepted-card.js';
 import { deleteCardFromIndex, indexCard, searchCards } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
@@ -22,6 +23,8 @@ export interface DigestSession {
   documentId: string;
   writtenCardIds: string[];
   cardSource?: CardSource;
+  /** processDigest sets proposed only while DIGEST_CARD_GATE is on. Default accepted. */
+  cardAcceptance?: Extract<CardAcceptance, 'proposed' | 'accepted'>;
   dueImmediately?: boolean;
   topicId?: string | null;
   mapNodeId?: string | null;
@@ -119,6 +122,7 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
         anchored: boolean;
       }[] = [];
       const contentJson = asPmJson(document.contentJson);
+      const proposed = session.cardAcceptance === 'proposed';
       for (const draft of params.cards) {
         const now = new Date();
         const resolved = resolveQuoteAnchor(contentJson, draft.blockIndex, draft.quote);
@@ -136,35 +140,38 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
             source: session.cardSource ?? 'agent',
             anchorText: resolved.anchorText,
             anchorBlockIndex: resolved.anchorBlockIndex,
+            ...(proposed ? { acceptance: 'proposed' as const } : {}),
           })
           .returning();
         if (!row) throw new Error('failed to insert card');
-        try {
-          await insertInitialReviewState(
-            session.userId,
-            row.id,
-            now,
-            getDb(),
-            session.dueImmediately ? now : undefined,
-          );
-          await indexCard({
-            id: row.id,
-            userId: row.userId,
-            topicId: row.topicId,
-            concept: row.concept,
-            example: row.example,
-            confusionPoint: row.confusionPoint,
-            tags: row.tags,
-          });
-        } catch (err) {
-          logger.error('digest.index_card_failed', err);
+        if (!proposed) {
           try {
-            await deleteCardFromIndex(row.id);
-          } catch (cleanupErr) {
-            logger.warn('digest.index_card_cleanup_failed', cleanupErr);
+            await insertInitialReviewState(
+              session.userId,
+              row.id,
+              now,
+              getDb(),
+              session.dueImmediately ? now : undefined,
+            );
+            await indexCard({
+              id: row.id,
+              userId: row.userId,
+              topicId: row.topicId,
+              concept: row.concept,
+              example: row.example,
+              confusionPoint: row.confusionPoint,
+              tags: row.tags,
+            });
+          } catch (err) {
+            logger.error('digest.index_card_failed', err);
+            try {
+              await deleteCardFromIndex(row.id);
+            } catch (cleanupErr) {
+              logger.warn('digest.index_card_cleanup_failed', cleanupErr);
+            }
+            await getDb().delete(cards).where(eq(cards.id, row.id));
+            throw err instanceof Error ? err : new Error('indexCard failed');
           }
-          await getDb().delete(cards).where(eq(cards.id, row.id));
-          throw err instanceof Error ? err : new Error('indexCard failed');
         }
         session.writtenCardIds.push(row.id);
         created.push({
@@ -242,7 +249,7 @@ async function searchOwnedCards(userId: string, query: string) {
   const rows = await getDb()
     .select()
     .from(cards)
-    .where(and(eq(cards.userId, userId), isNull(cards.deletedAt)));
+    .where(and(eq(cards.userId, userId), acceptedCard()));
   const byId = new Map(rows.map((row) => [row.id, row]));
   return ids
     .map((id) => byId.get(id))

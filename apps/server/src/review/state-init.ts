@@ -68,7 +68,7 @@ export async function backfillMissingReviewStates(): Promise<number> {
       reviewStates,
       and(eq(reviewStates.cardId, cards.id), eq(reviewStates.userId, cards.userId)),
     )
-    .where(and(isNull(reviewStates.id), isNull(cards.deletedAt)));
+    .where(and(isNull(reviewStates.id), isNull(cards.deletedAt), eq(cards.acceptance, 'accepted')));
 
   if (missing.length === 0) return 0;
 

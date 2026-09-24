@@ -11,7 +11,7 @@ import type {
   CreateCardInput,
   UpdateCardInput,
 } from '@inwit/dto';
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import {
   annotations,
@@ -30,6 +30,7 @@ import { recalculateMapNodeStatus, requireWritableMapNode } from '../maps/map.se
 import { tryDeleteCardFromIndex, tryIndexCard } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { presignGet } from '../storage/client.js';
+import { shouldIndexCard } from './card-acceptance-logic.js';
 import { diffCardQuestions, normalizeTags } from './card-logic.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
 
@@ -186,14 +187,28 @@ export async function listCardLinks(userId: string, cardId: string): Promise<Car
     .select({ link: cardLinks, card: cards })
     .from(cardLinks)
     .innerJoin(cards, eq(cards.id, cardLinks.toCardId))
-    .where(and(eq(cardLinks.userId, userId), eq(cardLinks.fromCardId, cardId)))
+    .where(
+      and(
+        eq(cardLinks.userId, userId),
+        eq(cardLinks.fromCardId, cardId),
+        isNull(cards.deletedAt),
+        ne(cards.acceptance, 'rejected'),
+      ),
+    )
     .orderBy(desc(cardLinks.createdAt), desc(cardLinks.id));
 
   const incomingRows = await getDb()
     .select({ link: cardLinks, card: cards })
     .from(cardLinks)
     .innerJoin(cards, eq(cards.id, cardLinks.fromCardId))
-    .where(and(eq(cardLinks.userId, userId), eq(cardLinks.toCardId, cardId)))
+    .where(
+      and(
+        eq(cardLinks.userId, userId),
+        eq(cardLinks.toCardId, cardId),
+        isNull(cards.deletedAt),
+        ne(cards.acceptance, 'rejected'),
+      ),
+    )
     .orderBy(desc(cardLinks.createdAt), desc(cardLinks.id));
 
   return {
@@ -255,7 +270,8 @@ export async function updateCard(
   id: string,
   input: UpdateCardInput,
 ): Promise<CardDetail> {
-  await getOwnedCard(userId, id);
+  const existing = await getOwnedCard(userId, id);
+  if (existing.acceptance === 'rejected') throw AppError.of(409, 'CARD_NOT_ACCEPTABLE');
   const now = new Date();
 
   await getDb().transaction(async (tx) => {
@@ -302,15 +318,17 @@ export async function updateCard(
   });
 
   const detail = await getCard(userId, id);
-  await tryIndexCard({
-    id: detail.id,
-    userId: detail.userId,
-    topicId: detail.topicId,
-    concept: detail.concept,
-    example: detail.example,
-    confusionPoint: detail.confusionPoint,
-    tags: detail.tags,
-  });
+  if (shouldIndexCard({ acceptance: existing.acceptance, deletedAt: null })) {
+    await tryIndexCard({
+      id: detail.id,
+      userId: detail.userId,
+      topicId: detail.topicId,
+      concept: detail.concept,
+      example: detail.example,
+      confusionPoint: detail.confusionPoint,
+      tags: detail.tags,
+    });
+  }
   return detail;
 }
 
@@ -343,7 +361,7 @@ export async function restoreCard(userId: string, id: string): Promise<Card> {
     if (row.mapNodeId) await recalculateMapNodeStatus(row.mapNodeId, tx);
     return row;
   });
-  await tryIndexCard(restored);
+  if (shouldIndexCard(restored)) await tryIndexCard(restored);
   return toPublicCardBase(restored);
 }
 

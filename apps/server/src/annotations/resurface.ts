@@ -170,7 +170,14 @@ async function loadCardHints(userId: string, documentIds: string[]): Promise<Can
       anchorText: cards.anchorText,
     })
     .from(cards)
-    .where(and(eq(cards.userId, userId), inArray(cards.documentId, documentIds), isNull(cards.deletedAt)));
+    .where(
+      and(
+        eq(cards.userId, userId),
+        inArray(cards.documentId, documentIds),
+        eq(cards.acceptance, 'accepted'),
+        isNull(cards.deletedAt),
+      ),
+    );
 }
 
 /** Deterministic daily job: pick stale unconverted annotations and store the suggestion. */

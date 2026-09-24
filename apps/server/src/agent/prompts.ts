@@ -1,3 +1,36 @@
+import { clipChars } from '../retrieval/search-logic.js';
+
+const AVOID_LIMIT = 20;
+const AVOID_CONCEPT_CHARS = 80;
+
+export function digestAvoidanceText(avoid?: {
+  accepted: { concept: string }[];
+  rejected: { concept: string; reason: string | null }[];
+}): string {
+  if (!avoid) return '';
+  const blocks: string[] = [];
+  const accepted = avoid.accepted.slice(0, AVOID_LIMIT);
+  if (accepted.length > 0) {
+    const lines = accepted.map((row) => `- ${clipChars(row.concept, AVOID_CONCEPT_CHARS)}`).join('\n');
+    blocks.push(`已确认，不要再写相同概念的卡：\n${lines}`);
+  }
+  const rejected = avoid.rejected.slice(0, AVOID_LIMIT);
+  if (rejected.length > 0) {
+    const lines = rejected
+      .map((row) => {
+        const concept = clipChars(row.concept, AVOID_CONCEPT_CHARS);
+        if (!row.reason) return `- ${concept}`;
+        const reason = row.reason.replace(/\s+/g, ' ').trim();
+        return reason.length > 0 ? `- ${concept}（理由：${reason}）` : `- ${concept}`;
+      })
+      .join('\n');
+    blocks.push(
+      `已拒绝，不要原样重写。理由里如果指出缺什么，就按那个方向写一张不同的卡；没有理由就不要再出这一概念：\n${lines}`,
+    );
+  }
+  return blocks.join('\n\n');
+}
+
 export const DIGEST_SYSTEM_PROMPT = `你是 Inwit 的消化 Agent。用户丢来一段学习材料，你必须把它加工成可复习的原子卡片。
 
 工作流程（按顺序调用工具，不要只回复文字）：
@@ -72,6 +105,10 @@ export function digestUserPrompt(input: {
   documentId: string;
   topicId: string | null;
   topics: { id: string; title: string; goal: string | null }[];
+  avoid?: {
+    accepted: { concept: string }[];
+    rejected: { concept: string; reason: string | null }[];
+  };
 }): string {
   const topicLines =
     input.topics.length === 0
@@ -83,12 +120,14 @@ export function digestUserPrompt(input: {
     input.topicId === null
       ? '这篇文档目前没有主题。若与某个活跃主题高度相关，attribute_topic 之后必须再 read_topic_map + place_on_map。'
       : `这篇文档已归属主题 ${input.topicId}。切卡出题后必须 read_topic_map(${input.topicId}) 并把每张新卡 place_on_map。`;
-  return `请消化这篇文档。documentId: ${input.documentId}
+  const base = `请消化这篇文档。documentId: ${input.documentId}
 
 ${owned}
 
 活跃主题：
 ${topicLines}`;
+  const extra = digestAvoidanceText(input.avoid);
+  return extra.length > 0 ? `${base}\n\n${extra}` : base;
 }
 
 export const TOPIC_ORGANIZE_SYSTEM_PROMPT = `你是 Inwit 的主题 Agent，负责整理一门课的知识地图。
@@ -125,7 +164,8 @@ export const TOPIC_FILL_SYSTEM_PROMPT = `你是 Inwit 的主题 Agent，负责�
 约束：
 - 必须通过工具落库。
 - 入门卡要能独立复习，不要写成目录或鸡汤。
-- 题目要能靠卡片内容回答。`;
+- 题目要能靠卡片内容回答。
+- 若 read_map_node 返回的 pendingConcepts 非空，不要为这些概念写卡。`;
 
 export function topicFillUserPrompt(input: { topicId: string; nodeId: string; documentId: string }): string {
   return `请为这个空白节点生成 1-2 张入门卡片。

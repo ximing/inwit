@@ -8,7 +8,8 @@ import { AppError } from '../errors.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { toPublicJob } from '../jobs/jobs.service.js';
 import { getOwnedTopic } from '../topics/topic.service.js';
-import { requireWritableMapNode } from './map.service.js';
+import { fillStubMarkdown } from './fill-stub-logic.js';
+import { nodeHasProposedCards, requireWritableMapNode } from './map.service.js';
 
 async function assertWritableTopic(userId: string, topicId: string): Promise<void> {
   const topic = await getOwnedTopic(userId, topicId);
@@ -48,8 +49,11 @@ export async function enqueueFillMapNodeJob(userId: string, nodeId: string): Pro
   const node = await requireWritableMapNode(userId, nodeId);
   const existing = await findActiveTopicJob(userId, node.topicId);
   if (existing) throw AppError.of(409, 'TOPIC_JOB_IN_PROGRESS', { jobId: existing.id });
+  if (await nodeHasProposedCards(userId, node.id)) {
+    throw AppError.of(409, 'NODE_HAS_PROPOSED_CARDS');
+  }
 
-  const contentJson = markdownToContentJson(`# 入门：${node.title}\n\n（待生成）`);
+  const contentJson = markdownToContentJson(fillStubMarkdown(node.title));
   const title = titleFromDoc(contentJson);
 
   return getDb().transaction(async (tx) => {

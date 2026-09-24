@@ -1,5 +1,6 @@
 import { WEEKLY_REPORT_TITLE_MARK, type Job, type WeeklyReportLatest } from '@inwit/dto';
 import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { getDb, type Database } from '../db/index.js';
 import { cardLinks, cards, documents, jobs, reviewLogs, users, type JobRow } from '../db/schema.js';
 import { enqueueJob } from '../jobs/enqueue.js';
@@ -64,16 +65,48 @@ async function countWeeklyActivity(
   const [cardRow] = await db
     .select({ n: count() })
     .from(cards)
-    .where(and(eq(cards.userId, userId), gte(cards.createdAt, start), lt(cards.createdAt, endExclusive), isNull(cards.deletedAt)));
-  const [linkRow] = await db
-    .select({ n: count() })
-    .from(cardLinks)
-    .where(and(eq(cardLinks.userId, userId), gte(cardLinks.createdAt, start), lt(cardLinks.createdAt, endExclusive)));
+    .where(
+      and(
+        eq(cards.userId, userId),
+        gte(cards.createdAt, start),
+        lt(cards.createdAt, endExclusive),
+        eq(cards.acceptance, 'accepted'),
+        isNull(cards.deletedAt),
+      ),
+    );
   return {
     reviewCount: Number(reviewRow?.n ?? 0),
     newCards: Number(cardRow?.n ?? 0),
-    newLinks: Number(linkRow?.n ?? 0),
+    newLinks: await countAcceptedNewLinks(db, userId, start, endExclusive),
   };
+}
+
+/** Links created in the window whose both ends are accepted and not soft-deleted. */
+export async function countAcceptedNewLinks(
+  db: WeeklyEnqueueDb,
+  userId: string,
+  start: Date,
+  endExclusive: Date,
+): Promise<number> {
+  const fromCard = alias(cards, 'weekly_link_from');
+  const toCard = alias(cards, 'weekly_link_to');
+  const [linkRow] = await db
+    .select({ n: count() })
+    .from(cardLinks)
+    .innerJoin(fromCard, eq(fromCard.id, cardLinks.fromCardId))
+    .innerJoin(toCard, eq(toCard.id, cardLinks.toCardId))
+    .where(
+      and(
+        eq(cardLinks.userId, userId),
+        gte(cardLinks.createdAt, start),
+        lt(cardLinks.createdAt, endExclusive),
+        eq(fromCard.acceptance, 'accepted'),
+        isNull(fromCard.deletedAt),
+        eq(toCard.acceptance, 'accepted'),
+        isNull(toCard.deletedAt),
+      ),
+    );
+  return Number(linkRow?.n ?? 0);
 }
 
 export async function maybeEnqueueWeeklyReport(
