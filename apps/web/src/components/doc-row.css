@@ -56,7 +56,8 @@ button.doc-row {
   margin-bottom: 6px;
 }
 .doc-digesting,
-.doc-failed {
+.doc-failed,
+.doc-proposed {
   font-family: var(--sans);
   font-size: 12px;
   font-weight: 400;

@@ -41,10 +41,12 @@ node "$SKILL_DIR/scripts/inwit.mjs" call GET /api/auth/me
 | 实体 | 做什么 |
 |---|---|
 | Document | 输入：笔记、导入、问答、截图、周报 |
-| Card | 消化结果：原子知识 + 题目，进 SM-2 队列 |
+| Card | 消化结果：原子知识 + 题目。文章消化的卡片要在应用里确认后才进入复习 |
 | Topic | 一门课的方向，不是文件夹 |
 | Map node | 主题下的概念大纲 |
 | Job | 异步：digest / chat / extract / ocr / topic / evolve / weekly_report |
+
+文章消化的卡片要在应用里确认后才进入复习；本 skill 可以调用确认接口，但不要把未确认卡当成已经在队列里。
 
 文档长期 `pending` 时先看 jobs 模块里的 `GET /api/jobs/queue`，不要重发同样内容。
 

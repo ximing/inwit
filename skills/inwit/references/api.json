@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-20T05:12:01.638Z",
+  "generatedAt": "2026-09-24T08:06:29.100Z",
   "modules": [
     {
       "id": "open",
@@ -9,12 +9,12 @@
     {
       "id": "documents",
       "title": "文档与问答",
-      "count": 21
+      "count": 22
     },
     {
       "id": "cards",
       "title": "卡片",
-      "count": 13
+      "count": 15
     },
     {
       "id": "review",
@@ -1166,6 +1166,31 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/cards/:id/accept",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
       "method": "GET",
       "path": "/api/cards/:id/image",
       "module": "cards",
@@ -1283,6 +1308,46 @@
           "additionalProperties": false
         },
         "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/cards/:id/reject",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "rejectCardInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "optional": true,
+              "refined": true
+            }
+          },
+          "additionalProperties": false
+        }
       }
     },
     {
@@ -1644,6 +1709,31 @@
     {
       "method": "GET",
       "path": "/api/documents/:id/annotations",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/:id/cards/accept-proposed",
       "module": "documents",
       "auth": "bearer",
       "status": [],

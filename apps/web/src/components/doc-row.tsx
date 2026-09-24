@@ -38,6 +38,7 @@ export function DocRow({
 }) {
   const agentLabel = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   const face = docCardFace(doc, 160);
+  const hasChip = doc.status === 'pending' || doc.status === 'failed' || doc.proposedCount > 0;
   const status = (
     <>
       {doc.status === 'pending' ? (
@@ -46,6 +47,9 @@ export function DocRow({
         </span>
       ) : null}
       {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
+      {doc.proposedCount > 0 ? (
+        <span className="doc-proposed">待确认 {doc.proposedCount}</span>
+      ) : null}
     </>
   );
   const body = (
@@ -55,7 +59,7 @@ export function DocRow({
           {face.title}
           {status}
         </h2>
-      ) : doc.status === 'pending' || doc.status === 'failed' ? (
+      ) : hasChip ? (
         <h2 className="doc-row-chips">{status}</h2>
       ) : null}
       {face.preview ? (

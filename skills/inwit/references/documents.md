@@ -2,7 +2,7 @@
 
 # 文档与问答
 
-Generated 2026-09-20T05:12:01.638Z. 21 endpoints.
+Generated 2026-09-24T08:06:29.100Z. 22 endpoints.
 
 ### POST `/api/chat`
 
@@ -227,6 +227,27 @@ auth=bearer
 ```
 
 ### GET `/api/documents/:id/annotations`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/documents/:id/cards/accept-proposed`
 
 auth=bearer
 

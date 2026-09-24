@@ -2,15 +2,15 @@
 
 # API 模块索引
 
-Generated 2026-09-20T05:12:01.638Z.
+Generated 2026-09-24T08:06:29.100Z.
 
 按意图只读其中一个文件。不要一次打开多个模块，也不要读 `api.json`。
 
 | 模块 | 文件 | 条数 |
 |---|---|---|
 | 开放文档（PAT） | [open.md](./open.md) | 2 |
-| 文档与问答 | [documents.md](./documents.md) | 21 |
-| 卡片 | [cards.md](./cards.md) | 13 |
+| 文档与问答 | [documents.md](./documents.md) | 22 |
+| 卡片 | [cards.md](./cards.md) | 15 |
 | 复习 | [review.md](./review.md) | 8 |
 | 主题与知识地图 | [topics.md](./topics.md) | 19 |
 | 搜索 | [search.md](./search.md) | 1 |

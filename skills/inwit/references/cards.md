@@ -2,7 +2,7 @@
 
 # 卡片
 
-Generated 2026-09-20T05:12:01.638Z. 13 endpoints.
+Generated 2026-09-24T08:06:29.100Z. 15 endpoints.
 
 ### DELETE `/api/card-links/:id`
 
@@ -220,6 +220,27 @@ auth=bearer
 }
 ```
 
+### POST `/api/cards/:id/accept`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
 ### GET `/api/cards/:id/image`
 
 auth=bearer
@@ -318,6 +339,42 @@ auth=bearer · 204
   "required": [
     "id"
   ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/cards/:id/reject`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `rejectCardInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "optional": true,
+      "refined": true
+    }
+  },
   "additionalProperties": false
 }
 ```

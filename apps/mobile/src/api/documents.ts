@@ -1,4 +1,5 @@
 import type {
+  AcceptProposedResult,
   CreateChatInput,
   CreateDocumentInput,
   CreateSelectionCardsInput,
@@ -101,6 +102,12 @@ export function createChat(input: CreateChatInput): Promise<Document> {
 
 export function getDocument(id: string): Promise<DocumentDetail> {
   return request<DocumentDetail>(`/api/documents/${id}`);
+}
+
+export function acceptProposedCards(id: string): Promise<AcceptProposedResult> {
+  return request<AcceptProposedResult>(`/api/documents/${id}/cards/accept-proposed`, {
+    method: 'POST',
+  });
 }
 
 export function enqueueSelectionCards(

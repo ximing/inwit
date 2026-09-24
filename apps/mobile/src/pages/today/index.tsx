@@ -327,6 +327,9 @@ const TodayContent = observer(function TodayContent() {
                       </Text>
                     </View>
                   ) : null}
+                  {doc.proposedCount > 0 ? (
+                    <Text style={styles.digesting}>待确认 {doc.proposedCount}</Text>
+                  ) : null}
                   {doc.status === 'pending' ? (
                     <Text style={styles.digesting}>消化中</Text>
                   ) : doc.status === 'failed' ? (

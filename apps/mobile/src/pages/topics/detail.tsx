@@ -374,6 +374,9 @@ const DocCard = observer(function DocCard({
         <Text style={styles.docBlank}>{BLANK_DOCUMENT_LABEL}</Text>
       ) : null}
       <View style={styles.docMeta}>
+        {doc.proposedCount > 0 ? (
+          <Text style={styles.gold}>待确认 {doc.proposedCount}</Text>
+        ) : null}
         {pending ? <Text style={styles.gold}>消化中</Text> : null}
         {doc.status === 'failed' ? <Text style={styles.failed}>失败</Text> : null}
         {agent ? <Text style={styles.aiTag}>{agent}</Text> : null}
@@ -401,6 +404,7 @@ const MapTab = observer(function MapTab({
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const rows = flattenMapTree(service.tree, service.collapsedIds);
+  const fillWaiting = !service.fillingNodeId && service.fillWaiting;
   const fillDisabled = archived || service.jobRunning || !service.fillTarget;
   const organizeDisabled = archived || service.jobRunning;
 
@@ -425,10 +429,10 @@ const MapTab = observer(function MapTab({
         <Pressable
           disabled={fillDisabled}
           onPress={() => void service.fill()}
-          style={[styles.ghostBtn, fillDisabled && styles.dim]}
+          style={[styles.ghostBtn, fillDisabled && !fillWaiting && styles.dim]}
         >
-          <Text style={styles.ghostText}>
-            {service.fillingNodeId ? '补充中…' : '补充'}
+          <Text style={[styles.ghostText, fillWaiting && styles.waitingText]}>
+            {service.fillingNodeId ? '补充中…' : fillWaiting ? '有待确认的卡' : '补充'}
           </Text>
         </Pressable>
         <Text style={styles.covText}>
@@ -507,8 +511,10 @@ const NodeSheet = observer(function NodeSheet({ onOpenDoc }: { onOpenDoc: (id: s
   const detail = service.nodeDetail;
   const loading = service.$model.openNode.loading && service.selectedNodeId !== null;
   const uncovered = detail?.node.status === 'uncovered';
+  const waiting = Boolean(uncovered && detail && detail.node.proposedCount > 0);
   const filling = detail ? service.fillingNodeId === detail.node.id : false;
   const archived = service.topic?.status === 'archived';
+  const fillLocked = archived || service.jobRunning || waiting;
 
   return (
     <BottomSheet
@@ -522,11 +528,13 @@ const NodeSheet = observer(function NodeSheet({ onOpenDoc }: { onOpenDoc: (id: s
           {detail.node.note ? <Text style={styles.goal}>{detail.node.note}</Text> : null}
           {uncovered ? (
             <Pressable
-              disabled={archived || service.jobRunning}
+              disabled={fillLocked}
               onPress={() => void service.fill(detail.node.id)}
-              style={[styles.ghostBtn, (archived || service.jobRunning) && styles.dim]}
+              style={[styles.ghostBtn, fillLocked && !waiting && styles.dim]}
             >
-              <Text style={styles.ghostText}>{filling ? '补充中…' : '让 AI 补'}</Text>
+              <Text style={[styles.ghostText, waiting && styles.waitingText]}>
+                {waiting ? '有待确认的卡' : filling ? '补充中…' : '让 AI 补'}
+              </Text>
             </Pressable>
           ) : null}
 
@@ -694,6 +702,7 @@ function makeStyles(theme: ThemeTokens) {
       backgroundColor: theme.colors.surface,
     },
     ghostText: { color: theme.colors.ink2, fontSize: 13, fontWeight: '500' },
+    waitingText: { color: theme.colors.ink4 },
     primaryBtn: {
       backgroundColor: theme.colors.accent,
       borderRadius: theme.radius.sm,

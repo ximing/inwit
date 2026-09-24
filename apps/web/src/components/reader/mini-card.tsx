@@ -39,11 +39,24 @@ export function cardNextReviewLabel(card: DocumentCard): string {
   return formatNextReview(card.review.dueAt);
 }
 
+/** Proposed first, then the rest. Rejected cards are not drawn. */
+export function cardsForRail(cards: readonly DocumentCard[]): DocumentCard[] {
+  const proposed: DocumentCard[] = [];
+  const rest: DocumentCard[] = [];
+  for (const card of cards) {
+    if (card.acceptance === 'rejected') continue;
+    if (card.acceptance === 'proposed') proposed.push(card);
+    else rest.push(card);
+  }
+  return [...proposed, ...rest];
+}
+
 export function MiniCard({
   card,
   open,
   active,
   lost,
+  digesting = false,
   onClick,
   thumb,
 }: {
@@ -51,11 +64,14 @@ export function MiniCard({
   open: boolean;
   active: boolean;
   lost?: boolean;
+  /** Document is not digested yet, so a proposed card cannot be confirmed. */
+  digesting?: boolean;
   onClick: () => void;
   thumb?: ReactNode;
 }) {
   const question = card.questions[0]?.question ?? card.concept;
   const answer = card.questions[0]?.answer ?? card.example;
+  const proposed = card.acceptance === 'proposed';
   return (
     <button
       type="button"
@@ -72,10 +88,16 @@ export function MiniCard({
       ) : null}
       {open && answer ? <div className="mini-a">{answer}</div> : null}
       <div className="mini-foot">
-        <MasteryDots level={cardMasteryLevel(card)} />
-        <span>{cardNextReviewLabel(card)}</span>
+        {proposed ? (
+          <span className="mini-badge">{digesting ? '消化中，还不能确认' : '待确认'}</span>
+        ) : (
+          <>
+            <MasteryDots level={cardMasteryLevel(card)} />
+            <span>{cardNextReviewLabel(card)}</span>
+            {card.review?.suspendedAt != null ? <span className="hand-tag">已熟悉</span> : null}
+          </>
+        )}
         {card.source === 'manual' ? <span className="hand-tag">手写</span> : null}
-        {card.review?.suspendedAt != null ? <span className="hand-tag">已熟悉</span> : null}
         {lost ? <span className="anchor-lost">原文已删除</span> : null}
       </div>
     </button>

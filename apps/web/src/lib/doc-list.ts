@@ -41,7 +41,8 @@ export function mergeDetail(item: DocumentListItem, detail: DocumentDetail): Doc
     fileMime: detail.fileMime,
     pageCount: detail.pageCount,
     updatedAt: detail.updatedAt,
-    cardCount: detail.cards.length,
+    cardCount: detail.cards.filter((card) => card.acceptance === 'accepted').length,
+    proposedCount: detail.cards.filter((card) => card.acceptance === 'proposed').length,
     topicTitle: detail.topicTitle ?? item.topicTitle,
   };
 }
