@@ -26,6 +26,7 @@ import {
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
 import { readDocumentAnnotationsTool } from './annotation-tools.js';
+import { memoryLoadTools } from './memory-tools.js';
 import { resolveQuoteAnchor } from './card-anchor-logic.js';
 import { SPLIT_LINK_REASON, SPLIT_LINK_TYPE, SPLIT_MAX_CHILDREN } from './evolve-logic.js';
 import { asToolError } from './tools.js';
@@ -563,6 +564,7 @@ export function evolveLinkCardsTool(
 
 export function evolveTools(session: EvolveSession): AgentTool[] {
   return [
+    ...memoryLoadTools(session),
     readCardTool(session),
     readDocumentAnnotationsTool(session),
     evolveWriteQuestionsTool(session),

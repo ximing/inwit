@@ -66,6 +66,7 @@ export async function processChat(job: JobRow): Promise<void> {
     systemPrompt: CHAT_SYSTEM_PROMPT,
     userPrompt: chatUserPrompt({ documentId, question }),
     tools: chatTools(session),
+    maxTurns: 32,
     context: { documentId },
     verify: async ({ agent, executionId }) => {
       const answerText = extractAssistantText(agent.state.messages);

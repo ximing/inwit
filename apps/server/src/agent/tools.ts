@@ -14,6 +14,7 @@ import { deleteCardFromIndex, indexCard, searchCards } from '../retrieval/pipeli
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
 import { readDocumentAnnotationsTool, searchAnnotationsTool } from './annotation-tools.js';
+import { memoryLoadTools } from './memory-tools.js';
 import { numberedBlocksFromDoc, resolveQuoteAnchor } from './card-anchor-logic.js';
 import { persistDocumentMeta } from './doc-meta.js';
 import { isUserOwnedTitle } from './doc-meta-logic.js';
@@ -620,6 +621,7 @@ export function setDocumentMetaTool(session: DigestSession): AgentTool<typeof se
 
 export function digestTools(session: DigestSession): AgentTool[] {
   return [
+    ...memoryLoadTools(session),
     readDocumentTool(session),
     readDocumentAnnotationsTool(session),
     writeCardsTool(session),
@@ -651,6 +653,7 @@ export function chatWriteCardsTool(session: DigestSession): AgentTool<typeof cha
 
 export function chatTools(session: DigestSession): AgentTool[] {
   return [
+    ...memoryLoadTools(session),
     searchCardsTool(session),
     searchAnnotationsTool(session),
     chatWriteCardsTool(session),

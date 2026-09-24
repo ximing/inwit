@@ -95,6 +95,7 @@ export async function processEvolve(job: JobRow): Promise<void> {
     systemPrompt: EVOLVE_SYSTEM_PROMPT,
     userPrompt: evolveUserPrompt({ cardId, reason }),
     tools: evolveTools(session),
+    maxTurns: 32,
     context: card.documentId ? { documentId: card.documentId } : undefined,
     verify: async () => {
       await assertEvolveOutcome({
