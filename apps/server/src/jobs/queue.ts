@@ -7,7 +7,7 @@ import { markDocumentFailed, pipelineDocumentId } from '../documents/document-st
 import { logger } from '../utils/logger.js';
 import { heartbeatJob } from './heartbeat.js';
 import { processJob } from './processors.js';
-import { backoffMs, failureDisposition, RescheduleJobError } from './queue-logic.js';
+import { backoffMs, failureDisposition, rescheduleAttempts, RescheduleJobError } from './queue-logic.js';
 
 export { heartbeatJob };
 export { enqueueJob, type EnqueueJobInput, type JobWriter } from './enqueue.js';
@@ -114,6 +114,7 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
   const disposition = failureDisposition(err, attempts, config.JOB_MAX_ATTEMPTS);
   if (disposition === 'terminal') {
     await markFailedTerminal(job, message, now);
+    await planOrganizeAfterRelease(job);
     return;
   }
   if (disposition === 'exhausted') {
@@ -128,6 +129,7 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
       .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
     logger.warn('job.failed', { jobId: job.id, type: job.type, attempts, lastError: message });
     await settleDocumentFailure(job, message);
+    await planOrganizeAfterRelease(job);
     return;
   }
   const wait = backoffMs(attempts, BACKOFF_MS);
@@ -144,11 +146,22 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
 }
 
 async function rescheduleJob(job: JobRow, runAt: Date, now: Date): Promise<void> {
+  const attempts = rescheduleAttempts(job.attempts);
   await getDb()
     .update(jobs)
-    .set({ status: 'pending', runAt, updatedAt: now })
+    .set({ status: 'pending', runAt, attempts, updatedAt: now })
     .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
-  logger.info('job.rescheduled', { jobId: job.id, type: job.type, runAt: runAt.toISOString() });
+  logger.info('job.rescheduled', {
+    jobId: job.id,
+    type: job.type,
+    runAt: runAt.toISOString(),
+    attempts,
+  });
+}
+
+async function planOrganizeAfterRelease(job: JobRow): Promise<void> {
+  if (job.type !== 'memory_organize') return;
+  await scheduleMemoryOrganizeSafely(job.userId);
 }
 
 async function processOne(job: JobRow): Promise<void> {

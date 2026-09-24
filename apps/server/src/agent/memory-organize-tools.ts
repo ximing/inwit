@@ -69,7 +69,7 @@ export function memoryOrganizeTools(session: OrganizeSession): AgentTool[] {
     name: 'list_memory_collections',
     label: '列出记忆集合',
     description:
-      '列出该用户的记忆集合，含已停用。每条只有 id、title、description、status、entryCount，没有条目正文。整理前先调用。',
+      '列出该用户的记忆集合，含已停用。每条只有 id、title、description、status、entryCount，没有条目正文。entryCount 只数启用中的条目。整理前先调用。',
     parameters: listMemoryCollectionsSchema,
     execute: async () => {
       const db = getDb();
@@ -86,7 +86,7 @@ export function memoryOrganizeTools(session: OrganizeSession): AgentTool[] {
       const counts = await db
         .select({ collectionId: memoryEntries.collectionId, n: count() })
         .from(memoryEntries)
-        .where(eq(memoryEntries.userId, session.userId))
+        .where(and(eq(memoryEntries.userId, session.userId), eq(memoryEntries.status, 'active')))
         .groupBy(memoryEntries.collectionId);
       const byCollection = new Map(counts.map((row) => [row.collectionId, Number(row.n)]));
       const collections = rows.map((row) => ({
@@ -104,7 +104,7 @@ export function memoryOrganizeTools(session: OrganizeSession): AgentTool[] {
     name: 'read_memory_entries',
     label: '读取记忆条目',
     description:
-      '分页读取一个集合的条目，每页最多 20 条，按创建时间从早到晚。offset 默认 0。返回 id、body、status。按 entryCount 翻页，不要一次要完全部。',
+      '分页读取一个集合里启用中的条目，每页最多 20 条，按创建时间从早到晚。不返回已停用条目，所以 offset 能翻到每一条启用中的条目。offset 默认 0。返回 id、body、status。按 entryCount 翻页，不要一次要完全部。',
     parameters: readMemoryEntriesSchema,
     execute: async (_id, params) => {
       const db = getDb();
@@ -115,10 +115,12 @@ export function memoryOrganizeTools(session: OrganizeSession): AgentTool[] {
         .limit(1);
       if (!collection) throw new Error('集合不存在');
       const offset = params.offset ?? 0;
-      const [total] = await db
-        .select({ n: count() })
-        .from(memoryEntries)
-        .where(and(eq(memoryEntries.userId, session.userId), eq(memoryEntries.collectionId, params.collectionId)));
+      const activeEntries = and(
+        eq(memoryEntries.userId, session.userId),
+        eq(memoryEntries.collectionId, params.collectionId),
+        eq(memoryEntries.status, 'active'),
+      );
+      const [total] = await db.select({ n: count() }).from(memoryEntries).where(activeEntries);
       const rows = await db
         .select({
           id: memoryEntries.id,
@@ -126,7 +128,7 @@ export function memoryOrganizeTools(session: OrganizeSession): AgentTool[] {
           status: memoryEntries.status,
         })
         .from(memoryEntries)
-        .where(and(eq(memoryEntries.userId, session.userId), eq(memoryEntries.collectionId, params.collectionId)))
+        .where(activeEntries)
         .orderBy(asc(memoryEntries.createdAt), asc(memoryEntries.id))
         .limit(MEMORY_ENTRY_PAGE_SIZE)
         .offset(offset);
@@ -195,8 +197,8 @@ export function memoryOrganizeTools(session: OrganizeSession): AgentTool[] {
         const payload = {
           ok: true,
           duplicate: false,
-          revisionId: result.revisionId,
           indexed: result.indexed,
+          ...(result.revisionId !== null ? { revisionId: result.revisionId } : { dropped: true }),
         };
         return toolResult(JSON.stringify(payload), payload);
       } catch (err) {

@@ -14,10 +14,20 @@ export type MemoryOrganizePending = {
   trigger: MemoryOrganizeTrigger;
 };
 
+export type MemoryOrganizeReason =
+  | 'none'
+  | 'running'
+  | 'daily_cap'
+  | 'count'
+  | 'pending'
+  | 'slot'
+  | 'earlier'
+  | 'later';
+
 export type MemoryOrganizePlan =
-  | { action: 'skip' }
-  | { action: 'enqueue'; runAt: Date; trigger: MemoryOrganizeTrigger }
-  | { action: 'postpone'; runAt: Date; trigger: MemoryOrganizeTrigger };
+  | { action: 'skip'; reason: MemoryOrganizeReason }
+  | { action: 'enqueue'; runAt: Date; trigger: MemoryOrganizeTrigger; reason: MemoryOrganizeReason }
+  | { action: 'postpone'; runAt: Date; trigger: MemoryOrganizeTrigger; reason: MemoryOrganizeReason };
 
 function nextOrganizeSlot(now: Date): Date {
   const start = startOfLocalDay(now);
@@ -38,12 +48,14 @@ function schedule(
   runAt: Date,
   trigger: MemoryOrganizeTrigger,
   bound: 'pull-earlier' | 'push-later',
+  reason: MemoryOrganizeReason,
 ): MemoryOrganizePlan {
-  if (pending === null) return { action: 'enqueue', runAt, trigger };
+  if (pending === null) return { action: 'enqueue', runAt, trigger, reason };
   const pendingAt = pending.runAt.getTime();
   const target = runAt.getTime();
   const move = bound === 'pull-earlier' ? pendingAt > target : pendingAt < target;
-  return move ? { action: 'postpone', runAt, trigger } : { action: 'skip' };
+  if (!move) return { action: 'skip', reason: bound === 'pull-earlier' ? 'earlier' : 'later' };
+  return { action: 'postpone', runAt, trigger, reason };
 }
 
 export function planMemoryOrganize(input: {
@@ -53,20 +65,20 @@ export function planMemoryOrganize(input: {
   running: boolean;
   pending: MemoryOrganizePending | null;
 }): MemoryOrganizePlan {
-  if (input.unconsumed <= 0) return { action: 'skip' };
-  if (input.running) return { action: 'skip' };
+  if (input.unconsumed <= 0) return { action: 'skip', reason: 'none' };
+  if (input.running) return { action: 'skip', reason: 'running' };
 
   if (input.revisionsToday >= ORGANIZE_DAILY_CAP) {
-    return schedule(input.pending, nextLocalMidnight(input.now), 'slot', 'push-later');
+    return schedule(input.pending, nextLocalMidnight(input.now), 'slot', 'push-later', 'daily_cap');
   }
 
   if (input.unconsumed >= ORGANIZE_COUNT_THRESHOLD) {
     const runAt = new Date(input.now.getTime() + ORGANIZE_DEBOUNCE_MS);
-    return schedule(input.pending, runAt, 'count', 'pull-earlier');
+    return schedule(input.pending, runAt, 'count', 'pull-earlier', 'count');
   }
 
-  if (input.pending !== null) return { action: 'skip' };
-  return { action: 'enqueue', runAt: nextOrganizeSlot(input.now), trigger: 'slot' };
+  if (input.pending !== null) return { action: 'skip', reason: 'pending' };
+  return { action: 'enqueue', runAt: nextOrganizeSlot(input.now), trigger: 'slot', reason: 'slot' };
 }
 
 const UUID_RE =

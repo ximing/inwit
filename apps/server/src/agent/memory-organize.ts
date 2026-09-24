@@ -24,7 +24,7 @@ const ORGANIZE_SYSTEM_PROMPT = `你是 Inwit 的记忆整理 Agent。你把用�
 
 工作顺序：
 1. list_memory_collections。返回里没有条目正文。
-2. 要改某一条时，用 read_memory_entries 按集合分页读，每页 20 条。
+2. 要改某一条时，用 read_memory_entries 按集合分页读启用中的条目，每页 20 条。已停用的条目不会出现在分页里。
 3. read_card_feedback 读取这一批已经锁定的反馈。
 4. 成功调用一次 apply_memory_revision。
 

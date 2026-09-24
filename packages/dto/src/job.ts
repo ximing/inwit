@@ -207,13 +207,6 @@ export const memoryOrganizeJobPayloadSchema = z.object({
 });
 export type MemoryOrganizeJobPayload = z.infer<typeof memoryOrganizeJobPayloadSchema>;
 
-export function memoryOrganizeJobPayloadFrom(
-  payload: JobPayload,
-): MemoryOrganizeJobPayload | undefined {
-  const parsed = memoryOrganizeJobPayloadSchema.safeParse(payload);
-  return parsed.success ? parsed.data : undefined;
-}
-
 const emptyToUndef = (value: unknown) => (value === '' || value === undefined ? undefined : value);
 
 export const listJobsQuerySchema = paginationQuerySchema.extend({

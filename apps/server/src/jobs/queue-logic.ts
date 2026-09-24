@@ -29,3 +29,8 @@ export function failureDisposition(
 export function backoffMs(attempts: number, steps: readonly number[]): number {
   return steps[Math.min(Math.max(attempts - 1, 0), steps.length - 1)] ?? 32_000;
 }
+
+/** Claim increments attempts. A deferral gives that increment back. */
+export function rescheduleAttempts(attempts: number): number {
+  return Math.max(0, attempts - 1);
+}

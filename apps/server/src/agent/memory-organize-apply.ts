@@ -64,7 +64,7 @@ type ColState = {
 
 export type ApplyMemoryRevisionResult =
   | { duplicate: true }
-  | { duplicate: false; indexed: 'ok' | 'partial'; revisionId: string };
+  | { duplicate: false; indexed: 'ok' | 'partial'; revisionId: string | null };
 
 function collectionIdOf(target: NormalizedEntryTarget, createdAtIndex: ReadonlyMap<number, string>): string {
   if (target.kind === 'collection') return target.id;
@@ -79,9 +79,18 @@ async function writeRevision(
   batchKey: string,
   batchFeedbackIds: readonly string[],
   revision: NormalizedMemoryRevision,
-): Promise<{ revisionId: string; indexRows: DirtyMemoryIndexRow[] }> {
+): Promise<{ revisionId: string | null; indexRows: DirtyMemoryIndexRow[] }> {
   return getDb().transaction(async (tx) => {
     const now = new Date();
+    const found = await tx
+      .select({ id: cardFeedback.id })
+      .from(cardFeedback)
+      .where(and(eq(cardFeedback.userId, userId), inArray(cardFeedback.id, [...batchFeedbackIds])))
+      .for('update');
+    const foundIds = new Set(found.map((row) => row.id));
+    const liveIds = batchFeedbackIds.filter((id) => foundIds.has(id));
+    if (liveIds.length === 0) return { revisionId: null, indexRows: [] };
+
     const loaded = await tx
       .select()
       .from(memoryCollections)
@@ -202,6 +211,7 @@ async function writeRevision(
           description: op.description,
           status: 'active',
           indexDirty: true,
+          updatedAt: now,
         })
         .returning({ id: memoryCollections.id, updatedAt: memoryCollections.updatedAt });
       if (!inserted) reject('修订没有写入');
@@ -341,6 +351,7 @@ async function writeRevision(
             body: op.body,
             status: 'active',
             indexDirty: true,
+            updatedAt: now,
           })
           .returning({ id: memoryEntries.id, updatedAt: memoryEntries.updatedAt });
         if (!inserted) reject('修订没有写入');
@@ -468,7 +479,7 @@ async function writeRevision(
     const diff: MemoryRevision['diff'] = {
       collections: diffCollections,
       entries: diffEntries,
-      feedbackCount: batchFeedbackIds.length,
+      feedbackCount: liveIds.length,
     };
     const [created] = await tx
       .insert(memoryRevisions)
@@ -479,7 +490,7 @@ async function writeRevision(
         batchKey,
         summary: revision.summary,
         diff,
-        feedbackIds: [...batchFeedbackIds],
+        feedbackIds: [...liveIds],
       })
       .returning({ id: memoryRevisions.id });
     if (!created) reject('修订没有写入');
@@ -490,12 +501,12 @@ async function writeRevision(
       .where(
         and(
           eq(cardFeedback.userId, userId),
-          inArray(cardFeedback.id, [...batchFeedbackIds]),
+          inArray(cardFeedback.id, [...liveIds]),
           isNull(cardFeedback.consumedAt),
         ),
       )
       .returning({ id: cardFeedback.id });
-    if (consumed.length !== batchFeedbackIds.length) reject('这批反馈已变化，不能写入修订');
+    if (consumed.length !== liveIds.length) reject('这批反馈已变化，不能写入修订');
 
     return { revisionId: created.id, indexRows: [...indexRows.values()] };
   });
@@ -519,6 +530,9 @@ export async function applyMemoryRevision(input: {
       input.batchFeedbackIds,
       normalized.value,
     );
+    if (committed.revisionId === null) {
+      return { duplicate: false, indexed: 'ok', revisionId: null };
+    }
     try {
       const indexed = await indexDirtyMemoryRows(committed.indexRows);
       return { duplicate: false, indexed, revisionId: committed.revisionId };

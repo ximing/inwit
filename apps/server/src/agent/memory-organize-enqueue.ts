@@ -10,8 +10,6 @@ import { logger } from '../utils/logger.js';
 import {
   dispatchMemoryOrganizePlan,
   memoryOrganizeTrigger,
-  ORGANIZE_COUNT_THRESHOLD,
-  ORGANIZE_DAILY_CAP,
   planMemoryOrganize,
   type MemoryOrganizePending,
   type MemoryOrganizePlan,
@@ -25,15 +23,6 @@ interface OrganizeState {
   revisionsToday: number;
   running: boolean;
   pending: PendingJob | null;
-}
-
-function planReason(state: OrganizeState): string {
-  if (state.unconsumed <= 0) return 'none';
-  if (state.running) return 'running';
-  if (state.revisionsToday >= ORGANIZE_DAILY_CAP) return 'daily_cap';
-  if (state.unconsumed >= ORGANIZE_COUNT_THRESHOLD) return 'count';
-  if (state.pending) return 'pending';
-  return 'slot';
 }
 
 async function loadState(userId: string, now: Date): Promise<OrganizeState> {
@@ -122,7 +111,7 @@ export async function scheduleMemoryOrganize(userId: string, now = new Date()): 
   logger.info('memory.organize.plan', {
     userId,
     action,
-    reason: action === 'skip' && plan.action === 'enqueue' ? 'disabled' : planReason(state),
+    reason: action === 'skip' && plan.action === 'enqueue' ? 'disabled' : plan.reason,
     unconsumed: state.unconsumed,
   });
   if (action === 'skip' || plan.action === 'skip') return;

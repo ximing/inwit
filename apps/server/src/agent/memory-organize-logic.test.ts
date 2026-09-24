@@ -51,7 +51,7 @@ describe('planMemoryOrganize', () => {
   const now = at(24, 10, 15, 30);
 
   it('skips when nothing is unconsumed', () => {
-    expect(plan({ unconsumed: 0, now })).toEqual({ action: 'skip' });
+    expect(plan({ unconsumed: 0, now })).toEqual({ action: 'skip', reason: 'none' });
     expect(
       plan({
         unconsumed: 0,
@@ -59,7 +59,7 @@ describe('planMemoryOrganize', () => {
         revisionsToday: 8,
         pending: { runAt: at(24, 12), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'none' });
   });
 
   it('skips while a job is already running', () => {
@@ -70,7 +70,7 @@ describe('planMemoryOrganize', () => {
         running: true,
         pending: { runAt: at(24, 18), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'running' });
   });
 
   it('enqueues a count trigger ten minutes out once unconsumed reaches 12', () => {
@@ -78,6 +78,7 @@ describe('planMemoryOrganize', () => {
       action: 'enqueue',
       runAt: new Date(now.getTime() + ORGANIZE_DEBOUNCE_MS),
       trigger: 'count',
+      reason: 'count',
     });
     expect(plan({ unconsumed: 40, now }).action).toBe('enqueue');
   });
@@ -90,21 +91,21 @@ describe('planMemoryOrganize', () => {
         now,
         pending: { runAt: at(24, 18), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'postpone', runAt, trigger: 'count' });
+    ).toEqual({ action: 'postpone', runAt, trigger: 'count', reason: 'count' });
     expect(
       plan({
         unconsumed: 15,
         now,
         pending: { runAt: at(24, 10, 20), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'earlier' });
     expect(
       plan({
         unconsumed: 12,
         now,
         pending: { runAt, trigger: 'count' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'earlier' });
   });
 
   it('enqueues the next local slot when the tail is under 12', () => {
@@ -112,31 +113,37 @@ describe('planMemoryOrganize', () => {
       action: 'enqueue',
       runAt: at(24, 6),
       trigger: 'slot',
+      reason: 'slot',
     });
     expect(plan({ unconsumed: 11, now: at(24, 6, 0, 0) })).toEqual({
       action: 'enqueue',
       runAt: at(24, 12),
       trigger: 'slot',
+      reason: 'slot',
     });
     expect(plan({ unconsumed: 3, now: at(24, 6, 0, 0, 1) })).toEqual({
       action: 'enqueue',
       runAt: at(24, 12),
       trigger: 'slot',
+      reason: 'slot',
     });
     expect(plan({ unconsumed: 11, now: at(24, 17, 59, 59, 999) })).toEqual({
       action: 'enqueue',
       runAt: at(24, 18),
       trigger: 'slot',
+      reason: 'slot',
     });
     expect(plan({ unconsumed: 4, now: at(24, 18, 0, 0) })).toEqual({
       action: 'enqueue',
       runAt: at(25, 0),
       trigger: 'slot',
+      reason: 'slot',
     });
     expect(plan({ unconsumed: 4, now: at(24, 21, 30) })).toEqual({
       action: 'enqueue',
       runAt: at(25, 0),
       trigger: 'slot',
+      reason: 'slot',
     });
   });
 
@@ -147,28 +154,28 @@ describe('planMemoryOrganize', () => {
         now,
         pending: { runAt: new Date(now.getTime() + ORGANIZE_DEBOUNCE_MS), trigger: 'count' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'pending' });
     expect(
       plan({
         unconsumed: 2,
         now,
         pending: { runAt: at(24, 18), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'pending' });
     expect(
       plan({
         unconsumed: 2,
         now,
         pending: { runAt: at(24, 12), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'pending' });
     expect(
       plan({
         unconsumed: 2,
         now,
         pending: { runAt: at(24, 6), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'pending' });
   });
 
   it('schedules the next local midnight once the daily revision cap is hit, and does not pull a later pending earlier', () => {
@@ -176,11 +183,13 @@ describe('planMemoryOrganize', () => {
       action: 'enqueue',
       runAt: at(25, 0),
       trigger: 'slot',
+      reason: 'daily_cap',
     });
     expect(plan({ unconsumed: 3, now: at(24, 10), revisionsToday: 9 })).toEqual({
       action: 'enqueue',
       runAt: at(25, 0),
       trigger: 'slot',
+      reason: 'daily_cap',
     });
     expect(
       plan({
@@ -189,7 +198,7 @@ describe('planMemoryOrganize', () => {
         revisionsToday: 8,
         pending: { runAt: new Date(now.getTime() + ORGANIZE_DEBOUNCE_MS), trigger: 'count' },
       }),
-    ).toEqual({ action: 'postpone', runAt: at(25, 0), trigger: 'slot' });
+    ).toEqual({ action: 'postpone', runAt: at(25, 0), trigger: 'slot', reason: 'daily_cap' });
     expect(
       plan({
         unconsumed: 12,
@@ -197,7 +206,7 @@ describe('planMemoryOrganize', () => {
         revisionsToday: 8,
         pending: { runAt: at(25, 0), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'later' });
     expect(
       plan({
         unconsumed: 4,
@@ -205,7 +214,7 @@ describe('planMemoryOrganize', () => {
         revisionsToday: 8,
         pending: { runAt: at(25, 18), trigger: 'slot' },
       }),
-    ).toEqual({ action: 'skip' });
+    ).toEqual({ action: 'skip', reason: 'later' });
   });
 });
 
@@ -241,9 +250,9 @@ describe('memory organize payload helpers', () => {
     expect(memoryOrganizeTrigger({ trigger: 'count' })).toBe('count');
     expect(memoryOrganizeTrigger({ trigger: 'later' })).toBeUndefined();
     expect(memoryBodyPreview('🙂'.repeat(81))).toBe('🙂'.repeat(80));
-    expect(dispatchMemoryOrganizePlan(false, { action: 'enqueue', runAt: at(24, 12), trigger: 'slot' })).toBe('skip');
-    expect(dispatchMemoryOrganizePlan(false, { action: 'postpone', runAt: at(24, 12), trigger: 'slot' })).toBe('postpone');
-    expect(dispatchMemoryOrganizePlan(true, { action: 'enqueue', runAt: at(24, 12), trigger: 'count' })).toBe('enqueue');
+    expect(dispatchMemoryOrganizePlan(false, { action: 'enqueue', runAt: at(24, 12), trigger: 'slot', reason: 'slot' })).toBe('skip');
+    expect(dispatchMemoryOrganizePlan(false, { action: 'postpone', runAt: at(24, 12), trigger: 'slot', reason: 'slot' })).toBe('postpone');
+    expect(dispatchMemoryOrganizePlan(true, { action: 'enqueue', runAt: at(24, 12), trigger: 'count', reason: 'count' })).toBe('enqueue');
   });
 });
 

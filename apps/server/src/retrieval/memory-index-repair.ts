@@ -38,9 +38,9 @@ export interface DirtyMemoryEntry {
 export type DirtyMemoryIndexRow = DirtyMemoryCollection | DirtyMemoryEntry;
 
 /** Match updatedAt so a newer write that landed while we embedded stays dirty. */
-async function clearDirty(row: DirtyMemoryIndexRow): Promise<void> {
+async function clearDirty(row: DirtyMemoryIndexRow): Promise<boolean> {
   if (row.kind === 'collection') {
-    await getDb()
+    const cleared = await getDb()
       .update(memoryCollections)
       .set({ indexDirty: false })
       .where(
@@ -49,10 +49,11 @@ async function clearDirty(row: DirtyMemoryIndexRow): Promise<void> {
           eq(memoryCollections.updatedAt, row.updatedAt),
           eq(memoryCollections.indexDirty, true),
         ),
-      );
-    return;
+      )
+      .returning({ id: memoryCollections.id });
+    return cleared.length > 0;
   }
-  await getDb()
+  const cleared = await getDb()
     .update(memoryEntries)
     .set({ indexDirty: false })
     .where(
@@ -61,7 +62,9 @@ async function clearDirty(row: DirtyMemoryIndexRow): Promise<void> {
         eq(memoryEntries.updatedAt, row.updatedAt),
         eq(memoryEntries.indexDirty, true),
       ),
-    );
+    )
+    .returning({ id: memoryEntries.id });
+  return cleared.length > 0;
 }
 
 /** Upsert active rows and delete retired ones. A failed row stays dirty. */
@@ -92,7 +95,15 @@ export async function indexDirtyMemoryRows(rows: readonly DirtyMemoryIndexRow[])
       } else {
         await deleteMemoryEntryFromIndex(row.id);
       }
-      await clearDirty(row);
+      const cleared = await clearDirty(row);
+      if (!cleared) {
+        partial = true;
+        logger.warn('memory.index_failed', {
+          id: row.id,
+          kind: row.kind,
+          error: 'index_dirty not cleared',
+        });
+      }
     } catch (err) {
       partial = true;
       logger.warn('memory.index_failed', {
