@@ -14,5 +14,6 @@ export const ROUTES = {
   meModels: '/me/models',
   meOcr: '/me/ocr',
   meTokens: '/me/tokens',
+  meMemory: '/me/memory',
   search: '/search',
 } as const;

@@ -1,7 +1,15 @@
 import { Service } from '@rabjs/react';
 import type { AgentExecution, Job, JobQueue, JobQueueCounts, JobStatus, JobType, JobUsage } from '@inwit/dto';
-import { errorMessage } from '@/api/client';
-import { cancelJob, getJobQueue, getJobUsage, listJobExecutions, listJobs, retryJob } from '@/api/jobs';
+import { ApiError, errorMessage } from '@/api/client';
+import {
+  cancelJob,
+  getJob,
+  getJobQueue,
+  getJobUsage,
+  listJobExecutions,
+  listJobs,
+  retryJob,
+} from '@/api/jobs';
 import { formatTimeHm } from '@/lib/format';
 
 const POLL_MS = 5000;
@@ -178,6 +186,11 @@ export class JobsService extends Service {
   executionsJobId: string | null = null;
   executions: AgentExecution[] = [];
   executionsLoaded = false;
+  /** Job opened from `?job=`, so a memory revision can show its execution. */
+  focusedJobId: string | null = null;
+  focusedJob: Job | null = null;
+  focusedMissing = false;
+  focusToken = 0;
 
   pollTimer: ReturnType<typeof setInterval> | null = null;
   tickTimer: ReturnType<typeof setInterval> | null = null;
@@ -340,13 +353,35 @@ export class JobsService extends Service {
     return `${running}|${pending}|${String(r)}:${String(p)}:${String(doneToday)}:${String(failed)}`;
   }
 
-  async toggleExecutions(jobId: string): Promise<void> {
-    if (this.executionsJobId === jobId) {
-      this.executionsJobId = null;
-      this.executions = [];
-      this.executionsLoaded = false;
-      return;
+  clearFocusedJob(): void {
+    this.focusToken += 1;
+    this.focusedJobId = null;
+    this.focusedJob = null;
+    this.focusedMissing = false;
+  }
+
+  async focusJob(jobId: string): Promise<void> {
+    if (this.focusedJobId === jobId && (this.focusedJob !== null || this.focusedMissing)) return;
+    const token = ++this.focusToken;
+    this.focusedJobId = jobId;
+    this.focusedJob = null;
+    this.focusedMissing = false;
+    try {
+      const job = await getJob(jobId);
+      if (token !== this.focusToken) return;
+      this.focusedJob = job;
+      await this.openExecutions(jobId);
+    } catch (err) {
+      if (token !== this.focusToken) return;
+      this.focusedJob = null;
+      this.focusedMissing = true;
+      if (!(err instanceof ApiError) || err.status !== 404) {
+        this.error = errorMessage(err, '这条任务加载失败');
+      }
     }
+  }
+
+  async openExecutions(jobId: string): Promise<void> {
     this.executionsJobId = jobId;
     this.executions = [];
     this.executionsLoaded = false;
@@ -360,6 +395,16 @@ export class JobsService extends Service {
       this.executionsJobId = null;
       this.error = errorMessage(err, '加载执行明细失败');
     }
+  }
+
+  async toggleExecutions(jobId: string): Promise<void> {
+    if (this.executionsJobId === jobId) {
+      this.executionsJobId = null;
+      this.executions = [];
+      this.executionsLoaded = false;
+      return;
+    }
+    await this.openExecutions(jobId);
   }
 
   async tickQueue(): Promise<void> {

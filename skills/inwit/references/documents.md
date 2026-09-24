@@ -2,7 +2,7 @@
 
 # 文档与问答
 
-Generated 2026-09-24T08:06:29.100Z. 22 endpoints.
+Generated 2026-09-24T10:19:45.342Z. 22 endpoints.
 
 ### POST `/api/chat`
 

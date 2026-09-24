@@ -219,6 +219,7 @@
 .hist-table td { padding: 11px 16px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); vertical-align: middle; }
 .hist-table tr:last-child td { border-bottom: none; }
 .hist-table tr.is-err td { background: #fdf3f0; }
+.hist-table tr.is-linked td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 [data-theme='dark'] .hist-table tr.is-err td { background: rgba(224, 106, 82, 0.12); }
 .hist-type { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .hist-table th:first-child,

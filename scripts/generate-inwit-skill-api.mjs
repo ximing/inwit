@@ -514,6 +514,7 @@ export const API_MODULES = [
   { id: 'topics', title: '主题与知识地图', groups: ['topics', 'topic-suggestions', 'map-nodes'] },
   { id: 'search', title: '搜索', groups: ['search'] },
   { id: 'jobs', title: '任务与周报', groups: ['jobs', 'reports', 'evolve'] },
+  { id: 'memory', title: '记忆', groups: ['memory'] },
   { id: 'annotations', title: '批注', groups: ['annotations', 'annotation-resurface'] },
   { id: 'assets', title: '媒体资源', groups: ['assets'] },
   { id: 'account', title: '账号与设置', groups: ['auth', 'me', 'llm-configs', 'ocr-config', 'health'] },
