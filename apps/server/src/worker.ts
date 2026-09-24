@@ -13,6 +13,7 @@ import { pool } from './db/index.js';
 import { pruneAccessTokenLogs } from './auth/access-tokens.js';
 import { purgeExpiredDocuments } from './documents/document.service.js';
 import { drainJobs, processDueJobs, recoverStuckJobs } from './jobs/queue.js';
+import { repairDirtyMemoryIndexes } from './retrieval/memory-index-repair.js';
 import { ensureRetrievalStores } from './retrieval/registry.js';
 import { abortStaleMultipartUploads } from './storage/multipart-sweep.js';
 import { logger } from './utils/logger.js';
@@ -24,6 +25,7 @@ const ACCESS_TOKEN_LOG_PRUNE_MS = 60 * 60 * 1000;
 const MULTIPART_SWEEP_MS = 60 * 60 * 1000;
 const RECYCLE_BIN_PURGE_MS = 60 * 60 * 1000;
 const AGENT_LOG_PRUNE_MS = 60 * 60 * 1000;
+const MEMORY_INDEX_REPAIR_MS = 60 * 1000;
 let lastAccessTokenLogPrune = 0;
 let lastMultipartSweep = 0;
 let lastRecycleBinPurge = 0;
@@ -104,6 +106,16 @@ async function scanWeekly(): Promise<void> {
   }
 }
 
+async function repairMemoryIndex(): Promise<void> {
+  if (stopping) return;
+  try {
+    const repaired = await repairDirtyMemoryIndexes();
+    if (repaired > 0) logger.info('memory.index_repair', { repaired });
+  } catch (err) {
+    logger.error('memory.index_repair_failed', err);
+  }
+}
+
 async function scanResurface(): Promise<void> {
   if (stopping) return;
   try {
@@ -132,6 +144,11 @@ const weeklyScan = hourlyScanOn
     }, WEEKLY_SCAN_MS)
   : null;
 
+// Not on the 1-second tick: a quiet minute must not call the embedding API.
+const memoryIndexRepair = setInterval(() => {
+  track(repairMemoryIndex);
+}, MEMORY_INDEX_REPAIR_MS);
+
 logger.info('worker started', {
   pollMs: config.WORKER_POLL_MS,
   claimLimit: config.WORKER_CLAIM_LIMIT,
@@ -151,6 +168,7 @@ function shutdown(sig: string): void {
   stopping = true;
   logger.info(`worker received ${sig}, shutting down`);
   clearInterval(poll);
+  clearInterval(memoryIndexRepair);
   if (weeklyScan) clearInterval(weeklyScan);
   void (async () => {
     await drainJobs();

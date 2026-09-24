@@ -47,6 +47,7 @@ const GENERIC: Record<JobType, { summary: string; description: string }> = {
   extract: { summary: '提取 · 一篇文档', description: '从原件提取文本' },
   ocr: { summary: '识别 · 一篇文档', description: '识别扫描版文档中的文字' },
   annotation_resurface: { summary: '批注回顾 · 今天', description: '挑出还没消化成卡片的旧批注' },
+  memory_organize: { summary: '记忆整理', description: '根据确认与拒绝整理记忆集合' },
 };
 
 export function isUuid(value: string): boolean {

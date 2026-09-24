@@ -18,6 +18,7 @@ import { recalculateMapNodeStatus } from '../maps/map.service.js';
 import { indexCard, deleteCardFromIndex, type IndexableCard } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { maybeEnqueueTopicSuggest } from '../topics/suggest.js';
+import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.js';
 import { logger } from '../utils/logger.js';
 import { decideCardAcceptance, normalizeRejectReason } from './card-acceptance-logic.js';
 import { getCard } from './card.service.js';
@@ -306,7 +307,10 @@ export async function acceptCard(userId: string, cardId: string): Promise<CardDe
   const outcome = await acceptOne(userId, cardId);
   if (outcome.kind === 'index_failed') throw AppError.of(503, 'CARD_INDEX_FAILED');
   if (outcome.kind === 'still_proposed') throw AppError.of(500, 'INTERNAL_ERROR');
-  if (outcome.kind === 'accepted') await maybeSuggestAfterAcceptance(userId, outcome.documentId);
+  if (outcome.kind === 'accepted') {
+    await maybeSuggestAfterAcceptance(userId, outcome.documentId);
+    await scheduleMemoryOrganizeSafely(userId);
+  }
   return getCard(userId, cardId);
 }
 
@@ -342,6 +346,7 @@ export async function acceptProposedCards(userId: string, documentId: string): P
     }
   }
   await maybeSuggestAfterAcceptance(userId, documentId);
+  if (acceptedIds.length > 0) await scheduleMemoryOrganizeSafely(userId);
   return { acceptedIds, failedIds };
 }
 
@@ -452,6 +457,7 @@ export async function rejectCard(userId: string, cardId: string, input: RejectCa
       cardId,
       reasonChars: reason ? [...reason].length : 0,
     });
+    await scheduleMemoryOrganizeSafely(userId);
   }
   return getCard(userId, cardId);
 }

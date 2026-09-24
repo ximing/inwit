@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.js';
 import { config } from '../config.js';
 import { getDb, type Database } from '../db/index.js';
 import { jobs, type JobRow } from '../db/schema.js';
@@ -156,6 +157,10 @@ async function processOne(job: JobRow): Promise<void> {
     await processJob(job);
     await markDone(job, new Date());
     logger.info('job.done', { jobId: job.id, type: job.type, ms: Date.now() - started });
+    if (job.type === 'memory_organize') {
+      // Leftovers can take the one active slot only after this row leaves running.
+      await scheduleMemoryOrganizeSafely(job.userId);
+    }
   } catch (err) {
     if (err instanceof RescheduleJobError) {
       try {
