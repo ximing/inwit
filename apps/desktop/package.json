@@ -1,6 +1,6 @@
 {
   "name": "@inwit/desktop",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "private": true,
   "type": "module",
   "description": "Tauri 2 shell around @inwit/web. Bearer via plugin-http + plugin-store. Production builds require VITE_TAURI_API_URL.",
