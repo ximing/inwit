@@ -1,5 +1,5 @@
 import type { JobPayload } from '@inwit/dto';
-import { and, count, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
+import { and, count, eq, gte, inArray, isNull, lte, notInArray, type SQL } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
@@ -25,12 +25,20 @@ interface OrganizeState {
   pending: PendingJob | null;
 }
 
-async function loadState(userId: string, now: Date): Promise<OrganizeState> {
+async function loadState(
+  userId: string,
+  now: Date,
+  excludeFeedbackIds: readonly string[],
+): Promise<OrganizeState> {
   const db = getDb();
+  const unconsumedWhere: SQL[] = [eq(cardFeedback.userId, userId), isNull(cardFeedback.consumedAt)];
+  if (excludeFeedbackIds.length > 0) {
+    unconsumedWhere.push(notInArray(cardFeedback.id, [...excludeFeedbackIds]));
+  }
   const [unconsumedRow] = await db
     .select({ n: count() })
     .from(cardFeedback)
-    .where(and(eq(cardFeedback.userId, userId), isNull(cardFeedback.consumedAt)));
+    .where(and(...unconsumedWhere));
   const [revisionRow] = await db
     .select({ n: count() })
     .from(memoryRevisions)
@@ -84,7 +92,7 @@ async function postpone(jobId: string, plan: Extract<MemoryOrganizePlan, { actio
 }
 
 async function reconcileUnique(userId: string, now: Date): Promise<void> {
-  const state = await loadState(userId, now);
+  const state = await loadState(userId, now, []);
   if (state.running || !state.pending) return;
   const plan = planMemoryOrganize({
     unconsumed: state.unconsumed,
@@ -98,8 +106,12 @@ async function reconcileUnique(userId: string, now: Date): Promise<void> {
   await postpone(state.pending.id, plan, now);
 }
 
-export async function scheduleMemoryOrganize(userId: string, now = new Date()): Promise<void> {
-  const state = await loadState(userId, now);
+export async function scheduleMemoryOrganize(
+  userId: string,
+  now = new Date(),
+  excludeFeedbackIds: readonly string[] = [],
+): Promise<void> {
+  const state = await loadState(userId, now, excludeFeedbackIds);
   const plan = planMemoryOrganize({
     unconsumed: state.unconsumed,
     revisionsToday: state.revisionsToday,
@@ -123,10 +135,12 @@ export async function scheduleMemoryOrganize(userId: string, now = new Date()): 
   if (plan.action !== 'enqueue') return;
   // The partial unique index is the lock. Do not SELECT again before INSERT.
   try {
+    const payload: JobPayload = { trigger: plan.trigger };
+    if (excludeFeedbackIds.length > 0) payload.skipFeedbackIds = [...excludeFeedbackIds];
     await enqueueJob(getDb(), {
       userId,
       type: 'memory_organize',
-      payload: { trigger: plan.trigger },
+      payload,
       runAt: plan.runAt,
     });
   } catch (err) {
@@ -135,9 +149,12 @@ export async function scheduleMemoryOrganize(userId: string, now = new Date()): 
   }
 }
 
-export async function scheduleMemoryOrganizeSafely(userId: string): Promise<void> {
+export async function scheduleMemoryOrganizeSafely(
+  userId: string,
+  excludeFeedbackIds: readonly string[] = [],
+): Promise<void> {
   try {
-    await scheduleMemoryOrganize(userId);
+    await scheduleMemoryOrganize(userId, new Date(), excludeFeedbackIds);
   } catch (err) {
     logger.error('memory.organize.plan_failed', {
       userId,

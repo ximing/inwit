@@ -1,5 +1,5 @@
 import type { JobPayload } from '@inwit/dto';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, notInArray, type SQL } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { cardFeedback, jobs, memoryRevisions, type JobRow } from '../db/schema.js';
@@ -10,6 +10,7 @@ import {
   memoryOrganizeBatchKey,
   memoryOrganizeTrigger,
   ORGANIZE_BATCH_MAX,
+  skippedMemoryOrganizeFeedback,
 } from './memory-organize-logic.js';
 import { memoryOrganizeTools, type OrganizeSession } from './memory-organize-tools.js';
 import { runAgentJob } from './run-agent-job.js';
@@ -48,10 +49,13 @@ async function lockBatch(job: JobRow): Promise<string[]> {
   const locked = lockedMemoryOrganizeBatch(job.payload);
   if (locked !== undefined) return locked;
   return getDb().transaction(async (tx) => {
+    const skip = skippedMemoryOrganizeFeedback(job.payload);
+    const filters: SQL[] = [eq(cardFeedback.userId, job.userId), isNull(cardFeedback.consumedAt)];
+    if (skip.length > 0) filters.push(notInArray(cardFeedback.id, skip));
     const rows = await tx
       .select({ id: cardFeedback.id })
       .from(cardFeedback)
-      .where(and(eq(cardFeedback.userId, job.userId), isNull(cardFeedback.consumedAt)))
+      .where(and(...filters))
       .orderBy(asc(cardFeedback.createdAt), asc(cardFeedback.id))
       .limit(ORGANIZE_BATCH_MAX)
       .for('update');

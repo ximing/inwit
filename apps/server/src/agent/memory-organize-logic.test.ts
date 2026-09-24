@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   dispatchMemoryOrganizePlan,
   lockedMemoryOrganizeBatch,
+  skippedMemoryOrganizeFeedback,
   memoryBodyPreview,
   memoryOrganizeBatchKey,
   memoryOrganizeTrigger,
@@ -241,6 +242,12 @@ describe('lockedMemoryOrganizeBatch', () => {
       `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
     );
     expect(lockedMemoryOrganizeBatch({ batchFeedbackIds: [...ids, 'not-a-uuid'] })).toEqual(ids.slice(0, 12));
+  });
+
+  it('reads skip ids for a job spawned after a failed batch', () => {
+    expect(skippedMemoryOrganizeFeedback({})).toEqual([]);
+    expect(skippedMemoryOrganizeFeedback({ skipFeedbackIds: 'nope' })).toEqual([]);
+    expect(skippedMemoryOrganizeFeedback({ skipFeedbackIds: [A, 'not-a-uuid', B] })).toEqual([A, B]);
   });
 });
 

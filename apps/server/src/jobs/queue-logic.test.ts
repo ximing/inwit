@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentTerminalError } from '../agent/terminal-error.js';
-import { backoffMs, failureDisposition, rescheduleAttempts } from './queue-logic.js';
+import { backoffMs, failureDisposition } from './queue-logic.js';
 
 describe('failureDisposition', () => {
   it('treats AgentTerminalError as terminal regardless of attempts', () => {
@@ -38,13 +38,5 @@ describe('backoffMs', () => {
 
   it('clamps zero/negative attempts to the first step', () => {
     expect(backoffMs(0, STEPS)).toBe(2_000);
-  });
-});
-
-describe('rescheduleAttempts', () => {
-  it('returns the pre-claim count so a deferral does not burn the budget', () => {
-    expect(rescheduleAttempts(1)).toBe(0);
-    expect(rescheduleAttempts(3)).toBe(2);
-    expect(rescheduleAttempts(0)).toBe(0);
   });
 });

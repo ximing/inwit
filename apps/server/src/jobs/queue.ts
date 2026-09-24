@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
 import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.js';
+import { lockedMemoryOrganizeBatch } from '../agent/memory-organize-logic.js';
 import { config } from '../config.js';
 import { getDb, type Database } from '../db/index.js';
 import { jobs, type JobRow } from '../db/schema.js';
@@ -7,7 +8,7 @@ import { markDocumentFailed, pipelineDocumentId } from '../documents/document-st
 import { logger } from '../utils/logger.js';
 import { heartbeatJob } from './heartbeat.js';
 import { processJob } from './processors.js';
-import { backoffMs, failureDisposition, rescheduleAttempts, RescheduleJobError } from './queue-logic.js';
+import { backoffMs, failureDisposition, RescheduleJobError } from './queue-logic.js';
 
 export { heartbeatJob };
 export { enqueueJob, type EnqueueJobInput, type JobWriter } from './enqueue.js';
@@ -146,7 +147,7 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
 }
 
 async function rescheduleJob(job: JobRow, runAt: Date, now: Date): Promise<void> {
-  const attempts = rescheduleAttempts(job.attempts);
+  const attempts = Math.max(0, job.attempts - 1);
   await getDb()
     .update(jobs)
     .set({ status: 'pending', runAt, attempts, updatedAt: now })
@@ -161,7 +162,9 @@ async function rescheduleJob(job: JobRow, runAt: Date, now: Date): Promise<void>
 
 async function planOrganizeAfterRelease(job: JobRow): Promise<void> {
   if (job.type !== 'memory_organize') return;
-  await scheduleMemoryOrganizeSafely(job.userId);
+  // The failed batch stays out until a later decision. Other unconsumed feedback can still queue.
+  const exclude = lockedMemoryOrganizeBatch(job.payload) ?? [];
+  await scheduleMemoryOrganizeSafely(job.userId, exclude);
 }
 
 async function processOne(job: JobRow): Promise<void> {

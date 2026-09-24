@@ -116,6 +116,17 @@ export function lockedMemoryOrganizeBatch(payload: object): string[] | undefined
   return ids;
 }
 
+/** Ids a failure-spawned job must not lock. Empty when the key is absent. */
+export function skippedMemoryOrganizeFeedback(payload: object): string[] {
+  const raw = (payload as { skipFeedbackIds?: unknown }).skipFeedbackIds;
+  if (!Array.isArray(raw)) return [];
+  const ids: string[] = [];
+  for (const item of raw) {
+    if (typeof item === 'string' && UUID_RE.test(item)) ids.push(item);
+  }
+  return ids;
+}
+
 export function memoryOrganizeTrigger(payload: { trigger?: unknown }): MemoryOrganizeTrigger | undefined {
   return payload.trigger === 'count' || payload.trigger === 'slot' ? payload.trigger : undefined;
 }
