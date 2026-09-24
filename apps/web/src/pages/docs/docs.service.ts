@@ -945,6 +945,7 @@ export class DocsService extends Service {
       });
       if (this.doc?.id === input.documentId) {
         const have = this.doc.cards.some((item) => item.id === card.id);
+        this.cardWriteGen += 1;
         this.doc = {
           ...this.doc,
           cards: have ? this.doc.cards : [...this.doc.cards, asDocumentCard(card)],
@@ -969,6 +970,8 @@ export class DocsService extends Service {
   editingCardId: string | null = null;
   decidingCardId: string | null = null;
   acceptingProposed = false;
+  /** Local card edits since the last refresh. A GET that started earlier must not overwrite them. */
+  private cardWriteGen = 0;
 
   get cardDecisionBusy(): boolean {
     return this.decidingCardId !== null || this.acceptingProposed;
@@ -989,6 +992,7 @@ export class DocsService extends Service {
 
   private replaceDocCard(updated: DocumentCard): void {
     if (!this.doc) return;
+    this.cardWriteGen += 1;
     this.doc = {
       ...this.doc,
       cards: this.doc.cards.map((card) => (card.id === updated.id ? updated : card)),
@@ -1011,9 +1015,11 @@ export class DocsService extends Service {
 
   /** Soft delete: the card moves to 回收站 and can be restored from settings. */
   async archiveDocCard(id: string): Promise<void> {
+    if (this.acceptingProposed) return;
     try {
       await archiveCard(id);
       if (this.doc) {
+        this.cardWriteGen += 1;
         this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
         this.patchListFromDetail(this.doc);
       }
@@ -1058,7 +1064,11 @@ export class DocsService extends Service {
   }
 
   async acceptAllProposed(): Promise<void> {
-    if (!this.doc || this.doc.status !== 'digested' || this.cardDecisionBusy) return;
+    if (this.cardDecisionBusy) {
+      this.showToast('还有卡片正在确认，请稍后再试');
+      return;
+    }
+    if (!this.doc || this.doc.status !== 'digested') return;
     if (!this.doc.cards.some((card) => card.acceptance === 'proposed')) return;
     const documentId = this.doc.id;
     this.acceptingProposed = true;
@@ -1066,6 +1076,7 @@ export class DocsService extends Service {
       const result = await acceptProposedCards(documentId);
       const acceptedIds = new Set(result.acceptedIds);
       if (this.doc?.id === documentId) {
+        this.cardWriteGen += 1;
         this.doc = {
           ...this.doc,
           cards: this.doc.cards.map((card) =>
@@ -1105,6 +1116,7 @@ export class DocsService extends Service {
 
   private dropDocCard(id: string): void {
     if (this.doc) {
+      this.cardWriteGen += 1;
       this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
       this.patchListFromDetail(this.doc);
     }
@@ -1117,6 +1129,7 @@ export class DocsService extends Service {
 
   /** 已熟悉 ↔ 恢复复习。 */
   async toggleCardSuspended(card: DocumentCard): Promise<void> {
+    if (this.acceptingProposed) return;
     const suspended = card.review?.suspendedAt != null;
     try {
       const state = suspended ? await resumeCard(card.id) : await suspendCard(card.id);
@@ -1292,6 +1305,7 @@ export class DocsService extends Service {
   }
 
   async refreshOne(id: string): Promise<void> {
+    const writeGen = this.doc?.id === id ? this.cardWriteGen : null;
     try {
       const [detail, notes] = await Promise.all([
         getDocument(id),
@@ -1299,6 +1313,8 @@ export class DocsService extends Service {
           ? listDocumentAnnotations(id).catch(() => this.annotations)
           : Promise.resolve(null),
       ]);
+      // A suspend or delete that landed while this GET was in flight is newer than the response.
+      if (writeGen !== null && this.cardWriteGen !== writeGen) return;
       this.documents = this.documents.map((item) =>
         item.id === id ? mergeDetail(item, detail) : item,
       );

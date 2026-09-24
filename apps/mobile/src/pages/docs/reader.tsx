@@ -82,6 +82,16 @@ const ReaderContent = observer(function ReaderContent() {
     pushToEngine();
   }, [service.engineReady, service.contentGen, pushToEngine]);
 
+  useEffect(() => {
+    if (!service.engineReady || service.entityGen === 0) return;
+    const current = service.doc;
+    if (!current) return;
+    engineRef.current?.setEntities({
+      cards: cardEntities(current.cards),
+      annotations: noteEntities(service.annotations),
+    });
+  }, [service, service.engineReady, service.entityGen]);
+
   const onReady = () => {
     service.markEngineReady();
   };

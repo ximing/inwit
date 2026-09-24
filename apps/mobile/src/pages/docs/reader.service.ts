@@ -70,6 +70,8 @@ export class ReaderService extends Service {
   engineError: string | null = null;
   engineReady = false;
   contentGen = 0;
+  /** Bumped when cards change without a new document body. contentGen also reloads the doc. */
+  entityGen = 0;
   sheet: ReaderSheet | null = null;
   activeCardId: string | null = null;
   links: CardLinksResponse | null = null;
@@ -405,6 +407,7 @@ export class ReaderService extends Service {
   private removeCard(id: string): void {
     if (!this.doc) return;
     this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
+    this.entityGen += 1;
     if (this.activeCardId === id) this.activeCardId = null;
     if (this.sheet?.kind === 'cards') {
       const cardIds = this.sheet.cardIds.filter((cardId) => cardId !== id);

@@ -223,6 +223,7 @@ const DocCardButton = observer(function DocCardButton({
                 className={`note-op${suspended ? ' is-on' : ''}`}
                 aria-label={suspended ? '恢复复习' : '已熟悉，不复习'}
                 title={suspended ? '恢复复习' : '已熟悉，不复习'}
+                disabled={service.acceptingProposed}
                 onClick={() => void service.toggleCardSuspended(card)}
               >
                 {suspended ? (
@@ -237,6 +238,7 @@ const DocCardButton = observer(function DocCardButton({
               className="note-op"
               aria-label="删除卡片"
               title="移入回收站"
+              disabled={service.acceptingProposed}
               onClick={() => void service.archiveDocCard(card.id)}
             >
               <Trash2 width={13} height={13} strokeWidth={1.8} />
@@ -364,7 +366,8 @@ export const CardRail = observer(function CardRail() {
               <button
                 type="button"
                 className="card-rail-accept-all"
-                disabled={service.acceptingProposed || dialog.current !== null}
+                disabled={service.cardDecisionBusy || dialog.current !== null}
+                title={service.cardDecisionBusy ? '还有卡片正在确认' : undefined}
                 onClick={() => void acceptAll()}
               >
                 {service.acceptingProposed ? '确认中…' : '全部确认'}
