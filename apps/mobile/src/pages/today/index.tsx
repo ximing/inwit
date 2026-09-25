@@ -266,7 +266,7 @@ const TodayContent = observer(function TodayContent() {
 
           <View style={styles.secRow}>
             <Text style={styles.sec}>最近动态</Text>
-            <Pressable onPress={() => service.showToast('网页端可见')}>
+            <Pressable onPress={() => router.navigate(ROUTES.jobs)}>
               <Text style={styles.more}>全部任务 →</Text>
             </Pressable>
           </View>

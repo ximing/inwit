@@ -199,6 +199,7 @@ export const AnchorHighlight = Extension.create<AnchorHighlightOptions>({
         props: {
           handleDOMEvents: {
             click: (view, event) => {
+              if (this.editor.isEditable) return false;
               const target = event.target;
               if (!(target instanceof Element) || !view.dom.contains(target)) return false;
               const { cardIds, annotationIds } = collectHitIds(target, view.dom);

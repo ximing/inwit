@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDispatcher } from './bridge';
-import { parseIncomingMessage, PROTOCOL_VERSION, type DocEngineEvent } from './protocol';
+import { FORMAT_NAMES, parseIncomingMessage, PROTOCOL_VERSION, type DocEngineEvent } from './protocol';
 
 const INIT = {
   v: PROTOCOL_VERSION,
@@ -67,6 +67,84 @@ describe('parseIncomingMessage', () => {
       }).ok,
     ).toBe(true);
     expect(parseIncomingMessage({ v: 1, type: 'setTheme', payload: { theme: 'dark' } }).ok).toBe(true);
+  });
+
+  it('parses setEditable true and false', () => {
+    expect(parseIncomingMessage({ v: 1, type: 'setEditable', payload: { editable: true } })).toEqual({
+      ok: true,
+      value: { type: 'setEditable', payload: { editable: true } },
+    });
+    expect(parseIncomingMessage({ v: 1, type: 'setEditable', payload: { editable: false } })).toEqual({
+      ok: true,
+      value: { type: 'setEditable', payload: { editable: false } },
+    });
+  });
+
+  it('getDoc requires a non-empty requestId and ignores the envelope id', () => {
+    expect(parseIncomingMessage({ v: 1, type: 'getDoc', payload: { requestId: 'r1' } })).toEqual({
+      ok: true,
+      value: { type: 'getDoc', payload: { requestId: 'r1' } },
+    });
+    expect(
+      parseIncomingMessage({ v: 1, id: 'envelope', type: 'getDoc', payload: { requestId: 'r1' } }),
+    ).toEqual({
+      ok: true,
+      value: { type: 'getDoc', payload: { requestId: 'r1' } },
+    });
+    expect(parseIncomingMessage({ v: 1, type: 'getDoc', payload: { requestId: '' } }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, id: 'envelope', type: 'getDoc', payload: {} }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'getDoc', payload: { requestId: 1 } }).ok).toBe(false);
+  });
+
+  it('format accepts each name and rejects an unknown name', () => {
+    for (const name of FORMAT_NAMES) {
+      expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name } })).toEqual({
+        ok: true,
+        value: { type: 'format', payload: { name } },
+      });
+    }
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'underline' } }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: '' } }).ok).toBe(false);
+  });
+
+  it('format link and image accept optional strings and other names ignore extras', () => {
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'link' } })).toEqual({
+      ok: true,
+      value: { type: 'format', payload: { name: 'link' } },
+    });
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'link', href: 'https://a.example' } })).toEqual({
+      ok: true,
+      value: { type: 'format', payload: { name: 'link', href: 'https://a.example' } },
+    });
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'link', href: '' } })).toEqual({
+      ok: true,
+      value: { type: 'format', payload: { name: 'link', href: '' } },
+    });
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'image' } })).toEqual({
+      ok: true,
+      value: { type: 'format', payload: { name: 'image' } },
+    });
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'image', src: 'asset:pic' } })).toEqual({
+      ok: true,
+      value: { type: 'format', payload: { name: 'image', src: 'asset:pic' } },
+    });
+    expect(
+      parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'bold', href: 'https://a', src: 'asset:x' } }),
+    ).toEqual({
+      ok: true,
+      value: { type: 'format', payload: { name: 'bold' } },
+    });
+  });
+
+  it('rejects bad editable payloads', () => {
+    expect(parseIncomingMessage({ v: 1, type: 'setEditable' }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'setEditable', payload: { editable: 'yes' } }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'getDoc' }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'format' }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: {} }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'link', href: 1 } }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'image', src: null } }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'link', href: null } }).ok).toBe(false);
   });
 });
 

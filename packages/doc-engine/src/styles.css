@@ -94,11 +94,16 @@ body.is-native .harness { display: none; }
   font-size: 15.5px;
   line-height: 1.8;
   color: var(--prose);
+  caret-color: var(--ink);
   word-break: break-word;
   outline: none;
   -webkit-touch-callout: none;
   -webkit-user-select: text;
   user-select: text;
+}
+
+.doc-view .ProseMirror ::selection {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .doc-view .ProseMirror > :first-child { margin-top: 0; }
@@ -139,6 +144,15 @@ body.is-native .harness { display: none; }
 
 .doc-view .ProseMirror p { margin: 0 0 18px; }
 .doc-view .ProseMirror p:empty { display: none; }
+.doc-view.is-editable .ProseMirror p:empty { display: block; }
+
+.doc-view .ProseMirror p.is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  color: var(--ink-4);
+}
 
 .doc-view .ProseMirror ul,
 .doc-view .ProseMirror ol {
@@ -318,6 +332,11 @@ body.is-native .harness { display: none; }
 .doc-view ul[data-type='taskList'] input[type='checkbox'],
 .doc-view ul[data-type='taskList'] li > label {
   pointer-events: none;
+}
+
+.doc-view.is-editable ul[data-type='taskList'] input[type='checkbox'],
+.doc-view.is-editable ul[data-type='taskList'] li > label {
+  pointer-events: auto;
 }
 
 .vital-chip {

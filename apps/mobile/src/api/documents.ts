@@ -7,6 +7,7 @@ import type {
   DocumentDetail,
   DocumentFileResponse,
   DocumentListItem,
+  ArchivedDocumentsResponse,
   ExcerptUploadInput,
   ExcerptUploadResponse,
   ImportAbortInput,
@@ -139,4 +140,25 @@ export function requestExcerptUpload(
     method: 'POST',
     body: JSON.stringify(input),
   });
+}
+
+export function deleteDocument(id: string): Promise<void> {
+  return request<void>(`/api/documents/${id}`, { method: 'DELETE' });
+}
+
+export function listArchivedDocuments(query: {
+  page: number;
+  limit: number;
+}): Promise<ArchivedDocumentsResponse> {
+  return request<ArchivedDocumentsResponse>(
+    `/api/documents/archived?page=${query.page}&limit=${query.limit}`,
+  );
+}
+
+export function restoreDocument(id: string): Promise<Document> {
+  return request<Document>(`/api/documents/${id}/restore`, { method: 'POST' });
+}
+
+export function destroyDocumentPermanently(id: string): Promise<void> {
+  return request<void>(`/api/documents/${id}/permanent`, { method: 'DELETE' });
 }

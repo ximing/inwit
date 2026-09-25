@@ -37,7 +37,7 @@ export type ViewportRect = {
   height: number;
 };
 
-/** 信封。预留 `id` 给未来 request/response。 */
+/** 信封。`id` 仍保留，但入桥解析会丢掉；请求关联放在 payload（如 getDoc.requestId）。 */
 export type ProtocolEnvelope<T extends string = string, P = unknown> = {
   v: typeof PROTOCOL_VERSION;
   type: T;
@@ -88,6 +88,46 @@ export type SetThemeCmd = {
   payload: { theme: ThemeName };
 };
 
+export const FORMAT_NAMES = [
+  'bold',
+  'italic',
+  'strike',
+  'heading1',
+  'heading2',
+  'bulletList',
+  'orderedList',
+  'taskList',
+  'blockquote',
+  'codeBlock',
+  'alignLeft',
+  'alignCenter',
+  'alignRight',
+  'link',
+  'unsetLink',
+  'image',
+  'horizontalRule',
+  'table',
+  'undo',
+  'redo',
+] as const;
+
+export type FormatName = (typeof FORMAT_NAMES)[number];
+
+export type SetEditableCmd = {
+  type: 'setEditable';
+  payload: { editable: boolean };
+};
+
+export type GetDocCmd = {
+  type: 'getDoc';
+  payload: { requestId: string };
+};
+
+export type FormatCmd = {
+  type: 'format';
+  payload: { name: FormatName; href?: string; src?: string };
+};
+
 export type DocEngineCommand =
   | InitCmd
   | SetContentCmd
@@ -95,7 +135,10 @@ export type DocEngineCommand =
   | SetActiveEntityCmd
   | FocusCardCmd
   | InjectAssetUrlsCmd
-  | SetThemeCmd;
+  | SetThemeCmd
+  | SetEditableCmd
+  | GetDocCmd
+  | FormatCmd;
 
 export type ReadyEvt = { type: 'ready' };
 
@@ -125,6 +168,34 @@ export type AssetNeededEvt = { type: 'assetNeeded'; payload: { srcs: string[] } 
 
 export type LinkClickEvt = { type: 'linkClick'; payload: { href: string } };
 
+export type DocChangedEvt = { type: 'docChanged' };
+
+export type DocJsonEvt = {
+  type: 'docJson';
+  payload: { requestId: string; doc: PmDocJson };
+};
+
+export type FormatState = {
+  editable: boolean;
+  bold: boolean;
+  italic: boolean;
+  strike: boolean;
+  heading1: boolean;
+  heading2: boolean;
+  bulletList: boolean;
+  orderedList: boolean;
+  taskList: boolean;
+  blockquote: boolean;
+  codeBlock: boolean;
+  link: boolean;
+  table: boolean;
+  textAlign: 'left' | 'center' | 'right';
+  canUndo: boolean;
+  canRedo: boolean;
+};
+
+export type FormatStateEvt = { type: 'formatState'; payload: FormatState };
+
 export type DocEngineEvent =
   | ReadyEvt
   | ErrorEvt
@@ -133,7 +204,10 @@ export type DocEngineEvent =
   | SelectionChangeEvt
   | SelectionActionEvt
   | AssetNeededEvt
-  | LinkClickEvt;
+  | LinkClickEvt
+  | DocChangedEvt
+  | DocJsonEvt
+  | FormatStateEvt;
 
 export type DocEngineOutgoing = ProtocolEnvelope & DocEngineEvent;
 
@@ -149,7 +223,16 @@ const COMMAND_TYPES = new Set<DocEngineCommand['type']>([
   'focusCard',
   'injectAssetUrls',
   'setTheme',
+  'setEditable',
+  'getDoc',
+  'format',
 ]);
+
+const FORMAT_NAME_SET: ReadonlySet<string> = new Set(FORMAT_NAMES);
+
+function isFormatName(value: unknown): value is FormatName {
+  return typeof value === 'string' && FORMAT_NAME_SET.has(value);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -266,6 +349,37 @@ function parsePayload(type: DocEngineCommand['type'], payload: unknown): ParseRe
         return { ok: false, message: 'setTheme payload requires theme' };
       }
       return { ok: true, value: { type, payload: { theme: payload.theme } } };
+    }
+    case 'setEditable': {
+      if (typeof payload.editable !== 'boolean') {
+        return { ok: false, message: 'setEditable payload requires editable' };
+      }
+      return { ok: true, value: { type, payload: { editable: payload.editable } } };
+    }
+    case 'getDoc': {
+      if (typeof payload.requestId !== 'string' || payload.requestId.length === 0) {
+        return { ok: false, message: 'getDoc payload requires requestId' };
+      }
+      return { ok: true, value: { type, payload: { requestId: payload.requestId } } };
+    }
+    case 'format': {
+      if (!isFormatName(payload.name)) {
+        return { ok: false, message: 'format payload requires a known name' };
+      }
+      const next: FormatCmd['payload'] = { name: payload.name };
+      if (payload.name === 'link' && 'href' in payload) {
+        if (typeof payload.href !== 'string') {
+          return { ok: false, message: 'format link href must be a string' };
+        }
+        next.href = payload.href;
+      }
+      if (payload.name === 'image' && 'src' in payload) {
+        if (typeof payload.src !== 'string') {
+          return { ok: false, message: 'format image src must be a string' };
+        }
+        next.src = payload.src;
+      }
+      return { ok: true, value: { type, payload: next } };
     }
     default: {
       const _never: never = type;

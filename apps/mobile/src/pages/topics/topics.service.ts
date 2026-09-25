@@ -8,12 +8,14 @@ import type {
   MapNodeDetail,
   MapSummary,
   MapTreeNode,
+  ReviewTopicStat,
   Topic,
 } from '@inwit/dto';
 import { isChatQuestion, topicJobPayloadFrom } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
 import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
 import { getJob } from '@/api/jobs';
+import { getReviewTopicStats } from '@/api/review';
 import {
   fillMapNode,
   getActiveTopicJob,
@@ -145,6 +147,7 @@ export function firstUncoveredNode(
 
 export class TopicsService extends Service {
   items: TopicListItem[] = [];
+  topicStats: Record<string, ReviewTopicStat> = {};
   error: string | null = null;
   detailError: string | null = null;
   newTitle = '';
@@ -473,6 +476,15 @@ export class TopicsService extends Service {
       this.items = await Promise.all(topics.map((topic) => this._enrich(topic)));
     } catch (err) {
       this.error = errorMessage(err, '加载主题失败');
+      return;
+    }
+    try {
+      const stats = await getReviewTopicStats();
+      const next: Record<string, ReviewTopicStat> = {};
+      for (const stat of stats) next[stat.topicId] = stat;
+      this.topicStats = next;
+    } catch {
+      // Retention is optional; the topic list stays.
     }
   }
 

@@ -1,27 +1,52 @@
 import { Service } from '@rabjs/react';
 import {
+  ASSET_IMAGE_MAX_BYTES,
+  ASSET_IMAGE_MIMES,
   type Annotation,
   type CardDetail,
   type CardLinksResponse,
   type DocumentCard,
   type DocumentDetail,
+  type PmDocJson,
   type Topic,
+  type UpdateCardInput,
 } from '@inwit/dto';
-import { createAnnotation, getAnnotationImage, listDocumentAnnotations } from '@/api/annotations';
-import { acceptCard, createCard, getCard, getCardImage, getCardLinks, rejectCard } from '@/api/cards';
+import {
+  createAnnotation,
+  deleteAnnotation,
+  getAnnotationImage,
+  listDocumentAnnotations,
+  updateAnnotation,
+} from '@/api/annotations';
+import { presignAsset } from '@/api/assets';
+import {
+  acceptCard,
+  archiveCard,
+  createCard,
+  getCard,
+  getCardImage,
+  getCardLinks,
+  rejectCard,
+  resumeCard,
+  suspendCard,
+  updateCard,
+} from '@/api/cards';
 import { ApiError, errorMessage } from '@/api/client';
 import {
   acceptProposedCards,
+  deleteDocument,
   enqueueSelectionCards,
   getDocument,
+  getDocumentFile,
   retryDocument,
   updateDocument,
 } from '@/api/documents';
 import { confirmAction } from '@/lib/confirm';
 import { listTopics } from '@/api/topics';
 import { clipChars } from '@/lib/clip';
+import { formatTimeHm } from '@/lib/format';
 import { asAssetSrc } from '@/lib/internal-links';
-import { isBlankPmDoc, textToPmDoc } from '@/lib/pm-doc';
+import { clonePmJson, isBlankPmDoc, jsonEqual } from '@/lib/pm-doc';
 import {
   livePresignedUrl,
   shouldRetryPresign,
@@ -29,7 +54,25 @@ import {
 } from '@/lib/presign-cache-logic';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { ToastService } from '@/services/toast.service';
-import type { TextSelectionAnchor } from '../../../../../packages/doc-engine/src/protocol';
+import * as FileSystem from 'expo-file-system/legacy';
+import type { FormatState, TextSelectionAnchor } from '../../../../../packages/doc-engine/src/protocol';
+import { buildDocumentPatch, displayedPmJson, SAVE_DEBOUNCE_MS, titlesDiffer } from './editor-session';
+
+const IMAGE_MIMES = new Set<string>(ASSET_IMAGE_MIMES);
+
+function imageMime(uri: string, mimeType?: string | null): string | null {
+  if (mimeType) {
+    const mime = mimeType.split(';')[0]?.trim().toLowerCase() ?? '';
+    const normalized = mime === 'image/jpg' ? 'image/jpeg' : mime;
+    if (IMAGE_MIMES.has(normalized)) return normalized;
+  }
+  const lower = uri.split('?')[0]?.toLowerCase() ?? '';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.gif')) return 'image/gif';
+  return null;
+}
 
 function clipReason(reason: string): string {
   return clipChars(reason.replaceAll('\0', ''), 500);
@@ -58,9 +101,13 @@ export type ReaderSheet =
   | { kind: 'card'; cardId: string; fromCards?: string[] }
   | { kind: 'reject'; cardId: string; fromCards?: string[] }
   | { kind: 'annotations'; annotationIds: string[] }
-  | { kind: 'annotate'; anchor: TextSelectionAnchor }
+  | { kind: 'annotate'; anchor: TextSelectionAnchor; pdfPageIndex?: number }
   | { kind: 'card-form'; anchor: TextSelectionAnchor }
-  | { kind: 'topic' };
+  | { kind: 'card-edit'; cardId: string; fromCards?: string[] }
+  | { kind: 'topic' }
+  | { kind: 'more' }
+  | { kind: 'format' }
+  | { kind: 'link' };
 
 export class ReaderService extends Service {
   doc: DocumentDetail | null = null;
@@ -68,6 +115,9 @@ export class ReaderService extends Service {
   topics: Topic[] = [];
   docError: string | null = null;
   engineError: string | null = null;
+  pdfUrl: string | null = null;
+  pdfError: string | null = null;
+  pdfSelection: { text: string; pageIndex: number } | null = null;
   engineReady = false;
   contentGen = 0;
   /** Bumped when cards change without a new document body. contentGen also reloads the doc. */
@@ -94,6 +144,30 @@ export class ReaderService extends Service {
   loadGen = 0;
   appliedAnchor: string | null = null;
   pendingAnchor: string | null = null;
+  editing = false;
+  draftTitle = '';
+  lastSavedTitle = '';
+  draftJson: PmDocJson | null = null;
+  lastSavedJson: PmDocJson | null = null;
+  saveState: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
+  savedAt: Date | null = null;
+  saveError: string | null = null;
+  formatState: FormatState | null = null;
+  linkDraft = '';
+  cardEditQuestion = '';
+  cardEditAnswer = '';
+  uploadingImage = false;
+  trashing = false;
+  cardBusy = false;
+  /** True from the first local edit until that JSON is known to match the last save. */
+  editorLive = false;
+  private closed = false;
+  private bodyRead = 0;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private saveInflight: Promise<void> | null = null;
+  private docGetter: (() => Promise<PmDocJson>) | null = null;
+  private trashed = false;
+  private editRouteFor: string | null = null;
 
   get toastService(): ToastService {
     return this.resolve(ToastService);
@@ -114,11 +188,38 @@ export class ReaderService extends Service {
     return true;
   }
 
+  /** PDF and weekly reports stay read-only. */
+  get canEdit(): boolean {
+    if (!this.doc || this.isPdf) return false;
+    return this.doc.kind !== 'weekly_report';
+  }
+
   get engineDoc() {
     if (!this.doc) return null;
-    if (!isBlankPmDoc(this.doc.contentJson)) return this.doc.contentJson;
-    if (this.doc.answer?.trim()) return textToPmDoc(this.doc.answer);
+    const shown = displayedPmJson(this.doc);
+    if (!isBlankPmDoc(shown)) return shown;
+    if (this.editing) return shown;
     return null;
+  }
+
+  get bodyDirty(): boolean {
+    if (!this.draftJson || !this.lastSavedJson) return false;
+    return !jsonEqual(this.draftJson, this.lastSavedJson);
+  }
+
+  get titleDirty(): boolean {
+    return titlesDiffer(this.draftTitle, this.lastSavedTitle);
+  }
+
+  get dirty(): boolean {
+    return this.bodyDirty || this.titleDirty;
+  }
+
+  get saveLabel(): string {
+    if (this.saveState === 'saving') return '保存中…';
+    if (this.saveState === 'error' && this.saveError) return this.saveError;
+    if (this.saveState === 'saved' && this.savedAt) return `已保存 · ${formatTimeHm(this.savedAt)}`;
+    return '';
   }
 
   showToast(message: string): void {
@@ -127,8 +228,64 @@ export class ReaderService extends Service {
 
   setFocused(value: boolean): void {
     this.focused = value;
-    if (!value) this.stopPolling();
-    else this.syncPolling();
+    if (!value) {
+      this.stopPolling();
+      void this.flushSave();
+    } else {
+      this.syncPolling();
+    }
+  }
+
+  setDocGetter(getter: (() => Promise<PmDocJson>) | null): void {
+    this.docGetter = getter;
+  }
+
+  setEditing(next: boolean): void {
+    if (next && !this.canEdit) return;
+    this.editing = next;
+    if (!next) this.formatState = null;
+  }
+
+  noteTitle(title: string): void {
+    this.draftTitle = title;
+    this.touchSave();
+  }
+
+  nextBodyRead(): number {
+    this.bodyRead += 1;
+    return this.bodyRead;
+  }
+
+  markEditorLive(): void {
+    this.editorLive = true;
+  }
+
+  noteJson(json: PmDocJson, seq?: number): void {
+    if (seq != null && seq < this.bodyRead) return;
+    this.draftJson = clonePmJson(json);
+    if (this.lastSavedJson && jsonEqual(this.draftJson, this.lastSavedJson)) this.editorLive = false;
+    this.touchSave();
+  }
+
+  noteFormatState(state: FormatState): void {
+    this.formatState = state;
+  }
+
+  openMore(): void {
+    this.sheet = { kind: 'more' };
+  }
+
+  openFormatMenu(): void {
+    this.sheet = { kind: 'format' };
+  }
+
+  openLinkSheet(): void {
+    this.linkDraft = '';
+    this.sheet = { kind: 'link' };
+  }
+
+  setLinkDraft(value: string): void {
+    this.linkDraft = value;
   }
 
   markEngineReady(): void {
@@ -145,7 +302,10 @@ export class ReaderService extends Service {
     this.noteDraft = '';
     this.cardQuestion = '';
     this.cardAnswer = '';
+    this.cardEditQuestion = '';
+    this.cardEditAnswer = '';
     this.rejectDraft = '';
+    this.linkDraft = '';
   }
 
   get proposedCount(): number {
@@ -156,18 +316,23 @@ export class ReaderService extends Service {
     return this.doc?.status === 'digested' && this.proposedCount > 0;
   }
 
-  async load(id: string, anchor?: string | null): Promise<void> {
+  async load(id: string, anchor?: string | null, editRequested = false): Promise<void> {
     this.docError = null;
     this.engineError = null;
     this.pendingAnchor = anchor ?? null;
     this.appliedAnchor = null;
     if (this.doc?.id !== id) {
+      this.trashed = false;
+      this.resetEditor();
       this.doc = null;
       this.annotations = [];
       this.sheet = null;
       this.activeCardId = null;
       this.links = null;
       this.engineReady = false;
+      this.pdfUrl = null;
+      this.pdfError = null;
+      this.pdfSelection = null;
     }
     const gen = ++this.loadGen;
     try {
@@ -177,12 +342,29 @@ export class ReaderService extends Service {
         this.topics.length > 0 ? Promise.resolve(this.topics) : listTopics('active'),
       ]);
       if (gen !== this.loadGen) return;
+      const sameDoc = this.doc?.id === detail.id && this.draftJson !== null;
+      this.topics = topics;
+      if (sameDoc) {
+        this.applyRemoteDetail(detail, notes);
+        this.syncPolling();
+        return;
+      }
       this.doc = detail;
       this.annotations = notes;
-      this.topics = topics;
+      this.seedEditor(detail);
+      if (this.editRouteFor !== id) {
+        this.editRouteFor = id;
+        if (editRequested && this.canEdit) this.editing = true;
+      }
       this.contentGen += 1;
       this.syncPolling();
       void this.prefetchMedia();
+      if (detail.fileMime === PDF_MIME) void this.loadPdf(detail.id, gen);
+      else {
+        this.pdfUrl = null;
+        this.pdfError = null;
+        this.pdfSelection = null;
+      }
     } catch (err) {
       if (gen !== this.loadGen) return;
       this.docError = errorMessage(err, '打不开这份文档');
@@ -230,6 +412,61 @@ export class ReaderService extends Service {
 
   openTopicMenu(): void {
     this.sheet = { kind: 'topic' };
+  }
+
+  async loadPdf(id = this.doc?.id, gen = this.loadGen): Promise<void> {
+    if (!id) return;
+    this.pdfError = null;
+    try {
+      const file = await getDocumentFile(id);
+      if (gen !== this.loadGen || this.doc?.id !== id) return;
+      this.pdfUrl = file.url;
+    } catch (err) {
+      if (gen !== this.loadGen || this.doc?.id !== id) return;
+      this.pdfUrl = null;
+      this.pdfError = errorMessage(err, '打不开这份 PDF');
+    }
+  }
+
+  setPdfError(message: string | null): void {
+    this.pdfError = message;
+  }
+
+  setPdfSelection(text: string, pageIndex: number): void {
+    const quote = text.trim();
+    if (!quote) {
+      this.pdfSelection = null;
+      return;
+    }
+    this.pdfSelection = { text: quote, pageIndex };
+  }
+
+  clearPdfSelection(): void {
+    this.pdfSelection = null;
+  }
+
+  beginPdfAnnotate(): void {
+    const selection = this.pdfSelection;
+    if (!selection) return;
+    this.pdfSelection = null;
+    this.noteDraft = '';
+    this.sheet = {
+      kind: 'annotate',
+      anchor: { text: selection.text, blockIndex: 0, from: 0, to: selection.text.length },
+      pdfPageIndex: selection.pageIndex,
+    };
+  }
+
+  beginPdfCard(): void {
+    const selection = this.pdfSelection;
+    if (!selection) return;
+    this.pdfSelection = null;
+    this.beginCardForm({
+      text: selection.text,
+      blockIndex: 0,
+      from: 0,
+      to: selection.text.length,
+    });
   }
 
   beginAnnotate(anchor: TextSelectionAnchor): void {
@@ -423,6 +660,13 @@ export class ReaderService extends Service {
       const fromCards = this.sheet.fromCards?.filter((cardId) => cardId !== id);
       this.rejectDraft = '';
       this.sheet = fromCards && fromCards.length > 0 ? { kind: 'cards', cardIds: fromCards } : null;
+      return;
+    }
+    if (this.sheet?.kind === 'card-edit' && this.sheet.cardId === id) {
+      const fromCards = this.sheet.fromCards?.filter((cardId) => cardId !== id);
+      this.cardEditQuestion = '';
+      this.cardEditAnswer = '';
+      this.sheet = fromCards && fromCards.length > 0 ? { kind: 'cards', cardIds: fromCards } : null;
     }
   }
 
@@ -508,13 +752,16 @@ export class ReaderService extends Service {
     if (!quote) return false;
     this.saving = true;
     try {
+      const pdfPageIndex = this.sheet.pdfPageIndex;
       await createAnnotation({
         documentId: this.doc.id,
         quote,
         note: this.noteDraft.trim(),
-        ...(this.sheet.anchor.blockIndex > 0
-          ? { anchorBlockIndex: this.sheet.anchor.blockIndex }
-          : {}),
+        ...(pdfPageIndex != null
+          ? { kind: 'pdf' as const, pageIndex: pdfPageIndex, geometry: { quads: [] } }
+          : this.sheet.anchor.blockIndex > 0
+            ? { anchorBlockIndex: this.sheet.anchor.blockIndex }
+            : {}),
       });
       this.showToast('已记下');
       this.closeSheet();
@@ -643,10 +890,7 @@ export class ReaderService extends Service {
         listDocumentAnnotations(id).catch(() => this.annotations),
       ]);
       if (this.doc?.id !== id) return;
-      this.doc = detail;
-      this.annotations = notes;
-      this.contentGen += 1;
-      void this.prefetchMedia();
+      this.applyRemoteDetail(detail, notes);
     } catch {
       // keep last copy
     }
@@ -680,8 +924,451 @@ export class ReaderService extends Service {
   }
 
   override destroy(): void {
+    this.closed = true;
+    this.clearSaveTimer();
     this.stopPolling();
     this.finishSelectionPoll();
     super.destroy();
+  }
+
+  async flushSave(): Promise<void> {
+    if (this.trashed) return;
+    this.clearSaveTimer();
+    await this.save(true);
+  }
+
+  async trashDocument(): Promise<boolean> {
+    if (!this.doc || this.isPdf || this.trashing) return false;
+    const id = this.doc.id;
+    this.closeSheet();
+    const ok = await confirmAction(
+      '移入回收站',
+      '30 天内可以在「我的 → 回收站」恢复。',
+      '移入回收站',
+      true,
+    );
+    if (!ok || this.doc?.id !== id) return false;
+    this.trashing = true;
+    try {
+      await deleteDocument(id);
+      this.trashed = true;
+      this.clearSaveTimer();
+      this.editing = false;
+      this.showToast('已移入回收站');
+      return true;
+    } catch (err) {
+      this.showToast(errorMessage(err, '没移入回收站'));
+      return false;
+    } finally {
+      this.trashing = false;
+    }
+  }
+
+  async uploadEditorImage(asset: {
+    uri: string;
+    mimeType?: string | null;
+    fileSize?: number | null;
+  }): Promise<string | null> {
+    if (this.uploadingImage) return null;
+    const contentType = imageMime(asset.uri, asset.mimeType);
+    if (!contentType) {
+      this.showToast('请换成 JPG、PNG、WebP 或 GIF');
+      return null;
+    }
+    let sizeBytes = asset.fileSize ?? 0;
+    if (sizeBytes <= 0) {
+      try {
+        const info = await FileSystem.getInfoAsync(asset.uri);
+        if (!info.exists || info.isDirectory) {
+          this.showToast('图片没传上');
+          return null;
+        }
+        sizeBytes = info.size;
+      } catch {
+        this.showToast('图片没传上');
+        return null;
+      }
+    }
+    if (sizeBytes > ASSET_IMAGE_MAX_BYTES) {
+      this.showToast('图片太大了');
+      return null;
+    }
+    if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+      this.showToast('图片没传上');
+      return null;
+    }
+    this.uploadingImage = true;
+    try {
+      const presigned = await presignAsset({ kind: 'image', contentType, sizeBytes });
+      const put = await FileSystem.uploadAsync(presigned.uploadUrl, asset.uri, {
+        httpMethod: 'PUT',
+        headers: { 'Content-Type': contentType },
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      });
+      if (put.status < 200 || put.status >= 300) {
+        this.showToast('图片没传上');
+        return null;
+      }
+      return presigned.assetSrc;
+    } catch {
+      this.showToast('图片没传上');
+      return null;
+    } finally {
+      this.uploadingImage = false;
+    }
+  }
+
+  beginCardEdit(cardId: string): void {
+    const card = this.doc?.cards.find((item) => item.id === cardId);
+    if (!card || card.acceptance === 'proposed') return;
+    const question = card.questions[0];
+    this.cardEditQuestion = question?.question ?? card.concept;
+    this.cardEditAnswer = question?.answer ?? card.example;
+    const fromCards = this.sheet?.kind === 'card' ? this.sheet.fromCards : undefined;
+    this.sheet = { kind: 'card-edit', cardId, fromCards };
+  }
+
+  setCardEditQuestion(value: string): void {
+    this.cardEditQuestion = value;
+  }
+
+  setCardEditAnswer(value: string): void {
+    this.cardEditAnswer = value;
+  }
+
+  closeCardEdit(): void {
+    if (this.sheet?.kind !== 'card-edit') {
+      this.closeSheet();
+      return;
+    }
+    const { cardId, fromCards } = this.sheet;
+    this.cardEditQuestion = '';
+    this.cardEditAnswer = '';
+    this.sheet = { kind: 'card', cardId, fromCards };
+  }
+
+  async saveCardEdit(): Promise<boolean> {
+    const editing = this.sheet;
+    if (editing?.kind !== 'card-edit' || this.cardBusy || !this.doc) return false;
+    const card = this.doc.cards.find((item) => item.id === editing.cardId);
+    if (!card) return false;
+    const ask = clipChars(this.cardEditQuestion.trim(), 2000);
+    const answer = clipChars(this.cardEditAnswer.trim(), 4000);
+    if (!ask || !answer) {
+      this.showToast('没改上');
+      return false;
+    }
+    const existing = card.questions[0];
+    // cardQuestionTypeSchema is cloze | compare | judge — there is no qa.
+    const input: UpdateCardInput = {
+      concept: ask,
+      example: answer,
+      questions: [
+        {
+          ...(existing?.id ? { id: existing.id } : {}),
+          type: existing?.type ?? 'cloze',
+          question: ask,
+          answer,
+        },
+      ],
+    };
+    const fromCards = editing.fromCards;
+    this.cardBusy = true;
+    try {
+      const detail = await updateCard(card.id, input);
+      this.applyCard(detail);
+      this.entityGen += 1;
+      this.showToast('已保存');
+      const stillThere = this.doc?.cards.some((item) => item.id === card.id) ?? false;
+      this.cardEditQuestion = '';
+      this.cardEditAnswer = '';
+      if (stillThere) this.sheet = { kind: 'card', cardId: card.id, fromCards };
+      return true;
+    } catch (err) {
+      this.showToast(errorMessage(err, '没改上'));
+      return false;
+    } finally {
+      this.cardBusy = false;
+    }
+  }
+
+  async archiveDocCard(id: string): Promise<void> {
+    if (this.cardBusy) return;
+    const sheet = this.sheet;
+    const fromCards =
+      sheet?.kind === 'card' || sheet?.kind === 'card-edit' ? sheet.fromCards : undefined;
+    this.closeSheet();
+    const ok = await confirmAction('移入回收站', '移入后可在设置里恢复。', '移入回收站', true);
+    if (!ok) {
+      if (this.doc?.cards.some((card) => card.id === id)) this.openCard(id, fromCards);
+      return;
+    }
+    this.cardBusy = true;
+    try {
+      await archiveCard(id);
+      this.removeCard(id);
+      this.showToast('已移入回收站，可在设置里恢复');
+    } catch (err) {
+      this.showToast(errorMessage(err, '没删掉'));
+    } finally {
+      this.cardBusy = false;
+    }
+  }
+
+  async toggleCardSuspended(cardId: string): Promise<void> {
+    const card = this.doc?.cards.find((item) => item.id === cardId);
+    if (!card?.review || this.cardBusy) return;
+    const suspended = card.review.suspendedAt != null;
+    this.cardBusy = true;
+    try {
+      const state = suspended ? await resumeCard(card.id) : await suspendCard(card.id);
+      if (!this.doc) return;
+      this.doc = {
+        ...this.doc,
+        cards: this.doc.cards.map((item) =>
+          item.id === card.id
+            ? {
+                ...item,
+                review: {
+                  dueAt: state.dueAt,
+                  intervalDays: state.intervalDays,
+                  suspendedAt: state.suspendedAt,
+                },
+              }
+            : item,
+        ),
+      };
+      this.showToast(suspended ? '已恢复复习' : '已标记为熟悉，不再安排复习');
+    } catch (err) {
+      this.showToast(errorMessage(err, '操作没成功'));
+    } finally {
+      this.cardBusy = false;
+    }
+  }
+
+  async saveAnnotationNote(id: string, note: string): Promise<boolean> {
+    if (this.saving) return false;
+    this.saving = true;
+    try {
+      const updated = await updateAnnotation(id, { note: note.slice(0, 20_000) });
+      this.annotations = this.annotations.map((item) => (item.id === id ? updated : item));
+      this.showToast('已记下');
+      return true;
+    } catch (err) {
+      this.showToast(errorMessage(err, '没改上'));
+      return false;
+    } finally {
+      this.saving = false;
+    }
+  }
+
+  async deleteAnnotationNote(id: string): Promise<void> {
+    const annotationIds = this.sheet?.kind === 'annotations' ? this.sheet.annotationIds : [id];
+    this.closeSheet();
+    const ok = await confirmAction('删除这条批注？', '删除后可在设置里恢复。', '删除', true);
+    if (!ok) {
+      this.sheet = { kind: 'annotations', annotationIds };
+      return;
+    }
+    try {
+      await deleteAnnotation(id);
+      this.annotations = this.annotations.filter((item) => item.id !== id);
+      if (this.sheet?.kind === 'annotations') {
+        const annotationIds = this.sheet.annotationIds.filter((item) => item !== id);
+        this.sheet = annotationIds.length > 0 ? { kind: 'annotations', annotationIds } : null;
+      }
+      this.entityGen += 1;
+      this.showToast('已移入回收站，可在设置里恢复');
+    } catch (err) {
+      this.showToast(errorMessage(err, '没删掉'));
+    }
+  }
+
+  private seedEditor(doc: DocumentDetail): void {
+    const shown = displayedPmJson(doc);
+    this.draftTitle = doc.title ?? '';
+    this.lastSavedTitle = doc.title ?? '';
+    this.draftJson = shown;
+    this.lastSavedJson = clonePmJson(shown);
+    const savedAt = new Date(doc.updatedAt);
+    this.savedAt = Number.isNaN(savedAt.getTime()) ? null : savedAt;
+    this.saveState = this.savedAt ? 'saved' : 'idle';
+    this.saveError = null;
+  }
+
+  private resetEditor(): void {
+    this.clearSaveTimer();
+    this.editing = false;
+    this.draftTitle = '';
+    this.lastSavedTitle = '';
+    this.draftJson = null;
+    this.lastSavedJson = null;
+    this.saveState = 'idle';
+    this.savedAt = null;
+    this.saveError = null;
+    this.formatState = null;
+    this.editRouteFor = null;
+  }
+
+  /** Poll/digest: keep a dirty draft; accept a clean remote title. */
+  private applyRemoteDetail(detail: DocumentDetail, notes: Annotation[]): void {
+    const prev = this.doc;
+    if (!prev || prev.id !== detail.id) return;
+    const remoteOlder = detail.updatedAt < prev.updatedAt;
+    const keepBody = this.bodyDirty || this.editorLive || remoteOlder;
+    const keepTitle = this.titleDirty || remoteOlder;
+    const prevCards = JSON.stringify(prev.cards);
+    const prevNotes = JSON.stringify(this.annotations);
+    const shown = displayedPmJson(detail);
+    const contentChanged = !keepBody && !jsonEqual(shown, this.lastSavedJson ?? prev.contentJson);
+    this.doc = {
+      ...detail,
+      contentJson: keepBody ? prev.contentJson : detail.contentJson,
+      title: keepTitle ? prev.title : detail.title,
+      answer: keepBody ? prev.answer : detail.answer,
+    };
+    this.annotations = notes;
+    if (!keepTitle) {
+      const nextTitle = detail.title ?? '';
+      if (nextTitle !== this.lastSavedTitle) {
+        this.lastSavedTitle = nextTitle;
+        this.draftTitle = nextTitle;
+      }
+    }
+    if (!keepBody) {
+      this.draftJson = shown;
+      this.lastSavedJson = clonePmJson(shown);
+      if (contentChanged) this.contentGen += 1;
+    }
+    if (prevCards !== JSON.stringify(detail.cards) || prevNotes !== JSON.stringify(notes)) {
+      this.entityGen += 1;
+    }
+    void this.prefetchMedia();
+  }
+
+  private touchSave(): void {
+    if (this.trashed || this.closed) return;
+    if (!this.dirty) {
+      this.clearSaveTimer();
+      if (this.saveState !== 'saving') this.saveState = this.savedAt ? 'saved' : 'idle';
+      return;
+    }
+    this.clearSaveTimer();
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      void this.save(false);
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  private clearSaveTimer(): void {
+    if (this.saveTimer === null) return;
+    clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+  }
+
+  private async save(force: boolean): Promise<void> {
+    if (this.trashed) return;
+    if (!force && !this.dirty) return;
+    if (this.saveInflight) {
+      await this.saveInflight;
+      if (this.trashed) return;
+      if (!force && !this.dirty && this.saveState !== 'error') return;
+    }
+    const run = this.persist();
+    this.saveInflight = run;
+    try {
+      await run;
+    } finally {
+      if (this.saveInflight === run) this.saveInflight = null;
+    }
+  }
+
+  private async persist(): Promise<void> {
+    this.clearSaveTimer();
+    const current = this.doc;
+    if (!current || this.trashed) return;
+    const id = current.id;
+    const lastSavedTitle = this.lastSavedTitle;
+    const lastSavedJson = this.lastSavedJson;
+    const titleSnapshot = this.draftTitle;
+    const jsonSnapshot = this.draftJson;
+    const getter = this.editing || this.dirty ? this.docGetter : null;
+    let fetched: PmDocJson | null = null;
+    if (getter) {
+      try {
+        fetched = clonePmJson(await getter());
+      } catch {
+        fetched = null;
+      }
+    }
+    if (this.trashed) return;
+    const still = this.doc?.id === id;
+    const draftTitle = still ? this.draftTitle : titleSnapshot;
+    let draftJson = fetched ?? (still ? this.draftJson : jsonSnapshot);
+    if (
+      still &&
+      this.draftJson &&
+      fetched &&
+      !jsonEqual(this.draftJson, fetched) &&
+      !jsonEqual(this.draftJson, jsonSnapshot)
+    ) {
+      draftJson = this.draftJson;
+    }
+    if (!draftJson || !lastSavedJson) return;
+    const patch = buildDocumentPatch({
+      draftTitle,
+      lastSavedTitle,
+      draftJson,
+      lastSavedJson,
+    });
+    if (!patch) {
+      if (still && fetched && (this.draftJson === null || jsonEqual(this.draftJson, jsonSnapshot))) {
+        this.draftJson = fetched;
+      }
+      if (still && this.saveState !== 'saving') {
+        this.saveError = null;
+        this.saveState = this.savedAt ? 'saved' : 'idle';
+      }
+      return;
+    }
+    if (still) {
+      this.saveState = 'saving';
+      this.saveError = null;
+    }
+    const sentJson = clonePmJson(draftJson);
+    const sentTitle = draftTitle;
+    try {
+      const updated = await updateDocument(id, patch);
+      if (this.trashed || this.closed || this.doc?.id !== id) return;
+      // Keep the client JSON. jsonb reorders keys, and that must not look like a new edit.
+      this.lastSavedJson = clonePmJson(sentJson);
+      this.lastSavedTitle = updated.title ?? '';
+      if (
+        this.draftJson === null ||
+        jsonEqual(this.draftJson, jsonSnapshot) ||
+        jsonEqual(this.draftJson, sentJson)
+      ) {
+        this.draftJson = clonePmJson(sentJson);
+      }
+      if (this.draftTitle.trim() === sentTitle.trim()) {
+        this.draftTitle = updated.title ?? '';
+      }
+      const titleStillDirty = titlesDiffer(this.draftTitle, this.lastSavedTitle);
+      this.doc = {
+        ...this.doc,
+        contentJson: clonePmJson(sentJson),
+        title: titleStillDirty ? this.doc.title : (updated.title ?? null),
+        updatedAt: updated.updatedAt,
+      };
+      this.savedAt = new Date();
+      this.saveState = 'saved';
+      this.saveError = null;
+      if (!this.dirty) this.editorLive = false;
+      if (this.dirty) this.touchSave();
+    } catch (err) {
+      if (this.doc?.id !== id) return;
+      this.saveState = 'error';
+      this.saveError = errorMessage(err, '没存上，再试一次');
+    }
   }
 }

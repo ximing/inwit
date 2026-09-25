@@ -1,9 +1,23 @@
 import { Service } from '@rabjs/react';
-import { DEFAULT_REVIEW_SETTINGS, type ReviewSettings, type ReviewStats, type ReviewToday } from '@inwit/dto';
+import {
+  DEFAULT_REVIEW_SETTINGS,
+  type ReviewSettings,
+  type ReviewStats,
+  type ReviewStrugglingCard,
+  type ReviewToday,
+} from '@inwit/dto';
 import { errorMessage } from '@/api/client';
-import { getReviewSettings, getReviewStats, getReviewToday, updateReviewSettings } from '@/api/review';
+import {
+  getReviewCheckins,
+  getReviewSettings,
+  getReviewStats,
+  getReviewToday,
+  getStrugglingCards,
+  updateReviewSettings,
+} from '@/api/review';
 import { LayoutService } from '@/services/layout.service';
 import { ToastService } from '@/services/toast.service';
+import { countsByDate, isCurrentMonth, monthKeyOf, shiftMonthKey } from './checkin-logic';
 import { adoptSettings, cloneSettings, normalizeDraft } from './review-settings-logic';
 
 export class ReviewService extends Service {
@@ -14,6 +28,9 @@ export class ReviewService extends Service {
   error: string | null = null;
   stats: ReviewStats | null = null;
   settings: ReviewSettings = cloneSettings(DEFAULT_REVIEW_SETTINGS);
+  struggling: ReviewStrugglingCard[] = [];
+  calMonth: string = monthKeyOf(new Date());
+  checkins: Record<string, number> = {};
 
   get layout(): LayoutService {
     return this.resolve(LayoutService);
@@ -25,6 +42,16 @@ export class ReviewService extends Service {
 
   get dueCount(): number {
     return Math.max(0, this.total - this.reviewedToday);
+  }
+
+  /** Cards past the daily cap, carried to tomorrow. */
+  get backlogCount(): number {
+    const overdue = this.stats?.overdueCount ?? 0;
+    return Math.max(0, overdue - this.dueCount);
+  }
+
+  showToast(message: string): void {
+    this.toastService.show(message);
   }
 
   private refreshDueBadge(): void {
@@ -49,12 +76,47 @@ export class ReviewService extends Service {
       this.applyToday(today);
       this.stats = stats;
       this.settings = adoptSettings(settings);
+      const month = monthKeyOf(new Date());
+      if (this.calMonth !== month) {
+        this.calMonth = month;
+        this.checkins = {};
+      }
       this.refreshDueBadge();
     } catch (err) {
       this.error = errorMessage(err, '复习中心加载失败');
     } finally {
       this.ready = true;
     }
+    void this.loadStruggling();
+    void this.loadCheckins(this.calMonth);
+  }
+
+  async loadStruggling(): Promise<void> {
+    try {
+      this.struggling = await getStrugglingCards();
+    } catch {
+      // Keep the last list. Struggling cards are optional.
+    }
+  }
+
+  async loadCheckins(month = this.calMonth): Promise<void> {
+    try {
+      const data = await getReviewCheckins(month);
+      if (month !== this.calMonth) return;
+      this.checkins = countsByDate(data.days);
+    } catch {
+      // Keep the last month. The heatmap is optional.
+    }
+  }
+
+  async shiftCalMonth(delta: number): Promise<void> {
+    if (delta === 0) return;
+    if (delta > 0 && isCurrentMonth(this.calMonth, new Date())) return;
+    const next = shiftMonthKey(this.calMonth, delta);
+    if (next > monthKeyOf(new Date())) return;
+    this.calMonth = next;
+    this.checkins = {};
+    await this.loadCheckins(next);
   }
 
   /** Prefetch today's queue then the screen navigates to session. */

@@ -1,5 +1,6 @@
 import { Service } from '@rabjs/react';
 import {
+  EMPTY_PM_DOC,
   isChatQuestion,
   type Document,
   type DocumentDetail,
@@ -13,15 +14,19 @@ import { errorMessage } from '@/api/client';
 import {
   createChat,
   createDocument,
+  deleteDocument,
   getDocument,
   listDocuments,
   retryDocument,
+  updateDocument,
 } from '@/api/documents';
 import { getJobQueue } from '@/api/jobs';
 import { createTopic, listTopics } from '@/api/topics';
 import { describeDocumentStage, pickDocumentJob, type DocPipelineStage } from '@/lib/doc-pipeline';
+import { checkpointPercent } from '@/lib/import-logic';
 import { isBlankPmDoc, textToPmDoc } from '@/lib/pm-doc';
 import { ToastService } from '@/services/toast.service';
+import { ImportService } from './import.service';
 
 const DOC_PAGE = 20;
 const POLL_MS = 3000;
@@ -76,6 +81,19 @@ export class DocsService extends Service {
     return this.resolve(ToastService);
   }
 
+  get importService(): ImportService {
+    return this.resolve(ImportService);
+  }
+
+  /** Filter wins; otherwise the capture-box topic. */
+  get actionTopicId(): string | undefined {
+    return this.filterTopicId ?? this.captureTopicId ?? undefined;
+  }
+
+  get cancelingId(): string | null {
+    return this.importService.cancelingId;
+  }
+
   get captureTopic(): Topic | null {
     if (this.captureTopicId === null) return null;
     return this.topics.find((topic) => topic.id === this.captureTopicId) ?? null;
@@ -107,13 +125,21 @@ export class DocsService extends Service {
     source: DocumentSource;
     contentJson?: unknown;
   }): DocPipelineStage {
+    const upload = this.importService.uploadByDoc[doc.id];
+    const checkpoint = this.importService.checkpointFor(doc.id);
+    const job = upload ? null : this.jobFor(doc.id);
+    const uploadPercent = upload
+      ? upload.percent
+      : !job && checkpoint
+        ? checkpointPercent(checkpoint)
+        : null;
     return describeDocumentStage({
       status: doc.status,
       source: doc.source,
-      uploadPercent: null,
-      hasCheckpoint: false,
+      uploadPercent,
+      hasCheckpoint: Boolean(checkpoint),
       hasContent: !isBlankPmDoc(doc.contentJson),
-      job: this.jobFor(doc.id),
+      job,
     });
   }
 
@@ -143,6 +169,11 @@ export class DocsService extends Service {
 
   async boot(): Promise<void> {
     this.error = null;
+    try {
+      await this.importService.hydrate();
+    } catch {
+      // A missing checkpoint store should not block the list.
+    }
     try {
       this.topics = await listTopics('active');
       if (this.captureTopicId && !this.topics.some((topic) => topic.id === this.captureTopicId)) {
@@ -230,10 +261,62 @@ export class DocsService extends Service {
     });
     const matchesFilter = this.filterTopicId === null || this.filterTopicId === created.topicId;
     if (matchesFilter) {
+      const exists = this.documents.some((doc) => doc.id === created.id);
       this.documents = [item, ...this.documents.filter((doc) => doc.id !== created.id)];
-      this.documentsTotal += 1;
+      if (!exists) this.documentsTotal += 1;
     }
     this.syncPolling();
+  }
+
+  async createBlank(): Promise<string | null> {
+    const topicId = this.actionTopicId;
+    try {
+      const created = await createDocument({
+        contentJson: EMPTY_PM_DOC,
+        source: 'editor',
+        ...(topicId ? { topicId } : {}),
+      });
+      this.ingestCreated(created);
+      return created.id;
+    } catch (err) {
+      this.showToast(errorMessage(err, '没建出来，再试一次'));
+      return null;
+    }
+  }
+
+  async renameDocument(id: string, rawTitle: string): Promise<boolean> {
+    const trimmed = rawTitle.trim();
+    try {
+      const updated = await updateDocument(id, { title: trimmed.length === 0 ? null : trimmed });
+      this.documents = this.documents.map((item) =>
+        item.id === id ? { ...item, title: updated.title, updatedAt: updated.updatedAt } : item,
+      );
+      return true;
+    } catch (err) {
+      this.showToast(errorMessage(err, '没改成'));
+      return false;
+    }
+  }
+
+  async archiveDocument(id: string): Promise<void> {
+    if (this.importService.checkpointFor(id) || this.importService.uploadingDocumentId === id) {
+      await this.importService.cancelImport(id);
+      this.showToast('已取消上传');
+      return;
+    }
+    try {
+      await deleteDocument(id);
+      const had = this.documents.some((doc) => doc.id === id);
+      this.documents = this.documents.filter((doc) => doc.id !== id);
+      if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
+      this.showToast('已移入回收站');
+    } catch (err) {
+      this.showToast(errorMessage(err, '没移进去'));
+    }
+  }
+
+  async cancelImport(id: string): Promise<void> {
+    await this.importService.cancelImport(id);
   }
 
   topicTitleById(id: string | null): string | null {

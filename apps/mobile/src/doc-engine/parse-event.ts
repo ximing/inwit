@@ -1,5 +1,7 @@
+import type { PmDocJson } from '@inwit/dto';
 import type {
   DocEngineEvent,
+  FormatState,
   SelectionAction,
   TextSelectionAnchor,
   ViewportRect,
@@ -15,6 +17,9 @@ const EVENT_TYPES = new Set<DocEngineEvent['type']>([
   'selectionAction',
   'assetNeeded',
   'linkClick',
+  'docChanged',
+  'docJson',
+  'formatState',
 ]);
 
 export type ParseOk<T> = { ok: true; value: T };
@@ -56,6 +61,49 @@ function parseRect(value: unknown): ViewportRect | null | undefined {
     return undefined;
   }
   return { x: value.x, y: value.y, width: value.width, height: value.height };
+}
+
+function parseFormatState(value: unknown): FormatState | null {
+  if (!isRecord(value)) return null;
+  const flags = [
+    'bold',
+    'italic',
+    'strike',
+    'heading1',
+    'heading2',
+    'bulletList',
+    'orderedList',
+    'taskList',
+    'blockquote',
+    'codeBlock',
+    'link',
+    'table',
+    'canUndo',
+    'canRedo',
+  ] as const;
+  if (typeof value.editable !== 'boolean') return null;
+  for (const key of flags) {
+    if (typeof value[key] !== 'boolean') return null;
+  }
+  if (value.textAlign !== 'left' && value.textAlign !== 'center' && value.textAlign !== 'right') return null;
+  return {
+    editable: value.editable,
+    bold: value.bold as boolean,
+    italic: value.italic as boolean,
+    strike: value.strike as boolean,
+    heading1: value.heading1 as boolean,
+    heading2: value.heading2 as boolean,
+    bulletList: value.bulletList as boolean,
+    orderedList: value.orderedList as boolean,
+    taskList: value.taskList as boolean,
+    blockquote: value.blockquote as boolean,
+    codeBlock: value.codeBlock as boolean,
+    link: value.link as boolean,
+    table: value.table as boolean,
+    textAlign: value.textAlign,
+    canUndo: value.canUndo as boolean,
+    canRedo: value.canRedo as boolean,
+  };
 }
 
 function parseStrings(value: unknown): string[] | null {
@@ -135,6 +183,25 @@ export function parseDocEngineEvent(raw: unknown): ParseResult<DocEngineEvent> {
         return { ok: false, message: 'linkClick payload requires href' };
       }
       return { ok: true, value: { type, payload: { href: payload.href } } };
+    }
+    case 'docChanged':
+      return { ok: true, value: { type: 'docChanged' } };
+    case 'docJson': {
+      if (!isRecord(payload) || typeof payload.requestId !== 'string' || payload.requestId.length === 0) {
+        return { ok: false, message: 'docJson payload requires requestId' };
+      }
+      if (!isRecord(payload.doc) || payload.doc.type !== 'doc') {
+        return { ok: false, message: 'docJson payload.doc must be a PM doc' };
+      }
+      return {
+        ok: true,
+        value: { type: 'docJson', payload: { requestId: payload.requestId, doc: payload.doc as PmDocJson } },
+      };
+    }
+    case 'formatState': {
+      const state = parseFormatState(payload);
+      if (!state) return { ok: false, message: 'formatState payload is invalid' };
+      return { ok: true, value: { type: 'formatState', payload: state } };
     }
     default: {
       const _never: never = type;

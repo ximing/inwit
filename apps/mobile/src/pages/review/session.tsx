@@ -2,9 +2,11 @@ import { IMAGE_EXCERPT_QUOTE } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BottomSheet } from '@/components/bottom-sheet';
+import { confirmAction } from '@/lib/confirm';
 import { ROUTES } from '@/routes';
 import { useTheme, type ThemeTokens } from '@/theme';
 import { formatMult } from './review-settings-logic';
@@ -21,6 +23,7 @@ const SessionContent = observer(function SessionContent() {
   const fuzzyScale = service.settings.fuzzyScale;
   const imageUrl = service.currentImageUrl;
   const showQuestion = (service.question.trim() || '') !== IMAGE_EXCERPT_QUOTE;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     void service.load();
@@ -30,6 +33,10 @@ const SessionContent = observer(function SessionContent() {
     if (!current?.card.hasImage) return;
     void service.loadCardImage(current.card.id);
   }, [current?.card.id, current?.card.hasImage, service]);
+
+  useEffect(() => {
+    if (!current) setMenuOpen(false);
+  }, [current]);
 
   const goHub = () => {
     if (router.canGoBack()) router.back();
@@ -43,9 +50,23 @@ const SessionContent = observer(function SessionContent() {
           <Text style={styles.backText}>← 返回</Text>
         </Pressable>
         <Text style={styles.title}>今日复习</Text>
-        <Text style={styles.count}>
-          {service.cardOrdinal} / {service.total}
-        </Text>
+        <View style={styles.headSide}>
+          {current ? (
+            <Pressable
+              accessibilityLabel="卡片操作"
+              onPress={() => setMenuOpen(true)}
+              hitSlop={8}
+              style={styles.menuBtn}
+            >
+              <Text style={styles.menuGlyph}>···</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.menuBtn} />
+          )}
+          <Text style={styles.count}>
+            {service.cardOrdinal} / {service.total}
+          </Text>
+        </View>
       </View>
       <View
         style={styles.progress}
@@ -160,6 +181,36 @@ const SessionContent = observer(function SessionContent() {
           )}
         </View>
       )}
+      <BottomSheet visible={menuOpen} title="卡片操作" onClose={() => setMenuOpen(false)}>
+        <Pressable
+          disabled={grading}
+          onPress={() => {
+            setMenuOpen(false);
+            void service.markCurrentFamiliar();
+          }}
+          style={styles.menuRow}
+        >
+          <Text style={[styles.menuLabel, grading && styles.disabled]}>已熟悉，不复习</Text>
+        </Pressable>
+        <Pressable
+          disabled={grading}
+          onPress={() => {
+            setMenuOpen(false);
+            void (async () => {
+              const ok = await confirmAction(
+                '移入回收站',
+                '可在「我的 → 回收站」恢复。',
+                '移入回收站',
+                true,
+              );
+              if (ok) await service.archiveCurrent();
+            })();
+          }}
+          style={styles.menuRow}
+        >
+          <Text style={[styles.menuDanger, grading && styles.disabled]}>移入回收站</Text>
+        </Pressable>
+      </BottomSheet>
     </SafeAreaView>
   );
 });
@@ -214,7 +265,13 @@ function makeStyles(theme: ThemeTokens) {
     backBtn: { paddingVertical: 6, paddingRight: 8 },
     backText: { fontSize: 14, color: theme.colors.ink2, fontWeight: '500' },
     title: { flex: 1, textAlign: 'center', fontSize: 15, fontWeight: '600', color: theme.colors.ink },
+    headSide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
+    menuBtn: { minWidth: 28, alignItems: 'center' },
+    menuGlyph: { fontSize: 18, color: theme.colors.ink2, fontWeight: '700', letterSpacing: 1 },
     count: { fontSize: 13, color: theme.colors.ink3, minWidth: 48, textAlign: 'right' },
+    menuRow: { paddingVertical: 14 },
+    menuLabel: { fontSize: 16, color: theme.colors.ink },
+    menuDanger: { fontSize: 16, color: theme.colors.accent },
     progress: {
       height: 4,
       backgroundColor: theme.colors.lineSoft,

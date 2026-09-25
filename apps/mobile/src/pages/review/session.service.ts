@@ -7,7 +7,7 @@ import {
   type ReviewStats,
 } from '@inwit/dto';
 import { router } from 'expo-router';
-import { getCardImage } from '@/api/cards';
+import { archiveCard, getCardImage, suspendCard } from '@/api/cards';
 import { errorMessage } from '@/api/client';
 import { getReviewSettings, getReviewStats, getReviewToday, submitReviewFeedback } from '@/api/review';
 import {
@@ -24,6 +24,7 @@ import {
   applyGradeFailure,
   applyGradeStart,
   applyGradeSuccess,
+  applyRemoveCurrent,
   applyToday,
   canFlip,
   canGrade,
@@ -56,6 +57,7 @@ export class ReviewSessionService extends Service {
   stats: ReviewStats | null = null;
   settings: ReviewSettings = cloneSettings(DEFAULT_REVIEW_SETTINGS);
   cardImageUrls: Record<string, PresignedUrlEntry> = {};
+  removing = false;
 
   get layout(): LayoutService {
     return this.resolve(LayoutService);
@@ -134,7 +136,7 @@ export class ReviewSessionService extends Service {
   }
 
   get grading(): boolean {
-    return this.$model.grade.loading;
+    return this.$model.grade.loading || this.removing;
   }
 
   private refreshDueBadge(): void {
@@ -204,6 +206,44 @@ export class ReviewSessionService extends Service {
     } catch (err) {
       this.error = errorMessage(err, '这次反馈没记下，再点一次');
       this.commit(applyGradeFailure(this.snapshot()));
+    }
+  }
+
+  async markCurrentFamiliar(): Promise<void> {
+    const item = this.current;
+    if (!item || this.grading) return;
+    this.removing = true;
+    this.error = null;
+    try {
+      await suspendCard(item.card.id);
+      if (this.current?.card.id === item.card.id) {
+        this.commit(applyRemoveCurrent(this.snapshot()));
+        this.refreshDueBadge();
+      }
+      this.toastService.show('这张先放到一边');
+    } catch (err) {
+      this.error = errorMessage(err, '操作没成功，再试一次');
+    } finally {
+      this.removing = false;
+    }
+  }
+
+  async archiveCurrent(): Promise<void> {
+    const item = this.current;
+    if (!item || this.grading) return;
+    this.removing = true;
+    this.error = null;
+    try {
+      await archiveCard(item.card.id);
+      if (this.current?.card.id === item.card.id) {
+        this.commit(applyRemoveCurrent(this.snapshot()));
+        this.refreshDueBadge();
+      }
+      this.toastService.show('已移入回收站，可在设置里恢复');
+    } catch (err) {
+      this.error = errorMessage(err, '没删掉，再试一次');
+    } finally {
+      this.removing = false;
     }
   }
 

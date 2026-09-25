@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>PDF</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --reader-bg: #f6f3ec;
+      --paper: #fffdf8;
+      --status: #574e41;
+      --error: #b3402a;
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --reader-bg: #1c1915;
+      --paper: #fffdf8;
+      --status: #c9bfae;
+      --error: #e06a52;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--reader-bg);
+      color: var(--status);
+      font: 15px/1.5 -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+    body { overflow: hidden; }
+    #status {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+      pointer-events: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    #status[hidden] { display: none; }
+    #status.error { color: var(--error); }
+    #scroller {
+      height: 100%;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 8px 0 56px;
+      box-sizing: border-box;
+    }
+    .page {
+      position: relative;
+      margin: 8px auto;
+      background: var(--paper);
+      box-shadow: 0 1px 3px rgba(60, 48, 30, 0.12);
+      overflow: hidden;
+    }
+    .canvasHost {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+    }
+    .canvasHost canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    /* Text layer layout matches pdf.js 4.10.38 (transparent glyphs over the canvas). */
+    .textLayer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      z-index: 2;
+      overflow: hidden;
+      opacity: 1;
+      line-height: 1;
+      text-align: initial;
+      -webkit-text-size-adjust: none;
+      text-size-adjust: none;
+      transform-origin: 0 0;
+      caret-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: text;
+      user-select: text;
+    }
+    .textLayer :is(span, br) {
+      color: transparent;
+      position: absolute;
+      white-space: pre;
+      cursor: text;
+      transform-origin: 0% 0%;
+    }
+    .textLayer ::selection {
+      background: rgba(179, 64, 42, 0.28);
+    }
+    .textLayer .endOfContent {
+      display: block;
+      position: absolute;
+      inset: 100% 0 0;
+      z-index: 0;
+      cursor: default;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .textLayer.selecting .endOfContent { top: 0; }
+    .hiddenCanvasElement {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 0;
+      height: 0;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="status">正在打开 PDF…</div>
+  <div id="scroller"></div>
+  <script>
+    // pdf.js 4.10.38 on cdnjs is ESM only (pdf.min.mjs). pdf.min.js is 404.
+    // A file:// WebView has an opaque origin, so PDFWorker treats the CDN worker
+    // as cross-origin and wraps it: blob URL whose module does await import(workerSrc).
+    // If that Worker errors, 4.10.38 falls back to a main-thread fake worker.
+    // The fake worker uses globalThis.pdfjsWorker.WorkerMessageHandler when set,
+    // otherwise import(workerSrc). The eval path installs pdfjsWorker because
+    // import() is what already failed.
+    const PDFJS_VERSION = '4.10.38';
+    const LIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VERSION + '/pdf.min.mjs';
+    const WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VERSION + '/pdf.worker.min.mjs';
+    // cdnjs 4.10.38 does not serve cmaps (403) or standard_fonts (404).
+    const CMAP_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@' + PDFJS_VERSION + '/cmaps/';
+    const FONT_URL = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@' + PDFJS_VERSION + '/standard_fonts/';
+    const MAX_RENDER = 2;
+    const MAX_PIXEL_RATIO = 2;
+
+    const statusEl = document.getElementById('status');
+    const scroller = document.getElementById('scroller');
+
+    let pdfjsLib = null;
+    let libReady = false;
+    let pendingUrl = null;
+    let phase = 'idle';
+    let activeUrl = null;
+    let loadToken = 0;
+    let pdfDoc = null;
+    let loadingTask = null;
+    let slots = [];
+    let renderQueue = [];
+    let activeRenders = 0;
+    let pageObserver = null;
+    let pageTimer = 0;
+    let postedPage = -1;
+    let currentPageIndex = 0;
+    let selectionTimer = 0;
+    let lastSelectionKey = '';
+    let selectionWasNonEmpty = false;
+    let lastWidth = 0;
+    let resizeTimer = 0;
+
+    function post(message) {
+      const raw = JSON.stringify(message);
+      const bridge = window.ReactNativeWebView;
+      if (bridge && typeof bridge.postMessage === 'function') bridge.postMessage(raw);
+      else console.log(raw);
+    }
+
+    function showStatus(text, isError) {
+      statusEl.hidden = false;
+      statusEl.textContent = text;
+      statusEl.classList.toggle('error', Boolean(isError));
+    }
+
+    function hideStatus() {
+      statusEl.hidden = true;
+      statusEl.classList.remove('error');
+    }
+
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
+    }
+
+    function humanError(err) {
+      const name = err && typeof err === 'object' ? err.name : '';
+      if (name === 'PasswordException') return '这份 PDF 需要密码，暂不能打开';
+      if (name === 'InvalidPDFException') return '这份文件不是有效的 PDF';
+      if (name === 'MissingPDFException') return '找不到 PDF 文件';
+      if (name === 'UnexpectedResponseException') {
+        const status = err.status;
+        return typeof status === 'number' ? 'PDF 下载失败（' + status + '）' : 'PDF 下载失败';
+      }
+      return '无法打开 PDF';
+    }
+
+    function isCancel(err) {
+      const name = err && err.name;
+      return name === 'RenderingCancelledException' || name === 'AbortException';
+    }
+
+    async function evalClassic(url, rewriteMeta) {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      let code = await response.text();
+      // pdf.min.mjs is a webpack bundle plus a trailing ESM export, and one
+      // import.meta.url inside the Node canvas branch. Classic scripts cannot parse either.
+      if (rewriteMeta) code = code.split('import.meta.url').join(JSON.stringify(url));
+      code = code.replace(/export\{[^}]*\};?\s*$/, '');
+      (0, eval)(code);
+    }
+
+    async function loadPdfJs() {
+      let viaEval = false;
+      try {
+        await import(LIB_URL);
+      } catch (err) {
+        viaEval = true;
+        await evalClassic(LIB_URL, true);
+      }
+      const lib = globalThis.pdfjsLib;
+      if (!lib || typeof lib.getDocument !== 'function' || typeof lib.TextLayer !== 'function') {
+        throw new Error('pdfjs');
+      }
+      lib.GlobalWorkerOptions.workerSrc = WORKER_URL;
+      // import() failed, so PDFWorker's fake-worker import(workerSrc) would fail too.
+      // globalThis.pdfjsWorker.WorkerMessageHandler is what 4.10.38 checks first.
+      if (viaEval) {
+        try {
+          await evalClassic(WORKER_URL, false);
+        } catch (err) {
+          // The module Worker may still start. If both fail, getDocument rejects.
+        }
+      }
+      return lib;
+    }
+
+    function destroyDocument() {
+      loadToken += 1;
+      if (pageObserver) {
+        pageObserver.disconnect();
+        pageObserver = null;
+      }
+      for (const slot of slots) cancelSlot(slot);
+      slots = [];
+      renderQueue = [];
+      scroller.replaceChildren();
+      postedPage = -1;
+      currentPageIndex = 0;
+      const task = loadingTask;
+      const doc = pdfDoc;
+      loadingTask = null;
+      pdfDoc = null;
+      if (task && typeof task.destroy === 'function') task.destroy().catch(function () {});
+      if (doc && typeof doc.destroy === 'function') doc.destroy().catch(function () {});
+    }
+
+    function cancelSlot(slot) {
+      slot.renderToken += 1;
+      slot.wanted = false;
+      const index = renderQueue.indexOf(slot);
+      if (index >= 0) renderQueue.splice(index, 1);
+      if (slot.renderTask) {
+        try { slot.renderTask.cancel(); } catch (err) { /* already settled */ }
+        slot.renderTask = null;
+      }
+      if (slot.textLayer && typeof slot.textLayer.cancel === 'function') {
+        try { slot.textLayer.cancel(); } catch (err) { /* already settled */ }
+        slot.textLayer = null;
+      }
+      slot.rendered = false;
+      slot.canvasHost.replaceChildren();
+      const text = slot.el.querySelector('.textLayer');
+      if (text) text.remove();
+    }
+
+    function fitScale(baseWidth, containerWidth) {
+      const available = Math.max(1, containerWidth - 24);
+      if (!baseWidth) return 1;
+      return available / baseWidth;
+    }
+
+    function requestRender(slot) {
+      slot.wanted = true;
+      if (slot.rendered || slot.rendering) return;
+      if (renderQueue.indexOf(slot) >= 0) return;
+      renderQueue.push(slot);
+      drain();
+    }
+
+    function drain() {
+      while (activeRenders < MAX_RENDER && renderQueue.length > 0) {
+        const slot = renderQueue.shift();
+        if (!slot || !slot.wanted || slot.rendered || slot.rendering) continue;
+        slot.rendering = true;
+        activeRenders += 1;
+        const renderToken = slot.renderToken;
+        renderSlot(slot, renderToken);
+      }
+    }
+
+    function renderSlot(slot, renderToken) {
+      let task = null;
+      try {
+        const page = slot.page;
+        const viewport = slot.viewport;
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('canvas');
+        canvas.width = Math.floor(viewport.width * pixelRatio);
+        canvas.height = Math.floor(viewport.height * pixelRatio);
+        const renderParams = { canvasContext: ctx, viewport: viewport };
+        if (pixelRatio !== 1) renderParams.transform = [pixelRatio, 0, 0, pixelRatio, 0, 0];
+        task = page.render(renderParams);
+        slot.renderTask = task;
+        task.promise.then(function () {
+          if (slot.renderToken !== renderToken || !slot.wanted) return null;
+          slot.canvasHost.replaceChildren(canvas);
+          const textDiv = document.createElement('div');
+          textDiv.className = 'textLayer';
+          if (typeof pdfjsLib.setLayerDimensions === 'function') {
+            pdfjsLib.setLayerDimensions(textDiv, viewport);
+          }
+          const textLayer = new pdfjsLib.TextLayer({
+            textContentSource: page.streamTextContent({
+              includeMarkedContent: true,
+              disableNormalization: true,
+            }),
+            container: textDiv,
+            viewport: viewport,
+          });
+          slot.textLayer = textLayer;
+          return textLayer.render().then(function () {
+            if (slot.renderToken !== renderToken || !slot.wanted) {
+              try { textLayer.cancel(); } catch (err) { /* cancelled */ }
+              return;
+            }
+            const end = document.createElement('div');
+            end.className = 'endOfContent';
+            textDiv.append(end);
+            slot.el.append(textDiv);
+            slot.rendered = true;
+          });
+        }).catch(function (err) {
+          if (isCancel(err) || slot.renderToken !== renderToken) return;
+          // Keep a painted canvas if we have one, and do not retry forever.
+          if (!slot.canvasHost.firstChild) slot.canvasHost.append(canvas);
+          slot.rendered = true;
+        }).finally(function () {
+          finishRender(slot, renderToken);
+        });
+      } catch (err) {
+        if (task) {
+          try { task.cancel(); } catch (cancelErr) { /* already settled */ }
+        }
+        slot.rendered = true;
+        finishRender(slot, renderToken);
+      }
+    }
+
+    function finishRender(slot, renderToken) {
+      activeRenders = Math.max(0, activeRenders - 1);
+      slot.rendering = false;
+      if (slot.renderToken === renderToken) slot.renderTask = null;
+      // A cancelled render bumps renderToken. If the page is still wanted, start over.
+      if (slot.wanted && !slot.rendered) requestRender(slot);
+      else drain();
+    }
+
+    function nearestPageIndex() {
+      const pages = scroller.querySelectorAll('.page');
+      if (pages.length === 0) return 0;
+      const rootRect = scroller.getBoundingClientRect();
+      const centerY = rootRect.top + rootRect.height / 2;
+      let best = 0;
+      let bestDist = Infinity;
+      for (let i = 0; i < pages.length; i += 1) {
+        const rect = pages[i].getBoundingClientRect();
+        const dist = Math.abs(rect.top + rect.height / 2 - centerY);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = i;
+        }
+      }
+      return best;
+    }
+
+    function schedulePage() {
+      clearTimeout(pageTimer);
+      pageTimer = setTimeout(function () {
+        const index = nearestPageIndex();
+        currentPageIndex = index;
+        if (index === postedPage) return;
+        postedPage = index;
+        post({ type: 'page', pageIndex: index });
+      }, 100);
+    }
+
+    function emitSelection() {
+      const selection = document.getSelection();
+      let text = selection ? selection.toString().replace(/\u0000/g, '') : '';
+      text = text.trim();
+      let pageIndex = currentPageIndex;
+      if (text && selection && selection.anchorNode) {
+        const node = selection.anchorNode;
+        const el = node.nodeType === 1 ? node : node.parentElement;
+        const page = el && el.closest ? el.closest('[data-page-index]') : null;
+        if (page) {
+          const parsed = Number(page.getAttribute('data-page-index'));
+          if (Number.isInteger(parsed) && parsed >= 0) pageIndex = parsed;
+        }
+      }
+      if (!text) {
+        if (!selectionWasNonEmpty) return;
+        selectionWasNonEmpty = false;
+        lastSelectionKey = '';
+        post({ type: 'selection', text: '', pageIndex: pageIndex });
+        return;
+      }
+      const key = String(pageIndex) + '\n' + text;
+      if (key === lastSelectionKey) return;
+      lastSelectionKey = key;
+      selectionWasNonEmpty = true;
+      post({ type: 'selection', text: text, pageIndex: pageIndex });
+    }
+
+    function ensureObserver() {
+      if (pageObserver || typeof IntersectionObserver !== 'function') return;
+      pageObserver = new IntersectionObserver(function (entries) {
+        for (const entry of entries) {
+          const slot = entry.target._slot;
+          if (!slot) continue;
+          if (entry.isIntersecting) requestRender(slot);
+          else if (slot.rendered || slot.rendering || renderQueue.indexOf(slot) >= 0) cancelSlot(slot);
+        }
+      }, { root: scroller, rootMargin: '800px 0px', threshold: 0.01 });
+    }
+
+    function watchSlot(slot) {
+      if (!pageObserver) {
+        requestRender(slot);
+        return;
+      }
+      pageObserver.observe(slot.el);
+    }
+
+    async function mountPages(pdf, token) {
+      const width = scroller.clientWidth || window.innerWidth;
+      lastWidth = width;
+      ensureObserver();
+      for (let number = 1; number <= pdf.numPages; number += 1) {
+        if (token !== loadToken) return;
+        const page = await pdf.getPage(number);
+        if (token !== loadToken) return;
+        const base = page.getViewport({ scale: 1 });
+        const viewport = page.getViewport({ scale: fitScale(base.width, width) });
+        const el = document.createElement('div');
+        el.className = 'page';
+        el.dataset.pageIndex = String(number - 1);
+        el.style.width = viewport.width + 'px';
+        el.style.height = viewport.height + 'px';
+        el.style.setProperty('--scale-factor', String(viewport.scale));
+        const canvasHost = document.createElement('div');
+        canvasHost.className = 'canvasHost';
+        el.append(canvasHost);
+        const slot = {
+          el: el,
+          page: page,
+          viewport: viewport,
+          canvasHost: canvasHost,
+          wanted: false,
+          rendered: false,
+          rendering: false,
+          renderToken: 0,
+          renderTask: null,
+          textLayer: null,
+        };
+        el._slot = slot;
+        slots.push(slot);
+        scroller.append(el);
+        watchSlot(slot);
+        if (number === 1) hideStatus();
+      }
+      if (token === loadToken) schedulePage();
+    }
+
+    function relayout() {
+      if (!pdfDoc || slots.length === 0) return;
+      const width = scroller.clientWidth || window.innerWidth;
+      if (Math.abs(width - lastWidth) < 1) return;
+      lastWidth = width;
+      if (pageObserver) {
+        pageObserver.disconnect();
+        pageObserver = null;
+      }
+      ensureObserver();
+      for (const slot of slots) {
+        cancelSlot(slot);
+        const base = slot.page.getViewport({ scale: 1 });
+        slot.viewport = slot.page.getViewport({ scale: fitScale(base.width, width) });
+        slot.el.style.width = slot.viewport.width + 'px';
+        slot.el.style.height = slot.viewport.height + 'px';
+        slot.el.style.setProperty('--scale-factor', String(slot.viewport.scale));
+        watchSlot(slot);
+      }
+      schedulePage();
+    }
+
+    async function loadDocument(url) {
+      const token = loadToken;
+      showStatus('正在打开 PDF…', false);
+      selectionWasNonEmpty = false;
+      lastSelectionKey = '';
+      try {
+        const task = pdfjsLib.getDocument({
+          url: url,
+          cMapUrl: CMAP_URL,
+          cMapPacked: true,
+          standardFontDataUrl: FONT_URL,
+          withCredentials: false,
+          enableXfa: false,
+        });
+        if (token !== loadToken) {
+          task.destroy().catch(function () {});
+          return;
+        }
+        loadingTask = task;
+        const pdf = await task.promise;
+        if (token !== loadToken) {
+          pdf.destroy().catch(function () {});
+          return;
+        }
+        pdfDoc = pdf;
+        if (!Number.isInteger(pdf.numPages) || pdf.numPages < 1) {
+          throw Object.assign(new Error('empty'), { name: 'EmptyPdf' });
+        }
+        post({ type: 'loaded', pageCount: pdf.numPages });
+        await mountPages(pdf, token);
+        if (token !== loadToken) return;
+        phase = 'ready';
+      } catch (err) {
+        if (token !== loadToken || isCancel(err)) return;
+        phase = 'error';
+        const message = err && err.name === 'EmptyPdf' ? '这份 PDF 没有可显示的页面' : humanError(err);
+        showStatus(message, true);
+        post({ type: 'error', message: message });
+      }
+    }
+
+    function requestOpen(url) {
+      if (typeof url !== 'string' || url.length === 0) return;
+      if (url === activeUrl && (phase === 'loading' || phase === 'ready')) return;
+      activeUrl = url;
+      phase = 'loading';
+      pendingUrl = url;
+      if (!libReady) return;
+      destroyDocument();
+      void loadDocument(url);
+    }
+
+    function onHostMessage(event) {
+      let data = event && event.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch (err) { return; }
+      }
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'open' && typeof data.url === 'string') requestOpen(data.url);
+      if (data.type === 'setTheme') applyTheme(data.theme);
+    }
+
+    window.__pdfViewer = {
+      open: requestOpen,
+      setTheme: applyTheme,
+    };
+    window.addEventListener('message', onHostMessage);
+    document.addEventListener('message', onHostMessage);
+    scroller.addEventListener('scroll', schedulePage, { passive: true });
+    document.addEventListener('selectionchange', function () {
+      clearTimeout(selectionTimer);
+      selectionTimer = setTimeout(emitSelection, 50);
+    });
+    document.addEventListener('contextmenu', function (event) {
+      event.preventDefault();
+    });
+    document.addEventListener('pointerdown', function (event) {
+      const layer = event.target && event.target.closest ? event.target.closest('.textLayer') : null;
+      if (layer) layer.classList.add('selecting');
+    });
+    document.addEventListener('pointerup', function () {
+      const nodes = document.querySelectorAll('.textLayer.selecting');
+      for (let i = 0; i < nodes.length; i += 1) nodes[i].classList.remove('selecting');
+    });
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(relayout, 200);
+    });
+
+    loadPdfJs().then(function (lib) {
+      pdfjsLib = lib;
+      libReady = true;
+      post({ type: 'ready' });
+      if (pendingUrl) {
+        const url = pendingUrl;
+        pendingUrl = null;
+        activeUrl = null;
+        phase = 'idle';
+        requestOpen(url);
+      }
+    }).catch(function () {
+      const message = '阅读器加载失败';
+      showStatus(message, true);
+      post({ type: 'error', message: message });
+    });
+  </script>
+</body>
+</html>

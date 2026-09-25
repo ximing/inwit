@@ -1,6 +1,6 @@
 {
   "name": "@inwit/desktop",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Tauri 2 桌面壳。开发加载 http://localhost:5190，生产加载 https://inwit.aimo.plus。会话走 cookie。",

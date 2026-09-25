@@ -3,7 +3,7 @@
     "name": "Inwit",
     "slug": "inwit",
     "scheme": "inwit",
-    "version": "0.1.9",
+    "version": "0.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -39,7 +39,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "用于更换头像"
+          "photosPermission": "用于更换头像，或从相册选择页面",
+        "cameraPermission": "用于把拍下的页面收成文档"
         }
       ],
       "expo-file-system"

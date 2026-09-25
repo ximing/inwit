@@ -1,3 +1,4 @@
+import type { PmDocJson } from '@inwit/dto';
 import { Editor } from '@tiptap/core';
 import { AssetMap } from './asset-map';
 import { emitEvent, installBridge } from './bridge';
@@ -6,6 +7,7 @@ import {
   type AnnotationAnchorInput,
   type CardAnchorInput,
   type DocEngineCommand,
+  type FormatState,
   type SelectionAction,
   type TextSelectionAnchor,
   type ThemeName,
@@ -22,6 +24,8 @@ import { createDocExtensions } from './vendor/extensions';
 
 const ANCHOR_FLASH_SELECTOR = '[data-card-ids], [data-card-id], .anchor, .anchor-note';
 const SELECTION_DEBOUNCE_MS = 150;
+const DOC_CHANGED_DEBOUNCE_MS = 300;
+const FORMAT_STATE_DEBOUNCE_MS = 50;
 const FLASH_MS = 1100;
 
 const ACTIONS: Array<{ action: SelectionAction; label: string }> = [
@@ -89,6 +93,99 @@ function refreshDecorations(editor: Editor): void {
   commands.updateDecorations?.('anchorHighlight');
 }
 
+function textAlignOf(editor: Editor): FormatState['textAlign'] {
+  if (editor.isActive({ textAlign: 'center' })) return 'center';
+  if (editor.isActive({ textAlign: 'right' })) return 'right';
+  return 'left';
+}
+
+function historyAvailable(editor: Editor, name: 'undo' | 'redo'): boolean {
+  try {
+    const probe = editor.can() as Partial<Record<'undo' | 'redo', () => boolean>>;
+    const command = probe[name];
+    if (typeof command !== 'function') return false;
+    return command() === true;
+  } catch {
+    return false;
+  }
+}
+
+function applyFormat(editor: Editor, payload: Extract<DocEngineCommand, { type: 'format' }>['payload']): void {
+  const href = typeof payload.href === 'string' ? payload.href.trim() : '';
+  const src = typeof payload.src === 'string' ? payload.src : '';
+  const chain = editor.chain().focus();
+  switch (payload.name) {
+    case 'bold':
+      chain.toggleBold().run();
+      return;
+    case 'italic':
+      chain.toggleItalic().run();
+      return;
+    case 'strike':
+      chain.toggleStrike().run();
+      return;
+    case 'heading1':
+    case 'heading2': {
+      const level = payload.name === 'heading1' ? 1 : 2;
+      if (editor.isActive('heading', { level })) chain.setParagraph().run();
+      else chain.toggleHeading({ level }).run();
+      return;
+    }
+    case 'bulletList':
+      chain.toggleBulletList().run();
+      return;
+    case 'orderedList':
+      chain.toggleOrderedList().run();
+      return;
+    case 'taskList':
+      chain.toggleTaskList().run();
+      return;
+    case 'blockquote':
+      chain.toggleBlockquote().run();
+      return;
+    case 'codeBlock':
+      chain.toggleCodeBlock().run();
+      return;
+    case 'alignLeft':
+      chain.unsetTextAlign().run();
+      return;
+    case 'alignCenter':
+      chain.setTextAlign('center').run();
+      return;
+    case 'alignRight':
+      chain.setTextAlign('right').run();
+      return;
+    case 'link':
+      if (href.length > 0) chain.extendMarkRange('link').setLink({ href }).run();
+      else if (editor.isActive('link')) chain.extendMarkRange('link').unsetLink().run();
+      else chain.run();
+      return;
+    case 'unsetLink':
+      chain.extendMarkRange('link').unsetLink().run();
+      return;
+    case 'image':
+      if (src.length > 0) chain.setImage({ src }).run();
+      else chain.run();
+      return;
+    case 'horizontalRule':
+      chain.setHorizontalRule().run();
+      return;
+    case 'table':
+      chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+      return;
+    case 'undo':
+      chain.undo().run();
+      return;
+    case 'redo':
+      chain.redo().run();
+      return;
+    default: {
+      const _never: never = payload.name;
+      return _never;
+    }
+  }
+}
+
 export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
   applyTheme('light');
 
@@ -100,8 +197,14 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
   let contentKey: string | null = null;
   let theme: ThemeName = 'light';
   let lastAnchor: TextSelectionAnchor | null = null;
+  let editable = false;
+  let applyingContent = false;
+  let alive = true;
   let selectionTimer: number | undefined;
   let flashTimer: number | undefined;
+  let docChangedTimer: number | undefined;
+  let docChangedLeading = false;
+  let formatStateTimer: number | undefined;
 
   const assetMap = new AssetMap((srcs) => {
     emitEvent({ type: 'assetNeeded', payload: { srcs } });
@@ -123,7 +226,6 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
     element: opts.element,
     editable: false,
     extensions: createDocExtensions({
-      editable: false,
       assetUrls: assetMap,
       anchorHighlight,
     }),
@@ -158,15 +260,98 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
     refreshDecorations(editor);
   };
 
-  const applyContent = (doc: unknown): void => {
-    const serialized = JSON.stringify(doc);
-    if (contentKey !== serialized) {
-      contentKey = serialized;
-      editor.commands.setContent(doc as Parameters<Editor['commands']['setContent']>[0], {
-        emitUpdate: false,
-      });
+  const readFormatState = (): FormatState => ({
+    editable,
+    bold: editor.isActive('bold'),
+    italic: editor.isActive('italic'),
+    strike: editor.isActive('strike'),
+    heading1: editor.isActive('heading', { level: 1 }),
+    heading2: editor.isActive('heading', { level: 2 }),
+    bulletList: editor.isActive('bulletList'),
+    orderedList: editor.isActive('orderedList'),
+    taskList: editor.isActive('taskList'),
+    blockquote: editor.isActive('blockquote'),
+    codeBlock: editor.isActive('codeBlock'),
+    link: editor.isActive('link'),
+    table: editor.isActive('table'),
+    textAlign: textAlignOf(editor),
+    canUndo: historyAvailable(editor, 'undo'),
+    canRedo: historyAvailable(editor, 'redo'),
+  });
+
+  const emitFormatStateNow = (): void => {
+    if (formatStateTimer !== undefined) {
+      window.clearTimeout(formatStateTimer);
+      formatStateTimer = undefined;
     }
-    syncEntities();
+    if (!alive) return;
+    emitEvent({ type: 'formatState', payload: readFormatState() });
+  };
+
+  const scheduleFormatState = (): void => {
+    if (!alive) return;
+    if (formatStateTimer !== undefined) window.clearTimeout(formatStateTimer);
+    formatStateTimer = window.setTimeout(() => {
+      formatStateTimer = undefined;
+      if (!alive) return;
+      emitEvent({ type: 'formatState', payload: readFormatState() });
+    }, FORMAT_STATE_DEBOUNCE_MS);
+  };
+
+  const scheduleDocChanged = (): void => {
+    if (!alive || !editable) return;
+    // Leading edge so a poll cannot replace the body before the debounce fires.
+    if (!docChangedLeading) {
+      docChangedLeading = true;
+      emitEvent({ type: 'docChanged' });
+    }
+    if (docChangedTimer !== undefined) window.clearTimeout(docChangedTimer);
+    docChangedTimer = window.setTimeout(() => {
+      docChangedTimer = undefined;
+      docChangedLeading = false;
+      if (!alive || !editable) return;
+      emitEvent({ type: 'docChanged' });
+    }, DOC_CHANGED_DEBOUNCE_MS);
+  };
+
+  const applyContent = (doc: unknown): void => {
+    applyingContent = true;
+    try {
+      const serialized = JSON.stringify(doc);
+      if (contentKey !== serialized) {
+        contentKey = serialized;
+        editor.commands.setContent(doc as Parameters<Editor['commands']['setContent']>[0], {
+          emitUpdate: false,
+        });
+      }
+      syncEntities();
+    } finally {
+      applyingContent = false;
+    }
+  };
+
+  const setEditing = (next: boolean): void => {
+    if (!next && docChangedTimer !== undefined) {
+      window.clearTimeout(docChangedTimer);
+      docChangedTimer = undefined;
+      docChangedLeading = false;
+      emitEvent({ type: 'docChanged' });
+    }
+    editable = next;
+    opts.element.classList.toggle('is-editable', next);
+    if (selectionTimer !== undefined) {
+      window.clearTimeout(selectionTimer);
+      selectionTimer = undefined;
+    }
+    toolbar.hidden = true;
+    if (next) {
+      editor.setEditable(true);
+      editor.commands.focus('end');
+    } else {
+      editor.commands.blur();
+      editor.setEditable(false);
+    }
+    emitFormatStateNow();
   };
 
   const focusCard = (cardId: string): void => {
@@ -192,6 +377,7 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
         return;
       case 'setContent':
         applyContent(cmd.payload.doc);
+        if (editable) emitFormatStateNow();
         return;
       case 'setEntities':
         cards = cmd.payload.cards;
@@ -213,8 +399,32 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
         theme = cmd.payload.theme;
         applyTheme(theme);
         return;
+      case 'setEditable':
+        setEditing(cmd.payload.editable);
+        return;
+      case 'getDoc': {
+        const doc = editor.getJSON() as PmDocJson;
+        emitEvent({ type: 'docJson', payload: { requestId: cmd.payload.requestId, doc } });
+        return;
+      }
+      case 'format':
+        applyFormat(editor, cmd.payload);
+        scheduleFormatState();
+        return;
+      default: {
+        const _never: never = cmd;
+        return _never;
+      }
     }
   };
+
+  editor.on('transaction', ({ transaction, appendedTransactions }) => {
+    if (!editable || applyingContent) return;
+    if (transaction.getMeta('preventUpdate')) return;
+    const docChanged = transaction.docChanged || appendedTransactions.some((item) => item.docChanged);
+    if (docChanged) scheduleDocChanged();
+    scheduleFormatState();
+  });
 
   const { dispatch } = installBridge((cmd) => {
     try {
@@ -225,8 +435,21 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
   });
 
   const onSelectionChange = (): void => {
+    if (editable) {
+      toolbar.hidden = true;
+      if (selectionTimer !== undefined) {
+        window.clearTimeout(selectionTimer);
+        selectionTimer = undefined;
+      }
+      scheduleFormatState();
+      return;
+    }
     if (selectionTimer !== undefined) window.clearTimeout(selectionTimer);
     selectionTimer = window.setTimeout(() => {
+      if (editable) {
+        toolbar.hidden = true;
+        return;
+      }
       const sel = window.getSelection();
       const inside =
         Boolean(sel) &&
@@ -252,6 +475,7 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
   };
 
   const onLinkClick = (event: MouseEvent): void => {
+    if (editable) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     const a = target.closest('a');
@@ -277,11 +501,14 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
   return {
     dispatch,
     destroy: () => {
+      alive = false;
       document.removeEventListener('selectionchange', onSelectionChange);
       opts.element.removeEventListener('click', onLinkClick);
       document.removeEventListener('contextmenu', onContextMenu);
       if (selectionTimer !== undefined) window.clearTimeout(selectionTimer);
       if (flashTimer !== undefined) window.clearTimeout(flashTimer);
+      if (docChangedTimer !== undefined) window.clearTimeout(docChangedTimer);
+      if (formatStateTimer !== undefined) window.clearTimeout(formatStateTimer);
       toolbar.remove();
       editor.destroy();
     },

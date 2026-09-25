@@ -23,9 +23,11 @@ const TopicRow = observer(function TopicRow({
   item: TopicListItem;
   archived?: boolean;
 }) {
+  const service = useService(TopicsService);
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const { topic } = item;
+  const retention = service.topicStats[topic.id]?.retention7d;
   return (
     <Pressable
       onPress={() => router.push(`/topics/${topic.id}`)}
@@ -37,6 +39,7 @@ const TopicRow = observer(function TopicRow({
       <View style={styles.rowMeta}>
         <Text style={styles.metaText}>
           {item.cardCount} 卡 · {item.documentCount} 篇文档
+          {retention != null ? ` · 7 天想起 ${String(retention)}%` : ''}
         </Text>
         <ProgressBar pct={item.masteryPct} theme={theme} />
         <Text style={styles.pct}>{item.masteryPct}%</Text>

@@ -25,7 +25,6 @@ const lowlight = createLowlight(common);
 const DEFAULT_PLACEHOLDER = '开始书写…';
 
 export type CreateDocExtensionsOpts = {
-  editable: boolean;
   placeholder?: string;
   assetUrls: AssetUrlProvider;
   anchorHighlight?: AnyExtension;
@@ -225,14 +224,10 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
     AnnotationMark,
     CardAnchorMark,
     createTextAlignExtension(),
+    Placeholder.configure({
+      placeholder: opts.placeholder ?? DEFAULT_PLACEHOLDER,
+    }),
   ];
-  if (opts.editable) {
-    extensions.push(
-      Placeholder.configure({
-        placeholder: opts.placeholder ?? DEFAULT_PLACEHOLDER,
-      }),
-    );
-  }
   if (opts.anchorHighlight) extensions.push(opts.anchorHighlight);
   return extensions;
 }

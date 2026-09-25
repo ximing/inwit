@@ -1,10 +1,13 @@
 import type {
+  ArchivedCardsResponse,
   Card,
   CardDetail,
   CardImageResponse,
   CardLinksResponse,
   CreateCardInput,
   RejectCardInput,
+  ReviewState,
+  UpdateCardInput,
 } from '@inwit/dto';
 import { request } from './client';
 
@@ -40,4 +43,38 @@ export function getCardLinks(id: string): Promise<CardLinksResponse> {
 
 export function deleteCardLink(id: string): Promise<void> {
   return request<void>(`/api/card-links/${id}`, { method: 'DELETE' });
+}
+
+export function updateCard(id: string, input: UpdateCardInput): Promise<CardDetail> {
+  return request<CardDetail>(`/api/cards/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
+}
+
+export function archiveCard(id: string): Promise<void> {
+  return request<void>(`/api/cards/${id}`, { method: 'DELETE' });
+}
+
+export function restoreCard(id: string): Promise<Card> {
+  return request<Card>(`/api/cards/${id}/restore`, { method: 'POST' });
+}
+
+export function destroyCard(id: string): Promise<void> {
+  return request<void>(`/api/cards/${id}/permanent`, { method: 'DELETE' });
+}
+
+export function suspendCard(id: string): Promise<ReviewState> {
+  return request<ReviewState>(`/api/cards/${id}/suspend`, { method: 'POST' });
+}
+
+export function resumeCard(id: string): Promise<ReviewState> {
+  return request<ReviewState>(`/api/cards/${id}/suspend`, { method: 'DELETE' });
+}
+
+export function listArchivedCards(query: {
+  page: number;
+  limit: number;
+}): Promise<ArchivedCardsResponse> {
+  return request<ArchivedCardsResponse>(`/api/cards/archived?page=${query.page}&limit=${query.limit}`);
 }

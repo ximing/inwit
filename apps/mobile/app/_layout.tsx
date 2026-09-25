@@ -145,6 +145,10 @@ const RootNavigation = observer(function RootNavigation() {
             name="me/memory"
             options={{ animation: 'slide_from_right', gestureEnabled: true }}
           />
+          <Stack.Screen
+            name="me/archive"
+            options={{ animation: 'slide_from_right', gestureEnabled: true }}
+          />
         </Stack.Protected>
         <Stack.Protected guard={!loggedIn}>
           <Stack.Screen name="login" />

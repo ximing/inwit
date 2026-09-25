@@ -94,6 +94,18 @@ export function applyGradeFailure(state: SessionState): SessionState {
   return { ...state, lastFeedback: null };
 }
 
+/** Drop the current card without recording a grade or counting it as reviewed. */
+export function applyRemoveCurrent(state: SessionState): SessionState {
+  if (currentItem(state) === null) return state;
+  return {
+    ...state,
+    items: state.items.slice(1),
+    total: Math.max(state.reviewedToday, state.total - 1),
+    flipped: false,
+    lastFeedback: null,
+  };
+}
+
 export function sessionQuestion(item: ReviewQueueItem | null): string {
   if (!item) return '';
   const first = item.card.questions[0];

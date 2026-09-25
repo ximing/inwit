@@ -3,12 +3,13 @@ import {
   BLANK_DOCUMENT_LABEL,
   docCardFace,
   docCardLabel,
+  docDisplayTitle,
   type DocumentListItem,
 } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { router, useFocusEffect } from 'expo-router';
-import { Search } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { Plus, Search } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   AppState,
@@ -18,13 +19,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BottomSheet } from '@/components/bottom-sheet';
 import { CaptureBox } from '@/components/capture-box';
+import { confirmAction } from '@/lib/confirm';
 import { formatRelativeTime } from '@/lib/format';
 import { useTheme, type ThemeTokens } from '@/theme';
 import { DocsService } from './docs.service';
+import { ImportService } from './import.service';
 
 const PulseLabel = observer(function PulseLabel({ text }: { text: string }) {
   const theme = useTheme();
@@ -44,19 +49,32 @@ const PulseLabel = observer(function PulseLabel({ text }: { text: string }) {
   );
 });
 
-const DocRow = observer(function DocRow({ doc }: { doc: DocumentListItem }) {
+const DocRow = observer(function DocRow({
+  doc,
+  onOpenMenu,
+}: {
+  doc: DocumentListItem;
+  onOpenMenu: (doc: DocumentListItem) => void;
+}) {
   const service = useService(DocsService);
+  const imports = useService(ImportService);
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const stage = service.stageFor(doc);
   const agent = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   const face = docCardFace(doc, 120);
   const failed = doc.status === 'failed' || stage.kind === 'failed';
-  const pulse = stage.pulse && stage.label;
+  const uploading = stage.kind === 'upload';
+  const pulse = !uploading && stage.pulse && stage.label;
+  const live = imports.uploadByDoc[doc.id];
+  const checkpoint = imports.checkpointFor(doc.id);
+  const uploadName = live?.filename ?? checkpoint?.filename ?? '';
+  const uploadPercent = live?.percent ?? stage.percent ?? 0;
 
   return (
     <Pressable
       onPress={() => router.push({ pathname: '/docs/[id]', params: { id: doc.id } })}
+      onLongPress={() => onOpenMenu(doc)}
       style={[styles.row, failed && styles.rowFailed]}
       accessibilityLabel={docCardLabel(face)}
     >
@@ -80,6 +98,20 @@ const DocRow = observer(function DocRow({ doc }: { doc: DocumentListItem }) {
           <Text style={styles.proposed}>待确认 {doc.proposedCount}</Text>
         ) : null}
         {pulse ? <PulseLabel text={stage.label.replace(/…$/, '') || '消化中'} /> : null}
+        {uploading ? (
+          <View style={styles.uploadLine}>
+            <Text style={styles.uploadName} numberOfLines={1}>
+              {uploadName} {uploadPercent}%
+            </Text>
+            <Pressable
+              disabled={service.cancelingId === doc.id}
+              onPress={() => void service.cancelImport(doc.id)}
+              hitSlop={8}
+            >
+              <Text style={styles.retry}>{service.cancelingId === doc.id ? '取消中…' : '取消'}</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {failed ? (
           <Text style={styles.failed} numberOfLines={1}>
             失败{doc.failReason ? `：${doc.failReason}` : ''}
@@ -113,10 +145,15 @@ const DocRow = observer(function DocRow({ doc }: { doc: DocumentListItem }) {
 
 const DocsContent = observer(function DocsContent() {
   const service = useService(DocsService);
+  const imports = useService(ImportService);
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const refreshing = service.$model.loadDocuments.loading && service.documents.length > 0;
   const loading = service.$model.boot.loading && service.documents.length === 0;
+  const [createOpen, setCreateOpen] = useState(false);
+  const [actionDoc, setActionDoc] = useState<DocumentListItem | null>(null);
+  const [renameDoc, setRenameDoc] = useState<DocumentListItem | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -142,13 +179,44 @@ const DocsContent = observer(function DocsContent() {
     }
   };
 
+  const openCreated = (id: string | null, edit = false) => {
+    if (!id) return;
+    router.push({
+      pathname: '/docs/[id]',
+      params: edit ? { id, edit: '1' } : { id },
+    });
+  };
+
+  const trashDoc = (doc: DocumentListItem) => {
+    setActionDoc(null);
+    void (async () => {
+      const ok = await confirmAction(
+        '移入回收站',
+        '30 天内可以在「我的 → 回收站」恢复。',
+        '移入回收站',
+        true,
+      );
+      if (ok) await service.archiveDocument(doc.id);
+    })();
+  };
+
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.head}>
         <Text style={styles.title}>文档</Text>
-        <Pressable onPress={openSearch} hitSlop={8} style={styles.searchBtn} accessibilityLabel="搜索">
-          <Search color={theme.colors.ink2} size={18} strokeWidth={1.8} />
-        </Pressable>
+        <View style={styles.headActions}>
+          <Pressable
+            onPress={() => setCreateOpen(true)}
+            hitSlop={8}
+            style={styles.searchBtn}
+            accessibilityLabel="新建"
+          >
+            <Plus color={theme.colors.ink2} size={18} strokeWidth={1.8} />
+          </Pressable>
+          <Pressable onPress={openSearch} hitSlop={8} style={styles.searchBtn} accessibilityLabel="搜索">
+            <Search color={theme.colors.ink2} size={18} strokeWidth={1.8} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.padX}>
@@ -206,7 +274,7 @@ const DocsContent = observer(function DocsContent() {
       <FlatList
         data={service.documents}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <DocRow doc={item} />}
+        renderItem={({ item }) => <DocRow doc={item} onOpenMenu={setActionDoc} />}
         contentContainerStyle={styles.list}
         onEndReached={() => void service.loadMore()}
         onEndReachedThreshold={0.4}
@@ -232,6 +300,105 @@ const DocsContent = observer(function DocsContent() {
           ) : null
         }
       />
+      <BottomSheet visible={createOpen} title="新建" onClose={() => setCreateOpen(false)}>
+        <Pressable
+          onPress={() => {
+            setCreateOpen(false);
+            void service.createBlank().then((id) => openCreated(id, true));
+          }}
+          style={styles.sheetRow}
+        >
+          <Text style={styles.sheetLabel}>写一篇</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setCreateOpen(false);
+            void imports.pickAndImport().then((id) => openCreated(id));
+          }}
+          style={styles.sheetRow}
+        >
+          <Text style={styles.sheetLabel}>导入文件</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setCreateOpen(false);
+            void imports.takePhoto().then((id) => openCreated(id));
+          }}
+          style={styles.sheetRow}
+        >
+          <Text style={styles.sheetLabel}>拍照</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setCreateOpen(false);
+            void imports.pickPhoto().then((id) => openCreated(id));
+          }}
+          style={styles.sheetRow}
+        >
+          <Text style={styles.sheetLabel}>从相册选择</Text>
+        </Pressable>
+      </BottomSheet>
+      <BottomSheet
+        visible={actionDoc !== null}
+        title={actionDoc ? docDisplayTitle(actionDoc) : undefined}
+        onClose={() => setActionDoc(null)}
+      >
+        <Pressable
+          onPress={() => {
+            if (!actionDoc) return;
+            setRenameDraft(actionDoc.title ?? '');
+            setRenameDoc(actionDoc);
+            setActionDoc(null);
+          }}
+          style={styles.sheetRow}
+        >
+          <Text style={styles.sheetLabel}>重命名</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            if (actionDoc) trashDoc(actionDoc);
+          }}
+          style={styles.sheetRow}
+        >
+          <Text style={styles.sheetDanger}>移入回收站</Text>
+        </Pressable>
+      </BottomSheet>
+      <BottomSheet
+        visible={renameDoc !== null}
+        title="重命名"
+        onClose={() => setRenameDoc(null)}
+        footer={
+          <>
+            <Pressable onPress={() => setRenameDoc(null)} hitSlop={8}>
+              <Text style={styles.sheetLabel}>取消</Text>
+            </Pressable>
+            <Pressable
+              disabled={service.$model.renameDocument.loading}
+              onPress={() => {
+                if (!renameDoc) return;
+                void service.renameDocument(renameDoc.id, renameDraft).then((ok) => {
+                  if (ok) setRenameDoc(null);
+                });
+              }}
+              hitSlop={8}
+            >
+              <Text style={styles.sheetSave}>
+                {service.$model.renameDocument.loading ? '保存中…' : '保存'}
+              </Text>
+            </Pressable>
+          </>
+        }
+      >
+        <TextInput
+          value={renameDraft}
+          onChangeText={setRenameDraft}
+          placeholder="文档标题"
+          placeholderTextColor={theme.colors.ink4}
+          style={styles.renameInput}
+          maxLength={500}
+          autoFocus
+        />
+      </BottomSheet>
     </SafeAreaView>
   );
 });
@@ -253,6 +420,7 @@ function makeStyles(theme: ThemeTokens) {
       fontWeight: '700',
       color: theme.colors.ink,
     },
+    headActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     searchBtn: {
       width: 36,
       height: 36,
@@ -311,8 +479,24 @@ function makeStyles(theme: ThemeTokens) {
     proposed: { fontSize: 12, color: theme.colors.gold },
     failed: { fontSize: 12, color: theme.colors.accent, fontWeight: '600' },
     retry: { fontSize: 12.5, color: theme.colors.accentDeep, fontWeight: '600' },
+    uploadLine: { flexDirection: 'row', alignItems: 'center', gap: 8, maxWidth: '100%' },
+    uploadName: { flexShrink: 1, fontSize: 12, color: theme.colors.ink2 },
     hint: { fontSize: 13.5, color: theme.colors.ink3, marginTop: 16 },
+    sheetRow: { paddingVertical: 14 },
+    sheetLabel: { fontSize: 16, color: theme.colors.ink },
+    sheetDanger: { fontSize: 16, color: theme.colors.accent },
+    sheetSave: { fontSize: 16, color: theme.colors.accentDeep, fontWeight: '600' },
+    renameInput: {
+      height: 44,
+      borderRadius: theme.radius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.line,
+      backgroundColor: theme.colors.bg,
+      paddingHorizontal: 12,
+      color: theme.colors.ink,
+      fontSize: 16,
+    },
   });
 }
 
-export default bindServices(DocsContent, [DocsService]);
+export default bindServices(DocsContent, [DocsService, ImportService]);
