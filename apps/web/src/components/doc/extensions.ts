@@ -22,6 +22,7 @@ import type { NodeView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import { common, createLowlight } from 'lowlight';
 import type { AssetUrlsService } from '@/services/asset-urls.service';
+import { externalLinkOpen } from './external-link-plugin';
 
 const lowlight = createLowlight(common);
 registerDocCodeAliases(lowlight);
@@ -210,6 +211,7 @@ function createVideoNode(assetUrls: AssetUrlsService) {
 
 export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension[] {
   const extensions: AnyExtension[] = [
+    externalLinkOpen,
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5, 6] },
       codeBlock: false,

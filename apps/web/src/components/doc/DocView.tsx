@@ -27,6 +27,10 @@ function isHttpUrl(href: string): boolean {
 function navigateInternalLink(event: MouseEvent, navigate: (to: string) => void): boolean {
   const target = event.target;
   if (!(target instanceof Element)) return false;
+  if (target.closest('.doc-ext-link-jump')) {
+    event.preventDefault();
+    return true;
+  }
   const a = target.closest('a');
   if (!a) return false;
   const href = a.getAttribute('href');

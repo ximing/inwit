@@ -74,6 +74,45 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+.doc-view .ProseMirror a[href] { cursor: pointer; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-ext-link-jump {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0;
+  max-width: 0;
+  height: 1em;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  vertical-align: middle;
+  color: var(--accent);
+  line-height: 0;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  cursor: pointer;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) a:hover .doc-ext-link-jump,
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) a:hover + .doc-ext-link-jump,
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-ext-link-jump:hover {
+  width: 1.05em;
+  max-width: none;
+  padding-inline-start: 0.16em;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-ext-link-jump {
+    width: 1.05em;
+    max-width: none;
+    padding-inline-start: 0.16em;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+  }
+}
 
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) code {
   font-family: var(--mono);
