@@ -155,6 +155,7 @@ export class ReaderService extends Service {
   saveError: string | null = null;
   formatState: FormatState | null = null;
   linkDraft = '';
+  editingLink = false;
   mathDraft = '';
   cardEditQuestion = '';
   cardEditAnswer = '';
@@ -282,7 +283,10 @@ export class ReaderService extends Service {
   }
 
   openLinkSheet(): void {
-    this.linkDraft = '';
+    const state = this.formatState;
+    this.editingLink = state?.link === true;
+    const href = state?.link && typeof state.href === 'string' ? state.href : '';
+    this.linkDraft = href;
     this.sheet = { kind: 'link' };
   }
 
@@ -317,6 +321,7 @@ export class ReaderService extends Service {
     this.cardEditAnswer = '';
     this.rejectDraft = '';
     this.linkDraft = '';
+    this.editingLink = false;
     this.mathDraft = '';
   }
 

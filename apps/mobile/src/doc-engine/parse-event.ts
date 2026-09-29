@@ -99,6 +99,7 @@ function parseFormatState(value: unknown): FormatState | null {
     blockquote: value.blockquote as boolean,
     codeBlock: value.codeBlock as boolean,
     link: value.link as boolean,
+    ...(typeof value.href === 'string' && value.href.length > 0 ? { href: value.href } : {}),
     table: value.table as boolean,
     textAlign: value.textAlign,
     canUndo: value.canUndo as boolean,

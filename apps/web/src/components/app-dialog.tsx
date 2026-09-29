@@ -95,6 +95,11 @@ export const AppDialog = observer(function AppDialog() {
             />
           ) : null}
           <div className="dialog-actions">
+            {current.kind === 'prompt' && current.extra ? (
+              <button type="button" className="btn btn-ghost app-dialog-extra" onClick={() => dialog.chooseExtra()}>
+                {current.extra}
+              </button>
+            ) : null}
             {current.kind !== 'alert' ? (
               <button type="button" className="btn btn-ghost" onClick={() => dialog.cancel()}>
                 {current.cancel}

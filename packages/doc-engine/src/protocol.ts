@@ -189,6 +189,8 @@ export type FormatState = {
   blockquote: boolean;
   codeBlock: boolean;
   link: boolean;
+  /** Present when the selection is a link and the mark has an href. */
+  href?: string;
   table: boolean;
   textAlign: 'left' | 'center' | 'right';
   canUndo: boolean;

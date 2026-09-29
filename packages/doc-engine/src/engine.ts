@@ -139,6 +139,12 @@ function refreshDecorations(editor: Editor): void {
   commands.updateDecorations?.('anchorHighlight');
 }
 
+function linkHrefOf(editor: Editor): { href: string } | Record<string, never> {
+  if (!editor.isActive('link')) return {};
+  const href = editor.getAttributes('link').href;
+  return typeof href === 'string' && href.length > 0 ? { href } : {};
+}
+
 function textAlignOf(editor: Editor): FormatState['textAlign'] {
   if (editor.isActive({ textAlign: 'center' })) return 'center';
   if (editor.isActive({ textAlign: 'right' })) return 'right';
@@ -334,6 +340,7 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
     blockquote: editor.isActive('blockquote'),
     codeBlock: editor.isActive('codeBlock'),
     link: editor.isActive('link'),
+    ...linkHrefOf(editor),
     table: editor.isActive('table'),
     textAlign: textAlignOf(editor),
     canUndo: historyAvailable(editor, 'undo'),

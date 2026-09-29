@@ -9,6 +9,10 @@
 }
 .app-dialog-backdrop .dialog-actions {
   margin-top: 12px;
+  flex-wrap: wrap;
+}
+.app-dialog-extra {
+  margin-right: auto;
 }
 .app-dialog-backdrop .stack-form input {
   width: 100%;

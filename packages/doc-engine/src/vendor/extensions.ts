@@ -215,6 +215,7 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
       codeBlock: false,
       link: {
         openOnClick: false,
+        enableClickSelection: true,
         autolink: true,
       },
     }),

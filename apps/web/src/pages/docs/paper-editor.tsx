@@ -23,7 +23,7 @@ import {
 import { asPmJson, clonePmJson } from '@/lib/pm-doc';
 import { putPresigned } from '@/lib/presign-put';
 import { AssetUrlsService } from '@/services/asset-urls.service';
-import { DialogService } from '@/services/dialog.service';
+import { DialogService, PROMPT_EXTRA } from '@/services/dialog.service';
 import { AnchorHighlight } from './anchor-highlight';
 import { fetchMediaAsFile, filesFromDataTransfer } from './paste-media';
 import {
@@ -412,18 +412,23 @@ export const PaperEditor = observer(function PaperEditor({
   }
 
   const insertLink = () => {
+    const { from, to } = editor.state.selection;
     const previous = editor.getAttributes('link').href;
-    const fallback =
-      typeof previous === 'string' && previous.length > 0 ? previous : 'https://';
-    void dialog.prompt('链接地址', fallback).then((href) => {
-      if (href === null) return;
-      const trimmed = href.trim();
-      if (trimmed === '') {
-        editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    const hasLink = editor.isActive('link');
+    const fallback = typeof previous === 'string' && previous.length > 0 ? previous : 'https://';
+    const apply = (href: string | null | typeof PROMPT_EXTRA) => {
+      if (href === null || editor.isDestroyed) return;
+      const max = editor.state.doc.content.size;
+      if (from > max || to > max) return;
+      const chain = editor.chain().focus().setTextSelection({ from, to }).extendMarkRange('link');
+      if (href === PROMPT_EXTRA || href.trim() === '') {
+        chain.unsetLink().run();
         return;
       }
-      editor.chain().focus().extendMarkRange('link').setLink({ href: trimmed }).run();
-    });
+      chain.setLink({ href: href.trim() }).run();
+    };
+    if (hasLink) void dialog.prompt('链接地址', fallback, { extra: '取消链接' }).then(apply);
+    else void dialog.prompt('链接地址', fallback).then(apply);
   };
 
   const insertMath = () => {

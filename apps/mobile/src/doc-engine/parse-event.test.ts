@@ -69,4 +69,19 @@ describe('parseDocEngineEvent edit events', () => {
       false,
     );
   });
+
+  it('keeps a link href and drops a non-string one', () => {
+    const withHref = formatPayload({ link: true, href: 'https://inwit.app' });
+    expect(parseDocEngineEvent({ v: 1, type: 'formatState', payload: withHref })).toEqual({
+      ok: true,
+      value: { type: 'formatState', payload: withHref },
+    });
+    const dropped = formatPayload({ link: true, href: 1 });
+    const parsed = parseDocEngineEvent({ v: 1, type: 'formatState', payload: dropped });
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok && parsed.value.type === 'formatState') {
+      expect(parsed.value.payload.href).toBeUndefined();
+      expect(parsed.value.payload.link).toBe(true);
+    }
+  });
 });

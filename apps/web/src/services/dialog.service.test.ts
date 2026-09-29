@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DialogService } from './dialog.service';
+import { DialogService, PROMPT_EXTRA } from './dialog.service';
 
 describe('DialogService', () => {
   it('resolves alert on submit and cancel', async () => {
@@ -40,6 +40,22 @@ describe('DialogService', () => {
     const aborted = dialog.prompt('链接地址');
     dialog.cancel();
     await expect(aborted).resolves.toBeNull();
+  });
+
+  it('resolves the extra prompt action and ignores it when none was declared', async () => {
+    const dialog = new DialogService();
+    const removed = dialog.prompt('链接地址', 'https://inwit.app', { extra: ' 取消链接 ' });
+    expect(dialog.current?.extra).toBe('取消链接');
+    dialog.setInputValue('');
+    dialog.chooseExtra();
+    await expect(removed).resolves.toBe(PROMPT_EXTRA);
+
+    const plain = dialog.prompt('链接地址', 'https://');
+    expect(dialog.current?.extra).toBe('');
+    dialog.chooseExtra();
+    expect(dialog.current?.kind).toBe('prompt');
+    dialog.cancel();
+    await expect(plain).resolves.toBeNull();
   });
 
   it('queues a second dialog until the first closes', async () => {

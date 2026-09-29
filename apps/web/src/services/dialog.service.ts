@@ -11,6 +11,7 @@ export type DialogRequest = {
   danger: boolean;
   defaultValue: string;
   placeholder: string;
+  extra: string;
 };
 
 type Pending = {
@@ -25,11 +26,16 @@ export type ConfirmOptions = {
   danger?: boolean;
 };
 
+/** Resolved when a prompt's extra action is chosen. Distinct from a typed value and from cancel. */
+export const PROMPT_EXTRA: unique symbol = Symbol('inwit.prompt.extra');
+
 export type PromptOptions = {
   title?: string;
   ok?: string;
   cancel?: string;
   placeholder?: string;
+  /** Extra action label. Shown only when non-empty. Choosing it resolves `PROMPT_EXTRA`. */
+  extra?: string;
 };
 
 export type AlertOptions = {
@@ -54,6 +60,7 @@ export class DialogService extends Service {
       danger: false,
       defaultValue: '',
       placeholder: '',
+      extra: '',
     }) as Promise<void>;
   }
 
@@ -67,11 +74,23 @@ export class DialogService extends Service {
       danger: options?.danger ?? false,
       defaultValue: '',
       placeholder: '',
+      extra: '',
     }) as Promise<boolean>;
   }
 
-  prompt(message: string, defaultValue = '', options?: PromptOptions): Promise<string | null> {
+  prompt(message: string, defaultValue?: string, options?: Omit<PromptOptions, 'extra'>): Promise<string | null>;
+  prompt(
+    message: string,
+    defaultValue: string | undefined,
+    options: PromptOptions & { extra: string },
+  ): Promise<string | null | typeof PROMPT_EXTRA>;
+  prompt(
+    message: string,
+    defaultValue = '',
+    options?: PromptOptions,
+  ): Promise<string | null | typeof PROMPT_EXTRA> {
     const customTitle = options?.title?.trim() ?? '';
+    const extra = options?.extra?.trim() ?? '';
     return this.open({
       kind: 'prompt',
       title: customTitle.length > 0 ? customTitle : message,
@@ -81,7 +100,8 @@ export class DialogService extends Service {
       danger: false,
       defaultValue,
       placeholder: options?.placeholder ?? '',
-    }) as Promise<string | null>;
+      extra,
+    }) as Promise<string | null | typeof PROMPT_EXTRA>;
   }
 
   setInputValue(value: string): void {
@@ -103,6 +123,15 @@ export class DialogService extends Service {
     if (request.kind === 'confirm') resolve(false);
     else if (request.kind === 'prompt') resolve(null);
     else resolve(undefined);
+    this.advance();
+  }
+
+  /** Resolves the open prompt with `PROMPT_EXTRA`. No-op unless that prompt declared an extra action. */
+  chooseExtra(): void {
+    if (!this.pending) return;
+    const { request, resolve } = this.pending;
+    if (request.kind !== 'prompt' || request.extra.length === 0) return;
+    resolve(PROMPT_EXTRA);
     this.advance();
   }
 

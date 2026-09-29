@@ -257,7 +257,13 @@ const ReaderContent = observer(function ReaderContent() {
 
   const confirmLink = () => {
     const href = service.linkDraft.trim();
-    engineRef.current?.format(href ? { name: 'link', href } : { name: 'unsetLink' });
+    if (href) engineRef.current?.format({ name: 'link', href });
+    else if (service.editingLink) engineRef.current?.format({ name: 'unsetLink' });
+    service.closeSheet();
+  };
+
+  const removeLink = () => {
+    engineRef.current?.format({ name: 'unsetLink' });
     service.closeSheet();
   };
 
@@ -470,7 +476,7 @@ const ReaderContent = observer(function ReaderContent() {
       <MoreSheet onTrash={trashDoc} />
       <FormatMenu onFormat={(name) => engineRef.current?.format({ name })} onPickImage={pickEditorImage} />
       <MathSheet onConfirm={confirmMath} />
-      <LinkSheet onConfirm={confirmLink} />
+      <LinkSheet onConfirm={confirmLink} onRemove={removeLink} />
     </SafeAreaView>
   );
 });
@@ -1051,7 +1057,13 @@ const MathSheet = observer(function MathSheet({ onConfirm }: { onConfirm: () => 
   );
 });
 
-const LinkSheet = observer(function LinkSheet({ onConfirm }: { onConfirm: () => void }) {
+const LinkSheet = observer(function LinkSheet({
+  onConfirm,
+  onRemove,
+}: {
+  onConfirm: () => void;
+  onRemove: () => void;
+}) {
   const service = useService(ReaderService);
   const theme = useTheme();
   return (
@@ -1060,9 +1072,16 @@ const LinkSheet = observer(function LinkSheet({ onConfirm }: { onConfirm: () => 
       title="链接"
       onClose={() => service.closeSheet()}
       footer={
-        <Pressable onPress={onConfirm}>
-          <Text style={{ color: theme.colors.accentDeep, fontWeight: '700' }}>确定</Text>
-        </Pressable>
+        <>
+          {service.editingLink ? (
+            <Pressable onPress={onRemove} style={{ marginRight: 'auto' }}>
+              <Text style={{ color: theme.colors.ink2, fontWeight: '600' }}>取消链接</Text>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={onConfirm}>
+            <Text style={{ color: theme.colors.accentDeep, fontWeight: '700' }}>确定</Text>
+          </Pressable>
+        </>
       }
     >
       <TextInput
