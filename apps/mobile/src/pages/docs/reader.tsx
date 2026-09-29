@@ -261,6 +261,11 @@ const ReaderContent = observer(function ReaderContent() {
     service.closeSheet();
   };
 
+  const confirmMath = () => {
+    engineRef.current?.format({ name: 'math', latex: service.mathDraft });
+    service.closeSheet();
+  };
+
   const retryEngine = () => {
     service.setEngineError(null);
     engineRef.current?.reload();
@@ -464,6 +469,7 @@ const ReaderContent = observer(function ReaderContent() {
       <TopicSheet />
       <MoreSheet onTrash={trashDoc} />
       <FormatMenu onFormat={(name) => engineRef.current?.format({ name })} onPickImage={pickEditorImage} />
+      <MathSheet onConfirm={confirmMath} />
       <LinkSheet onConfirm={confirmLink} />
     </SafeAreaView>
   );
@@ -924,6 +930,7 @@ const MENU_ACTIONS: {
   { name: 'link', label: '链接', active: (state) => state.link },
   { name: 'image', label: '图片' },
   { name: 'horizontalRule', label: '分割线' },
+  { name: 'math', label: '公式' },
   { name: 'table', label: '表格', active: (state) => state.table },
   { name: 'undo', label: '撤销', disabled: (state) => !state?.canUndo },
   { name: 'redo', label: '重做', disabled: (state) => !state?.canRedo },
@@ -987,6 +994,10 @@ const FormatMenu = observer(function FormatMenu({
                     onPickImage();
                     return;
                   }
+                  if (item.name === 'math') {
+                    service.openMathSheet();
+                    return;
+                  }
                   onFormat(item.name);
                 }}
                 style={[styles.formatCell, disabled && styles.formatCellOff]}
@@ -999,6 +1010,43 @@ const FormatMenu = observer(function FormatMenu({
           );
         })}
       </View>
+    </BottomSheet>
+  );
+});
+
+const MathSheet = observer(function MathSheet({ onConfirm }: { onConfirm: () => void }) {
+  const service = useService(ReaderService);
+  const theme = useTheme();
+  return (
+    <BottomSheet
+      visible={service.sheet?.kind === 'math'}
+      title="公式"
+      onClose={() => service.closeSheet()}
+      footer={
+        <Pressable onPress={onConfirm}>
+          <Text style={{ color: theme.colors.accentDeep, fontWeight: '700' }}>插入</Text>
+        </Pressable>
+      }
+    >
+      <TextInput
+        value={service.mathDraft}
+        onChangeText={(value) => service.setMathDraft(value)}
+        placeholder="LaTeX，例如 E=mc^2。换行则单独成段"
+        placeholderTextColor={theme.colors.ink4}
+        autoCapitalize="none"
+        autoCorrect={false}
+        multiline
+        style={{
+          minHeight: 96,
+          borderWidth: 1,
+          borderColor: theme.colors.line,
+          borderRadius: 8,
+          paddingHorizontal: 10,
+          paddingVertical: 8,
+          color: theme.colors.ink,
+          backgroundColor: theme.colors.surface2,
+        }}
+      />
     </BottomSheet>
   );
 });

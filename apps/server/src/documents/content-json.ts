@@ -1,5 +1,6 @@
 import {
   getHeadlessExtensions,
+  normalizeMathHtml,
   pmJsonToText,
   thematicBreaksToPageBreaks,
   type PmJson,
@@ -94,7 +95,15 @@ function sanitizePmMedia(doc: PmJson): PmJson {
   return content === undefined ? doc : { ...doc, content };
 }
 
-const ATOM_TYPES = new Set(['image', 'video', 'horizontalRule', 'thematicBreak', 'pageBreak']);
+const ATOM_TYPES = new Set([
+  'image',
+  'video',
+  'horizontalRule',
+  'thematicBreak',
+  'pageBreak',
+  'inlineMath',
+  'blockMath',
+]);
 
 function hasAtom(node: PmJson): boolean {
   if (ATOM_TYPES.has(node.type)) return true;
@@ -135,7 +144,10 @@ function prependSourceBlockquote(doc: PmJson, sourceUrl: string): PmJson {
  * schema (no markdown round-trip — videos survive as `video` nodes).
  */
 export function htmlToContentJson(html: string, sourceUrl?: string): PmJson {
-  const doc = generateJSON(stripNonContentHtml(html), getHeadlessExtensions()) as PmJson;
+  const doc = generateJSON(
+    stripNonContentHtml(normalizeMathHtml(html)),
+    getHeadlessExtensions(),
+  ) as PmJson;
   const transformed = thematicBreaksToPageBreaks(
     horizontalRulesToThematicBreaks(sanitizePmMedia(doc)),
   );

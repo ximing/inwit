@@ -1,10 +1,13 @@
 import {
   AnnotationMark,
   CardAnchorMark,
+  createDocMathExtensions,
   createTextAlignExtension,
   PageBreak,
+  registerDocCodeAliases,
   VitalEntity,
 } from '@inwit/doc-schema';
+import { codeBlockNodeView } from '@inwit/doc-schema/code-block-view';
 import { mergeAttributes, Node, type AnyExtension, type NodeViewRendererProps } from '@tiptap/core';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Image from '@tiptap/extension-image';
@@ -21,6 +24,13 @@ import { common, createLowlight } from 'lowlight';
 import type { AssetUrlsService } from '@/services/asset-urls.service';
 
 const lowlight = createLowlight(common);
+registerDocCodeAliases(lowlight);
+
+const DocCodeBlock = CodeBlockLowlight.extend({
+  addNodeView() {
+    return codeBlockNodeView;
+  },
+});
 
 const DEFAULT_PLACEHOLDER = '开始书写…';
 
@@ -208,7 +218,7 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
         autolink: true,
       },
     }),
-    CodeBlockLowlight.configure({ lowlight }),
+    DocCodeBlock.configure({ lowlight }),
     Table.configure({ resizable: false }),
     TableRow,
     TableHeader,
@@ -224,6 +234,7 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
     AnnotationMark,
     CardAnchorMark,
     createTextAlignExtension(),
+    ...createDocMathExtensions(),
   ];
   if (opts.editable) {
     extensions.push(

@@ -1,5 +1,6 @@
 import remarkDirective from 'remark-directive';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import remarkParse from 'remark-parse';
 import remarkStringify, { type Options as StringifyOptions } from 'remark-stringify';
 import { unified } from 'unified';
@@ -29,6 +30,7 @@ export function parseMarkdownToMdast(md: string): MdastRoot {
     .use(remarkGfm)
     .use(remarkDirective)
     .use(remarkVitalEntity)
+    .use(remarkMath)
     .parse(md);
 }
 
@@ -37,6 +39,7 @@ export function serializeMdastToMarkdown(tree: MdastRoot): string {
     .use(remarkGfm)
     .use(remarkDirective)
     .use(remarkVitalEntity)
+    .use(remarkMath)
     .use(remarkStringify, STRINGIFY_OPTIONS)
     .stringify(tree);
   return normalizeTrailingNewlines(out);

@@ -1,3 +1,4 @@
+import { insertMathLatex, updateMathLatex } from '@inwit/doc-schema';
 import type { PmDocJson } from '@inwit/dto';
 import { Editor } from '@tiptap/core';
 import { AssetMap } from './asset-map';
@@ -23,6 +24,51 @@ import {
 import { createDocExtensions } from './vendor/extensions';
 
 const ANCHOR_FLASH_SELECTOR = '[data-card-ids], [data-card-id], .anchor, .anchor-note';
+
+function mountMathDialog(): {
+  open: (latex: string, onSubmit: (value: string | null) => void) => void;
+} {
+  const root = document.createElement('div');
+  root.className = 'math-dialog';
+  root.hidden = true;
+  root.innerHTML = `
+    <div class="math-dialog-card" role="dialog" aria-modal="true" aria-label="编辑公式">
+      <p class="math-dialog-title">编辑公式</p>
+      <textarea class="math-dialog-input" rows="4" spellcheck="false" placeholder="LaTeX，例如 E=mc^2"></textarea>
+      <p class="math-dialog-hint">留空则删除公式</p>
+      <div class="math-dialog-actions">
+        <button type="button" data-act="cancel">取消</button>
+        <button type="button" data-act="ok">确定</button>
+      </div>
+    </div>
+  `;
+  document.body.append(root);
+  const input = root.querySelector('textarea');
+  if (!(input instanceof HTMLTextAreaElement)) throw new Error('公式编辑框没有建起来');
+  let submit: ((value: string | null) => void) | null = null;
+  const close = (value: string | null): void => {
+    root.hidden = true;
+    const done = submit;
+    submit = null;
+    done?.(value);
+  };
+  root.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (target === root || target.dataset.act === 'cancel') close(null);
+    if (target.dataset.act === 'ok') close(input.value);
+  });
+  return {
+    open(latex, onSubmit) {
+      submit = onSubmit;
+      input.value = latex;
+      root.hidden = false;
+      input.focus();
+    },
+  };
+}
+
+const mathDialog = mountMathDialog();
 const SELECTION_DEBOUNCE_MS = 150;
 const DOC_CHANGED_DEBOUNCE_MS = 300;
 const FORMAT_STATE_DEBOUNCE_MS = 50;
@@ -173,6 +219,9 @@ function applyFormat(editor: Editor, payload: Extract<DocEngineCommand, { type: 
     case 'table':
       chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
       return;
+    case 'math':
+      insertMathLatex(editor, typeof payload.latex === 'string' ? payload.latex : '');
+      return;
     case 'undo':
       chain.undo().run();
       return;
@@ -233,6 +282,18 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
     editorProps: {
       attributes: {
         spellcheck: 'false',
+      },
+      handleClickOn: (_view, _pos, node, nodePos, event) => {
+        if (!editable) return false;
+        if (node.type.name !== 'inlineMath' && node.type.name !== 'blockMath') return false;
+        event.preventDefault();
+        const latex = typeof node.attrs.latex === 'string' ? node.attrs.latex : '';
+        const kind = node.type.name === 'blockMath' ? 'block' : 'inline';
+        mathDialog.open(latex, (value) => {
+          if (value === null) return;
+          updateMathLatex(editor, nodePos, kind, value);
+        });
+        return true;
       },
     },
   });

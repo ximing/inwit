@@ -6,6 +6,25 @@ export { AnnotationMark } from './schema/annotation-mark.js';
 export { CardAnchorMark } from './schema/card-anchor-mark.js';
 export { getHeadlessExtensions, getHeadlessSchema } from './schema/headless.js';
 export { createTextAlignExtension, DOC_TEXT_ALIGN_TYPES } from './schema/text-align.js';
+export {
+  createDocMathExtensions,
+  insertMathLatex,
+  updateMathLatex,
+} from './schema/math.js';
+export {
+  classifyLatexInput,
+  mathPlainText,
+  normalizeMathHtml,
+} from './schema/math-html.js';
+export {
+  CODE_LANGUAGES,
+  codeLanguageChoices,
+  codeLanguageValue,
+  filterCodeLanguageChoices,
+  registerDocCodeAliases,
+  resolveCodeLanguage,
+} from './schema/code-language.js';
+export type { CodeLanguageChoice } from './schema/code-language.js';
 export { PageBreak } from './schema/page-break.js';
 export { Video } from './schema/video.js';
 export { VitalEntity } from './schema/vital-entity.js';

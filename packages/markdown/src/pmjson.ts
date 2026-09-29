@@ -45,6 +45,11 @@ function safeMime(value: string): string | null {
   return null;
 }
 
+function latexOf(node: PmNode): string {
+  const latex = node.attrs?.latex;
+  return typeof latex === 'string' ? latex.trim() : '';
+}
+
 function withContent(type: string, content: PmNode[], attrs?: PmNode['attrs']): PmNode {
   const node: PmNode = { type };
   if (attrs !== undefined) node.attrs = attrs;
@@ -99,6 +104,12 @@ function phrasingToPm(nodes: PhrasingContent[], marks: PmMark[]): PmNode[] {
         if (node.alt) attrs.alt = node.alt;
         if (node.title) attrs.title = node.title;
         out.push({ type: 'image', attrs });
+        break;
+      }
+      case 'inlineMath': {
+        const latex = node.value.trim();
+        if (!latex) break;
+        out.push({ type: 'inlineMath', attrs: { latex } });
         break;
       }
       default:
@@ -196,6 +207,11 @@ function flowToPm(node: BlockContent | RootContent): PmNode | null {
       return tableToPm(node);
     case 'leafDirective':
       return leafDirectiveToPm(node);
+    case 'math': {
+      const latex = node.value.trim();
+      if (!latex) return null;
+      return { type: 'blockMath', attrs: { latex } };
+    }
     default:
       return withContent('paragraph', []);
   }
@@ -329,6 +345,13 @@ function pmPhrasing(nodes: PmNode[]): PhrasingContent[] {
         title: typeof attrs.title === 'string' ? attrs.title : null,
       };
       out.push(image);
+      continue;
+    }
+    if (node.type === 'inlineMath' || node.type === 'blockMath') {
+      const latex = latexOf(node);
+      if (!latex) continue;
+      const inline: PhrasingContent = { type: 'inlineMath', value: latex };
+      out.push(inline);
     }
   }
   return out;
@@ -430,6 +453,19 @@ function pmFlow(node: PmNode): BlockContent | null {
     }
     case 'video':
       return pmVideoToMdast(node);
+    case 'blockMath': {
+      const latex = latexOf(node);
+      if (!latex) return null;
+      const math: BlockContent = { type: 'math', value: latex };
+      return math;
+    }
+    case 'inlineMath': {
+      const latex = latexOf(node);
+      if (!latex) return null;
+      const inline: PhrasingContent = { type: 'inlineMath', value: latex };
+      const paragraph: Paragraph = { type: 'paragraph', children: [inline] };
+      return paragraph;
+    }
     case 'table':
       return pmTable(node);
     default:
@@ -440,7 +476,13 @@ function pmFlow(node: PmNode): BlockContent | null {
 function pmTableCell(node: PmNode): TableCell {
   const phrasing = asPmNodes(node.content).flatMap((block) => {
     if (block.type === 'paragraph') return pmPhrasing(asPmNodes(block.content));
-    if (block.type === 'text' || block.type === 'image' || block.type === 'hardBreak') {
+    if (
+      block.type === 'text' ||
+      block.type === 'image' ||
+      block.type === 'hardBreak' ||
+      block.type === 'inlineMath' ||
+      block.type === 'blockMath'
+    ) {
       return pmPhrasing([block]);
     }
     return [];

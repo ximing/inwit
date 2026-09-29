@@ -98,6 +98,169 @@
   padding: 0;
 }
 
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code {
+  position: relative;
+  margin: 0 0 10px;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) > .doc-code:first-child { margin-top: 0; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) > .doc-code:last-child { margin-bottom: 0; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code > pre {
+  margin: 0;
+  padding-top: 32px;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code.is-bare > pre {
+  padding-top: 10px;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang {
+  position: absolute;
+  z-index: 1;
+  top: 6px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  max-width: calc(100% - 16px);
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.2;
+  user-select: none;
+  pointer-events: none;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang[hidden] { display: none; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code.is-editing .doc-code-lang {
+  pointer-events: auto;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang-btn[hidden] { display: none; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang-btn::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-1px) rotate(45deg);
+  flex: none;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang-btn.is-open::after {
+  transform: translateY(1px) rotate(225deg);
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code.is-editing .doc-code-lang-btn:hover,
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code.is-editing .doc-code-lang-btn:focus-visible,
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang-btn.is-open {
+  background: var(--surface);
+  color: var(--ink);
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang-name {
+  padding: 2px 6px;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang-name[hidden] { display: none; }
+.doc-code-menu {
+  position: fixed;
+  z-index: 28;
+  width: 220px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.3;
+}
+.doc-code-menu-filter {
+  display: block;
+  width: 100%;
+  margin: 0 0 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: inherit;
+}
+.doc-code-menu-filter::placeholder { color: var(--ink-4); }
+.doc-code-menu-list {
+  position: relative;
+  max-height: min(280px, calc(100vh - 96px));
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.doc-code-menu-option {
+  display: block;
+  width: 100%;
+  position: relative;
+  margin: 0;
+  padding: 7px 10px 7px 24px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.doc-code-menu-option.is-active {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.doc-code-menu-option.is-on {
+  color: var(--accent-deep);
+  font-weight: 500;
+}
+.doc-code-menu-option.is-on.is-active { background: var(--accent-soft); }
+.doc-code-menu-option.is-on::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.doc-code-menu-empty {
+  padding: 8px 10px;
+  color: var(--ink-4);
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code > pre { padding-top: 40px; }
+  :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code.is-bare > pre { padding-top: 10px; }
+  :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code-lang { font-size: 16px; }
+  .doc-code-menu,
+  .doc-code-menu-filter { font-size: 16px; }
+}
+
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .tableWrapper {
   display: block;
   overflow-x: auto;
@@ -437,4 +600,25 @@ mark.anchor-note.is-flash,
   mark.anchor-note.is-flash,
   .anchor-note-block.is-flash,
   .ProseMirror .anchor-note.is-flash { animation: none; }
+}
+
+.katex { color: inherit; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .tiptap-mathematics-render[data-type='inline-math'] {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle;
+  overflow-x: auto;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .tiptap-mathematics-render[data-type='block-math'] {
+  display: block;
+  margin: 0.75em 0;
+  overflow-x: auto;
+  text-align: center;
+}
+.ws-writer .ProseMirror[contenteditable='true'] .tiptap-mathematics-render { cursor: pointer; }
+.inline-math-error,
+.block-math-error {
+  color: var(--accent-deep);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.95em;
 }

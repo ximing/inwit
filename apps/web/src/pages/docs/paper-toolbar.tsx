@@ -18,6 +18,7 @@ import {
   ListOrdered,
   Minus,
   Quote,
+  Sigma,
   Strikethrough,
   Table as TableIcon,
 } from 'lucide-react';
@@ -120,6 +121,7 @@ export function PaperToolbar({
   onPickImage,
   onPickVideo,
   onToggleTable,
+  onInsertMath,
 }: {
   editor: Editor;
   uploading: boolean;
@@ -128,6 +130,7 @@ export function PaperToolbar({
   onPickImage: () => void;
   onPickVideo: () => void;
   onToggleTable: () => void;
+  onInsertMath: () => void;
 }) {
   const active = useEditorState({
     editor,
@@ -283,6 +286,9 @@ export function PaperToolbar({
           onAction={() => editor.chain().focus().setHorizontalRule().run()}
         >
           <Minus width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
+        </EditorToolButton>
+        <EditorToolButton variant="paper" label="公式" onAction={onInsertMath}>
+          <Sigma width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
         </EditorToolButton>
         {uploading ? (
           <span className="paper-tool is-wide" aria-live="polite">

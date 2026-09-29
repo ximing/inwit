@@ -97,6 +97,24 @@ describe('textFromPmJson', () => {
     ).toBe('过拟合 训练集很好，测试集不行。');
   });
 
+  it('keeps formula source in the preview', () => {
+    expect(
+      textFromPmJson({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: '能量 ' },
+              { type: 'inlineMath', attrs: { latex: 'E=mc^2' } },
+            ],
+          },
+          { type: 'blockMath', attrs: { latex: '\\int x' } },
+        ],
+      }),
+    ).toBe('能量 $E=mc^2$ $$ \\int x $$');
+  });
+
   it('clips to max Unicode characters', () => {
     expect(textFromPmJson(para('a'.repeat(50)), 12)).toBe('a'.repeat(12));
   });

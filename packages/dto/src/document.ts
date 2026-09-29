@@ -1,4 +1,4 @@
-import { blocksFromPmJSON, type PmJson } from '@inwit/doc-schema';
+import { blocksFromPmJSON, mathPlainText, type PmJson } from '@inwit/doc-schema';
 import { z } from 'zod';
 import { cardReviewSummarySchema, cardWithQuestionsSchema } from './card.js';
 import { paginationQuerySchema } from './common.js';
@@ -171,6 +171,13 @@ function collectPmInline(node: unknown, out: string[], state: PmWalkState): void
     out.push(' ');
     return;
   }
+  if (type === 'inlineMath' || type === 'blockMath') {
+    const attrs = isRecord(node.attrs) ? node.attrs : null;
+    const latex = attrs && typeof attrs.latex === 'string' ? attrs.latex : '';
+    const plain = mathPlainText(type, latex);
+    if (plain) out.push(plain);
+    return;
+  }
   if (typeof node.text === 'string') {
     const text = node.text.replaceAll('\u200b', '');
     if (text) out.push(text);
@@ -217,6 +224,7 @@ export function textFromPmJson(value: unknown, max = CARD_PREVIEW_DEFAULT): stri
       state.nodes += 1;
       return false;
     }
+    if (type === 'blockMath' || type === 'inlineMath') return takeBlock(node);
     if (PM_BLOCK_TYPES.has(type)) return takeBlock(node);
     state.nodes += 1;
     const children = Array.isArray(node.content) ? node.content : [];

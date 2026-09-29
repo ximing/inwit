@@ -144,6 +144,11 @@ describe('parseIncomingMessage', () => {
     expect(parseIncomingMessage({ v: 1, type: 'format', payload: {} }).ok).toBe(false);
     expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'link', href: 1 } }).ok).toBe(false);
     expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'image', src: null } }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'math', latex: 1 } }).ok).toBe(false);
+    expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'math', latex: 'E=mc^2' } })).toEqual({
+      ok: true,
+      value: { type: 'format', payload: { name: 'math', latex: 'E=mc^2' } },
+    });
     expect(parseIncomingMessage({ v: 1, type: 'format', payload: { name: 'link', href: null } }).ok).toBe(false);
   });
 });

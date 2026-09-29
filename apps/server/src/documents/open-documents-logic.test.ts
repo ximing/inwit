@@ -80,6 +80,14 @@ describe('htmlToContentJson', () => {
     );
   });
 
+  it('turns dollar math and math nodes into inline and block math', () => {
+    const doc = htmlToContentJson(
+      '<p>能量 $E=mc^2$ 守恒</p><div data-type="block-math" data-latex="\\int_0^1"></div>',
+    );
+    expect(collect(doc, 'inlineMath')[0]?.attrs).toMatchObject({ latex: 'E=mc^2' });
+    expect(collect(doc, 'blockMath')[0]?.attrs).toMatchObject({ latex: '\\int_0^1' });
+  });
+
   it('prepends a source blockquote when sourceUrl is given', () => {
     const doc = htmlToContentJson('<p>正文</p>', 'https://example.com/a');
     const first = doc.content?.[0];

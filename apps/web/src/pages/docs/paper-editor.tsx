@@ -11,6 +11,7 @@ import {
   presignAsset,
   signAssetMultipart,
 } from '@/api/assets';
+import { insertMathLatex, updateMathLatex } from '@inwit/doc-schema';
 import { createDocExtensions } from '@/components/doc/extensions';
 import { docEntities } from '@/lib/anchors';
 import {
@@ -298,6 +299,21 @@ export const PaperEditor = observer(function PaperEditor({
         spellcheck: 'false',
       },
       transformPasted: (slice) => stripEntityMarksFromSlice(slice),
+      handleClickOn: (_view, _pos, node, nodePos, event) => {
+        if (node.type.name !== 'inlineMath' && node.type.name !== 'blockMath') return false;
+        event.preventDefault();
+        const latex = typeof node.attrs.latex === 'string' ? node.attrs.latex : '';
+        const kind = node.type.name === 'blockMath' ? 'block' : 'inline';
+        void dialog
+          .prompt('留空则删除公式', latex, { title: '编辑公式', placeholder: 'E=mc^2' })
+          .then((value) => {
+            if (value === null) return;
+            const instance = editorRef.current;
+            if (!instance) return;
+            updateMathLatex(instance, nodePos, kind, value);
+          });
+        return true;
+      },
       handlePaste: (view, event) => {
         const dt = event.clipboardData;
         if (!dt) return false;
@@ -410,6 +426,18 @@ export const PaperEditor = observer(function PaperEditor({
     });
   };
 
+  const insertMath = () => {
+    void dialog
+      .prompt('输入 LaTeX。换行，或用 $$ 包住，会单独成段。', '', {
+        title: '公式',
+        placeholder: 'E=mc^2',
+      })
+      .then((value) => {
+        if (value === null || !editor) return;
+        insertMathLatex(editor, value);
+      });
+  };
+
   const toggleTable = () => {
     if (editor.isActive('table')) {
       editor.chain().focus().deleteTable().run();
@@ -437,6 +465,7 @@ export const PaperEditor = observer(function PaperEditor({
         onPickImage={() => imageInputRef.current?.click()}
         onPickVideo={() => videoInputRef.current?.click()}
         onToggleTable={toggleTable}
+        onInsertMath={insertMath}
       />
       <BubbleMenu
         editor={editor}

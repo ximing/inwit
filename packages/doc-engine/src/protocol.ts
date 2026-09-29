@@ -107,6 +107,7 @@ export const FORMAT_NAMES = [
   'image',
   'horizontalRule',
   'table',
+  'math',
   'undo',
   'redo',
 ] as const;
@@ -125,7 +126,7 @@ export type GetDocCmd = {
 
 export type FormatCmd = {
   type: 'format';
-  payload: { name: FormatName; href?: string; src?: string };
+  payload: { name: FormatName; href?: string; src?: string; latex?: string };
 };
 
 export type DocEngineCommand =
@@ -378,6 +379,12 @@ function parsePayload(type: DocEngineCommand['type'], payload: unknown): ParseRe
           return { ok: false, message: 'format image src must be a string' };
         }
         next.src = payload.src;
+      }
+      if (payload.name === 'math' && 'latex' in payload) {
+        if (typeof payload.latex !== 'string') {
+          return { ok: false, message: 'format math latex must be a string' };
+        }
+        next.latex = payload.latex;
       }
       return { ok: true, value: { type, payload: next } };
     }

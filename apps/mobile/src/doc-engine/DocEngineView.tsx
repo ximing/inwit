@@ -19,7 +19,6 @@ import type {
   CardAnchorInput,
   DocEngineCommand,
   EntityKind,
-  FormatName,
   FormatState,
   PlatformName,
   TextSelectionAnchor,
@@ -46,7 +45,7 @@ export type DocEngineHandle = {
   injectAssetUrls: (urls: Record<string, string | null>) => void;
   setTheme: (theme: ThemeName) => void;
   setEditable: (editable: boolean) => void;
-  format: (payload: { name: FormatName; href?: string; src?: string }) => void;
+  format: (payload: Extract<DocEngineCommand, { type: 'format' }>['payload']) => void;
   getDoc: () => Promise<PmDocJson>;
   reload: () => void;
 };

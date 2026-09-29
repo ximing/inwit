@@ -118,6 +118,13 @@ describe('locateQuote', () => {
     expect(locateQuote(source, 9, 'hello')).toBeNull();
     expect(locateQuote(source, 1, '')).toBeNull();
   });
+
+  it('maps a formula quote onto the math atom', () => {
+    const formula = doc(
+      p(t('能量 '), { type: 'inlineMath', attrs: { latex: 'E=mc^2' } }, t(' 守恒')),
+    );
+    expect(locateQuote(formula, 1, '$E=mc^2$')).toEqual({ from: 4, to: 5 });
+  });
 });
 
 describe('applyEntityAnchor', () => {

@@ -107,7 +107,8 @@ export type ReaderSheet =
   | { kind: 'topic' }
   | { kind: 'more' }
   | { kind: 'format' }
-  | { kind: 'link' };
+  | { kind: 'link' }
+  | { kind: 'math' };
 
 export class ReaderService extends Service {
   doc: DocumentDetail | null = null;
@@ -154,6 +155,7 @@ export class ReaderService extends Service {
   saveError: string | null = null;
   formatState: FormatState | null = null;
   linkDraft = '';
+  mathDraft = '';
   cardEditQuestion = '';
   cardEditAnswer = '';
   uploadingImage = false;
@@ -288,6 +290,15 @@ export class ReaderService extends Service {
     this.linkDraft = value;
   }
 
+  openMathSheet(): void {
+    this.mathDraft = '';
+    this.sheet = { kind: 'math' };
+  }
+
+  setMathDraft(value: string): void {
+    this.mathDraft = value;
+  }
+
   markEngineReady(): void {
     this.engineReady = true;
     this.contentGen += 1;
@@ -306,6 +317,7 @@ export class ReaderService extends Service {
     this.cardEditAnswer = '';
     this.rejectDraft = '';
     this.linkDraft = '';
+    this.mathDraft = '';
   }
 
   get proposedCount(): number {
