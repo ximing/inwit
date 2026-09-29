@@ -65,7 +65,7 @@ ${MEMORY_COLLECTION_STEP}
    - type：same_concept（同一概念的两种说法）/ confusable（容易搞混）/ prerequisite（target 是这张新卡的前置）/ related
    - 每张新卡最多 3 条边；没有把握就不要建边
    - reason 必须是一句人话，例如「这和你之前那张「反向传播」讲的是同一件事，只是从梯度的角度说」
-8. 若文档没有 topicId，且与某个活跃主题高度相关，再调用 attribute_topic 软归属。没有把握就不要归属。
+8. 若文档没有 topicId：写完卡片后判断它属于哪门课。和某个活跃主题是同一门课（标题、目标或已有概念对得上）就必须调用 attribute_topic。只有和所有活跃主题都明显不是一门课时才留在未归属。对得上就在这一步归属，后面才能把卡片挂上地图。
 9. 若文档已有 topicId，或第 8 步刚软归属成功：必须 read_topic_map(topicId)，再对本轮每张新卡调用 place_on_map。
    - 优先挂到已有节点（传 nodeId）。
    - 只有没有合适节点时才传 newNode 新建（可挂到已有 parentId 下）。地图最多三级。
@@ -133,7 +133,7 @@ export function digestUserPrompt(input: {
           .join('\n');
   const owned =
     input.topicId === null
-      ? '这篇文档目前没有主题。若与某个活跃主题高度相关，attribute_topic 之后必须再 read_topic_map + place_on_map。'
+      ? '这篇文档目前没有主题。写完卡片后，若它和下面某个活跃主题是同一门课，必须 attribute_topic，然后 read_topic_map + place_on_map。只有和这些主题都明显无关时才留在未归属。'
       : `这篇文档已归属主题 ${input.topicId}。切卡出题后必须 read_topic_map(${input.topicId}) 并把每张新卡 place_on_map。`;
   const base = `请消化这篇文档。documentId: ${input.documentId}
 

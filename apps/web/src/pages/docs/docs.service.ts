@@ -469,7 +469,17 @@ export class DocsService extends Service {
     if (!updated) {
       if (this.doc?.id === id) this.closeDoc();
     } else {
-      if (this.doc?.id === id) this.doc = { ...this.doc, ...updated, topicTitle };
+      if (this.doc?.id === id) {
+        const topicMoved = this.doc.topicId !== updated.topicId;
+        this.doc = {
+          ...this.doc,
+          ...updated,
+          topicTitle,
+          cards: topicMoved
+            ? this.doc.cards.map((card) => ({ ...card, topicId: updated.topicId, mapNodeId: null }))
+            : this.doc.cards,
+        };
+      }
       this.syncEditorFromRemote(updated);
       const editor = this.resolve(EditorService);
       if (editor.id === id) editor.topicId = updated.topicId;
@@ -1224,11 +1234,15 @@ export class DocsService extends Service {
       const updated = await updateDocument(id, { topicId });
       const topicTitle = this.topicTitleById(updated.topicId);
       if (this.doc?.id === id) {
+        const topicMoved = this.doc.topicId !== updated.topicId;
         this.doc = {
           ...this.doc,
           topicId: updated.topicId,
           topicTitle,
           updatedAt: updated.updatedAt,
+          cards: topicMoved
+            ? this.doc.cards.map((card) => ({ ...card, topicId: updated.topicId, mapNodeId: null }))
+            : this.doc.cards,
         };
         this.patchListFromDetail(this.doc);
       } else {

@@ -64,6 +64,8 @@ describe('memory collection prompts', () => {
     expect(DIGEST_SYSTEM_PROMPT).toContain('4. 用 search_user_memories 检索用户已有概念');
     expect(DIGEST_SYSTEM_PROMPT).toContain('7. 对 write_cards 返回的每一张新卡，再用 search_user_memories');
     expect(DIGEST_SYSTEM_PROMPT).toContain('第 8 步刚软归属成功');
+    expect(DIGEST_SYSTEM_PROMPT).toContain('就必须调用 attribute_topic');
+    expect(DIGEST_SYSTEM_PROMPT).not.toContain('没有把握就不要归属');
     expect(DIGEST_SYSTEM_PROMPT).not.toContain('第 7 步刚软归属成功');
     expect(DIGEST_SYSTEM_PROMPT).not.toContain(WRITE_MEMORY_TABLE_NOTE);
     expect(CHAT_SYSTEM_PROMPT).toContain('2. 先用 search_cards 检索用户已有卡片');
@@ -89,6 +91,13 @@ describe('memory collection prompts', () => {
     expect(digest).toContain('doc-1');
     expect(digest).toContain('place_on_map');
     expect(countOf(digest, MEMORY_COLLECTION_USER_SENTENCE)).toBe(1);
+    const unscoped = digestUserPrompt({
+      documentId: 'doc-1',
+      topicId: null,
+      topics: [{ id: 'topic-1', title: '线性代数', goal: null }],
+    });
+    expect(unscoped).toContain('必须 attribute_topic');
+    expect(unscoped).toContain('线性代数');
 
     const chat = chatUserPrompt({ documentId: 'doc-2', question: '梯度为什么消失？' });
     expect(chat).toContain('梯度为什么消失？');

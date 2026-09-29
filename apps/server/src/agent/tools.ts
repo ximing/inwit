@@ -10,6 +10,7 @@ import { AppError } from '../errors.js';
 import { getTopicMapFlat, placeCardOnMap, recalculateMapNodeStatus } from '../maps/map.service.js';
 import { OutlineError, parsePlaceOnMapTarget } from '../maps/outline.js';
 import { acceptedCard } from '../cards/accepted-card.js';
+import { reindexDocumentCards } from '../topics/topic-assign.js';
 import { deleteCardFromIndex, indexCard, searchCards } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
@@ -318,7 +319,7 @@ export function attributeTopicTool(session: DigestSession): AgentTool<typeof att
     name: 'attribute_topic',
     label: '软归属主题',
     description:
-      '当文档没有 topicId、且内容与某个活跃主题高度相关时，把文档（及本次写出的卡片）软归属到该主题。不要强行归属。',
+      '当文档没有 topicId、且内容和某个活跃主题是同一门课时，把文档和本次写出的卡片归到该主题。对得上就调用。只有和所有活跃主题都明显无关时才不要调用。',
     parameters: attributeTopicSchema,
     execute: async (_id, params) => {
       if (params.documentId !== session.documentId) {
@@ -355,6 +356,7 @@ export function attributeTopicTool(session: DigestSession): AgentTool<typeof att
         .set({ topicId: topic.id, updatedAt: now })
         .where(and(eq(cards.documentId, document.id), eq(cards.userId, session.userId), isNull(cards.deletedAt)));
       session.topicId = topic.id;
+      await reindexDocumentCards(session.userId, document.id);
       return toolResult(
         JSON.stringify({ ok: true, topicId: topic.id, reason: params.reason }),
         { ok: true, topicId: topic.id },

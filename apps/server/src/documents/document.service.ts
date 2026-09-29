@@ -304,7 +304,7 @@ export async function updateDocument(
     input.contentJson !== undefined &&
     (isBlankDocumentContent(existing.contentJson) || existing.source === 'editor');
 
-  const { row, digestPlanned } = await getDb().transaction(async (tx) => {
+  const { row, digestPlanned, movedCards } = await getDb().transaction(async (tx) => {
     let plan: DigestPlan = { kind: 'none' };
     let pendingDigestId: string | null = null;
     if (needsDigestPlan) {
@@ -365,11 +365,43 @@ export async function updateDocument(
         .set({ runAt: new Date(now.getTime() + plan.delayMs), updatedAt: now })
         .where(and(eq(jobs.id, pendingDigestId), eq(jobs.status, 'pending')));
     }
-    return { row: updated, digestPlanned: plan.kind !== 'none' };
+    let movedCards: (typeof cards.$inferSelect)[] = [];
+    if (topicChanged) {
+      const attached = await tx
+        .select({ mapNodeId: cards.mapNodeId })
+        .from(cards)
+        .where(and(eq(cards.userId, userId), eq(cards.documentId, id), isNull(cards.deletedAt)));
+      movedCards = await tx
+        .update(cards)
+        .set({ topicId: input.topicId ?? null, mapNodeId: null, updatedAt: now })
+        .where(and(eq(cards.userId, userId), eq(cards.documentId, id), isNull(cards.deletedAt)))
+        .returning();
+      const nodeIds = [
+        ...new Set(attached.map((row) => row.mapNodeId).filter((nodeId): nodeId is string => nodeId !== null)),
+      ];
+      for (const nodeId of nodeIds) {
+        await recalculateMapNodeStatus(nodeId, tx);
+      }
+    }
+    return { row: updated, digestPlanned: plan.kind !== 'none', movedCards };
   });
   const titleChanged = input.title !== undefined && title !== existing.title;
   // While a digest is pending it re-indexes on completion; embedding every
   // intermediate save would burn tokens on drafts.
+  if (topicChanged) {
+    for (const card of movedCards) {
+      if (!shouldIndexCard(card)) continue;
+      await tryIndexCard({
+        id: card.id,
+        userId: card.userId,
+        topicId: card.topicId,
+        concept: card.concept,
+        example: card.example,
+        confusionPoint: card.confusionPoint,
+        tags: card.tags,
+      });
+    }
+  }
   if ((titleChanged || contentChanged || topicChanged) && !digestPlanned) {
     await tryIndexDocument(row);
   }

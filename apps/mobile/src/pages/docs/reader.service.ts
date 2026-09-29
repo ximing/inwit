@@ -881,7 +881,16 @@ export class ReaderService extends Service {
     try {
       const updated = await updateDocument(this.doc.id, { topicId });
       const topicTitle = this.topics.find((topic) => topic.id === updated.topicId)?.title ?? null;
-      this.doc = { ...this.doc, topicId: updated.topicId, topicTitle, updatedAt: updated.updatedAt };
+      const topicMoved = this.doc.topicId !== updated.topicId;
+      this.doc = {
+        ...this.doc,
+        topicId: updated.topicId,
+        topicTitle,
+        updatedAt: updated.updatedAt,
+        cards: topicMoved
+          ? this.doc.cards.map((card) => ({ ...card, topicId: updated.topicId, mapNodeId: null }))
+          : this.doc.cards,
+      };
     } catch (err) {
       this.showToast(errorMessage(err, '没换上主题'));
     }

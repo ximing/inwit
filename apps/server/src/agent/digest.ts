@@ -7,6 +7,7 @@ import { findOwnedDocument } from '../documents/document.service.js';
 import { RescheduleJobError } from '../jobs/queue-logic.js';
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
 import { maybeEnqueueTopicSuggest } from '../topics/suggest.js';
+import { assignUnscopedDigestedDocument } from '../topics/topic-assign.js';
 import { logger } from '../utils/logger.js';
 import {
   associationHintForCards,
@@ -112,7 +113,7 @@ async function verifyDigest(
 
   const hint = await associationHintForCards(job.userId, liveIds);
   const linkN = await countOutgoingLinks(job.userId, liveIds);
-  await markDigested(documentId, { linkHint: hint });
+  // Title and summary make the topic match sharper than the raw body alone.
   try {
     await ensureDocumentMeta({
       userId: job.userId,
@@ -126,6 +127,41 @@ async function verifyDigest(
       error: err instanceof Error ? err.message : String(err),
     });
   }
+  if (!session.topicId) {
+    try {
+      const assigned = await assignUnscopedDigestedDocument(job.userId, documentId);
+      if (assigned.topicId && (assigned.assigned || assigned.reason === 'existing')) {
+        session.topicId = assigned.topicId;
+      }
+      if (assigned.assigned) {
+        logger.info('digest.topic_assigned', {
+          jobId: job.id,
+          documentId,
+          topicId: assigned.topicId,
+          reason: assigned.reason,
+          relevance: assigned.relevance,
+          abstain: assigned.abstain,
+          hitCount: assigned.hitCount,
+        });
+      } else if (assigned.reason === 'none') {
+        logger.info('digest.topic_skipped', {
+          jobId: job.id,
+          documentId,
+          relevance: assigned.relevance,
+          abstain: assigned.abstain,
+          runnerUp: assigned.runnerUp,
+          hitCount: assigned.hitCount,
+        });
+      }
+    } catch (err) {
+      logger.warn('digest.topic_assign_failed', {
+        jobId: job.id,
+        documentId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  await markDigested(documentId, { linkHint: hint });
   await tryIndexOwnedDocument(job.userId, documentId);
 
   if (!config.DIGEST_CARD_GATE && !session.topicId) {
@@ -139,7 +175,8 @@ async function verifyDigest(
     }
   }
 
-  return `cards=${String(live.length)} questions=${String(questionTotal)} links=${String(linkN)}${hint ? ' same_concept_hint=1' : ''}`;
+  const topicPart = session.topicId ? ` topic=${session.topicId}` : ' topic=none';
+  return `cards=${String(live.length)} questions=${String(questionTotal)} links=${String(linkN)}${topicPart}${hint ? ' same_concept_hint=1' : ''}`;
 }
 
 export async function processDigest(job: JobRow): Promise<void> {
