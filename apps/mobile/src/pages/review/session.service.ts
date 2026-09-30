@@ -16,7 +16,10 @@ import {
   shouldRetryPresign,
   type PresignedUrlEntry,
 } from '@/lib/presign-cache-logic';
+import { consumeEchoes } from '@/lib/sync-echo';
+import { coalesceChanges, planReloads, reviewReloadMode, type EchoStamp, type SyncView } from '@/lib/sync-plan';
 import { LayoutService } from '@/services/layout.service';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
 import { adoptSettings, cloneSettings } from './review-settings-logic';
 import {
@@ -58,6 +61,21 @@ export class ReviewSessionService extends Service {
   settings: ReviewSettings = cloneSettings(DEFAULT_REVIEW_SETTINGS);
   cardImageUrls: Record<string, PresignedUrlEntry> = {};
   removing = false;
+  private sync: SyncService | null = null;
+  private unsubscribeSync: (() => void) | null = null;
+  private syncChain: Promise<void> = Promise.resolve();
+  private echoes: EchoStamp[] = [];
+  private statsGen = 0;
+
+  constructor() {
+    super();
+    try {
+      this.sync = this.resolve(SyncService);
+      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
+    } catch {
+      this.sync = null;
+    }
+  }
 
   get layout(): LayoutService {
     return this.resolve(LayoutService);
@@ -226,6 +244,57 @@ export class ReviewSessionService extends Service {
     } finally {
       this.removing = false;
     }
+  }
+
+  override destroy(): void {
+    this.unsubscribeSync?.();
+    this.unsubscribeSync = null;
+    this.sync = null;
+    super.destroy();
+  }
+
+  private async refreshStats(): Promise<void> {
+    const gen = ++this.statsGen;
+    try {
+      const stats = await getReviewStats();
+      if (gen !== this.statsGen) return;
+      this.stats = stats;
+    } catch {
+      // Complete copy can live without a fresh forecast.
+    }
+  }
+
+  private onSyncEvent(event: SyncEvent): void {
+    this.syncChain = this.syncChain.then(() => this.handleSync(event)).catch(() => undefined);
+  }
+
+  private async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'active') return;
+    if (event.type === 'reset') {
+      await this.refreshStats();
+      return;
+    }
+    const changes = coalesceChanges(consumeEchoes(event.changes, this.echoes));
+    const intents = planReloads(changes, this.syncView());
+    if (!intents.some((intent) => intent.kind === 'review')) return;
+    if (reviewReloadMode(true) === 'stats') await this.refreshStats();
+  }
+
+  private syncView(): SyncView {
+    return {
+      documents: [],
+      openDocumentId: null,
+      listIncludesHead: false,
+      editor: null,
+      topics: [],
+      openTopicId: null,
+      mapTopicId: null,
+      readerDocumentId: null,
+      readerActiveCardId: null,
+      reviewInSession: true,
+      jobs: [],
+      activeJobId: null,
+    };
   }
 
   async archiveCurrent(): Promise<void> {
