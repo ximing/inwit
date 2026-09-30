@@ -62,7 +62,8 @@ const DocsPageContent = observer(function DocsPageContent() {
 
   useEffect(() => {
     editor.onCreated = (created) => service.ingestCreated(created);
-    editor.onSaved = (saved) => service.noteEditorSaved(saved.id, saved.title, saved.contentJson);
+    editor.onSaved = (saved) =>
+      service.noteEditorSaved(saved.id, saved.title, saved.contentJson, saved.updatedAt);
     return () => {
       editor.onCreated = null;
       editor.onSaved = null;

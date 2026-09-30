@@ -79,6 +79,8 @@ type PaperEditorProps = {
   onAnchorClick?: (cardIds: string[]) => void;
   onAnnotationClick?: (ids: string[]) => void;
   bindHost?: (host: DocEditorHost | null) => void;
+  /** Sync reseed: restore scroll, do not focus. First open leaves this false. */
+  preserveViewport?: boolean;
 };
 
 export const PaperEditor = observer(function PaperEditor({
@@ -94,6 +96,7 @@ export const PaperEditor = observer(function PaperEditor({
   onAnchorClick,
   onAnnotationClick,
   bindHost,
+  preserveViewport = false,
 }: PaperEditorProps) {
   const assetUrls = useService(AssetUrlsService);
   const dialog = useService(DialogService);
@@ -112,6 +115,8 @@ export const PaperEditor = observer(function PaperEditor({
   const pasteRef = useRef<(dt: DataTransfer, insertAt: number) => boolean>(() => false);
   const rehostRef = useRef<() => Promise<void>>(async () => undefined);
   const uploadingRef = useRef(false);
+  const preserveRef = useRef(preserveViewport);
+  preserveRef.current = preserveViewport;
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   onChangeRef.current = onChange;
@@ -350,20 +355,24 @@ export const PaperEditor = observer(function PaperEditor({
 
   useEffect(() => {
     if (!editor) return;
-    editor.commands.setContent(contentFromSeed(seedDoc), { emitUpdate: false });
-    editor.commands.focus('start', { scrollIntoView: false });
+    const scroller = editor.view.dom.closest('.pane-scroll');
+    const keep = preserveRef.current;
+    const previousTop = scroller instanceof HTMLElement ? scroller.scrollTop : 0;
+    if (keep) editor.commands.setContent(contentFromSeed(seedDoc), { emitUpdate: false });
+    else editor.commands.setContent(contentFromSeed(seedDoc));
+    if (!keep) editor.commands.focus('start', { scrollIntoView: false });
     ensureEntityMarksOnEditor(editor, cardsRef.current, annotationsRef.current);
-    const pinTop = () => {
+    const pinScroll = () => {
       if (editor.isDestroyed) return;
-      const scroller = editor.view.dom.closest('.pane-scroll');
-      if (scroller instanceof HTMLElement) scroller.scrollTop = 0;
+      const el = editor.view.dom.closest('.pane-scroll');
+      if (el instanceof HTMLElement) el.scrollTop = keep ? previousTop : 0;
     };
     // setContent keeps the previous scroll offset, and focus() may scroll the caret on the next frame.
-    pinTop();
+    pinScroll();
     let nested = 0;
     const outer = requestAnimationFrame(() => {
-      pinTop();
-      nested = requestAnimationFrame(pinTop);
+      pinScroll();
+      nested = requestAnimationFrame(pinScroll);
     });
     return () => {
       cancelAnimationFrame(outer);

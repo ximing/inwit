@@ -17,6 +17,7 @@ import {
   type DocumentStatus,
   type Job,
   type PmDocJson,
+  type SyncChange,
   type Topic,
   type UpdateCardInput,
 } from '@inwit/dto';
@@ -51,7 +52,7 @@ import {
   stopPolling,
   stopToast,
 } from '@/lib/doc-list';
-import { getJobQueue } from '@/api/jobs';
+import { getJob, getJobQueue } from '@/api/jobs';
 import { createTopic, listTopics } from '@/api/topics';
 import {
   describeDocumentStage,
@@ -64,13 +65,24 @@ import {
 } from '@/lib/multipart-logic';
 import { type PresignedUrlEntry } from '@/lib/presign-cache-logic';
 import { isLostTextEntity, type DocEditorHost } from '@/lib/entity-marks';
-import { asPmJson, isBlankPmDoc, textToPmDoc } from '@/lib/pm-doc';
+import { asPmJson, isBlankPmDoc, jsonEqual, textToPmDoc } from '@/lib/pm-doc';
+import {
+  classifyRemoteDetail,
+  coalesceChanges,
+  planDroppedDocumentReplay,
+  planReloads,
+  stripEchoes,
+  type EchoStamp,
+  type SyncView,
+} from '@/lib/sync-plan';
 import { CARD_RAIL_NARROW_PX } from '@/services/ui-prefs.service';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { DocsAnnotationsService } from './docs-annotations.service';
 import { DocsImportService, importFailMessage } from './docs-import.service';
 import { EditorService } from './editor.service';
 
 const DOC_PAGE = 20;
+const LIST_LIMIT_MAX = 100;
 const SELECTION_POLL_MS = 2000;
 const SELECTION_POLL_FOR_MS = 9000;
 
@@ -143,6 +155,9 @@ export class DocsService extends Service {
   selectionPollUntil = 0;
   selectionPollDocId: string | null = null;
   selectionCardCountAtStart = 0;
+  selectionJobId: string | null = null;
+  /** Docs list always loads offset 0; load-more appends, so the head stays. */
+  listIncludesHead = true;
   selectionPop: {
     kind: 'annotate' | 'card';
     text: string;
@@ -164,7 +179,39 @@ export class DocsService extends Service {
   toastTimer: ReturnType<typeof setTimeout> | null = null;
   selectionTickTimer: ReturnType<typeof setTimeout> | null = null;
   selectionWatchdog: ReturnType<typeof setTimeout> | null = null;
+  private selectionTickInflight = false;
   loadGen = 0;
+
+  private sync: SyncService | null = null;
+  private unsubscribeSync: (() => void) | null = null;
+  private syncChain: Promise<void> = Promise.resolve();
+  private echoes: EchoStamp[] = [];
+  private saveFloors = new Map<string, number>();
+  private conflictNotifiedAt: string | null = null;
+  private goneNotifiedId: string | null = null;
+  private inflightReads: { id: string; gen: number }[] = [];
+  private replayQueue: string[] = [];
+  private recoveryInflight = false;
+  /** One automatic replay per document + generation + floor. A newer write changes the key. */
+  private replayStamp: string | null = null;
+
+  constructor() {
+    super();
+    // Unit tests call `new DocsService()` with no container.
+    try {
+      this.sync = this.resolve(SyncService);
+      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
+    } catch {
+      this.sync = null;
+    }
+    try {
+      const editor = this.resolve(EditorService);
+      editor.onLocalWriteStart = () => this.bumpCardWriteGen();
+      editor.onLocalWriteEnd = () => this.noteWritesSettled();
+    } catch {
+      // Same unattached instance.
+    }
+  }
 
   get importService(): DocsImportService {
     return this.resolve(DocsImportService);
@@ -585,6 +632,7 @@ export class DocsService extends Service {
             }
           : doc,
       );
+      this.echoDocumentRow(created.id, created.updatedAt);
       this.syncPolling();
       return;
     }
@@ -593,6 +641,7 @@ export class DocsService extends Service {
     if (matchesFilter) {
       this.documents = [item, ...this.documents];
       this.documentsTotal += 1;
+      this.echoDocumentRow(created.id, created.updatedAt);
     }
     this.syncPolling();
   }
@@ -687,6 +736,7 @@ export class DocsService extends Service {
       this.expandedCardIds = [];
     }
     const gen = ++this.docLoadGen;
+    if (this.goneNotifiedId === id) this.goneNotifiedId = null;
     try {
       const [detail, notes] = await Promise.all([
         getDocument(id),
@@ -748,22 +798,7 @@ export class DocsService extends Service {
 
   async refreshDoc(): Promise<void> {
     if (!this.doc) return;
-    const id = this.doc.id;
-    try {
-      const [detail, notes] = await Promise.all([
-        getDocument(id),
-        listDocumentAnnotations(id).catch(() => this.annotations),
-      ]);
-      if (this.doc?.id !== id) return;
-      this.doc = detail;
-      this.annotations = notes;
-      this.pruneOpenCards();
-      this.patchListFromDetail(detail);
-      this.syncEditorFromRemote(detail);
-      this.syncPolling();
-    } catch {
-      // keep the last good copy while polling
-    }
+    await this.refreshOne(this.doc.id);
   }
 
   openAnchors(ids: string[]): void {
@@ -962,6 +997,7 @@ export class DocsService extends Service {
         };
         this.patchListFromDetail(this.doc);
       }
+      this.echoDocumentRow(input.documentId, card.updatedAt);
       this.showToast('已加入复习队列');
       this.editorHost?.ensureEntityMarks(this.doc?.cards ?? [], this.annotations);
       this.openAnchors([card.id]);
@@ -980,8 +1016,29 @@ export class DocsService extends Service {
   editingCardId: string | null = null;
   decidingCardId: string | null = null;
   acceptingProposed = false;
-  /** Local card edits since the last refresh. A GET that started earlier must not overwrite them. */
+  /** Editor saves, card edits, and annotation replacements share this generation. */
   private cardWriteGen = 0;
+
+  bumpCardWriteGen(): void {
+    this.cardWriteGen += 1;
+  }
+
+  /** One echo per applied row. A duplicate stamp must not swallow a second upsert. */
+  echoDocumentRow(documentId: string | null, updatedAt: string | null | undefined): void {
+    if (!documentId || !updatedAt) return;
+    const atMs = Date.parse(updatedAt);
+    if (Number.isNaN(atMs)) return;
+    const dup = this.echoes.some(
+      (echo) => echo.scope === 'document' && echo.resourceId === documentId && echo.atMs === atMs,
+    );
+    if (dup) return;
+    this.echoes.push({ scope: 'document', resourceId: documentId, atMs });
+    if (this.echoes.length > 200) this.echoes.splice(0, this.echoes.length - 200);
+  }
+
+  noteWritesSettled(): void {
+    this.kickReplay();
+  }
 
   get cardDecisionBusy(): boolean {
     return this.decidingCardId !== null || this.acceptingProposed;
@@ -1015,6 +1072,7 @@ export class DocsService extends Service {
       const detail = await updateCard(id, input);
       const { documentTitle: _documentTitle, ...card } = detail;
       this.replaceDocCard(card);
+      this.echoDocumentRow(card.documentId, card.updatedAt);
       this.showToast('已保存');
       return true;
     } catch (err) {
@@ -1050,6 +1108,7 @@ export class DocsService extends Service {
       const detail = await acceptCard(id);
       const { documentTitle: _documentTitle, ...card } = detail;
       this.replaceDocCard(card);
+      this.echoDocumentRow(card.documentId, card.updatedAt);
       this.showToast('已确认，会安排复习');
     } catch (err) {
       this.showToast(decisionError(err, 'accept'));
@@ -1063,8 +1122,10 @@ export class DocsService extends Service {
     const trimmed = clipReason(reason.trim());
     this.decidingCardId = id;
     try {
-      await rejectCard(id, trimmed ? { reason: trimmed } : {});
+      const detail = await rejectCard(id, trimmed ? { reason: trimmed } : {});
+      const { documentTitle: _documentTitle, ...card } = detail;
       this.dropDocCard(id);
+      this.echoDocumentRow(card.documentId, card.updatedAt);
       this.showToast('不会进入复习');
     } catch (err) {
       this.showToast(decisionError(err, 'reject'));
@@ -1151,6 +1212,7 @@ export class DocsService extends Service {
           suspendedAt: state.suspendedAt,
         },
       });
+      this.echoDocumentRow(card.documentId, state.updatedAt);
       this.showToast(suspended ? '已恢复复习' : '已标记为熟悉，不再安排复习');
     } catch (err) {
       this.showToast(errorMessage(err, '操作没成功'));
@@ -1166,7 +1228,8 @@ export class DocsService extends Service {
       this.doc?.id === documentId ? this.doc.cards.length : 0;
     this.selectionPollUntil = Date.now() + SELECTION_POLL_FOR_MS;
     try {
-      await enqueueSelectionCards(documentId, { text: clipped, blockIndex });
+      const job = await enqueueSelectionCards(documentId, { text: clipped, blockIndex });
+      this.selectionJobId = job.id;
       this.startSelectionPoll(documentId);
       return true;
     } catch (err) {
@@ -1178,19 +1241,38 @@ export class DocsService extends Service {
 
   startSelectionPoll(documentId: string): void {
     this.stopSelectionTick();
-    const startCount = this.selectionCardCountAtStart;
     const deadline = this.selectionPollUntil;
+    this.selectionWatchdog = setTimeout(() => {
+      this.selectionWatchdog = null;
+      if (this.selectionPollUntil === deadline) this.finishSelectionPoll();
+    }, SELECTION_POLL_FOR_MS + 400);
+    // Job events and document reloads finish the flag. The 2s loop is only the fallback.
+    this.armSelectionLoop(documentId);
+  }
+
+  /** Arms the 2s getDocument loop. No-op while sync is healthy or a tick is already running. */
+  private armSelectionLoop(documentId: string): void {
+    if (this.syncActive()) return;
+    if (this.selectionTickTimer !== null || this.selectionTickInflight) return;
+    if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
+    const startCount = this.selectionCardCountAtStart;
     const tick = async () => {
       this.selectionTickTimer = null;
-      if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-      await this.refreshOne(documentId);
-      const grown =
-        this.doc?.id === documentId && this.doc.cards.length > startCount;
-      const timedOut = Date.now() >= this.selectionPollUntil;
-      if (grown || timedOut) {
-        this.finishSelectionPoll();
-        return;
+      this.selectionTickInflight = true;
+      try {
+        if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
+        await this.refreshOne(documentId);
+        if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
+        if (this.syncActive()) return;
+        const grown =
+          this.doc?.id === documentId && this.doc.cards.length > startCount;
+        const timedOut = Date.now() >= this.selectionPollUntil;
+        if (grown || timedOut) this.finishSelectionPoll();
+      } finally {
+        this.selectionTickInflight = false;
       }
+      if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
+      if (this.syncActive() || this.selectionTickTimer !== null) return;
       this.selectionTickTimer = setTimeout(() => {
         void tick();
       }, SELECTION_POLL_MS);
@@ -1198,10 +1280,6 @@ export class DocsService extends Service {
     this.selectionTickTimer = setTimeout(() => {
       void tick();
     }, SELECTION_POLL_MS);
-    this.selectionWatchdog = setTimeout(() => {
-      this.selectionWatchdog = null;
-      if (this.selectionPollUntil === deadline) this.finishSelectionPoll();
-    }, SELECTION_POLL_FOR_MS + 400);
   }
 
   stopSelectionTick(): void {
@@ -1215,11 +1293,19 @@ export class DocsService extends Service {
     }
   }
 
+  /** Drop the 2s getDocument loop without clearing selectionDigesting or the watchdog. */
+  private disarmSelectionLoop(): void {
+    if (this.selectionTickTimer === null) return;
+    clearTimeout(this.selectionTickTimer);
+    this.selectionTickTimer = null;
+  }
+
   finishSelectionPoll(): void {
     this.stopSelectionTick();
     this.selectionDigesting = false;
     this.selectionPollUntil = 0;
     this.selectionPollDocId = null;
+    this.selectionJobId = null;
   }
 
   async setDocTopic(topicId: string | null, documentId?: string | null): Promise<void> {
@@ -1261,13 +1347,22 @@ export class DocsService extends Service {
     this.resolve(EditorService).applyRemoteMeta(doc);
   }
 
-  noteEditorSaved(id: string, title: string | null, contentJson: PmDocJson): void {
+  noteEditorSaved(
+    id: string,
+    title: string | null,
+    contentJson: PmDocJson,
+    updatedAt?: string,
+  ): void {
+    const stamp = updatedAt && !Number.isNaN(Date.parse(updatedAt)) ? updatedAt : null;
     this.documents = this.documents.map((item) =>
-      item.id === id ? { ...item, title, contentJson, updatedAt: new Date().toISOString() } : item,
+      item.id === id ? { ...item, title, contentJson, ...(stamp ? { updatedAt: stamp } : {}) } : item,
     );
     if (this.doc?.id === id) {
-      this.doc = { ...this.doc, title, contentJson, updatedAt: new Date().toISOString() };
+      this.doc = { ...this.doc, title, contentJson, ...(stamp ? { updatedAt: stamp } : {}) };
     }
+    if (!stamp) return;
+    this.saveFloors.set(id, Date.parse(stamp));
+    this.echoDocumentRow(id, stamp);
   }
 
   stopPolling(): void {
@@ -1275,6 +1370,16 @@ export class DocsService extends Service {
   }
 
   override destroy(): void {
+    this.unsubscribeSync?.();
+    this.unsubscribeSync = null;
+    this.sync = null;
+    try {
+      const editor = this.resolve(EditorService);
+      editor.onLocalWriteStart = null;
+      editor.onLocalWriteEnd = null;
+    } catch {
+      // Container already gone.
+    }
     this.importService.abortInFlight();
     this.stopPolling();
     this.finishSelectionPoll();
@@ -1283,6 +1388,10 @@ export class DocsService extends Service {
   }
 
   syncPolling(): void {
+    if (this.syncActive()) {
+      this.stopPolling();
+      return;
+    }
     const listPending = hasPendingDoc(this.documents);
     const docPending = this.doc?.status === 'pending';
     const uploading = Object.keys(this.uploadByDoc).length > 0;
@@ -1291,6 +1400,7 @@ export class DocsService extends Service {
   }
 
   startPolling(): void {
+    if (this.syncActive()) return;
     startPolling(this, () => void this.tickPending());
   }
 
@@ -1318,28 +1428,344 @@ export class DocsService extends Service {
     }
   }
 
-  async refreshOne(id: string): Promise<void> {
-    const writeGen = this.doc?.id === id ? this.cardWriteGen : null;
+  async refreshOne(id: string, changeAt?: string | null): Promise<void> {
+    const openAtStart = this.doc?.id === id;
+    const read = {
+      id,
+      gen: this.cardWriteGen,
+      floor: this.saveFloors.get(id) ?? null,
+    };
+    this.inflightReads.push(read);
     try {
       const [detail, notes] = await Promise.all([
         getDocument(id),
-        this.doc?.id === id
+        openAtStart
           ? listDocumentAnnotations(id).catch(() => this.annotations)
           : Promise.resolve(null),
       ]);
-      // A suspend or delete that landed while this GET was in flight is newer than the response.
-      if (writeGen !== null && this.cardWriteGen !== writeGen) return;
-      this.documents = this.documents.map((item) =>
-        item.id === id ? mergeDetail(item, detail) : item,
-      );
-      if (this.doc?.id === id) {
-        this.doc = detail;
-        if (notes) this.annotations = notes;
-        this.pruneOpenCards();
+      const mode = this.classifyDetail(id, read.gen, read.floor, detail.updatedAt);
+      if (mode === 'drop') {
+        this.noteDetailDropped(id);
+        return;
       }
-      this.syncEditorFromRemote(detail);
-    } catch {
+      if (read.gen === this.cardWriteGen) {
+        this.replayQueue = this.replayQueue.filter((queued) => queued !== id);
+        if (this.replayStamp === this.replayKey(id)) this.replayStamp = null;
+      }
+      this.applyRemoteDetail(id, detail, notes, mode, changeAt ?? null);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        this.replayQueue = this.replayQueue.filter((queued) => queued !== id);
+        this.forgetDocument(id);
+        return;
+      }
       // Transient poll errors should not wipe the list.
+    } finally {
+      this.inflightReads = this.inflightReads.filter((item) => item !== read);
+      this.kickReplay();
+    }
+  }
+
+  private syncActive(): boolean {
+    return this.sync?.active === true;
+  }
+
+  private onSyncEvent(event: SyncEvent): void {
+    if (event.type === 'active') {
+      if (event.active) {
+        this.stopPolling();
+        this.disarmSelectionLoop();
+      } else {
+        this.syncPolling();
+        if (this.selectionPollDocId) this.armSelectionLoop(this.selectionPollDocId);
+      }
+      return;
+    }
+    this.syncChain = this.syncChain
+      .then(() => this.handleSync(event))
+      .catch(() => undefined);
+  }
+
+  private async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'reset') {
+      await this.reloadFromReset();
+      return;
+    }
+    if (event.type !== 'changes') return;
+    const changes = coalesceChanges(stripEchoes(event.changes, this.echoes));
+    const intents = planReloads(changes, this.syncView());
+    await this.applySyncIntents(intents, changes);
+  }
+
+  private syncView(): SyncView {
+    const editor = this.resolve(EditorService);
+    const editorLive = editor.id !== null && editor.phase !== 'idle' && editor.phase !== 'missing';
+    return {
+      documents: this.documents.map((item) => ({ id: item.id, updatedAt: item.updatedAt })),
+      openDocumentId: this.doc?.id ?? null,
+      listIncludesHead: this.listIncludesHead,
+      editor:
+        editorLive && editor.id
+          ? {
+              id: editor.id,
+              updatedAt: this.serverStamp(editor.id),
+              bodyDirty: !jsonEqual(editor.draftJson, editor.lastSavedJson),
+              titleDirty: editor.draftTitle.trim() !== editor.lastSavedTitle.trim(),
+              saveInflight: editor.saveInflight !== null,
+            }
+          : null,
+      topics: [],
+      openTopicId: null,
+      mapTopicId: null,
+      readerDocumentId: null,
+      readerActiveCardId: null,
+      reviewInSession: false,
+      jobs: [],
+      activeJobId: null,
+    };
+  }
+
+  private serverStamp(id: string): string {
+    if (this.doc?.id === id) return this.doc.updatedAt;
+    return this.documents.find((item) => item.id === id)?.updatedAt ?? new Date(0).toISOString();
+  }
+
+  private async applySyncIntents(
+    intents: ReturnType<typeof planReloads>,
+    changes: SyncChange[],
+  ): Promise<void> {
+    const deleteIds: string[] = [];
+    const upserts: string[] = [];
+    const jobIds: string[] = [];
+    for (const intent of intents) {
+      if (intent.kind === 'document' && intent.op === 'delete') deleteIds.push(intent.id);
+      else if (intent.kind === 'document' && intent.op === 'upsert') upserts.push(intent.id);
+      else if (intent.kind === 'job') jobIds.push(intent.id);
+    }
+    if (intents.some((intent) => intent.kind === 'documents-page')) {
+      await this.reloadListMerging(deleteIds);
+    }
+    for (const id of deleteIds) this.forgetDocument(id);
+    const atById = new Map<string, string>();
+    for (const change of changes) {
+      if (change.scope === 'document' && change.op === 'upsert' && change.resourceId) {
+        atById.set(change.resourceId, change.at);
+      }
+    }
+    for (const id of upserts) {
+      await this.refreshOne(id, atById.get(id) ?? null);
+    }
+    if (jobIds.length > 0) {
+      await this.refreshJobs();
+      for (const id of jobIds) {
+        if (this.selectionJobId === id) await this.settleSelectionJob(id);
+      }
+    }
+  }
+
+  private async reloadFromReset(): Promise<void> {
+    const editor = this.resolve(EditorService);
+    const openId = this.doc?.id ?? editor.id;
+    // The gap is not replayed, so replace the window instead of appending local rows.
+    await Promise.all([this.reloadListMerging([], false), this.refreshJobs()]);
+    if (!openId) return;
+    if (editor.remoteGone && editor.id === openId) return;
+    await this.refreshOne(openId);
+  }
+
+  private async reloadListMerging(deleteIds: readonly string[], keepTail = true): Promise<void> {
+    const gen = ++this.loadGen;
+    const held = Math.max(this.documents.length, DOC_PAGE);
+    try {
+      const page = await this.fetchListCovering(held);
+      if (gen !== this.loadGen) return;
+      const seen = new Set(page.items.map((item) => item.id));
+      const tail = keepTail ? this.documents.filter((item) => !seen.has(item.id)) : [];
+      const drop = new Set(deleteIds);
+      this.documents = [...page.items, ...tail].filter((item) => !drop.has(item.id));
+      this.documentsTotal = page.total;
+      this.listIncludesHead = true;
+      this.syncPolling();
+    } catch {
+      // Keep the rows already on screen.
+    }
+  }
+
+  /** Server list limit is 100. Page until the held window is covered. */
+  private async fetchListCovering(minRows: number): Promise<{ items: DocumentListItem[]; total: number }> {
+    const want = Math.max(minRows, 1);
+    const items: DocumentListItem[] = [];
+    let total = 0;
+    let offset = 0;
+    while (items.length < want) {
+      const limit = Math.min(LIST_LIMIT_MAX, want - items.length);
+      const page = await listDocuments({
+        ...(this.filterTopicId ? { topicId: this.filterTopicId } : {}),
+        limit,
+        offset,
+      });
+      total = page.total;
+      items.push(...page.items);
+      if (page.items.length === 0 || items.length >= total) break;
+      offset += page.items.length;
+    }
+    return { items, total };
+  }
+
+  private classifyDetail(
+    id: string,
+    capturedGen: number,
+    floorUpdatedAtMs: number | null,
+    updatedAt: string,
+  ): 'drop' | 'merge-keep-body' | 'merge-seed-body' {
+    const editor = this.resolve(EditorService);
+    const local = this.doc?.id === id || editor.id === id;
+    const bodyDirty = editor.id === id && !jsonEqual(editor.draftJson, editor.lastSavedJson);
+    const inflight = editor.id === id && editor.saveInflight !== null;
+    // Writes bump the counter for the open document only. Other rows keep their snapshot.
+    return classifyRemoteDetail({
+      capturedGen: local ? capturedGen : this.cardWriteGen,
+      currentGen: this.cardWriteGen,
+      dirty: bodyDirty,
+      inflight,
+      detailUpdatedAtMs: Date.parse(updatedAt),
+      floorUpdatedAtMs,
+    });
+  }
+
+  private applyRemoteDetail(
+    id: string,
+    detail: DocumentDetail,
+    notes: Annotation[] | null,
+    mode: 'merge-keep-body' | 'merge-seed-body',
+    changeAt: string | null,
+  ): void {
+    const editor = this.resolve(EditorService);
+    this.documents = this.documents.map((item) =>
+      item.id === id ? mergeDetail(item, detail) : item,
+    );
+    if (this.doc?.id === id) {
+      this.doc = detail;
+      if (notes) this.annotations = notes;
+      this.pruneOpenCards();
+    }
+    if (editor.id === id && !editor.remoteGone) {
+      editor.setTopicId(detail.topicId);
+      if (mode === 'merge-seed-body') editor.applyRemoteBody(detail);
+      this.syncEditorFromRemote(detail);
+      if (mode === 'merge-keep-body') this.toastBodyConflict(detail, changeAt);
+    }
+    if (
+      this.selectionDigesting &&
+      this.selectionPollDocId === id &&
+      this.doc?.id === id &&
+      this.doc.cards.length > this.selectionCardCountAtStart
+    ) {
+      this.finishSelectionPoll();
+    }
+    this.syncPolling();
+  }
+
+  private toastBodyConflict(detail: DocumentDetail, changeAt: string | null): void {
+    if (!changeAt || this.conflictNotifiedAt === changeAt) return;
+    const editor = this.resolve(EditorService);
+    if (editor.id !== detail.id) return;
+    if (jsonEqual(detail.contentJson, editor.lastSavedJson)) return;
+    this.conflictNotifiedAt = changeAt;
+    this.showToast('另一处改过正文，这里仍是未保存的草稿');
+  }
+
+  private forgetDocument(id: string): void {
+    const had = this.documents.some((item) => item.id === id);
+    this.documents = this.documents.filter((item) => item.id !== id);
+    if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
+    const editor = this.resolve(EditorService);
+    const wasOpen = this.doc?.id === id || editor.id === id;
+    if (this.doc?.id === id) {
+      this.docLoadGen += 1;
+      this.doc = null;
+      this.annotations = [];
+      this.annotationImageUrls = {};
+      this.cardImageUrls = {};
+      this.closeHighlight();
+    }
+    if (this.selectionPollDocId === id) this.finishSelectionPoll();
+    if (!wasOpen) {
+      this.syncPolling();
+      return;
+    }
+    const dirty = editor.id === id && (editor.dirty || editor.saveInflight !== null);
+    if (dirty) {
+      editor.remoteGone = true;
+      editor.clearTimer();
+      if (this.goneNotifiedId !== id) {
+        this.goneNotifiedId = id;
+        this.showToast('这份文档已在别处移入回收站');
+      }
+      this.syncPolling();
+      return;
+    }
+    if (editor.id === id) {
+      editor.clearTimer();
+      editor.phase = 'missing';
+      editor.error = null;
+    }
+    this.docError = '找不到这份文档。';
+    this.syncPolling();
+  }
+
+  private replayKey(id: string): string {
+    return `${id}:${this.cardWriteGen}:${this.saveFloors.get(id) ?? ''}`;
+  }
+
+  private noteDetailDropped(id: string): void {
+    const stamp = this.replayKey(id);
+    if (stamp === this.replayStamp) return;
+    const covered = this.inflightReads.some((read) => read.id === id && read.gen === this.cardWriteGen);
+    const decision = planDroppedDocumentReplay({
+      dropped: true,
+      writeInflight: this.isWriteInflight(),
+      recoveryInflight: this.recoveryInflight || covered,
+    });
+    if (decision === 'none') return;
+    this.replayStamp = stamp;
+    if (!this.replayQueue.includes(id)) this.replayQueue.push(id);
+    if (decision === 'start') this.kickReplay();
+  }
+
+  private isWriteInflight(): boolean {
+    try {
+      return this.resolve(EditorService).saveInflight !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  private kickReplay(): void {
+    if (this.recoveryInflight || this.isWriteInflight()) return;
+    const id = this.replayQueue.shift();
+    if (!id) return;
+    void this.runReplay(id);
+  }
+
+  private async runReplay(id: string): Promise<void> {
+    this.recoveryInflight = true;
+    try {
+      await this.refreshOne(id);
+    } finally {
+      this.recoveryInflight = false;
+      this.kickReplay();
+    }
+  }
+
+  private async settleSelectionJob(id: string): Promise<void> {
+    if (this.selectionJobId !== id || !this.selectionDigesting) return;
+    try {
+      const job = await getJob(id);
+      if (this.selectionJobId !== id) return;
+      if (job.status === 'done' || job.status === 'failed') this.finishSelectionPoll();
+    } catch {
+      // Watchdog still clears the flag.
     }
   }
 

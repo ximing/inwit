@@ -53,7 +53,9 @@ export class DocsAnnotationsService extends Service {
         ...(extra?.anchorBlockIndex !== undefined ? { anchorBlockIndex: extra.anchorBlockIndex } : {}),
       });
       if (!this.docs.doc || this.docs.doc.id === documentId) {
+        this.docs.bumpCardWriteGen();
         this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+        this.docs.echoDocumentRow(documentId, created.updatedAt);
       }
       if (created.kind === 'text') {
         const host = this.docs.editorHost;
@@ -74,7 +76,9 @@ export class DocsAnnotationsService extends Service {
   async saveAnnotationNote(id: string, note: string): Promise<boolean> {
     try {
       const updated = await updateAnnotation(id, { note });
+      this.docs.bumpCardWriteGen();
       this.annotations = this.annotations.map((item) => (item.id === id ? updated : item));
+      this.docs.echoDocumentRow(updated.documentId, updated.updatedAt);
       return true;
     } catch (err) {
       this.docs.showToast(errorMessage(err, '没改上'));
@@ -85,6 +89,7 @@ export class DocsAnnotationsService extends Service {
   async removeAnnotation(id: string): Promise<void> {
     try {
       await deleteAnnotation(id);
+      this.docs.bumpCardWriteGen();
       this.annotations = this.annotations.filter((item) => item.id !== id);
       if (this.docs.activeAnnotationId === id) this.docs.activeAnnotationId = null;
       if (this.annotationImageUrls[id]) {

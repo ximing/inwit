@@ -21,10 +21,25 @@ export class EditorService extends Service {
   savedAt: Date | null = null;
   error: string | null = null;
   justCreated = false;
+  /** Archived elsewhere: persist must not write again. */
+  remoteGone = false;
+  /** Sync reseed restores scroll and does not focus. load/initNew clear it. */
+  preserveViewport = false;
   saveTimer: ReturnType<typeof setTimeout> | null = null;
   saveInflight: Promise<void> | null = null;
   onCreated: ((doc: Document) => void) | null = null;
-  onSaved: ((doc: { id: string; title: string | null; contentJson: PmDocJson }) => void) | null = null;
+  onSaved:
+    | ((doc: {
+        id: string;
+        title: string | null;
+        contentJson: PmDocJson;
+        updatedAt: string;
+      }) => void)
+    | null = null;
+  /** DocsService bumps cardWriteGen before the PUT leaves. */
+  onLocalWriteStart: (() => void) | null = null;
+  /** Runs after saveInflight is cleared so a dropped GET can replay. */
+  onLocalWriteEnd: (() => void) | null = null;
 
   get saveLabel(): string {
     if (this.saveState === 'saving') return '保存中…';
@@ -42,14 +57,36 @@ export class EditorService extends Service {
     );
   }
 
-  /** Digest/poll rewrite: apply remote title only if the input is not dirty. */
+  /** Remote title. Skip while the body or the title input still has a local draft. */
   applyRemoteMeta(doc: { id: string; title: string | null }): void {
+    if (this.remoteGone) return;
     if (this.id !== doc.id || this.phase !== 'ready') return;
+    if (this.saveInflight) return;
+    if (!jsonEqual(this.draftJson, this.lastSavedJson)) return;
     if (this.draftTitle.trim() !== this.lastSavedTitle.trim()) return;
     const next = doc.title ?? '';
     if (next === this.lastSavedTitle) return;
     this.lastSavedTitle = next;
     this.draftTitle = next;
+  }
+
+  /**
+   * Clean editor takes the server body. Same JSON does not reseed, so a
+   * pending → digested status change does not jump the viewport.
+   */
+  applyRemoteBody(doc: { id: string; updatedAt: string; contentJson: PmDocJson }): void {
+    if (this.remoteGone) return;
+    if (this.id !== doc.id || this.phase !== 'ready') return;
+    const json = clonePmJson(doc.contentJson);
+    if (jsonEqual(json, this.lastSavedJson) && jsonEqual(json, this.draftJson)) return;
+    this.preserveViewport = true;
+    this.lastSavedJson = json;
+    this.draftJson = clonePmJson(json);
+    this.seedDoc = isBlankPmDoc(json) ? null : clonePmJson(json);
+    const nextKey = `${doc.id}:${doc.updatedAt}`;
+    this.seedKey = nextKey === this.seedKey ? `${nextKey}:r` : nextKey;
+    this.savedAt = new Date(doc.updatedAt);
+    if (!this.dirty) this.saveState = 'saved';
   }
 
   async open(routeId: string, topicId: string | null): Promise<void> {
@@ -71,6 +108,8 @@ export class EditorService extends Service {
 
   initNew(topicId: string | null): void {
     this.clearTimer();
+    this.remoteGone = false;
+    this.preserveViewport = false;
     this.phase = 'new';
     this.id = null;
     this.topicId = topicId;
@@ -88,6 +127,8 @@ export class EditorService extends Service {
 
   idle(): void {
     this.clearTimer();
+    this.remoteGone = false;
+    this.preserveViewport = false;
     this.phase = 'idle';
     this.id = null;
     this.justCreated = false;
@@ -97,6 +138,8 @@ export class EditorService extends Service {
 
   async load(id: string): Promise<void> {
     this.clearTimer();
+    this.remoteGone = false;
+    this.preserveViewport = false;
     this.phase = 'loading';
     this.error = null;
     try {
@@ -135,6 +178,7 @@ export class EditorService extends Service {
   }
 
   private noteDirty(): void {
+    if (this.remoteGone) return;
     if (!this.dirty) {
       this.clearTimer();
       if (this.saveState !== 'saving') this.saveState = this.id ? 'saved' : 'idle';
@@ -144,6 +188,7 @@ export class EditorService extends Service {
   }
 
   scheduleSave(): void {
+    if (this.remoteGone) return;
     this.clearTimer();
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
@@ -158,8 +203,10 @@ export class EditorService extends Service {
   }
 
   async save(): Promise<void> {
+    if (this.remoteGone) return;
     if (this.saveInflight) {
       await this.saveInflight;
+      if (this.remoteGone) return;
       if (!this.dirty && this.saveState !== 'error') return;
     }
     const run = this.persist();
@@ -168,21 +215,27 @@ export class EditorService extends Service {
       await run;
     } finally {
       if (this.saveInflight === run) this.saveInflight = null;
+      this.onLocalWriteEnd?.();
     }
   }
 
   private async persist(): Promise<void> {
+    if (this.remoteGone) return;
     this.clearTimer();
     const contentJson = this.draftJson;
-    const draftTitle = this.draftTitle.trim();
+    const titleAtSend = this.draftTitle;
+    const draftTitle = titleAtSend.trim();
     const titleValue = draftTitle.length > 0 ? draftTitle : null;
     const lastTitle = this.lastSavedTitle.trim() || null;
     if (!this.id && isBlankPmDoc(contentJson)) return;
     if (this.id && jsonEqual(contentJson, this.lastSavedJson) && titleValue === lastTitle) return;
 
+    // Before the request: an in-flight getDocument must not paint the pre-save detail.
+    this.onLocalWriteStart?.();
     this.saveState = 'saving';
     this.error = null;
     try {
+      let updatedAt: string | null = null;
       if (!this.id) {
         const created = await createDocument({
           contentJson,
@@ -190,12 +243,14 @@ export class EditorService extends Service {
           ...(titleValue ? { title: titleValue } : {}),
           ...(this.topicId ? { topicId: this.topicId } : {}),
         });
+        if (this.remoteGone) return;
         this.id = created.id;
         this.justCreated = true;
         this.phase = 'ready';
         this.lastSavedJson = clonePmJson(created.contentJson);
         this.lastSavedTitle = created.title ?? '';
-        this.draftTitle = created.title ?? this.draftTitle;
+        if (this.draftTitle === titleAtSend) this.draftTitle = this.lastSavedTitle;
+        updatedAt = created.updatedAt;
         this.onCreated?.(created);
       } else {
         const patch: UpdateDocumentInput = {};
@@ -206,20 +261,25 @@ export class EditorService extends Service {
           return;
         }
         const updated = await updateDocument(this.id, patch);
+        if (this.remoteGone) return;
         this.lastSavedJson = clonePmJson(updated.contentJson);
         this.lastSavedTitle = updated.title ?? '';
+        if (this.draftTitle === titleAtSend) this.draftTitle = this.lastSavedTitle;
+        updatedAt = updated.updatedAt;
       }
       this.savedAt = new Date();
       this.saveState = 'saved';
-      if (this.id) {
+      if (this.id && updatedAt) {
         this.onSaved?.({
           id: this.id,
           title: this.lastSavedTitle.trim() || null,
           contentJson: this.lastSavedJson,
+          updatedAt,
         });
       }
       if (this.dirty) this.scheduleSave();
     } catch (err) {
+      if (this.remoteGone) return;
       this.saveState = 'error';
       this.error = errorMessage(err, '没存上，再试一次');
     }
