@@ -59,6 +59,12 @@ describe('TodayService sync', () => {
   async function capture(updatedAt = T2): Promise<void> {
     vi.mocked(createDocument).mockResolvedValue({ id: DOC, updatedAt, title: 'n', status: 'pending' } as Document);
     vi.mocked(listJobs).mockResolvedValue({ items: [], total: 0, limit: 5, offset: 0 });
+    vi.mocked(listDocuments).mockResolvedValue({
+      items: [row(DOC, { updatedAt, title: 'n', status: 'pending' })],
+      total: 1,
+      limit: 4,
+      offset: 0,
+    });
     service.draft = 'hello note';
     await service.send('paste');
   }
@@ -240,12 +246,106 @@ describe('TodayService sync', () => {
       status: 'digested',
     } as Document);
     vi.mocked(listJobs).mockResolvedValue({ items: [], total: 0, limit: 5, offset: 0 });
+    vi.mocked(listDocuments).mockResolvedValueOnce({
+      items: [row(DOC, { updatedAt: T2 }), row('a'), row('b'), row('c')],
+      total: 5,
+      limit: 4,
+      offset: 0,
+    });
     service.draft = 'hello note';
     await service.send('paste');
     release({ items: [row('a'), row('b'), row('c'), row('d')], total: 4, limit: 4, offset: 0 });
     await pending;
     expect(service.recentDocuments.map((doc) => doc.id)).toEqual([DOC, 'a', 'b', 'c']);
     expect(service.documentTotal).toBe(5);
+    expect(service.error).toBeNull();
+  });
+
+  it('counts a surviving local-only front row and not a deleted head the page already omitted', async () => {
+    service = new TodayService();
+    service.documents = [row('new'), row('a'), row('b'), row('c')];
+    service.documentTotal = 10;
+    vi.mocked(listDocuments).mockResolvedValue({
+      items: [row('b'), row('c'), row('d'), row('e')],
+      total: 9,
+      limit: 4,
+      offset: 0,
+    });
+    await service.handleSync({
+      type: 'changes',
+      changes: [change({ id: '5', resourceId: 'a', op: 'delete', at: T2 })],
+    });
+    expect(service.documents.map((doc) => doc.id)).toEqual(['new', 'b', 'c', 'd', 'e']);
+    expect(service.documentTotal).toBe(10);
+  });
+
+  it('fills the other recent rows when send drops the first loadDocuments', async () => {
+    service = new TodayService();
+    let releaseFirst!: (page: { items: DocumentListItem[]; total: number; limit: number; offset: number }) => void;
+    vi.mocked(listDocuments).mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseFirst = resolve;
+      }),
+    );
+    const first = service.loadDocuments();
+    vi.mocked(createDocument).mockResolvedValue({
+      id: DOC,
+      updatedAt: T2,
+      title: 'n',
+      status: 'digested',
+    } as Document);
+    vi.mocked(listJobs).mockResolvedValue({ items: [], total: 0, limit: 5, offset: 0 });
+    vi.mocked(listDocuments).mockResolvedValueOnce({
+      items: [row(DOC, { updatedAt: T2 }), row('a'), row('b'), row('c')],
+      total: 8,
+      limit: 4,
+      offset: 0,
+    });
+    service.draft = 'hello note';
+    await service.send('paste');
+    releaseFirst({ items: [], total: 0, limit: 4, offset: 0 });
+    await first;
+    expect(service.documents.map((doc) => doc.id)).toEqual([DOC, 'a', 'b', 'c']);
+    expect(service.documentTotal).toBe(8);
+    expect(service.error).toBeNull();
+  });
+
+  it('lets a later send replace the loadDocuments the previous send started', async () => {
+    service = new TodayService();
+    const doc2 = '22222222-2222-4222-8222-222222222222';
+    let releaseMid!: (page: { items: DocumentListItem[]; total: number; limit: number; offset: number }) => void;
+    vi.mocked(createDocument).mockResolvedValueOnce({
+      id: DOC,
+      updatedAt: T2,
+      title: 'n',
+      status: 'digested',
+    } as Document);
+    vi.mocked(listJobs).mockResolvedValue({ items: [], total: 0, limit: 5, offset: 0 });
+    vi.mocked(listDocuments).mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseMid = resolve;
+      }),
+    );
+    service.draft = 'hello note';
+    await service.send('paste');
+    vi.mocked(createDocument).mockResolvedValueOnce({
+      id: doc2,
+      updatedAt: T2,
+      title: 'n2',
+      status: 'digested',
+    } as Document);
+    vi.mocked(listDocuments).mockResolvedValueOnce({
+      items: [row(doc2, { updatedAt: T2 }), row(DOC), row('a')],
+      total: 3,
+      limit: 4,
+      offset: 0,
+    });
+    service.draft = 'again';
+    await service.send('paste');
+    releaseMid({ items: [row(DOC)], total: 1, limit: 4, offset: 0 });
+    await Promise.resolve();
+    expect(service.documents.map((doc) => doc.id)).toEqual([doc2, DOC, 'a']);
+    expect(service.documentTotal).toBe(3);
   });
 
   it('keeps a leading local-only row in front when the head page omits it', async () => {

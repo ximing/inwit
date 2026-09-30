@@ -238,7 +238,7 @@ export class TodayService extends Service {
       });
       this.captureHandle?.clear();
       this.draft = '';
-      // 进行中的首页请求是在这次插入之前发出的，回来不能盖掉刚收下的行。
+      // 插入前发出的首页请求作废。再拉一次才能把新行和其余最近文档一起画上；回声会被剥掉，不会补这次列表。
       ++this.loadGen;
       this.documents = [
         asListItem(created, {
@@ -251,6 +251,7 @@ export class TodayService extends Service {
       this.rememberDocument(created);
       this.showToast(useChat ? '问题扔出去了，正在答' : '已收下，消化中');
       this.syncPolling();
+      void this.loadDocuments();
       void this.loadJobs();
     } catch (err) {
       this.error = errorMessage(err, useChat ? '提问失败' : '发送失败');
@@ -526,7 +527,7 @@ export class TodayService extends Service {
     const drop = new Set(deleteIds);
     // 先合并列表，再丢掉本批 delete，避免刚删的 id 被这一页带回来。
     let merged = false;
-    if (page || drop.size > 0) merged = await this.mergeRecentDocuments();
+    if (page || drop.size > 0) merged = await this.mergeRecentDocuments(drop);
     const refresh = refreshIds.filter((id) => !drop.has(id));
     if (refresh.length > 0) await Promise.all(refresh.map((id) => this.refreshOne(id)));
     if (drop.size === 0) return;
@@ -538,7 +539,7 @@ export class TodayService extends Service {
     this.syncPolling();
   }
 
-  private async mergeRecentDocuments(): Promise<boolean> {
+  private async mergeRecentDocuments(drop: ReadonlySet<string>): Promise<boolean> {
     const gen = ++this.loadGen;
     try {
       const page = await listDocuments({ limit: RECENT_DOCS, offset: 0 });
@@ -550,11 +551,12 @@ export class TodayService extends Service {
       const front = overlap < 0 ? [] : held.slice(0, overlap);
       const tail = (overlap < 0 ? held : held.slice(overlap)).filter((item) => !pageIds.has(item.id));
       this.documents = [...front, ...page.items, ...tail];
-      this.documentTotal = page.total + front.length;
+      // page.total 已不含回收站。本批要删的队首不能再加一次；页内删掉的 id 也不在这里减。
+      const keptFront = front.filter((item) => !drop.has(item.id)).length;
+      this.documentTotal = page.total + keptFront;
       this.syncPolling();
       return true;
     } catch {
-      if (gen !== this.loadGen) return false;
       return false;
     }
   }
