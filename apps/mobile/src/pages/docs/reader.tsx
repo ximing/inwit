@@ -7,6 +7,7 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   Dimensions,
   Keyboard,
   Platform,
@@ -90,8 +91,13 @@ const ReaderContent = observer(function ReaderContent() {
       return engine.getDoc();
     });
     service.setFocused(true);
+    service.setAppActive(AppState.currentState === 'active');
+    const sub = AppState.addEventListener('change', (state) => {
+      service.setAppActive(state === 'active');
+    });
     if (id) void service.load(id, anchorParam ?? null, editParam === '1');
     return () => {
+      sub.remove();
       service.setFocused(false);
       service.setDocGetter(null);
     };

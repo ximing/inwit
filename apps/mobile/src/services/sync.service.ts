@@ -28,6 +28,8 @@ export class SyncService extends Service {
   private stopped = false;
   private session = false;
   private foreground = AppState.currentState === 'active';
+  /** Degraded while backgrounded. Emitted on the next foreground tick so old timers stay stopped. */
+  private pendingInactive = false;
   private appStateSub: NativeEventSubscription | null = null;
 
   constructor() {
@@ -45,6 +47,7 @@ export class SyncService extends Service {
       this.cursor = null;
       this.failures = 0;
       this.degraded = false;
+      this.pendingInactive = false;
       this._setActive(false);
       return;
     }
@@ -52,6 +55,7 @@ export class SyncService extends Service {
     this.cursor = null;
     this.failures = 0;
     this.degraded = false;
+    this.pendingInactive = false;
     this._requestTick();
     this._syncTimer();
   }
@@ -85,6 +89,10 @@ export class SyncService extends Service {
       return;
     }
     if (was) return;
+    if (this.pendingInactive) {
+      this.pendingInactive = false;
+      this._setActive(false);
+    }
     this._requestTick();
     this._syncTimer(true);
   };
@@ -98,10 +106,12 @@ export class SyncService extends Service {
     this.inflight = true;
     try {
       let pages = 0;
-      while (pages < SYNC_BURST_PAGES && !this.stopped) {
+      while (pages < SYNC_BURST_PAGES && !this.stopped && this.foreground) {
         const handshake = this.cursor === null;
         const res = await request<SyncPollResponse>(this._path());
         if (this.stopped) return;
+        // A page that lands in the background is left unread. Foreground polls the same cursor.
+        if (!this.foreground) break;
         if (!usablePoll(res)) throw new Error('sync response');
         pages += 1;
         const more = this._apply(res, handshake);
@@ -115,7 +125,6 @@ export class SyncService extends Service {
     }
   }
 
-  /** @returns whether another page should be pulled immediately. */
   private _apply(res: SyncPollResponse, handshake: boolean): boolean {
     // A failed or 404 poll leaves cursor null. That later handshake would skip the gap.
     const recover = handshake && (this.degraded || this.failures > 0);
@@ -152,16 +161,25 @@ export class SyncService extends Service {
     if (err instanceof ApiError && err.status === 404) {
       // Route missing or SYNC_ENABLED=false. Not a logout, and not three strikes.
       this.degraded = true;
-      this._setActive(false);
+      this._deactivate();
       devDebug('sync.degraded', { status: 404 });
       return;
     }
     this.failures += 1;
     if (this.failures >= 3) {
       this.degraded = true;
-      this._setActive(false);
+      this._deactivate();
       devDebug('sync.degraded', { failures: this.failures });
     }
+  }
+
+  private _deactivate(): void {
+    if (this.foreground) {
+      this.pendingInactive = false;
+      this._setActive(false);
+      return;
+    }
+    this.pendingInactive = true;
   }
 
   private _delayMs(): number {

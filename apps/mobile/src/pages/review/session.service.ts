@@ -17,7 +17,7 @@ import {
   type PresignedUrlEntry,
 } from '@/lib/presign-cache-logic';
 import { consumeEchoes } from '@/lib/sync-echo';
-import { coalesceChanges, planReloads, reviewReloadMode, type EchoStamp, type SyncView } from '@/lib/sync-plan';
+import { coalesceChanges, planReloads, type EchoStamp, type SyncView } from '@/lib/sync-plan';
 import { LayoutService } from '@/services/layout.service';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
@@ -277,7 +277,7 @@ export class ReviewSessionService extends Service {
     const changes = coalesceChanges(consumeEchoes(event.changes, this.echoes));
     const intents = planReloads(changes, this.syncView());
     if (!intents.some((intent) => intent.kind === 'review')) return;
-    if (reviewReloadMode(true) === 'stats') await this.refreshStats();
+    await this.refreshStats();
   }
 
   private syncView(): SyncView {

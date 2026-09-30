@@ -32,7 +32,6 @@ export class LayoutService extends Service {
       this.dueCount = Math.max(0, today.total - today.reviewedToday);
     } catch {
       if (gen !== this.dueGen) return;
-      this.dueCount = 0;
     }
   }
 

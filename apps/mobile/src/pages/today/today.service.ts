@@ -88,6 +88,8 @@ export class TodayService extends Service {
   private pinned = new Set<string>();
   private rowGen = new Map<string, number>();
   private jobsGen = 0;
+  private opGen = 0;
+  private hiddenDocs = new Map<string, number>();
   private reviewGen = 0;
   private suggestGen = 0;
   private reportGen = 0;
@@ -176,10 +178,11 @@ export class TodayService extends Service {
 
   async loadDocuments(): Promise<void> {
     const gen = ++this.loadGen;
+    const listedAt = this.opGen;
     try {
       const page = await listDocuments({ limit: RECENT_DOCS, offset: 0 });
       if (gen !== this.loadGen) return;
-      this.applyServerPage(page.items, page.total, [], false);
+      this.applyServerPage(page.items, page.total, [], false, listedAt);
       this.syncPolling();
     } catch (err) {
       if (gen !== this.loadGen) return;
@@ -414,6 +417,7 @@ export class TodayService extends Service {
 
   private forgetDocument(id: string): void {
     this.pinned.delete(id);
+    this.hiddenDocs.set(id, ++this.opGen);
     const had = this.documents.some((doc) => doc.id === id);
     this.documents = this.documents.filter((doc) => doc.id !== id);
     if (had) this.documentTotal = Math.max(0, this.documentTotal - 1);
@@ -425,11 +429,19 @@ export class TodayService extends Service {
     total: number,
     deleteIds: readonly string[],
     keepTail: boolean,
+    listedAt: number,
   ): void {
+    const visible = items.filter((item) => {
+      const hiddenAt = this.hiddenDocs.get(item.id);
+      if (hiddenAt === undefined) return true;
+      if (hiddenAt > listedAt) return false;
+      this.hiddenDocs.delete(item.id);
+      return true;
+    });
     const prev = new Map(this.documents.map((item) => [item.id, item]));
-    const seen = new Set(items.map((item) => item.id));
+    const seen = new Set(visible.map((item) => item.id));
     for (const id of seen) this.pinned.delete(id);
-    const merged = items.map((item) => {
+    const merged = visible.map((item) => {
       const local = prev.get(item.id);
       if (!local) return item;
       const localMs = Date.parse(local.updatedAt);
@@ -507,6 +519,7 @@ export class TodayService extends Service {
 
   private async reloadListMerging(deleteIds: readonly string[]): Promise<void> {
     const gen = ++this.loadGen;
+    const listedAt = this.opGen;
     const want = Math.max(this.documents.length, RECENT_DOCS);
     try {
       const items: DocumentListItem[] = [];
@@ -521,7 +534,7 @@ export class TodayService extends Service {
         offset += page.items.length;
       }
       if (gen !== this.loadGen) return;
-      this.applyServerPage(items, total, deleteIds, true);
+      this.applyServerPage(items, total, deleteIds, true, listedAt);
       this.syncPolling();
     } catch {
       // Keep the rows already on screen.

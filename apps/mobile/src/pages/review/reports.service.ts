@@ -37,11 +37,14 @@ export class ReportsService extends Service {
 
   async load(): Promise<void> {
     this.error = null;
+    const gen = ++this.listGen;
     try {
       const page = await listWeeklyReports(0);
+      if (gen !== this.listGen) return;
       this.reports = page.items;
       this.total = page.total;
     } catch (err) {
+      if (gen !== this.listGen) return;
       this.error = errorMessage(err, '周报加载失败，请重试');
     } finally {
       this.ready = true;
@@ -50,11 +53,15 @@ export class ReportsService extends Service {
 
   async loadMore(): Promise<void> {
     this.error = null;
+    const gen = ++this.listGen;
+    const offset = this.reports.length;
     try {
-      const page = await listWeeklyReports(this.reports.length);
+      const page = await listWeeklyReports(offset);
+      if (gen !== this.listGen) return;
       this.reports = [...this.reports, ...page.items];
       this.total = page.total;
     } catch (err) {
+      if (gen !== this.listGen) return;
       this.error = errorMessage(err, '历史周报加载失败，请重试');
     }
   }

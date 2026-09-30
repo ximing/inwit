@@ -187,6 +187,7 @@ export class TopicsService extends Service {
   jobPollTimer: ReturnType<typeof setInterval> | null = null;
   docPollTimer: ReturnType<typeof setInterval> | null = null;
   topicLoadGen = 0;
+  private jobEpoch = 0;
   private sync: SyncService | null = null;
   private unsubscribeSync: (() => void) | null = null;
   private syncChain: Promise<void> = Promise.resolve();
@@ -197,6 +198,12 @@ export class TopicsService extends Service {
   private topicGen = new Map<string, number>();
   private topicsGen = 0;
   private docListGen = 0;
+  private mapGen = 0;
+  private summaryGen = 0;
+  private nodeGen = 0;
+  private opGen = 0;
+  private hiddenDocs = new Map<string, number>();
+  private hiddenTopics = new Map<string, number>();
   private topicOpens = 0;
 
   constructor() {
@@ -402,6 +409,7 @@ export class TopicsService extends Service {
   }
 
   closeDrawer(): void {
+    this.nodeGen += 1;
     this.selectedNodeId = null;
     this.nodeDetail = null;
   }
@@ -460,6 +468,7 @@ export class TopicsService extends Service {
   }
 
   watchJob(job: Job): void {
+    this.jobEpoch += 1;
     this.activeJob = job;
     if (job.status === 'pending' || job.status === 'running') {
       if (this.pollingAllowed) this.startJobPolling();
@@ -508,26 +517,30 @@ export class TopicsService extends Service {
 
   async load(): Promise<void> {
     this.error = null;
+    const gen = ++this.topicsGen;
+    const listedAt = this.opGen;
     try {
       const topics = await listTopics();
       const enriched = await Promise.all(topics.map((topic) => this._enrich(topic)));
-      const seen = new Set(enriched.map((item) => item.topic.id));
-      const prev = new Map(this.items.map((item) => [item.topic.id, item]));
-      const pinned = this.items.filter(
-        (item) => this.pinnedTopics.has(item.topic.id) && !seen.has(item.topic.id),
-      );
-      for (const id of seen) this.pinnedTopics.delete(id);
-      this.items = [
-        ...pinned,
-        ...enriched.map((item) => {
-          const local = prev.get(item.topic.id);
-          if (!local) return item;
-          return { ...item, topic: newerTopic(local.topic, item.topic) };
-        }),
-      ];
+      if (gen === this.topicsGen) {
+        const visible = enriched.filter((item) => this.keepTopic(item.topic.id, listedAt));
+        const seen = new Set(visible.map((item) => item.topic.id));
+        const prev = new Map(this.items.map((item) => [item.topic.id, item]));
+        const pinned = this.items.filter(
+          (item) => this.pinnedTopics.has(item.topic.id) && !seen.has(item.topic.id),
+        );
+        for (const id of seen) this.pinnedTopics.delete(id);
+        this.items = [
+          ...pinned,
+          ...visible.map((item) => {
+            const local = prev.get(item.topic.id);
+            if (!local) return item;
+            return { ...item, topic: newerTopic(local.topic, item.topic) };
+          }),
+        ];
+      }
     } catch (err) {
-      this.error = errorMessage(err, '加载主题失败');
-      return;
+      if (gen === this.topicsGen) this.error = errorMessage(err, '加载主题失败');
     }
     try {
       const stats = await getReviewTopicStats();
@@ -541,6 +554,7 @@ export class TopicsService extends Service {
 
   async openTopic(id: string | null): Promise<void> {
     const gen = ++this.topicLoadGen;
+    this.jobEpoch += 1;
     this.topicOpens += 1;
     try {
       await this.openTopicBody(id, gen);
@@ -559,6 +573,10 @@ export class TopicsService extends Service {
     this.paneMenuOpen = false;
     this.draft = '';
     this.tab = 'docs';
+    const docGen = ++this.docListGen;
+    const mapGen = ++this.mapGen;
+    const summaryGen = ++this.summaryGen;
+    const topicListedAt = this.opGen;
     if (!id) {
       this.topic = null;
       this.tree = [];
@@ -570,6 +588,7 @@ export class TopicsService extends Service {
       return;
     }
     this.collapsedIds = await readCollapsed(id);
+    const listedAt = this.opGen;
     const [topicR, mapR, summaryR, docsR, jobR] = await Promise.allSettled([
       getTopic(id),
       getTopicMap(id),
@@ -578,35 +597,53 @@ export class TopicsService extends Service {
       getActiveTopicJob(id),
     ]);
     if (gen !== this.topicLoadGen) return;
+    const hiddenTopicAt = this.hiddenTopics.get(id);
+    if (hiddenTopicAt !== undefined && hiddenTopicAt > topicListedAt) return;
     if (topicR.status === 'rejected') {
       this.detailError = errorMessage(topicR.reason, '打不开这个主题');
       this.topic = null;
-      this.tree = [];
-      this.summary = null;
-      this.documents = [];
-      this.documentsTotal = 0;
+      if (mapGen === this.mapGen) {
+        this.tree = [];
+        this.titleByNodeId = {};
+      }
+      if (summaryGen === this.summaryGen) this.summary = null;
+      if (docGen === this.docListGen) {
+        this.documents = [];
+        this.documentsTotal = 0;
+      }
       this.stopDocPolling();
       return;
     }
     const topic = topicR.value;
+    if (hiddenTopicAt !== undefined) this.hiddenTopics.delete(id);
     this.topic = topic;
-    if (mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
-    else {
-      this.tree = [];
-      this.titleByNodeId = {};
+    if (mapGen === this.mapGen) {
+      if (mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
+      else {
+        this.tree = [];
+        this.titleByNodeId = {};
+      }
     }
-    if (summaryR.status === 'fulfilled') this.summary = summaryR.value;
-    else this.summary = null;
-    if (docsR.status === 'fulfilled') this.applyDocPage(docsR.value.items, docsR.value.total, [], false);
-    else {
-      this.documents = [];
-      this.documentsTotal = 0;
+    if (summaryGen === this.summaryGen) {
+      this.summary = summaryR.status === 'fulfilled' ? summaryR.value : null;
     }
-    const summary = summaryR.status === 'fulfilled' ? summaryR.value : this.summary;
+    if (docGen === this.docListGen) {
+      if (docsR.status === 'fulfilled') {
+        this.applyDocPage(docsR.value.items, docsR.value.total, [], false, listedAt);
+      } else {
+        this.documents = [];
+        this.documentsTotal = 0;
+      }
+    }
+    const summary =
+      summaryGen === this.summaryGen && summaryR.status === 'fulfilled' ? summaryR.value : this.summary;
     if (summary) {
       this.patchItem(id, {
         cardCount: summary.cardCount,
-        documentCount: docsR.status === 'fulfilled' ? docsR.value.total : this.documentsTotal,
+        documentCount:
+          docGen === this.docListGen && docsR.status === 'fulfilled'
+            ? docsR.value.total
+            : this.documentsTotal,
         totalNodes: summary.totalNodes,
         uncoveredNodes: summary.uncoveredNodes,
         masteryPct: summary.masteryPct,
@@ -718,6 +755,7 @@ export class TopicsService extends Service {
     const id = this.topic.id;
     try {
       await deleteTopic(id);
+      this.hideTopic(id);
       this.items = this.items.filter((item) => item.topic.id !== id);
       this.topic = null;
       this.tree = [];
@@ -725,6 +763,9 @@ export class TopicsService extends Service {
       this.documents = [];
       this.documentsTotal = 0;
       this.topicId = null;
+      this.nodeGen += 1;
+      this.selectedNodeId = null;
+      this.nodeDetail = null;
       this.stopJobPolling();
       this.stopDocPolling();
       return true;
@@ -775,6 +816,10 @@ export class TopicsService extends Service {
   async refreshAfterJob(): Promise<void> {
     if (!this.topicId) return;
     const topicId = this.topicId;
+    const docGen = ++this.docListGen;
+    const mapGen = ++this.mapGen;
+    const summaryGen = ++this.summaryGen;
+    const listedAt = this.opGen;
     const want = Math.min(LIST_LIMIT_MAX, Math.max(this.documents.length, DOC_PAGE));
     const [mapR, summaryR, docsR] = await Promise.allSettled([
       getTopicMap(topicId),
@@ -782,11 +827,13 @@ export class TopicsService extends Service {
       listDocuments({ topicId, limit: want, offset: 0 }),
     ]);
     if (this.topicId !== topicId) return;
-    if (mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
-    else this.detailError = errorMessage(mapR.reason, '刷新地图失败');
-    if (summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
-    if (docsR.status === 'fulfilled') {
-      this.applyDocPage(docsR.value.items, docsR.value.total, [], true);
+    if (mapGen === this.mapGen) {
+      if (mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
+      else this.detailError = errorMessage(mapR.reason, '刷新地图失败');
+    }
+    if (summaryGen === this.summaryGen && summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
+    if (docGen === this.docListGen && docsR.status === 'fulfilled') {
+      this.applyDocPage(docsR.value.items, docsR.value.total, [], true, listedAt);
       this.patchItem(topicId, { documentCount: docsR.value.total });
     }
     if (this.selectedNodeId) await this.openNode(this.selectedNodeId);
@@ -795,10 +842,13 @@ export class TopicsService extends Service {
 
   async refreshSummary(): Promise<void> {
     if (!this.topicId) return;
+    const topicId = this.topicId;
+    const summaryGen = ++this.summaryGen;
     try {
-      const summary = await getTopicMapSummary(this.topicId);
+      const summary = await getTopicMapSummary(topicId);
+      if (summaryGen !== this.summaryGen || this.topicId !== topicId) return;
       this.summary = summary;
-      this.patchItem(this.topicId, {
+      this.patchItem(topicId, {
         cardCount: summary.cardCount,
         totalNodes: summary.totalNodes,
         uncoveredNodes: summary.uncoveredNodes,
@@ -810,10 +860,14 @@ export class TopicsService extends Service {
   }
 
   async openNode(nodeId: string): Promise<void> {
+    const gen = ++this.nodeGen;
     this.selectedNodeId = nodeId;
     try {
-      this.nodeDetail = await getMapNodeDetail(nodeId);
+      const detail = await getMapNodeDetail(nodeId);
+      if (gen !== this.nodeGen) return;
+      this.nodeDetail = detail;
     } catch (err) {
+      if (gen !== this.nodeGen) return;
       this.detailError = errorMessage(err, '打不开这个节点');
       this.nodeDetail = null;
     }
@@ -888,8 +942,11 @@ export class TopicsService extends Service {
       this.stopJobPolling();
       return;
     }
+    const epoch = this.jobEpoch;
+    const jobId = current.id;
     try {
-      const job = await getJob(current.id);
+      const job = await getJob(jobId);
+      if (epoch !== this.jobEpoch || this.activeJob?.id !== jobId) return;
       this.activeJob = job;
       if (job.status === 'done' || job.status === 'failed') {
         this.stopJobPolling();
@@ -912,13 +969,22 @@ export class TopicsService extends Service {
 
   async loadMoreDocs(): Promise<void> {
     if (!this.topicId || !this.hasMoreDocs || this.$model.loadMoreDocs.loading) return;
+    const topicId = this.topicId;
+    const docGen = ++this.docListGen;
+    const listedAt = this.opGen;
+    const offset = this.documents.length;
     const page = await listDocuments({
-      topicId: this.topicId,
+      topicId,
       limit: DOC_PAGE,
-      offset: this.documents.length,
+      offset,
     });
+    if (docGen !== this.docListGen || this.topicId !== topicId) return;
     const have = new Set(this.documents.map((item) => item.id));
-    this.documents = [...this.documents, ...page.items.filter((item) => !have.has(item.id))];
+    const incoming = page.items.filter((item) => {
+      if (!this.keepDoc(item.id, listedAt)) return false;
+      return !have.has(item.id);
+    });
+    this.documents = [...this.documents, ...incoming];
     this.documentsTotal = page.total;
     this.patchItem(this.topicId, { documentCount: page.total });
     this.syncDocPolling();
@@ -1000,6 +1066,27 @@ export class TopicsService extends Service {
     return gen;
   }
 
+  private keepDoc(id: string, listedAt: number): boolean {
+    const hiddenAt = this.hiddenDocs.get(id);
+    if (hiddenAt === undefined) return true;
+    if (hiddenAt > listedAt) return false;
+    this.hiddenDocs.delete(id);
+    return true;
+  }
+
+  private keepTopic(id: string, listedAt: number): boolean {
+    const hiddenAt = this.hiddenTopics.get(id);
+    if (hiddenAt === undefined) return true;
+    if (hiddenAt > listedAt) return false;
+    this.hiddenTopics.delete(id);
+    return true;
+  }
+
+  private hideTopic(id: string): void {
+    this.pinnedTopics.delete(id);
+    this.hiddenTopics.set(id, ++this.opGen);
+  }
+
   private echoRow(
     scope: 'document' | 'topic',
     resourceId: string | null,
@@ -1032,11 +1119,13 @@ export class TopicsService extends Service {
     total: number,
     deleteIds: readonly string[],
     keepTail: boolean,
+    listedAt: number,
   ): void {
+    const visible = items.filter((item) => this.keepDoc(item.id, listedAt));
     const prev = new Map(this.documents.map((item) => [item.id, item]));
-    const seen = new Set(items.map((item) => item.id));
+    const seen = new Set(visible.map((item) => item.id));
     for (const id of seen) this.pinnedDocs.delete(id);
-    const merged = items.map((item) => newerDoc(prev.get(item.id), item));
+    const merged = visible.map((item) => newerDoc(prev.get(item.id), item));
     const pinned = this.documents.filter((item) => this.pinnedDocs.has(item.id) && !seen.has(item.id));
     const tail = keepTail
       ? this.documents.filter((item) => !seen.has(item.id) && !this.pinnedDocs.has(item.id))
@@ -1048,6 +1137,7 @@ export class TopicsService extends Service {
 
   private forgetDocument(id: string): void {
     this.pinnedDocs.delete(id);
+    this.hiddenDocs.set(id, ++this.opGen);
     const had = this.documents.some((doc) => doc.id === id);
     this.documents = this.documents.filter((doc) => doc.id !== id);
     if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
@@ -1056,7 +1146,7 @@ export class TopicsService extends Service {
   }
 
   private forgetTopic(id: string): void {
-    this.pinnedTopics.delete(id);
+    this.hideTopic(id);
     this.items = this.items.filter((item) => item.topic.id !== id);
     if (this.topicId !== id && this.topic?.id !== id) return;
     this.topic = null;
@@ -1067,6 +1157,9 @@ export class TopicsService extends Service {
     this.titleByNodeId = {};
     this.topicId = null;
     this.activeJob = null;
+    this.nodeGen += 1;
+    this.selectedNodeId = null;
+    this.nodeDetail = null;
     this.detailError = '打不开这个主题';
     this.stopJobPolling();
     this.stopDocPolling();
@@ -1181,6 +1274,8 @@ export class TopicsService extends Service {
     }
     const topicId = this.topicId;
     await this.reloadDocs(topicId, [], false);
+    const mapGen = ++this.mapGen;
+    const summaryGen = ++this.summaryGen;
     const [topicR, mapR, summaryR, jobR] = await Promise.allSettled([
       getTopic(topicId),
       getTopicMap(topicId),
@@ -1193,8 +1288,8 @@ export class TopicsService extends Service {
       this.forgetTopic(topicId);
       return;
     }
-    if (mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
-    if (summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
+    if (mapGen === this.mapGen && mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
+    if (summaryGen === this.summaryGen && summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
     if (jobR.status === 'fulfilled') {
       if (jobR.value.job) this.watchJob(jobR.value.job);
       else {
@@ -1208,11 +1303,11 @@ export class TopicsService extends Service {
 
   private async reloadTopics(): Promise<void> {
     const gen = ++this.topicsGen;
+    const listedAt = this.opGen;
     try {
       const topics = await listTopics();
       if (gen !== this.topicsGen) return;
       const prev = new Map(this.items.map((item) => [item.topic.id, item]));
-      const seen = new Set(topics.map((topic) => topic.id));
       const next: TopicListItem[] = [];
       for (const topic of topics) {
         const existing = prev.get(topic.id);
@@ -1220,11 +1315,13 @@ export class TopicsService extends Service {
         else next.push(await this._enrich(topic));
       }
       if (gen !== this.topicsGen) return;
+      const visible = next.filter((item) => this.keepTopic(item.topic.id, listedAt));
+      const seen = new Set(visible.map((item) => item.topic.id));
       const pinned = this.items.filter(
         (item) => this.pinnedTopics.has(item.topic.id) && !seen.has(item.topic.id),
       );
       for (const id of seen) this.pinnedTopics.delete(id);
-      this.items = [...pinned, ...next];
+      this.items = [...pinned, ...visible];
       if (this.topicId) {
         const fresh = this.items.find((item) => item.topic.id === this.topicId);
         if (fresh) this.topic = fresh.topic;
@@ -1240,6 +1337,7 @@ export class TopicsService extends Service {
     keepTail: boolean,
   ): Promise<void> {
     const gen = ++this.docListGen;
+    const listedAt = this.opGen;
     const want = Math.max(this.documents.length, DOC_PAGE);
     try {
       const items: DocumentListItem[] = [];
@@ -1254,7 +1352,7 @@ export class TopicsService extends Service {
         offset += page.items.length;
       }
       if (gen !== this.docListGen || this.topicId !== topicId) return;
-      this.applyDocPage(items, total, deleteIds, keepTail);
+      this.applyDocPage(items, total, deleteIds, keepTail, listedAt);
       if (this.topicId) this.patchItem(this.topicId, { documentCount: this.documentsTotal });
       this.syncDocPolling();
     } catch {
@@ -1264,9 +1362,13 @@ export class TopicsService extends Service {
 
   private async refreshTopic(id: string): Promise<void> {
     const gen = this.bumpTopic(id);
+    const listedAt = this.opGen;
     try {
       const topic = await getTopic(id);
       if (this.topicGen.get(id) !== gen) return;
+      const hiddenAt = this.hiddenTopics.get(id);
+      if (hiddenAt !== undefined && hiddenAt > listedAt) return;
+      if (hiddenAt !== undefined) this.hiddenTopics.delete(id);
       this.adoptTopic(topic);
     } catch (err) {
       if (this.topicGen.get(id) !== gen) return;
@@ -1276,13 +1378,15 @@ export class TopicsService extends Service {
 
   private async refreshMap(topicId: string): Promise<void> {
     if (this.topicId !== topicId) return;
+    const mapGen = ++this.mapGen;
+    const summaryGen = ++this.summaryGen;
     const [mapR, summaryR] = await Promise.allSettled([
       getTopicMap(topicId),
       getTopicMapSummary(topicId),
     ]);
     if (this.topicId !== topicId) return;
-    if (mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
-    if (summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
+    if (mapGen === this.mapGen && mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
+    if (summaryGen === this.summaryGen && summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
     if (this.selectedNodeId) await this.openNode(this.selectedNodeId);
   }
 }

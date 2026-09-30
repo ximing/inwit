@@ -86,6 +86,9 @@ export class DocsService extends Service {
   appActive = true;
   pollTimer: ReturnType<typeof setInterval> | null = null;
   loadGen = 0;
+  private jobsGen = 0;
+  private opGen = 0;
+  private hiddenDocs = new Map<string, number>();
   private sync: SyncService | null = null;
   private unsubscribeSync: (() => void) | null = null;
   private syncChain: Promise<void> = Promise.resolve();
@@ -222,6 +225,7 @@ export class DocsService extends Service {
 
   async loadDocuments(): Promise<void> {
     const gen = ++this.loadGen;
+    const listedAt = this.opGen;
     try {
       const page = await listDocuments({
         ...(this.filterTopicId ? { topicId: this.filterTopicId } : {}),
@@ -229,7 +233,7 @@ export class DocsService extends Service {
         offset: 0,
       });
       if (gen !== this.loadGen) return;
-      this.applyServerPage(page.items, page.total, [], false);
+      this.applyServerPage(page.items, page.total, [], false, listedAt);
       await this.refreshJobs();
       this.syncPolling();
     } catch (err) {
@@ -241,6 +245,7 @@ export class DocsService extends Service {
   async loadMore(): Promise<void> {
     if (!this.hasMore || this.$model.loadMore.loading) return;
     const gen = this.loadGen;
+    const listedAt = this.opGen;
     const page = await listDocuments({
       ...(this.filterTopicId ? { topicId: this.filterTopicId } : {}),
       limit: DOC_PAGE,
@@ -248,7 +253,11 @@ export class DocsService extends Service {
     });
     if (gen !== this.loadGen) return;
     const have = new Set(this.documents.map((item) => item.id));
-    this.documents = [...this.documents, ...page.items.filter((item) => !have.has(item.id))];
+    const incoming = page.items.filter((item) => {
+      if (!this.keepListed(item.id, listedAt)) return false;
+      return !have.has(item.id);
+    });
+    this.documents = [...this.documents, ...incoming];
     this.documentsTotal = page.total;
     await this.refreshJobs();
     this.syncPolling();
@@ -426,8 +435,10 @@ export class DocsService extends Service {
   }
 
   async refreshJobs(): Promise<void> {
+    const gen = ++this.jobsGen;
     try {
       const queue = await getJobQueue();
+      if (gen !== this.jobsGen) return;
       this.activeJobs = [...queue.running, ...queue.pending];
     } catch {
       // keep last snapshot
@@ -473,10 +484,19 @@ export class DocsService extends Service {
 
   private forgetDocument(id: string): void {
     this.pinned.delete(id);
+    this.hiddenDocs.set(id, ++this.opGen);
     const had = this.documents.some((doc) => doc.id === id);
     this.documents = this.documents.filter((doc) => doc.id !== id);
     if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
     this.syncPolling();
+  }
+
+  private keepListed(id: string, listedAt: number): boolean {
+    const hiddenAt = this.hiddenDocs.get(id);
+    if (hiddenAt === undefined) return true;
+    if (hiddenAt > listedAt) return false;
+    this.hiddenDocs.delete(id);
+    return true;
   }
 
   private applyServerPage(
@@ -484,11 +504,13 @@ export class DocsService extends Service {
     total: number,
     deleteIds: readonly string[],
     keepTail: boolean,
+    listedAt: number,
   ): void {
+    const visible = items.filter((item) => this.keepListed(item.id, listedAt));
     const prev = new Map(this.documents.map((item) => [item.id, item]));
-    const seen = new Set(items.map((item) => item.id));
+    const seen = new Set(visible.map((item) => item.id));
     for (const id of seen) this.pinned.delete(id);
-    const merged = items.map((item) => newerRow(prev.get(item.id), item));
+    const merged = visible.map((item) => newerRow(prev.get(item.id), item));
     const pinned = this.documents.filter((item) => this.pinned.has(item.id) && !seen.has(item.id));
     const tail = keepTail
       ? this.documents.filter((item) => !seen.has(item.id) && !this.pinned.has(item.id))
@@ -567,6 +589,7 @@ export class DocsService extends Service {
 
   private async reloadListMerging(deleteIds: readonly string[], keepTail = true): Promise<void> {
     const gen = ++this.loadGen;
+    const listedAt = this.opGen;
     const want = Math.max(this.documents.length, DOC_PAGE);
     const topicId = this.filterTopicId;
     try {
@@ -586,7 +609,7 @@ export class DocsService extends Service {
         offset += page.items.length;
       }
       if (gen !== this.loadGen || this.filterTopicId !== topicId) return;
-      this.applyServerPage(items, total, deleteIds, keepTail);
+      this.applyServerPage(items, total, deleteIds, keepTail, listedAt);
       this.syncPolling();
     } catch {
       // Keep the rows already on screen.

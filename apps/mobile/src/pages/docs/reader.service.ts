@@ -157,6 +157,7 @@ export class ReaderService extends Service {
   deciding = false;
   saving = false;
   focused = false;
+  appActive = true;
   pollTimer: ReturnType<typeof setInterval> | null = null;
   selectionDigesting = false;
   selectionPollUntil = 0;
@@ -197,8 +198,8 @@ export class ReaderService extends Service {
   private syncChain: Promise<void> = Promise.resolve();
   private echoes: EchoStamp[] = [];
   private cardWriteGen = 0;
+  private linksGen = 0;
   private saveFloors = new Map<string, number>();
-  private bodyWrite = false;
   private detailWrites = 0;
   private inflightReads: DetailRead[] = [];
   private replayQueue: Array<{ id: string; changeAt: string | null }> = [];
@@ -288,6 +289,17 @@ export class ReaderService extends Service {
     } else {
       this.syncPolling();
     }
+  }
+
+  setAppActive(value: boolean): void {
+    this.appActive = value;
+    if (!value) {
+      this.stopPolling();
+      this.disarmSelectionLoop();
+      return;
+    }
+    this.syncPolling();
+    if (this.selectionPollDocId) this.armSelectionLoop(this.selectionPollDocId);
   }
 
   setDocGetter(getter: (() => Promise<PmDocJson>) | null): void {
@@ -402,8 +414,9 @@ export class ReaderService extends Service {
       this.pdfUrl = null;
       this.pdfError = null;
       this.pdfSelection = null;
+      this.loadGen += 1;
     }
-    const gen = ++this.loadGen;
+    const gen = this.loadGen;
     const readGen = this.cardWriteGen;
     const floor = this.saveFloors.get(id) ?? null;
     const serial = ++this.detailSerial;
@@ -438,15 +451,18 @@ export class ReaderService extends Service {
         capturedGen: read.gen,
         currentGen: this.cardWriteGen,
         dirty: this.bodyDirty || this.editorLive,
-        inflight: this.saveInflight !== null || this.bodyWrite,
+        inflight: this.saveInflight !== null,
         detailUpdatedAtMs: Date.parse(detail.updatedAt),
         floorUpdatedAtMs: read.floor,
       });
       if (mode === 'drop') {
-        this.inflightReads.push(read);
         this.noteDetailDropped(read);
-        this.inflightReads = this.inflightReads.filter((item) => item !== read);
-        this.kickReplay();
+        if (
+          this.replayQueue.some((item) => item.id === id) &&
+          this.replayQueue.some((item) => item.id !== id)
+        ) {
+          this.kickReplay();
+        }
         return;
       }
       if (serial < this.appliedSerial) return;
@@ -696,17 +712,21 @@ export class ReaderService extends Service {
   }
 
   async ensureLinks(cardId: string): Promise<void> {
+    const gen = this.linksGen;
     const cached = this.linksCache[cardId];
     if (cached) {
+      if (gen !== this.linksGen) return;
       this.links = cached;
       return;
     }
     this.links = null;
     try {
       const data = await getCardLinks(cardId);
+      if (gen !== this.linksGen) return;
       this.linksCache = { ...this.linksCache, [cardId]: data };
       if (this.sheet?.kind === 'card' && this.sheet.cardId === cardId) this.links = data;
     } catch {
+      if (gen !== this.linksGen) return;
       if (this.sheet?.kind === 'card' && this.sheet.cardId === cardId) {
         this.links = { outgoing: [], incoming: [] };
       }
@@ -978,7 +998,7 @@ export class ReaderService extends Service {
   }
 
   private armSelectionLoop(documentId: string): void {
-    if (this.syncActive()) return;
+    if (this.syncActive() || !this.appActive) return;
     if (this.selectionTickTimer !== null || this.selectionTickInflight) return;
     if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
     const startCount = this.selectionCardCountAtStart;
@@ -986,7 +1006,7 @@ export class ReaderService extends Service {
       this.selectionTickTimer = null;
       this.selectionTickInflight = true;
       try {
-        if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
+        if (!this.appActive || !this.selectionDigesting || this.selectionPollDocId !== documentId) return;
         await this.refresh();
         if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
         if (this.syncActive()) return;
@@ -997,7 +1017,7 @@ export class ReaderService extends Service {
         this.selectionTickInflight = false;
       }
       if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-      if (this.syncActive() || this.selectionTickTimer !== null) return;
+      if (!this.appActive || this.syncActive() || this.selectionTickTimer !== null) return;
       this.selectionTickTimer = setTimeout(() => {
         void tick();
       }, SELECTION_POLL_MS);
@@ -1089,12 +1109,12 @@ export class ReaderService extends Service {
       this.stopPolling();
       return;
     }
-    if (this.doc?.status === 'pending' && this.focused) this.startPolling();
+    if (this.doc?.status === 'pending' && this.focused && this.appActive) this.startPolling();
     else this.stopPolling();
   }
 
   startPolling(): void {
-    if (this.syncActive()) return;
+    if (this.syncActive() || !this.appActive || !this.focused) return;
     if (this.pollTimer !== null) return;
     this.pollTimer = setInterval(() => {
       void this.tickPending();
@@ -1102,7 +1122,7 @@ export class ReaderService extends Service {
   }
 
   async tickPending(): Promise<void> {
-    if (!this.focused || this.doc?.status !== 'pending') {
+    if (!this.focused || !this.appActive || this.doc?.status !== 'pending') {
       this.stopPolling();
       return;
     }
@@ -1419,7 +1439,6 @@ export class ReaderService extends Service {
     this.editRouteFor = null;
   }
 
-  /** Poll/digest: keep a dirty draft; accept a clean remote title. Cards still merge. */
   private applyRemoteDetail(
     detail: DocumentDetail,
     notes: Annotation[],
@@ -1508,13 +1527,7 @@ export class ReaderService extends Service {
 
   private async persist(): Promise<void> {
     if (this.remoteGone || this.trashed) return;
-    this.bodyWrite = true;
-    try {
-      await this.persistBody();
-    } finally {
-      this.bodyWrite = false;
-      this.kickReplay();
-    }
+    await this.persistBody();
   }
 
   private async persistBody(): Promise<void> {
@@ -1638,6 +1651,7 @@ export class ReaderService extends Service {
 
   private async pullDetail(id: string, changeAt: string | null, clearLinks: boolean): Promise<boolean> {
     if (clearLinks && this.doc?.id === id) {
+      this.linksGen += 1;
       this.linksCache = {};
       this.links = null;
     }
@@ -1649,7 +1663,7 @@ export class ReaderService extends Service {
       changeAt,
     };
     this.inflightReads.push(read);
-    let applied = false;
+    let closed = false;
     try {
       const detail = await getDocument(id);
       const notes = await listDocumentAnnotations(id).catch(() =>
@@ -1660,7 +1674,7 @@ export class ReaderService extends Service {
         capturedGen: read.gen,
         currentGen: this.cardWriteGen,
         dirty: this.bodyDirty || this.editorLive,
-        inflight: this.saveInflight !== null || this.bodyWrite,
+        inflight: this.saveInflight !== null,
         detailUpdatedAtMs: Date.parse(detail.updatedAt),
         floorUpdatedAtMs: read.floor,
       });
@@ -1675,18 +1689,18 @@ export class ReaderService extends Service {
       if (read.serial < this.appliedSerial) return false;
       this.appliedSerial = read.serial;
       this.applyRemoteDetail(detail, notes, mode, read.changeAt);
-      applied = true;
       return true;
     } catch (err) {
       if (err instanceof ApiError && err.status === 404 && (this.doc?.id === id || this.doc === null)) {
         this.replayQueue = this.replayQueue.filter((item) => item.id !== id);
         this.forgetOpenDocument(id);
+        closed = this.doc === null || this.doc.id !== id;
       }
       return false;
     } finally {
       this.inflightReads = this.inflightReads.filter((item) => item !== read);
       this.kickReplay();
-      if (applied && this.sheet?.kind === 'card') void this.ensureLinks(this.sheet.cardId);
+      if (!closed && this.sheet?.kind === 'card') void this.ensureLinks(this.sheet.cardId);
     }
   }
 
@@ -1706,7 +1720,6 @@ export class ReaderService extends Service {
         this.titleDirty ||
         this.editorLive ||
         this.saveInflight !== null ||
-        this.bodyWrite ||
         this.detailWrites > 0);
     if (dirty) {
       this.remoteGone = true;
@@ -1720,6 +1733,7 @@ export class ReaderService extends Service {
     if (this.doc?.id === id || this.doc === null) {
       this.doc = null;
       this.annotations = [];
+      this.linksGen += 1;
       this.links = null;
       this.linksCache = {};
       this.sheet = null;
@@ -1764,7 +1778,7 @@ export class ReaderService extends Service {
   }
 
   private isWriteInflight(): boolean {
-    return this.bodyWrite || this.detailWrites > 0 || this.saveInflight !== null;
+    return this.detailWrites > 0 || this.saveInflight !== null;
   }
 
   private kickReplay(): void {
@@ -1841,7 +1855,7 @@ export class ReaderService extends Service {
               updatedAt: this.doc.updatedAt,
               bodyDirty: this.bodyDirty || this.editorLive,
               titleDirty: this.titleDirty,
-              saveInflight: this.saveInflight !== null || this.bodyWrite,
+              saveInflight: this.saveInflight !== null,
             }
           : null,
       topics: this.topics.map((topic) => ({ id: topic.id })),
