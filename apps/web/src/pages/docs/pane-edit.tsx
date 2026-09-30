@@ -69,6 +69,7 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
                   <PaperEditor
                     seedKey={editor.seedKey}
                     seedDoc={editor.seedDoc}
+                    preserveViewport={editor.preserveViewport}
                     documentId={editor.id ?? service.doc?.id ?? null}
                     cards={service.doc?.cards ?? []}
                     annotations={service.annotations}

@@ -79,6 +79,8 @@ type PaperEditorProps = {
   onAnchorClick?: (cardIds: string[]) => void;
   onAnnotationClick?: (ids: string[]) => void;
   bindHost?: (host: DocEditorHost | null) => void;
+  /** Sync reseed: restore scroll, do not focus. First open leaves this false. */
+  preserveViewport?: boolean;
 };
 
 export const PaperEditor = observer(function PaperEditor({
@@ -94,6 +96,7 @@ export const PaperEditor = observer(function PaperEditor({
   onAnchorClick,
   onAnnotationClick,
   bindHost,
+  preserveViewport = false,
 }: PaperEditorProps) {
   const assetUrls = useService(AssetUrlsService);
   const dialog = useService(DialogService);
@@ -350,20 +353,25 @@ export const PaperEditor = observer(function PaperEditor({
 
   useEffect(() => {
     if (!editor) return;
+    const scroller = editor.view.dom.closest('.pane-scroll');
+    // The seedKey render already carries this flag. Toggling it alone must not reseed.
+    const keep = preserveViewport;
+    const previousTop = scroller instanceof HTMLElement ? scroller.scrollTop : 0;
+    // emitUpdate would mark a normalized document dirty and drop the open-document refresh.
     editor.commands.setContent(contentFromSeed(seedDoc), { emitUpdate: false });
-    editor.commands.focus('start', { scrollIntoView: false });
+    if (!keep) editor.commands.focus('start', { scrollIntoView: false });
     ensureEntityMarksOnEditor(editor, cardsRef.current, annotationsRef.current);
-    const pinTop = () => {
+    const pinScroll = () => {
       if (editor.isDestroyed) return;
-      const scroller = editor.view.dom.closest('.pane-scroll');
-      if (scroller instanceof HTMLElement) scroller.scrollTop = 0;
+      const el = editor.view.dom.closest('.pane-scroll');
+      if (el instanceof HTMLElement) el.scrollTop = keep ? previousTop : 0;
     };
     // setContent keeps the previous scroll offset, and focus() may scroll the caret on the next frame.
-    pinTop();
+    pinScroll();
     let nested = 0;
     const outer = requestAnimationFrame(() => {
-      pinTop();
-      nested = requestAnimationFrame(pinTop);
+      pinScroll();
+      nested = requestAnimationFrame(pinScroll);
     });
     return () => {
       cancelAnimationFrame(outer);
