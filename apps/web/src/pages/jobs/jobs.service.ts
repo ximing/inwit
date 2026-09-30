@@ -1,5 +1,14 @@
 import { Service } from '@rabjs/react';
-import type { AgentExecution, Job, JobQueue, JobQueueCounts, JobStatus, JobType, JobUsage } from '@inwit/dto';
+import type {
+  AgentExecution,
+  Job,
+  JobQueue,
+  JobQueueCounts,
+  JobStatus,
+  JobType,
+  JobUsage,
+  SyncChange,
+} from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
 import {
   cancelJob,
@@ -11,6 +20,14 @@ import {
   retryJob,
 } from '@/api/jobs';
 import { formatTimeHm } from '@/lib/format';
+import {
+  coalesceChanges,
+  planReloads,
+  stripEchoes,
+  type EchoStamp,
+  type SyncView,
+} from '@/lib/sync-plan';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 
 const POLL_MS = 5000;
 const TICK_MS = 1000;
@@ -69,6 +86,21 @@ const USAGE_TYPE_LABELS: Record<string, string> = {
 const WEEKDAY_SHORT = ['日', '一', '二', '三', '四', '五', '六'] as const;
 
 const EMPTY_COUNTS: JobQueueCounts = { running: 0, pending: 0, doneToday: 0, failed: 0 };
+
+const JOBS_SYNC_VIEW: SyncView = {
+  documents: [],
+  openDocumentId: null,
+  listIncludesHead: false,
+  editor: null,
+  topics: [],
+  openTopicId: null,
+  mapTopicId: null,
+  readerDocumentId: null,
+  readerActiveCardId: null,
+  reviewInSession: false,
+  jobs: [],
+  activeJobId: null,
+};
 
 /** History cell: summary minus the `类型 · ` prefix and wrapping 「」. */
 export function jobContent(summary: string): string {
@@ -195,6 +227,23 @@ export class JobsService extends Service {
   pollTimer: ReturnType<typeof setInterval> | null = null;
   tickTimer: ReturnType<typeof setInterval> | null = null;
 
+  private syncService: SyncService;
+  private unsubscribeSync: () => void;
+  private echoes: EchoStamp[] = [];
+  private closed = false;
+  private queueTicket = 0;
+  private historyTicket = 0;
+  private failedTicket = 0;
+  private recentTicket = 0;
+
+  constructor() {
+    super();
+    this.syncService = this.resolve(SyncService);
+    this.unsubscribeSync = this.syncService.subscribe((event) => {
+      this.onSync(event);
+    });
+  }
+
   get counts(): JobQueueCounts {
     return this.queue?.counts ?? EMPTY_COUNTS;
   }
@@ -243,10 +292,14 @@ export class JobsService extends Service {
   }
 
   async loadQueue(): Promise<void> {
+    const ticket = ++this.queueTicket;
     try {
-      this.queue = await getJobQueue();
+      const queue = await getJobQueue();
+      if (ticket !== this.queueTicket) return;
+      this.queue = queue;
       this.syncTick();
     } catch (err) {
+      if (ticket !== this.queueTicket) return;
       if (!this.queue) this.error = errorMessage(err, '加载队列失败');
     }
   }
@@ -260,15 +313,19 @@ export class JobsService extends Service {
   }
 
   async loadRecent(): Promise<void> {
+    const ticket = ++this.recentTicket;
     try {
       const page = await listJobs({ limit: RECENT_LIMIT, offset: 0 });
+      if (ticket !== this.recentTicket) return;
       this.recentJobs = page.items;
     } catch (err) {
+      if (ticket !== this.recentTicket) return;
       if (this.recentJobs.length === 0) this.error = errorMessage(err, '加载任务失败');
     }
   }
 
   async loadHistory(): Promise<void> {
+    const ticket = ++this.historyTicket;
     try {
       const page = await listJobs({
         limit: this.jobsLimit,
@@ -276,19 +333,24 @@ export class JobsService extends Service {
         ...(this.jobStatus !== '' ? { status: this.jobStatus } : {}),
         ...(this.jobType !== '' ? { type: this.jobType } : {}),
       });
+      if (ticket !== this.historyTicket) return;
       this.jobs = page.items;
       this.jobsTotal = page.total;
     } catch (err) {
+      if (ticket !== this.historyTicket) return;
       this.error = errorMessage(err, '加载任务失败');
     }
   }
 
   async loadFailed(): Promise<void> {
+    const ticket = ++this.failedTicket;
     try {
       const page = await listJobs({ status: 'failed', limit: FAILED_LIMIT, offset: 0 });
+      if (ticket !== this.failedTicket) return;
       this.failedJobs = page.items;
       this.failedTotal = page.total;
     } catch (err) {
+      if (ticket !== this.failedTicket) return;
       if (this.failedJobs.length === 0) this.error = errorMessage(err, '加载任务失败');
     }
   }
@@ -322,8 +384,9 @@ export class JobsService extends Service {
     this.cancellingId = id;
     this.error = null;
     try {
-      await cancelJob(id);
+      const job = await cancelJob(id);
       await Promise.all([this.loadQueue(), this.loadHistory(), this.loadRecent()]);
+      this.noteJobEcho(job);
       this.syncPolling();
     } catch (err) {
       this.error = errorMessage(err, '取消失败');
@@ -336,8 +399,9 @@ export class JobsService extends Service {
     this.retryingId = id;
     this.error = null;
     try {
-      await retryJob(id);
+      const job = await retryJob(id);
       await Promise.all([this.loadQueue(), this.loadHistory(), this.loadFailed(), this.loadRecent()]);
+      this.noteJobEcho(job);
       this.syncPolling();
     } catch (err) {
       this.error = errorMessage(err, '重试失败');
@@ -434,13 +498,16 @@ export class JobsService extends Service {
   }
 
   syncPolling(): void {
+    if (this.closed) return;
     if (this.hasActivity) this.startPolling();
     else this.stopPolling();
     this.syncTick();
   }
 
   startPolling(): void {
-    if (this.pollTimer !== null) return;
+    if (this.closed || this.pollTimer !== null) return;
+    // Handshake may already have finished before this interval would start.
+    if (this.syncService.active) return;
     this.pollTimer = setInterval(() => {
       void this.tickQueue();
     }, POLL_MS);
@@ -453,6 +520,7 @@ export class JobsService extends Service {
   }
 
   syncTick(): void {
+    if (this.closed) return;
     if (this.running.length > 0) this.startTick();
     else this.stopTick();
   }
@@ -471,8 +539,79 @@ export class JobsService extends Service {
   }
 
   override destroy(): void {
+    this.closed = true;
+    this.unsubscribeSync();
     this.stopPolling();
     this.stopTick();
     super.destroy();
+  }
+
+  private onSync(event: SyncEvent): void {
+    if (event.type === 'active') {
+      if (event.active) this.stopPolling();
+      else this.syncPolling();
+      return;
+    }
+    if (event.type === 'reset') {
+      void this.reloadAfterGap();
+      return;
+    }
+    void this.applyJobChanges(event.changes);
+  }
+
+  private async applyJobChanges(changes: SyncChange[]): Promise<void> {
+    if (this.closed) return;
+    const kept = this.consumeEchoes(changes);
+    const intents = planReloads(coalesceChanges(kept), JOBS_SYNC_VIEW);
+    for (const intent of intents) {
+      if (this.closed) return;
+      if (intent.kind !== 'job') continue;
+      await this.tickQueue();
+    }
+  }
+
+  private async reloadAfterGap(): Promise<void> {
+    if (this.closed) return;
+    this.error = null;
+    this.echoes = [];
+    await Promise.all([this.loadQueue(), this.loadHistory(), this.loadFailed(), this.loadRecent()]);
+    if (this.closed) return;
+    this.syncPolling();
+  }
+
+  private consumeEchoes(changes: SyncChange[]): SyncChange[] {
+    const kept = stripEchoes(changes, this.echoes);
+    if (kept.length === changes.length) return kept;
+    const keptSet = new Set(kept);
+    for (const change of changes) {
+      if (keptSet.has(change)) continue;
+      const atMs = Date.parse(change.at);
+      const index = this.echoes.findIndex(
+        (echo) =>
+          echo.scope === change.scope &&
+          echo.resourceId === change.resourceId &&
+          echo.atMs === atMs,
+      );
+      if (index >= 0) this.echoes.splice(index, 1);
+    }
+    return kept;
+  }
+
+  // Stamp only after this queue snapshot shows the cancel or retry.
+  private noteJobEcho(job: Job): void {
+    if (!this.queue) return;
+    const atMs = Date.parse(job.updatedAt);
+    if (Number.isNaN(atMs)) return;
+    const live = [...this.running, ...this.pending].find((row) => row.id === job.id);
+    if (job.status === 'pending' || job.status === 'running') {
+      if (!live || Date.parse(live.updatedAt) !== atMs) return;
+    } else if (live) {
+      return;
+    }
+    const exists = this.echoes.some(
+      (echo) => echo.scope === 'job' && echo.resourceId === job.id && echo.atMs === atMs,
+    );
+    if (exists) return;
+    this.echoes.push({ scope: 'job', resourceId: job.id, atMs });
   }
 }
