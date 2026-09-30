@@ -37,6 +37,8 @@ import {
   MEMORY_ENTRY_STATUSES,
   MEMORY_LAYERS,
   MEMORY_SCOPES,
+  SYNC_OPS,
+  SYNC_SCOPES,
   TOPIC_STATUSES,
 } from '@inwit/dto';
 import type {
@@ -67,6 +69,8 @@ import type {
   MemoryScope,
   ReviewFeedback,
   ReviewSettings,
+  SyncOp,
+  SyncScope,
   TopicStatus,
 } from '@inwit/dto';
 
@@ -708,6 +712,27 @@ export const llmUsageLogs = pgTable(
     index('idx_llm_usage_logs_execution').on(t.executionId),
     index('idx_llm_usage_logs_capability_created').on(t.capability, t.createdAt),
     enumCheck('llm_usage_logs_capability_check', t.capability, LLM_CAPABILITIES),
+  ],
+);
+
+export const syncChanges = pgTable(
+  'sync_changes',
+  {
+    id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    scope: varchar('scope', { length: 16 }).$type<SyncScope>().notNull(),
+    resourceId: uuid('resource_id'),
+    op: varchar('op', { length: 8 }).$type<SyncOp>().notNull(),
+    /** Changed row's updated_at, or statement time when that column does not exist. */
+    at: timestamptz('at').notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_sync_changes_user_id').on(t.userId, t.id),
+    enumCheck('sync_changes_scope_check', t.scope, SYNC_SCOPES),
+    enumCheck('sync_changes_op_check', t.op, SYNC_OPS),
   ],
 );
 
