@@ -74,6 +74,12 @@ BEGIN
       PERFORM sync_emit(NEW.user_id, 'topic', NEW.topic_id, 'upsert', NEW.updated_at);
       PERFORM sync_emit(NEW.user_id, 'map', NEW.topic_id, 'upsert', NEW.updated_at);
     END IF;
+  ELSIF (
+    (OLD.deleted_at IS NULL) IS DISTINCT FROM (NEW.deleted_at IS NULL)
+    OR OLD.map_node_id IS DISTINCT FROM NEW.map_node_id
+  ) AND NEW.topic_id IS NOT NULL THEN
+    PERFORM sync_emit(NEW.user_id, 'topic', NEW.topic_id, 'upsert', NEW.updated_at);
+    PERFORM sync_emit(NEW.user_id, 'map', NEW.topic_id, 'upsert', NEW.updated_at);
   END IF;
   RETURN NEW;
 END;

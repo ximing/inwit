@@ -18,6 +18,7 @@ const DOC = '22222222-2222-4222-8222-222222222222';
 const DOC_B = '33333333-3333-4333-8333-333333333333';
 const TOPIC_A = '44444444-4444-4444-8444-444444444444';
 const TOPIC_B = '55555555-5555-4555-8555-555555555555';
+const NODE = '77777777-7777-4777-8777-777777777777';
 const JOB = '66666666-6666-4666-8666-666666666666';
 const AT = new Date('2026-09-30T08:00:00.000Z');
 const AT_OLD = new Date('2026-09-29T08:00:00.000Z');
@@ -32,6 +33,7 @@ function doc(overrides: Partial<DocumentSyncImage> = {}): DocumentSyncImage {
     id: DOC,
     userId: USER,
     topicId: null,
+    mapNodeId: null,
     kind: 'document',
     updatedAt: AT,
     deletedAt: null,
@@ -200,6 +202,60 @@ describe('eventsForRow', () => {
           row: doc({ deletedAt: AT }),
         }),
       ).toEqual([emit('document', DOC, 'delete')]);
+    });
+
+    it('fans out the current topic when visibility or map placement changes', () => {
+      const topicMap = [emit('topic', TOPIC_A, 'upsert'), emit('map', TOPIC_A, 'upsert')];
+      const cases: { name: string; old: DocumentSyncImage; row: DocumentSyncImage; events: SyncEmit[] }[] = [
+        {
+          name: 'soft-delete',
+          old: doc({ topicId: TOPIC_A, mapNodeId: NODE }),
+          row: doc({ topicId: TOPIC_A, mapNodeId: NODE, deletedAt: AT }),
+          events: [emit('document', DOC, 'delete'), ...topicMap],
+        },
+        {
+          name: 'restore',
+          old: doc({ topicId: TOPIC_A, deletedAt: AT_OLD }),
+          row: doc({ topicId: TOPIC_A, deletedAt: null }),
+          events: [emit('document', DOC, 'upsert'), ...topicMap],
+        },
+        {
+          name: 'map node attach',
+          old: doc({ topicId: TOPIC_A }),
+          row: doc({ topicId: TOPIC_A, mapNodeId: NODE }),
+          events: [emit('document', DOC, 'upsert'), ...topicMap],
+        },
+        {
+          name: 'map node clear',
+          old: doc({ topicId: TOPIC_A, mapNodeId: NODE }),
+          row: doc({ topicId: TOPIC_A, mapNodeId: null }),
+          events: [emit('document', DOC, 'upsert'), ...topicMap],
+        },
+        {
+          name: 'soft-delete without a topic',
+          old: doc({ mapNodeId: NODE }),
+          row: doc({ mapNodeId: NODE, deletedAt: AT }),
+          events: [emit('document', DOC, 'delete')],
+        },
+        {
+          name: 'map node change without a topic',
+          old: doc(),
+          row: doc({ mapNodeId: NODE }),
+          events: [emit('document', DOC, 'upsert')],
+        },
+        {
+          name: 'staying deleted does not fan out',
+          old: doc({ topicId: TOPIC_A, deletedAt: AT_OLD }),
+          row: doc({ topicId: TOPIC_A, deletedAt: AT }),
+          events: [emit('document', DOC, 'upsert')],
+        },
+      ];
+      for (const testCase of cases) {
+        expect(
+          eventsForRow({ table: 'documents', action: 'update', old: testCase.old, row: testCase.row }),
+          testCase.name,
+        ).toEqual(testCase.events);
+      }
     });
 
     it('clearing deleted_at emits document upsert', () => {

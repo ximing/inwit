@@ -38,6 +38,7 @@ export interface DocumentSyncImage {
   id: string;
   userId: string;
   topicId: string | null;
+  mapNodeId: string | null;
   kind: string;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -225,8 +226,16 @@ function documentEvents(
   } else if (old.topicId !== row.topicId) {
     events.push(...topicFanout(row.userId, old.topicId, row.updatedAt));
     events.push(...topicFanout(row.userId, row.topicId, row.updatedAt));
+  } else if (membershipChanged(old, row)) {
+    events.push(...topicFanout(row.userId, row.topicId, row.updatedAt));
   }
   return events;
+}
+
+/** Soft-delete, restore, or a map-node move keeps the same topic id, but that topic's counts change. */
+function membershipChanged(old: DocumentSyncImage, row: DocumentSyncImage): boolean {
+  const deletedAtChanged = (old.deletedAt == null) !== (row.deletedAt == null);
+  return deletedAtChanged || old.mapNodeId !== row.mapNodeId;
 }
 
 function documentOp(
