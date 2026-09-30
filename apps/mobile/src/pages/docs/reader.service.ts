@@ -8,6 +8,7 @@ import {
   type DocumentCard,
   type DocumentDetail,
   type PmDocJson,
+  type SyncChange,
   type Topic,
   type UpdateCardInput,
 } from '@inwit/dto';
@@ -42,17 +43,29 @@ import {
   updateDocument,
 } from '@/api/documents';
 import { confirmAction } from '@/lib/confirm';
-import { listTopics } from '@/api/topics';
+import { getJob } from '@/api/jobs';
+import { getTopic, listTopics } from '@/api/topics';
 import { clipChars } from '@/lib/clip';
 import { formatTimeHm } from '@/lib/format';
 import { asAssetSrc } from '@/lib/internal-links';
 import { clonePmJson, isBlankPmDoc, jsonEqual } from '@/lib/pm-doc';
+import { consumeEchoes } from '@/lib/sync-echo';
+import {
+  classifyRemoteDetail,
+  coalesceChanges,
+  planDroppedDocumentReplay,
+  planReloads,
+  type EchoStamp,
+  type ReloadIntent,
+  type SyncView,
+} from '@/lib/sync-plan';
 import {
   livePresignedUrl,
   shouldRetryPresign,
   type PresignedUrlEntry,
 } from '@/lib/presign-cache-logic';
 import { AssetUrlsService } from '@/services/asset-urls.service';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
 import * as FileSystem from 'expo-file-system/legacy';
 import type { FormatState, TextSelectionAnchor } from '../../../../../packages/doc-engine/src/protocol';
@@ -110,6 +123,14 @@ export type ReaderSheet =
   | { kind: 'link' }
   | { kind: 'math' };
 
+type DetailRead = {
+  id: string;
+  gen: number;
+  floor: number | null;
+  serial: number;
+  changeAt: string | null;
+};
+
 export class ReaderService extends Service {
   doc: DocumentDetail | null = null;
   annotations: Annotation[] = [];
@@ -136,6 +157,7 @@ export class ReaderService extends Service {
   deciding = false;
   saving = false;
   focused = false;
+  appActive = true;
   pollTimer: ReturnType<typeof setInterval> | null = null;
   selectionDigesting = false;
   selectionPollUntil = 0;
@@ -171,6 +193,36 @@ export class ReaderService extends Service {
   private docGetter: (() => Promise<PmDocJson>) | null = null;
   private trashed = false;
   private editRouteFor: string | null = null;
+  private sync: SyncService | null = null;
+  private unsubscribeSync: (() => void) | null = null;
+  private syncChain: Promise<void> = Promise.resolve();
+  private echoes: EchoStamp[] = [];
+  private cardWriteGen = 0;
+  private linksGen = 0;
+  private saveFloors = new Map<string, number>();
+  private detailWrites = 0;
+  private inflightReads: DetailRead[] = [];
+  private replayQueue: Array<{ id: string; changeAt: string | null }> = [];
+  private replayStamp = new Map<string, string>();
+  private recoveryInflight = false;
+  private detailSerial = 0;
+  private appliedSerial = 0;
+  private conflictNotifiedAt: string | null = null;
+  private goneNotifiedId: string | null = null;
+  private selectionJobId: string | null = null;
+  private selectionTickInflight = false;
+  private selectionWatchdog: ReturnType<typeof setTimeout> | null = null;
+  private remoteGone = false;
+
+  constructor() {
+    super();
+    try {
+      this.sync = this.resolve(SyncService);
+      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
+    } catch {
+      this.sync = null;
+    }
+  }
 
   get toastService(): ToastService {
     return this.resolve(ToastService);
@@ -237,6 +289,17 @@ export class ReaderService extends Service {
     } else {
       this.syncPolling();
     }
+  }
+
+  setAppActive(value: boolean): void {
+    this.appActive = value;
+    if (!value) {
+      this.stopPolling();
+      this.disarmSelectionLoop();
+      return;
+    }
+    this.syncPolling();
+    if (this.selectionPollDocId) this.armSelectionLoop(this.selectionPollDocId);
   }
 
   setDocGetter(getter: (() => Promise<PmDocJson>) | null): void {
@@ -340,6 +403,7 @@ export class ReaderService extends Service {
     this.appliedAnchor = null;
     if (this.doc?.id !== id) {
       this.trashed = false;
+      this.remoteGone = false;
       this.resetEditor();
       this.doc = null;
       this.annotations = [];
@@ -350,42 +414,79 @@ export class ReaderService extends Service {
       this.pdfUrl = null;
       this.pdfError = null;
       this.pdfSelection = null;
+      this.loadGen += 1;
     }
-    const gen = ++this.loadGen;
+    const gen = this.loadGen;
+    const readGen = this.cardWriteGen;
+    const floor = this.saveFloors.get(id) ?? null;
+    const serial = ++this.detailSerial;
+    const reloading = this.doc?.id === id && this.draftJson !== null;
+    let detail: DocumentDetail;
     try {
-      const [detail, notes, topics] = await Promise.all([
-        getDocument(id),
-        listDocumentAnnotations(id).catch(() => [] as Annotation[]),
-        this.topics.length > 0 ? Promise.resolve(this.topics) : listTopics('active'),
-      ]);
-      if (gen !== this.loadGen) return;
-      const sameDoc = this.doc?.id === detail.id && this.draftJson !== null;
-      this.topics = topics;
-      if (sameDoc) {
-        this.applyRemoteDetail(detail, notes);
-        this.syncPolling();
-        return;
-      }
-      this.doc = detail;
-      this.annotations = notes;
-      this.seedEditor(detail);
-      if (this.editRouteFor !== id) {
-        this.editRouteFor = id;
-        if (editRequested && this.canEdit) this.editing = true;
-      }
-      this.contentGen += 1;
-      this.syncPolling();
-      void this.prefetchMedia();
-      if (detail.fileMime === PDF_MIME) void this.loadPdf(detail.id, gen);
-      else {
-        this.pdfUrl = null;
-        this.pdfError = null;
-        this.pdfSelection = null;
-      }
+      detail = await getDocument(id);
     } catch (err) {
       if (gen !== this.loadGen) return;
+      if (reloading) return;
       this.docError = errorMessage(err, '打不开这份文档');
       this.doc = null;
+      return;
+    }
+    if (gen !== this.loadGen) return;
+    const notes = await listDocumentAnnotations(id).catch(() =>
+      this.doc?.id === id ? this.annotations : ([] as Annotation[]),
+    );
+    if (gen !== this.loadGen) return;
+    if (this.topics.length === 0) {
+      try {
+        this.topics = await listTopics('active');
+      } catch {
+        // The document still opens; the topic picker can stay empty.
+      }
+    }
+    if (gen !== this.loadGen) return;
+    const sameDoc = this.doc?.id === detail.id && this.draftJson !== null;
+    if (sameDoc) {
+      const read: DetailRead = { id, gen: readGen, floor, serial, changeAt: null };
+      const mode = classifyRemoteDetail({
+        capturedGen: read.gen,
+        currentGen: this.cardWriteGen,
+        dirty: this.bodyDirty || this.editorLive,
+        inflight: this.saveInflight !== null,
+        detailUpdatedAtMs: Date.parse(detail.updatedAt),
+        floorUpdatedAtMs: read.floor,
+      });
+      if (mode === 'drop') {
+        this.noteDetailDropped(read);
+        if (
+          this.replayQueue.some((item) => item.id === id) &&
+          this.replayQueue.some((item) => item.id !== id)
+        ) {
+          this.kickReplay();
+        }
+        return;
+      }
+      if (serial < this.appliedSerial) return;
+      this.appliedSerial = serial;
+      this.applyRemoteDetail(detail, notes, mode, null);
+      this.syncPolling();
+      return;
+    }
+    this.doc = detail;
+    this.annotations = notes;
+    this.seedEditor(detail);
+    if (serial >= this.appliedSerial) this.appliedSerial = serial;
+    if (this.editRouteFor !== id) {
+      this.editRouteFor = id;
+      if (editRequested && this.canEdit) this.editing = true;
+    }
+    this.contentGen += 1;
+    this.syncPolling();
+    void this.prefetchMedia();
+    if (detail.fileMime === PDF_MIME) void this.loadPdf(detail.id, gen);
+    else {
+      this.pdfUrl = null;
+      this.pdfError = null;
+      this.pdfSelection = null;
     }
   }
 
@@ -611,17 +712,21 @@ export class ReaderService extends Service {
   }
 
   async ensureLinks(cardId: string): Promise<void> {
+    const gen = this.linksGen;
     const cached = this.linksCache[cardId];
     if (cached) {
+      if (gen !== this.linksGen) return;
       this.links = cached;
       return;
     }
     this.links = null;
     try {
       const data = await getCardLinks(cardId);
+      if (gen !== this.linksGen) return;
       this.linksCache = { ...this.linksCache, [cardId]: data };
       if (this.sheet?.kind === 'card' && this.sheet.cardId === cardId) this.links = data;
     } catch {
+      if (gen !== this.linksGen) return;
       if (this.sheet?.kind === 'card' && this.sheet.cardId === cardId) {
         this.links = { outgoing: [], incoming: [] };
       }
@@ -691,8 +796,12 @@ export class ReaderService extends Service {
     if (this.deciding || this.doc?.status !== 'digested') return;
     this.deciding = true;
     try {
-      const detail = await acceptCard(id);
-      this.applyCard(detail);
+      await this.withDetailWrite(async () => {
+        const detail = await acceptCard(id);
+        this.cardWriteGen += 1;
+        this.applyCard(detail);
+        this.echoDocumentRow(detail.documentId, detail.updatedAt);
+      });
       this.showToast('已确认，会安排复习');
     } catch (err) {
       this.showToast(decisionError(err, 'accept'));
@@ -707,8 +816,12 @@ export class ReaderService extends Service {
     const trimmed = clipReason(this.rejectDraft.trim());
     this.deciding = true;
     try {
-      const detail = await rejectCard(cardId, trimmed ? { reason: trimmed } : {});
-      this.applyCard(detail);
+      await this.withDetailWrite(async () => {
+        const detail = await rejectCard(cardId, trimmed ? { reason: trimmed } : {});
+        this.cardWriteGen += 1;
+        this.applyCard(detail);
+        this.echoDocumentRow(detail.documentId, detail.updatedAt);
+      });
       this.showToast('不会进入复习');
     } catch (err) {
       this.showToast(decisionError(err, 'reject'));
@@ -724,28 +837,33 @@ export class ReaderService extends Service {
     const documentId = this.doc.id;
     this.deciding = true;
     try {
-      const result = await acceptProposedCards(documentId);
+      const result = await this.withDetailWrite(async () => {
+        const accepted = await acceptProposedCards(documentId);
+        this.cardWriteGen += 1;
+        const acceptedIds = new Set(accepted.acceptedIds);
+        if (this.doc?.id === documentId) {
+          this.doc = {
+            ...this.doc,
+            cards: this.doc.cards.map((card) =>
+              acceptedIds.has(card.id)
+                ? {
+                    ...card,
+                    acceptance: 'accepted',
+                    review: card.review ?? {
+                      dueAt: new Date(Date.now() + 86_400_000).toISOString(),
+                      intervalDays: 1,
+                      suspendedAt: null,
+                    },
+                  }
+                : card,
+            ),
+          };
+        }
+        await this.refresh();
+        return accepted;
+      });
       const acceptedIds = new Set(result.acceptedIds);
-      if (this.doc?.id === documentId) {
-        this.doc = {
-          ...this.doc,
-          cards: this.doc.cards.map((card) =>
-            acceptedIds.has(card.id)
-              ? {
-                  ...card,
-                  acceptance: 'accepted',
-                  review: card.review ?? {
-                    dueAt: new Date(Date.now() + 86_400_000).toISOString(),
-                    intervalDays: 1,
-                    suspendedAt: null,
-                  },
-                }
-              : card,
-          ),
-        };
-      }
-      await this.refresh();
-      const accepted = result.acceptedIds.length;
+      const accepted = acceptedIds.size;
       const failed = result.failedIds.length;
       if (failed > 0 && accepted > 0) {
         this.showToast(`已确认 ${accepted} 张。${failed} 张未能进入检索，可再试`);
@@ -767,22 +885,32 @@ export class ReaderService extends Service {
     if (!this.doc || this.sheet?.kind !== 'annotate' || this.saving) return false;
     const quote = clipChars(this.sheet.anchor.text.trim(), 20_000);
     if (!quote) return false;
+    const pdfPageIndex = this.sheet.pdfPageIndex;
+    const blockIndex = this.sheet.anchor.blockIndex;
+    const documentId = this.doc.id;
+    const note = this.noteDraft.trim();
     this.saving = true;
     try {
-      const pdfPageIndex = this.sheet.pdfPageIndex;
-      await createAnnotation({
-        documentId: this.doc.id,
-        quote,
-        note: this.noteDraft.trim(),
-        ...(pdfPageIndex != null
-          ? { kind: 'pdf' as const, pageIndex: pdfPageIndex, geometry: { quads: [] } }
-          : this.sheet.anchor.blockIndex > 0
-            ? { anchorBlockIndex: this.sheet.anchor.blockIndex }
-            : {}),
+      await this.withDetailWrite(async () => {
+        const created = await createAnnotation({
+          documentId,
+          quote,
+          note,
+          ...(pdfPageIndex != null
+            ? { kind: 'pdf' as const, pageIndex: pdfPageIndex, geometry: { quads: [] } }
+            : blockIndex > 0
+              ? { anchorBlockIndex: blockIndex }
+              : {}),
+        });
+        this.cardWriteGen += 1;
+        if (this.doc?.id === documentId) {
+          this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+          this.entityGen += 1;
+        }
+        this.echoDocumentRow(created.documentId, created.updatedAt);
       });
       this.showToast('已记下');
       this.closeSheet();
-      await this.refresh();
       return true;
     } catch (err) {
       this.showToast(errorMessage(err, '没记下这条批注'));
@@ -796,20 +924,37 @@ export class ReaderService extends Service {
     if (!this.doc || this.sheet?.kind !== 'card-form' || this.saving) return false;
     const concept = clipChars(this.cardQuestion.trim(), 2000);
     if (!concept) return false;
+    const documentId = this.doc.id;
+    const example = clipChars(this.cardAnswer.trim(), 4000);
+    const anchorText = clipChars(this.sheet.anchor.text, 4000);
+    const blockIndex = this.sheet.anchor.blockIndex;
     this.saving = true;
     try {
-      await createCard({
-        documentId: this.doc.id,
-        concept,
-        example: clipChars(this.cardAnswer.trim(), 4000),
-        anchorText: clipChars(this.sheet.anchor.text, 4000),
-        ...(this.sheet.anchor.blockIndex > 0
-          ? { anchorBlockIndex: this.sheet.anchor.blockIndex }
-          : {}),
+      await this.withDetailWrite(async () => {
+        const card = await createCard({
+          documentId,
+          concept,
+          example,
+          anchorText,
+          ...(blockIndex > 0 ? { anchorBlockIndex: blockIndex } : {}),
+        });
+        this.cardWriteGen += 1;
+        if (this.doc?.id === documentId) {
+          const next = { ...card, questions: [], review: null };
+          const have = this.doc.cards.some((item) => item.id === card.id);
+          this.doc = {
+            ...this.doc,
+            cards: have
+              ? this.doc.cards.map((item) => (item.id === card.id ? next : item))
+              : [...this.doc.cards, next],
+          };
+          this.entityGen += 1;
+        }
+        const pulled = await this.refresh();
+        if (pulled) this.echoDocumentRow(card.documentId, card.updatedAt);
       });
       this.showToast('已加入复习队列');
       this.closeSheet();
-      await this.refresh();
       return true;
     } catch (err) {
       this.showToast(errorMessage(err, '没写成卡片'));
@@ -826,14 +971,16 @@ export class ReaderService extends Service {
       this.showToast('选区没法排队');
       return;
     }
+    const documentId = this.doc.id;
     this.selectionDigesting = true;
-    this.selectionPollDocId = this.doc.id;
+    this.selectionPollDocId = documentId;
     this.selectionCardCountAtStart = this.doc.cards.length;
     this.selectionPollUntil = Date.now() + SELECTION_POLL_FOR_MS;
     try {
-      await enqueueSelectionCards(this.doc.id, { text: clipped, blockIndex: anchor.blockIndex });
+      const job = await enqueueSelectionCards(documentId, { text: clipped, blockIndex: anchor.blockIndex });
+      this.selectionJobId = job.id;
       this.showToast('已排队，消化完成后出现');
-      this.startSelectionPoll(this.doc.id);
+      this.startSelectionPoll(documentId);
     } catch (err) {
       this.finishSelectionPoll();
       this.showToast(errorMessage(err, '没排上队'));
@@ -842,17 +989,35 @@ export class ReaderService extends Service {
 
   startSelectionPoll(documentId: string): void {
     this.stopSelectionTick();
+    const deadline = this.selectionPollUntil;
+    this.selectionWatchdog = setTimeout(() => {
+      this.selectionWatchdog = null;
+      if (this.selectionPollUntil === deadline) this.finishSelectionPoll();
+    }, SELECTION_POLL_FOR_MS + 400);
+    this.armSelectionLoop(documentId);
+  }
+
+  private armSelectionLoop(documentId: string): void {
+    if (this.syncActive() || !this.appActive) return;
+    if (this.selectionTickTimer !== null || this.selectionTickInflight) return;
+    if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
     const startCount = this.selectionCardCountAtStart;
     const tick = async () => {
       this.selectionTickTimer = null;
-      if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-      await this.refresh();
-      const grown = this.doc?.id === documentId && this.doc.cards.length > startCount;
-      const timedOut = Date.now() >= this.selectionPollUntil;
-      if (grown || timedOut) {
-        this.finishSelectionPoll();
-        return;
+      this.selectionTickInflight = true;
+      try {
+        if (!this.appActive || !this.selectionDigesting || this.selectionPollDocId !== documentId) return;
+        await this.refresh();
+        if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
+        if (this.syncActive()) return;
+        const grown = this.doc?.id === documentId && this.doc.cards.length > startCount;
+        const timedOut = Date.now() >= this.selectionPollUntil;
+        if (grown || timedOut) this.finishSelectionPoll();
+      } finally {
+        this.selectionTickInflight = false;
       }
+      if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
+      if (!this.appActive || this.syncActive() || this.selectionTickTimer !== null) return;
       this.selectionTickTimer = setTimeout(() => {
         void tick();
       }, SELECTION_POLL_MS);
@@ -863,6 +1028,17 @@ export class ReaderService extends Service {
   }
 
   stopSelectionTick(): void {
+    if (this.selectionTickTimer !== null) {
+      clearTimeout(this.selectionTickTimer);
+      this.selectionTickTimer = null;
+    }
+    if (this.selectionWatchdog !== null) {
+      clearTimeout(this.selectionWatchdog);
+      this.selectionWatchdog = null;
+    }
+  }
+
+  private disarmSelectionLoop(): void {
     if (this.selectionTickTimer === null) return;
     clearTimeout(this.selectionTickTimer);
     this.selectionTickTimer = null;
@@ -873,24 +1049,34 @@ export class ReaderService extends Service {
     this.selectionDigesting = false;
     this.selectionPollUntil = 0;
     this.selectionPollDocId = null;
+    this.selectionJobId = null;
   }
 
   async setDocTopic(topicId: string | null): Promise<void> {
     if (!this.doc) return;
+    const id = this.doc.id;
     this.closeSheet();
     try {
-      const updated = await updateDocument(this.doc.id, { topicId });
-      const topicTitle = this.topics.find((topic) => topic.id === updated.topicId)?.title ?? null;
-      const topicMoved = this.doc.topicId !== updated.topicId;
-      this.doc = {
-        ...this.doc,
-        topicId: updated.topicId,
-        topicTitle,
-        updatedAt: updated.updatedAt,
-        cards: topicMoved
-          ? this.doc.cards.map((card) => ({ ...card, topicId: updated.topicId, mapNodeId: null }))
-          : this.doc.cards,
-      };
+      await this.withDetailWrite(async () => {
+        this.cardWriteGen += 1;
+        const updated = await updateDocument(id, { topicId });
+        const floorMs = Date.parse(updated.updatedAt);
+        if (!Number.isNaN(floorMs)) this.saveFloors.set(id, floorMs);
+        if (this.doc?.id === id) {
+          const topicTitle = this.topics.find((topic) => topic.id === updated.topicId)?.title ?? null;
+          const topicMoved = this.doc.topicId !== updated.topicId;
+          this.doc = {
+            ...this.doc,
+            topicId: updated.topicId,
+            topicTitle,
+            updatedAt: updated.updatedAt,
+            cards: topicMoved
+              ? this.doc.cards.map((card) => ({ ...card, topicId: updated.topicId, mapNodeId: null }))
+              : this.doc.cards,
+          };
+        }
+        this.echoDocumentRow(id, updated.updatedAt);
+      });
     } catch (err) {
       this.showToast(errorMessage(err, '没换上主题'));
     }
@@ -907,19 +1093,9 @@ export class ReaderService extends Service {
     }
   }
 
-  async refresh(): Promise<void> {
-    if (!this.doc) return;
-    const id = this.doc.id;
-    try {
-      const [detail, notes] = await Promise.all([
-        getDocument(id),
-        listDocumentAnnotations(id).catch(() => this.annotations),
-      ]);
-      if (this.doc?.id !== id) return;
-      this.applyRemoteDetail(detail, notes);
-    } catch {
-      // keep last copy
-    }
+  async refresh(): Promise<boolean> {
+    if (!this.doc) return false;
+    return this.pullDetail(this.doc.id, null, false);
   }
 
   stopPolling(): void {
@@ -929,11 +1105,16 @@ export class ReaderService extends Service {
   }
 
   syncPolling(): void {
-    if (this.doc?.status === 'pending' && this.focused) this.startPolling();
+    if (this.syncActive()) {
+      this.stopPolling();
+      return;
+    }
+    if (this.doc?.status === 'pending' && this.focused && this.appActive) this.startPolling();
     else this.stopPolling();
   }
 
   startPolling(): void {
+    if (this.syncActive() || !this.appActive || !this.focused) return;
     if (this.pollTimer !== null) return;
     this.pollTimer = setInterval(() => {
       void this.tickPending();
@@ -941,7 +1122,7 @@ export class ReaderService extends Service {
   }
 
   async tickPending(): Promise<void> {
-    if (!this.focused || this.doc?.status !== 'pending') {
+    if (!this.focused || !this.appActive || this.doc?.status !== 'pending') {
       this.stopPolling();
       return;
     }
@@ -951,6 +1132,9 @@ export class ReaderService extends Service {
 
   override destroy(): void {
     this.closed = true;
+    this.unsubscribeSync?.();
+    this.unsubscribeSync = null;
+    this.sync = null;
     this.clearSaveTimer();
     this.stopPolling();
     this.finishSelectionPoll();
@@ -958,7 +1142,7 @@ export class ReaderService extends Service {
   }
 
   async flushSave(): Promise<void> {
-    if (this.trashed) return;
+    if (this.trashed || this.remoteGone) return;
     this.clearSaveTimer();
     await this.save(true);
   }
@@ -1101,9 +1285,13 @@ export class ReaderService extends Service {
     const fromCards = editing.fromCards;
     this.cardBusy = true;
     try {
-      const detail = await updateCard(card.id, input);
-      this.applyCard(detail);
-      this.entityGen += 1;
+      await this.withDetailWrite(async () => {
+        const detail = await updateCard(card.id, input);
+        this.cardWriteGen += 1;
+        this.applyCard(detail);
+        this.entityGen += 1;
+        this.echoDocumentRow(detail.documentId, detail.updatedAt);
+      });
       this.showToast('已保存');
       const stillThere = this.doc?.cards.some((item) => item.id === card.id) ?? false;
       this.cardEditQuestion = '';
@@ -1131,8 +1319,11 @@ export class ReaderService extends Service {
     }
     this.cardBusy = true;
     try {
-      await archiveCard(id);
-      this.removeCard(id);
+      await this.withDetailWrite(async () => {
+        await archiveCard(id);
+        this.cardWriteGen += 1;
+        this.removeCard(id);
+      });
       this.showToast('已移入回收站，可在设置里恢复');
     } catch (err) {
       this.showToast(errorMessage(err, '没删掉'));
@@ -1147,23 +1338,28 @@ export class ReaderService extends Service {
     const suspended = card.review.suspendedAt != null;
     this.cardBusy = true;
     try {
-      const state = suspended ? await resumeCard(card.id) : await suspendCard(card.id);
-      if (!this.doc) return;
-      this.doc = {
-        ...this.doc,
-        cards: this.doc.cards.map((item) =>
-          item.id === card.id
-            ? {
-                ...item,
-                review: {
-                  dueAt: state.dueAt,
-                  intervalDays: state.intervalDays,
-                  suspendedAt: state.suspendedAt,
-                },
-              }
-            : item,
-        ),
-      };
+      await this.withDetailWrite(async () => {
+        const state = suspended ? await resumeCard(card.id) : await suspendCard(card.id);
+        this.cardWriteGen += 1;
+        if (this.doc) {
+          this.doc = {
+            ...this.doc,
+            cards: this.doc.cards.map((item) =>
+              item.id === card.id
+                ? {
+                    ...item,
+                    review: {
+                      dueAt: state.dueAt,
+                      intervalDays: state.intervalDays,
+                      suspendedAt: state.suspendedAt,
+                    },
+                  }
+                : item,
+            ),
+          };
+        }
+        this.echoDocumentRow(card.documentId, state.updatedAt);
+      });
       this.showToast(suspended ? '已恢复复习' : '已标记为熟悉，不再安排复习');
     } catch (err) {
       this.showToast(errorMessage(err, '操作没成功'));
@@ -1176,8 +1372,12 @@ export class ReaderService extends Service {
     if (this.saving) return false;
     this.saving = true;
     try {
-      const updated = await updateAnnotation(id, { note: note.slice(0, 20_000) });
-      this.annotations = this.annotations.map((item) => (item.id === id ? updated : item));
+      await this.withDetailWrite(async () => {
+        const updated = await updateAnnotation(id, { note: note.slice(0, 20_000) });
+        this.cardWriteGen += 1;
+        this.annotations = this.annotations.map((item) => (item.id === id ? updated : item));
+        this.echoDocumentRow(updated.documentId, updated.updatedAt);
+      });
       this.showToast('已记下');
       return true;
     } catch (err) {
@@ -1197,8 +1397,11 @@ export class ReaderService extends Service {
       return;
     }
     try {
-      await deleteAnnotation(id);
-      this.annotations = this.annotations.filter((item) => item.id !== id);
+      await this.withDetailWrite(async () => {
+        await deleteAnnotation(id);
+        this.cardWriteGen += 1;
+        this.annotations = this.annotations.filter((item) => item.id !== id);
+      });
       if (this.sheet?.kind === 'annotations') {
         const annotationIds = this.sheet.annotationIds.filter((item) => item !== id);
         this.sheet = annotationIds.length > 0 ? { kind: 'annotations', annotationIds } : null;
@@ -1236,13 +1439,16 @@ export class ReaderService extends Service {
     this.editRouteFor = null;
   }
 
-  /** Poll/digest: keep a dirty draft; accept a clean remote title. */
-  private applyRemoteDetail(detail: DocumentDetail, notes: Annotation[]): void {
+  private applyRemoteDetail(
+    detail: DocumentDetail,
+    notes: Annotation[],
+    mode: 'merge-keep-body' | 'merge-seed-body',
+    changeAt: string | null,
+  ): void {
     const prev = this.doc;
     if (!prev || prev.id !== detail.id) return;
-    const remoteOlder = detail.updatedAt < prev.updatedAt;
-    const keepBody = this.bodyDirty || this.editorLive || remoteOlder;
-    const keepTitle = this.titleDirty || remoteOlder;
+    const keepBody = mode === 'merge-keep-body';
+    const keepTitle = this.titleDirty;
     const prevCards = JSON.stringify(prev.cards);
     const prevNotes = JSON.stringify(this.annotations);
     const shown = displayedPmJson(detail);
@@ -1265,6 +1471,15 @@ export class ReaderService extends Service {
       this.draftJson = shown;
       this.lastSavedJson = clonePmJson(shown);
       if (contentChanged) this.contentGen += 1;
+    } else {
+      this.toastBodyConflict(detail, changeAt);
+    }
+    if (
+      this.selectionDigesting &&
+      this.selectionPollDocId === detail.id &&
+      detail.cards.length > this.selectionCardCountAtStart
+    ) {
+      this.finishSelectionPoll();
     }
     if (prevCards !== JSON.stringify(detail.cards) || prevNotes !== JSON.stringify(notes)) {
       this.entityGen += 1;
@@ -1273,7 +1488,7 @@ export class ReaderService extends Service {
   }
 
   private touchSave(): void {
-    if (this.trashed || this.closed) return;
+    if (this.trashed || this.closed || this.remoteGone) return;
     if (!this.dirty) {
       this.clearSaveTimer();
       if (this.saveState !== 'saving') this.saveState = this.savedAt ? 'saved' : 'idle';
@@ -1293,11 +1508,11 @@ export class ReaderService extends Service {
   }
 
   private async save(force: boolean): Promise<void> {
-    if (this.trashed) return;
+    if (this.trashed || this.remoteGone) return;
     if (!force && !this.dirty) return;
     if (this.saveInflight) {
       await this.saveInflight;
-      if (this.trashed) return;
+      if (this.trashed || this.remoteGone) return;
       if (!force && !this.dirty && this.saveState !== 'error') return;
     }
     const run = this.persist();
@@ -1306,10 +1521,16 @@ export class ReaderService extends Service {
       await run;
     } finally {
       if (this.saveInflight === run) this.saveInflight = null;
+      this.kickReplay();
     }
   }
 
   private async persist(): Promise<void> {
+    if (this.remoteGone || this.trashed) return;
+    await this.persistBody();
+  }
+
+  private async persistBody(): Promise<void> {
     this.clearSaveTimer();
     const current = this.doc;
     if (!current || this.trashed) return;
@@ -1363,9 +1584,13 @@ export class ReaderService extends Service {
     }
     const sentJson = clonePmJson(draftJson);
     const sentTitle = draftTitle;
+    this.cardWriteGen += 1;
     try {
       const updated = await updateDocument(id, patch);
-      if (this.trashed || this.closed || this.doc?.id !== id) return;
+      const floorMs = Date.parse(updated.updatedAt);
+      if (!Number.isNaN(floorMs)) this.saveFloors.set(id, floorMs);
+      this.echoDocumentRow(id, updated.updatedAt);
+      if (this.trashed || this.closed || this.remoteGone || this.doc?.id !== id) return;
       // Keep the client JSON. jsonb reorders keys, and that must not look like a new edit.
       this.lastSavedJson = clonePmJson(sentJson);
       this.lastSavedTitle = updated.title ?? '';
@@ -1395,6 +1620,293 @@ export class ReaderService extends Service {
       if (this.doc?.id !== id) return;
       this.saveState = 'error';
       this.saveError = errorMessage(err, '没存上，再试一次');
+    }
+  }
+
+  private async withDetailWrite<T>(run: () => Promise<T>): Promise<T> {
+    this.detailWrites += 1;
+    try {
+      return await run();
+    } finally {
+      this.detailWrites -= 1;
+      this.kickReplay();
+    }
+  }
+
+  private echoDocumentRow(documentId: string | null, updatedAt: string | null | undefined): void {
+    if (!documentId || !updatedAt) return;
+    const atMs = Date.parse(updatedAt);
+    if (Number.isNaN(atMs)) return;
+    const dup = this.echoes.some(
+      (echo) => echo.scope === 'document' && echo.resourceId === documentId && echo.atMs === atMs,
+    );
+    if (dup) return;
+    this.echoes.push({ scope: 'document', resourceId: documentId, atMs });
+    if (this.echoes.length > 200) this.echoes.splice(0, this.echoes.length - 200);
+  }
+
+  private syncActive(): boolean {
+    return this.sync?.active === true;
+  }
+
+  private async pullDetail(id: string, changeAt: string | null, clearLinks: boolean): Promise<boolean> {
+    if (clearLinks && this.doc?.id === id) {
+      this.linksGen += 1;
+      this.linksCache = {};
+      this.links = null;
+    }
+    const read: DetailRead = {
+      id,
+      gen: this.cardWriteGen,
+      floor: this.saveFloors.get(id) ?? null,
+      serial: ++this.detailSerial,
+      changeAt,
+    };
+    this.inflightReads.push(read);
+    let closed = false;
+    try {
+      const detail = await getDocument(id);
+      const notes = await listDocumentAnnotations(id).catch(() =>
+        this.doc?.id === id ? this.annotations : ([] as Annotation[]),
+      );
+      if (this.doc?.id !== id) return false;
+      const mode = classifyRemoteDetail({
+        capturedGen: read.gen,
+        currentGen: this.cardWriteGen,
+        dirty: this.bodyDirty || this.editorLive,
+        inflight: this.saveInflight !== null,
+        detailUpdatedAtMs: Date.parse(detail.updatedAt),
+        floorUpdatedAtMs: read.floor,
+      });
+      if (mode === 'drop') {
+        this.noteDetailDropped(read);
+        return false;
+      }
+      if (read.gen === this.cardWriteGen) {
+        this.replayQueue = this.replayQueue.filter((item) => item.id !== id);
+        if (this.replayStamp.get(id) === this.replayKey(id)) this.replayStamp.delete(id);
+      }
+      if (read.serial < this.appliedSerial) return false;
+      this.appliedSerial = read.serial;
+      this.applyRemoteDetail(detail, notes, mode, read.changeAt);
+      return true;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404 && (this.doc?.id === id || this.doc === null)) {
+        this.replayQueue = this.replayQueue.filter((item) => item.id !== id);
+        this.forgetOpenDocument(id);
+        closed = this.doc === null || this.doc.id !== id;
+      }
+      return false;
+    } finally {
+      this.inflightReads = this.inflightReads.filter((item) => item !== read);
+      this.kickReplay();
+      if (!closed && this.sheet?.kind === 'card') void this.ensureLinks(this.sheet.cardId);
+    }
+  }
+
+  private toastBodyConflict(detail: DocumentDetail, changeAt: string | null): void {
+    if (!changeAt || this.conflictNotifiedAt === changeAt) return;
+    if (!this.lastSavedJson || jsonEqual(displayedPmJson(detail), this.lastSavedJson)) return;
+    this.conflictNotifiedAt = changeAt;
+    this.showToast('另一处改过正文，这里仍是未保存的草稿');
+  }
+
+  private forgetOpenDocument(id: string): void {
+    if (this.selectionPollDocId === id) this.finishSelectionPoll();
+    this.stopPolling();
+    const dirty =
+      this.doc?.id === id &&
+      (this.bodyDirty ||
+        this.titleDirty ||
+        this.editorLive ||
+        this.saveInflight !== null ||
+        this.detailWrites > 0);
+    if (dirty) {
+      this.remoteGone = true;
+      this.clearSaveTimer();
+      if (this.goneNotifiedId !== id) {
+        this.goneNotifiedId = id;
+        this.showToast('这份文档已在别处移入回收站');
+      }
+      return;
+    }
+    if (this.doc?.id === id || this.doc === null) {
+      this.doc = null;
+      this.annotations = [];
+      this.linksGen += 1;
+      this.links = null;
+      this.linksCache = {};
+      this.sheet = null;
+      this.docError = '打不开这份文档';
+      this.resetEditor();
+    }
+  }
+
+  private replayKey(id: string): string {
+    return `${this.cardWriteGen}:${this.saveFloors.get(id) ?? ''}`;
+  }
+
+  private noteDetailDropped(read: DetailRead): void {
+    const id = read.id;
+    if (read.changeAt) {
+      const queued = this.replayQueue.find((item) => item.id === id);
+      if (queued) {
+        if (!queued.changeAt) queued.changeAt = read.changeAt;
+      } else {
+        const inflight = this.inflightReads.find(
+          (item) => item !== read && item.id === id && item.gen === this.cardWriteGen,
+        );
+        if (inflight && !inflight.changeAt) inflight.changeAt = read.changeAt;
+      }
+    }
+    const key = this.replayKey(id);
+    if (this.replayStamp.get(id) === key) return;
+    const covered = this.inflightReads.some(
+      (item) => item !== read && item.id === id && item.gen === this.cardWriteGen,
+    );
+    const decision = planDroppedDocumentReplay({
+      dropped: true,
+      writeInflight: this.isWriteInflight(),
+      recoveryInflight: this.recoveryInflight || covered,
+    });
+    if (decision === 'none') return;
+    this.replayStamp.set(id, key);
+    if (!this.replayQueue.some((item) => item.id === id)) {
+      this.replayQueue.push({ id, changeAt: read.changeAt });
+    }
+    if (decision === 'start') this.kickReplay();
+  }
+
+  private isWriteInflight(): boolean {
+    return this.detailWrites > 0 || this.saveInflight !== null;
+  }
+
+  private kickReplay(): void {
+    if (this.recoveryInflight || this.isWriteInflight()) return;
+    const next = this.replayQueue.find(
+      (item) => !this.inflightReads.some((read) => read.id === item.id && read.gen === this.cardWriteGen),
+    );
+    if (!next) return;
+    this.replayQueue = this.replayQueue.filter((item) => item !== next);
+    void this.runReplay(next.id, next.changeAt);
+  }
+
+  private async runReplay(id: string, changeAt: string | null): Promise<void> {
+    this.recoveryInflight = true;
+    try {
+      await this.pullDetail(id, changeAt, false);
+    } finally {
+      this.recoveryInflight = false;
+      this.kickReplay();
+    }
+  }
+
+  private async settleSelectionJob(id: string): Promise<void> {
+    if (this.selectionJobId !== id || !this.selectionDigesting) return;
+    try {
+      const job = await getJob(id);
+      if (this.selectionJobId !== id) return;
+      if (job.status === 'done' || job.status === 'failed') this.finishSelectionPoll();
+    } catch {
+      // Watchdog still clears the flag.
+    }
+  }
+
+  private onSyncEvent(event: SyncEvent): void {
+    if (event.type === 'active') {
+      if (event.active) {
+        this.stopPolling();
+        this.disarmSelectionLoop();
+      } else {
+        this.syncPolling();
+        if (this.selectionPollDocId) this.armSelectionLoop(this.selectionPollDocId);
+      }
+      return;
+    }
+    this.syncChain = this.syncChain.then(() => this.handleSync(event)).catch(() => undefined);
+  }
+
+  private async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'reset') {
+      if (!this.doc || this.remoteGone) return;
+      try {
+        this.topics = await listTopics('active');
+      } catch {
+        // Keep the picker already on screen.
+      }
+      await this.pullDetail(this.doc.id, null, true);
+      return;
+    }
+    if (event.type !== 'changes') return;
+    const changes = coalesceChanges(consumeEchoes(event.changes, this.echoes));
+    await this.applySyncIntents(planReloads(changes, this.syncView()), changes);
+  }
+
+  private syncView(): SyncView {
+    const id = this.doc?.id ?? null;
+    return {
+      documents: [],
+      openDocumentId: id,
+      listIncludesHead: false,
+      editor:
+        id && this.doc
+          ? {
+              id,
+              updatedAt: this.doc.updatedAt,
+              bodyDirty: this.bodyDirty || this.editorLive,
+              titleDirty: this.titleDirty,
+              saveInflight: this.saveInflight !== null,
+            }
+          : null,
+      topics: this.topics.map((topic) => ({ id: topic.id })),
+      openTopicId: this.doc?.topicId ?? null,
+      mapTopicId: null,
+      readerDocumentId: id,
+      readerActiveCardId: this.sheet?.kind === 'card' ? this.sheet.cardId : null,
+      reviewInSession: false,
+      jobs: [],
+      activeJobId: this.selectionJobId,
+    };
+  }
+
+  private async applySyncIntents(intents: ReloadIntent[], changes: SyncChange[]): Promise<void> {
+    const atById = new Map<string, string>();
+    for (const change of changes) {
+      if (change.scope === 'document' && change.op === 'upsert' && change.resourceId) {
+        atById.set(change.resourceId, change.at);
+      }
+    }
+    for (const intent of intents) {
+      if (intent.kind === 'document' && this.doc?.id === intent.id) {
+        if (intent.op === 'delete') this.forgetOpenDocument(intent.id);
+        else if (!this.remoteGone) await this.pullDetail(intent.id, atById.get(intent.id) ?? null, true);
+      } else if (intent.kind === 'job' && intent.id === this.selectionJobId) {
+        await this.settleSelectionJob(intent.id);
+      } else if (intent.kind === 'topic' && intent.op === 'delete') {
+        this.topics = this.topics.filter((topic) => topic.id !== intent.id);
+      } else if (intent.kind === 'topic' && intent.op === 'upsert') {
+        await this.refreshReaderTopic(intent.id);
+      } else if (intent.kind === 'topics-page') {
+        try {
+          this.topics = await listTopics('active');
+        } catch {
+          // Keep the picker already on screen.
+        }
+      }
+    }
+  }
+
+  private async refreshReaderTopic(id: string): Promise<void> {
+    try {
+      const topic = await getTopic(id);
+      const index = this.topics.findIndex((item) => item.id === id);
+      this.topics =
+        index < 0 ? [...this.topics, topic] : this.topics.map((item, i) => (i === index ? topic : item));
+      if (this.doc?.topicId === id) this.doc = { ...this.doc, topicTitle: topic.title };
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        this.topics = this.topics.filter((item) => item.id !== id);
+      }
     }
   }
 }

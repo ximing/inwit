@@ -3,24 +3,38 @@ import 'react-native-gesture-handler';
 import { observer, register, resolve, RSRoot, useService } from '@rabjs/react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { ToastHost } from '@/components/toast';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { AuthService } from '@/services/auth.service';
 import { LayoutService } from '@/services/layout.service';
+import { SyncService } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
 import { ThemeService, useTheme } from '@/theme';
 
 register(ThemeService);
 register(AuthService);
+register(SyncService);
 register(LayoutService);
 register(ToastService);
 register(AssetUrlsService);
 resolve(ThemeService);
 resolve(AuthService);
+resolve(SyncService);
 resolve(LayoutService);
 resolve(ToastService);
 resolve(AssetUrlsService);
+
+const SyncBridge = observer(function SyncBridge() {
+  const auth = useService(AuthService);
+  const sync = useService(SyncService);
+  const loggedIn = auth.user !== null && !auth.bootstrapping;
+  useEffect(() => {
+    sync.setSession(loggedIn);
+  }, [sync, loggedIn]);
+  return null;
+});
 
 const Splash = observer(function Splash() {
   const auth = useService(AuthService);
@@ -162,6 +176,7 @@ const RootNavigation = observer(function RootNavigation() {
 export default function RootLayout() {
   return (
     <RSRoot>
+      <SyncBridge />
       <RootNavigation />
     </RSRoot>
   );

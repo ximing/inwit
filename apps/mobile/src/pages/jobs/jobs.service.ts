@@ -3,6 +3,9 @@ import type { AgentExecution, Job, JobQueue, JobQueueCounts, JobStatus, JobType,
 import { errorMessage } from '@/api/client';
 import { cancelJob, getJobQueue, getJobUsage, listJobExecutions, listJobs, retryJob } from '@/api/jobs';
 import { formatTimeHm } from '@/lib/format';
+import { consumeEchoes } from '@/lib/sync-echo';
+import { coalesceChanges, planReloads, type EchoStamp, type SyncView } from '@/lib/sync-plan';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import type { ColorTokens } from '@/theme';
 
 const POLL_MS = 5000;
@@ -163,6 +166,22 @@ export class JobsService extends Service {
   appActive = true;
   pollTimer: ReturnType<typeof setInterval> | null = null;
   tickTimer: ReturnType<typeof setInterval> | null = null;
+  private sync: SyncService | null = null;
+  private unsubscribeSync: (() => void) | null = null;
+  private syncChain: Promise<void> = Promise.resolve();
+  private echoes: EchoStamp[] = [];
+  private queueGen = 0;
+  private historyGen = 0;
+
+  constructor() {
+    super();
+    try {
+      this.sync = this.resolve(SyncService);
+      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
+    } catch {
+      this.sync = null;
+    }
+  }
 
   get pollingAllowed(): boolean {
     return this.focused && this.appActive;
@@ -251,10 +270,14 @@ export class JobsService extends Service {
   }
 
   async loadQueue(): Promise<void> {
+    const gen = ++this.queueGen;
     try {
-      this.queue = await getJobQueue();
+      const queue = await getJobQueue();
+      if (gen !== this.queueGen) return;
+      this.queue = queue;
       this.syncTick();
     } catch (err) {
+      if (gen !== this.queueGen) return;
       if (!this.queue) this.error = errorMessage(err, '加载队列失败');
     }
   }
@@ -268,16 +291,23 @@ export class JobsService extends Service {
   }
 
   async loadHistory(): Promise<void> {
+    const gen = ++this.historyGen;
+    const pageNum = this.jobsPage;
+    const status = this.jobStatus;
+    const type = this.jobType;
     try {
       const page = await listJobs({
         limit: this.jobsLimit,
-        offset: (this.jobsPage - 1) * this.jobsLimit,
-        ...(this.jobStatus !== '' ? { status: this.jobStatus } : {}),
-        ...(this.jobType !== '' ? { type: this.jobType } : {}),
+        offset: (pageNum - 1) * this.jobsLimit,
+        ...(status !== '' ? { status } : {}),
+        ...(type !== '' ? { type } : {}),
       });
+      if (gen !== this.historyGen || pageNum !== this.jobsPage) return;
+      if (status !== this.jobStatus || type !== this.jobType) return;
       this.jobs = page.items;
       this.jobsTotal = page.total;
     } catch (err) {
+      if (gen !== this.historyGen) return;
       this.error = errorMessage(err, '加载任务失败');
     }
   }
@@ -360,12 +390,14 @@ export class JobsService extends Service {
   }
 
   syncPolling(): void {
-    if (this.pollingAllowed) this.startPolling();
+    if (this.syncActive()) this.stopPolling();
+    else if (this.pollingAllowed) this.startPolling();
     else this.stopPolling();
     this.syncTick();
   }
 
   startPolling(): void {
+    if (this.syncActive()) return;
     if (this.pollTimer !== null) return;
     this.pollTimer = setInterval(() => {
       void this.tickQueue();
@@ -397,8 +429,56 @@ export class JobsService extends Service {
   }
 
   override destroy(): void {
+    this.unsubscribeSync?.();
+    this.unsubscribeSync = null;
+    this.sync = null;
     this.stopPolling();
     this.stopTick();
     super.destroy();
+  }
+
+  private syncActive(): boolean {
+    return this.sync?.active === true;
+  }
+
+  private onSyncEvent(event: SyncEvent): void {
+    if (event.type === 'active') {
+      if (event.active) this.stopPolling();
+      else this.syncPolling();
+      return;
+    }
+    this.syncChain = this.syncChain.then(() => this.handleSync(event)).catch(() => undefined);
+  }
+
+  private async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'reset') {
+      await this.load();
+      return;
+    }
+    if (event.type !== 'changes') return;
+    const changes = coalesceChanges(consumeEchoes(event.changes, this.echoes));
+    const intents = planReloads(changes, this.syncView());
+    if (!intents.some((intent) => intent.kind === 'job')) return;
+    const prev = this.queueSignature();
+    await this.loadQueue();
+    if (this.queueSignature() !== prev) await this.loadHistory();
+  }
+
+  private syncView(): SyncView {
+    const jobs = [...this.running, ...this.pending];
+    return {
+      documents: [],
+      openDocumentId: null,
+      listIncludesHead: false,
+      editor: null,
+      topics: [],
+      openTopicId: null,
+      mapTopicId: null,
+      readerDocumentId: null,
+      readerActiveCardId: null,
+      reviewInSession: false,
+      jobs: jobs.map((job) => ({ id: job.id, updatedAt: job.updatedAt })),
+      activeJobId: null,
+    };
   }
 }

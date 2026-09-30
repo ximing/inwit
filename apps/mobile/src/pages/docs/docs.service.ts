@@ -10,7 +10,7 @@ import {
   type Job,
   type Topic,
 } from '@inwit/dto';
-import { errorMessage } from '@/api/client';
+import { ApiError, errorMessage } from '@/api/client';
 import {
   createChat,
   createDocument,
@@ -25,10 +25,20 @@ import { createTopic, listTopics } from '@/api/topics';
 import { describeDocumentStage, pickDocumentJob, type DocPipelineStage } from '@/lib/doc-pipeline';
 import { checkpointPercent } from '@/lib/import-logic';
 import { isBlankPmDoc, textToPmDoc } from '@/lib/pm-doc';
+import { consumeEchoes } from '@/lib/sync-echo';
+import {
+  coalesceChanges,
+  planReloads,
+  type EchoStamp,
+  type ReloadIntent,
+  type SyncView,
+} from '@/lib/sync-plan';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
 import { ImportService } from './import.service';
 
 const DOC_PAGE = 20;
+const LIST_LIMIT_MAX = 100;
 const POLL_MS = 3000;
 
 function asListItem(
@@ -76,6 +86,25 @@ export class DocsService extends Service {
   appActive = true;
   pollTimer: ReturnType<typeof setInterval> | null = null;
   loadGen = 0;
+  private jobsGen = 0;
+  private opGen = 0;
+  private hiddenDocs = new Map<string, number>();
+  private sync: SyncService | null = null;
+  private unsubscribeSync: (() => void) | null = null;
+  private syncChain: Promise<void> = Promise.resolve();
+  private echoes: EchoStamp[] = [];
+  private pinned = new Set<string>();
+  private rowGen = new Map<string, number>();
+
+  constructor() {
+    super();
+    try {
+      this.sync = this.resolve(SyncService);
+      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
+    } catch {
+      this.sync = null;
+    }
+  }
 
   get toastService(): ToastService {
     return this.resolve(ToastService);
@@ -196,6 +225,7 @@ export class DocsService extends Service {
 
   async loadDocuments(): Promise<void> {
     const gen = ++this.loadGen;
+    const listedAt = this.opGen;
     try {
       const page = await listDocuments({
         ...(this.filterTopicId ? { topicId: this.filterTopicId } : {}),
@@ -203,8 +233,7 @@ export class DocsService extends Service {
         offset: 0,
       });
       if (gen !== this.loadGen) return;
-      this.documents = page.items;
-      this.documentsTotal = page.total;
+      this.applyServerPage(page.items, page.total, [], false, listedAt);
       await this.refreshJobs();
       this.syncPolling();
     } catch (err) {
@@ -216,6 +245,7 @@ export class DocsService extends Service {
   async loadMore(): Promise<void> {
     if (!this.hasMore || this.$model.loadMore.loading) return;
     const gen = this.loadGen;
+    const listedAt = this.opGen;
     const page = await listDocuments({
       ...(this.filterTopicId ? { topicId: this.filterTopicId } : {}),
       limit: DOC_PAGE,
@@ -223,7 +253,11 @@ export class DocsService extends Service {
     });
     if (gen !== this.loadGen) return;
     const have = new Set(this.documents.map((item) => item.id));
-    this.documents = [...this.documents, ...page.items.filter((item) => !have.has(item.id))];
+    const incoming = page.items.filter((item) => {
+      if (!this.keepListed(item.id, listedAt)) return false;
+      return !have.has(item.id);
+    });
+    this.documents = [...this.documents, ...incoming];
     this.documentsTotal = page.total;
     await this.refreshJobs();
     this.syncPolling();
@@ -246,6 +280,7 @@ export class DocsService extends Service {
           });
       this.draft = '';
       this.ingestCreated(created);
+      this.echoDocumentRow(created.id, created.updatedAt);
       this.showToast(useChat ? '问题扔出去了，正在答' : '已收下，消化中');
       return created.id;
     } catch (err) {
@@ -259,6 +294,8 @@ export class DocsService extends Service {
       cardCount: 0,
       topicTitle: this.topicTitleById(created.topicId) ?? this.captureTopic?.title ?? null,
     });
+    this.pinned.add(created.id);
+    this.bumpRow(created.id);
     const matchesFilter = this.filterTopicId === null || this.filterTopicId === created.topicId;
     if (matchesFilter) {
       const exists = this.documents.some((doc) => doc.id === created.id);
@@ -277,6 +314,7 @@ export class DocsService extends Service {
         ...(topicId ? { topicId } : {}),
       });
       this.ingestCreated(created);
+      this.echoDocumentRow(created.id, created.updatedAt);
       return created.id;
     } catch (err) {
       this.showToast(errorMessage(err, '没建出来，再试一次'));
@@ -288,9 +326,11 @@ export class DocsService extends Service {
     const trimmed = rawTitle.trim();
     try {
       const updated = await updateDocument(id, { title: trimmed.length === 0 ? null : trimmed });
+      this.bumpRow(id);
       this.documents = this.documents.map((item) =>
         item.id === id ? { ...item, title: updated.title, updatedAt: updated.updatedAt } : item,
       );
+      this.echoDocumentRow(id, updated.updatedAt);
       return true;
     } catch (err) {
       this.showToast(errorMessage(err, '没改成'));
@@ -306,9 +346,8 @@ export class DocsService extends Service {
     }
     try {
       await deleteDocument(id);
-      const had = this.documents.some((doc) => doc.id === id);
-      this.documents = this.documents.filter((doc) => doc.id !== id);
-      if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
+      this.bumpRow(id);
+      this.forgetDocument(id);
       this.showToast('已移入回收站');
     } catch (err) {
       this.showToast(errorMessage(err, '没移进去'));
@@ -360,17 +399,25 @@ export class DocsService extends Service {
   }
 
   override destroy(): void {
+    this.unsubscribeSync?.();
+    this.unsubscribeSync = null;
+    this.sync = null;
     this.stopPolling();
     super.destroy();
   }
 
   syncPolling(): void {
+    if (this.syncActive()) {
+      this.stopPolling();
+      return;
+    }
     const listPending = this.documents.some((item) => item.status === 'pending');
     if (listPending && this.pollingAllowed) this.startPolling();
     else this.stopPolling();
   }
 
   startPolling(): void {
+    if (this.syncActive()) return;
     if (this.pollTimer !== null) return;
     this.pollTimer = setInterval(() => {
       void this.tickPending();
@@ -388,8 +435,10 @@ export class DocsService extends Service {
   }
 
   async refreshJobs(): Promise<void> {
+    const gen = ++this.jobsGen;
     try {
       const queue = await getJobQueue();
+      if (gen !== this.jobsGen) return;
       this.activeJobs = [...queue.running, ...queue.pending];
     } catch {
       // keep last snapshot
@@ -397,13 +446,181 @@ export class DocsService extends Service {
   }
 
   async refreshOne(id: string): Promise<void> {
+    const gen = this.bumpRow(id);
     try {
       const detail = await getDocument(id);
+      if (this.rowGen.get(id) !== gen) return;
+      if (!this.documents.some((item) => item.id === id)) return;
       this.documents = this.documents.map((item) =>
         item.id === id ? mergeDetail(item, detail) : item,
       );
-    } catch {
-      // Transient poll errors should not wipe the list.
+    } catch (err) {
+      if (this.rowGen.get(id) !== gen) return;
+      if (err instanceof ApiError && err.status === 404) this.forgetDocument(id);
     }
   }
+
+  private syncActive(): boolean {
+    return this.sync?.active === true;
+  }
+
+  private bumpRow(id: string): number {
+    const gen = (this.rowGen.get(id) ?? 0) + 1;
+    this.rowGen.set(id, gen);
+    return gen;
+  }
+
+  private echoDocumentRow(documentId: string | null, updatedAt: string | null | undefined): void {
+    if (!documentId || !updatedAt) return;
+    const atMs = Date.parse(updatedAt);
+    if (Number.isNaN(atMs)) return;
+    const dup = this.echoes.some(
+      (echo) => echo.scope === 'document' && echo.resourceId === documentId && echo.atMs === atMs,
+    );
+    if (dup) return;
+    this.echoes.push({ scope: 'document', resourceId: documentId, atMs });
+    if (this.echoes.length > 200) this.echoes.splice(0, this.echoes.length - 200);
+  }
+
+  private forgetDocument(id: string): void {
+    this.pinned.delete(id);
+    this.hiddenDocs.set(id, ++this.opGen);
+    const had = this.documents.some((doc) => doc.id === id);
+    this.documents = this.documents.filter((doc) => doc.id !== id);
+    if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
+    this.syncPolling();
+  }
+
+  private keepListed(id: string, listedAt: number): boolean {
+    const hiddenAt = this.hiddenDocs.get(id);
+    if (hiddenAt === undefined) return true;
+    if (hiddenAt > listedAt) return false;
+    this.hiddenDocs.delete(id);
+    return true;
+  }
+
+  private applyServerPage(
+    items: DocumentListItem[],
+    total: number,
+    deleteIds: readonly string[],
+    keepTail: boolean,
+    listedAt: number,
+  ): void {
+    const visible = items.filter((item) => this.keepListed(item.id, listedAt));
+    const prev = new Map(this.documents.map((item) => [item.id, item]));
+    const seen = new Set(visible.map((item) => item.id));
+    for (const id of seen) this.pinned.delete(id);
+    const merged = visible.map((item) => newerRow(prev.get(item.id), item));
+    const pinned = this.documents.filter((item) => this.pinned.has(item.id) && !seen.has(item.id));
+    const tail = keepTail
+      ? this.documents.filter((item) => !seen.has(item.id) && !this.pinned.has(item.id))
+      : [];
+    const drop = new Set(deleteIds);
+    this.documents = [...pinned, ...merged, ...tail].filter((item) => !drop.has(item.id));
+    this.documentsTotal = Math.max(total, this.documents.length);
+  }
+
+  private onSyncEvent(event: SyncEvent): void {
+    if (event.type === 'active') {
+      if (event.active) this.stopPolling();
+      else this.syncPolling();
+      return;
+    }
+    this.syncChain = this.syncChain.then(() => this.handleSync(event)).catch(() => undefined);
+  }
+
+  private async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'reset') {
+      await this.reloadFromReset();
+      return;
+    }
+    if (event.type !== 'changes') return;
+    const changes = coalesceChanges(consumeEchoes(event.changes, this.echoes));
+    await this.applySyncIntents(planReloads(changes, this.syncView()));
+  }
+
+  private syncView(): SyncView {
+    return {
+      documents: this.documents.map((item) => ({ id: item.id, updatedAt: item.updatedAt })),
+      openDocumentId: null,
+      listIncludesHead: true,
+      editor: null,
+      topics: [],
+      openTopicId: null,
+      mapTopicId: null,
+      readerDocumentId: null,
+      readerActiveCardId: null,
+      reviewInSession: false,
+      jobs: [],
+      activeJobId: null,
+    };
+  }
+
+  private async applySyncIntents(intents: ReloadIntent[]): Promise<void> {
+    const deleteIds = intents.flatMap((intent) =>
+      intent.kind === 'document' && intent.op === 'delete' ? [intent.id] : [],
+    );
+    const upserts = intents.flatMap((intent) =>
+      intent.kind === 'document' && intent.op === 'upsert' ? [intent.id] : [],
+    );
+    if (intents.some((intent) => intent.kind === 'documents-page')) {
+      await this.reloadListMerging(deleteIds);
+    }
+    for (const id of deleteIds) {
+      this.bumpRow(id);
+      this.forgetDocument(id);
+    }
+    if (intents.some((intent) => intent.kind === 'job')) await this.refreshJobs();
+    for (const id of upserts) {
+      if (this.documents.some((item) => item.id === id)) await this.refreshOne(id);
+    }
+  }
+
+  private async reloadFromReset(): Promise<void> {
+    try {
+      const topics = await listTopics('active');
+      this.topics = topics;
+    } catch {
+      // Keep the chips already on screen.
+    }
+    await this.reloadListMerging([], false);
+    await this.refreshJobs();
+  }
+
+  private async reloadListMerging(deleteIds: readonly string[], keepTail = true): Promise<void> {
+    const gen = ++this.loadGen;
+    const listedAt = this.opGen;
+    const want = Math.max(this.documents.length, DOC_PAGE);
+    const topicId = this.filterTopicId;
+    try {
+      const items: DocumentListItem[] = [];
+      let total = 0;
+      let offset = 0;
+      while (items.length < want) {
+        const limit = Math.min(LIST_LIMIT_MAX, want - items.length);
+        const page = await listDocuments({
+          ...(topicId ? { topicId } : {}),
+          limit,
+          offset,
+        });
+        total = page.total;
+        items.push(...page.items);
+        if (page.items.length === 0 || items.length >= total) break;
+        offset += page.items.length;
+      }
+      if (gen !== this.loadGen || this.filterTopicId !== topicId) return;
+      this.applyServerPage(items, total, deleteIds, keepTail, listedAt);
+      this.syncPolling();
+    } catch {
+      // Keep the rows already on screen.
+    }
+  }
+}
+
+function newerRow(local: DocumentListItem | undefined, incoming: DocumentListItem): DocumentListItem {
+  if (!local) return incoming;
+  const localMs = Date.parse(local.updatedAt);
+  const nextMs = Date.parse(incoming.updatedAt);
+  if (!Number.isNaN(localMs) && !Number.isNaN(nextMs) && localMs > nextMs) return local;
+  return incoming;
 }

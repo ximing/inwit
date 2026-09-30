@@ -34,10 +34,20 @@ import {
   updateTopic,
 } from '@/api/topics';
 import { textToPmDoc } from '@/lib/pm-doc';
+import { consumeEchoes } from '@/lib/sync-echo';
+import {
+  coalesceChanges,
+  planReloads,
+  type EchoStamp,
+  type ReloadIntent,
+  type SyncView,
+} from '@/lib/sync-plan';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
 
 const POLL_MS = 3000;
 const DOC_PAGE = 20;
+const LIST_LIMIT_MAX = 100;
 
 export type TopicTab = 'docs' | 'map' | 'feed';
 export type TopicEditField = 'title' | 'goal';
@@ -177,6 +187,34 @@ export class TopicsService extends Service {
   jobPollTimer: ReturnType<typeof setInterval> | null = null;
   docPollTimer: ReturnType<typeof setInterval> | null = null;
   topicLoadGen = 0;
+  private jobEpoch = 0;
+  private sync: SyncService | null = null;
+  private unsubscribeSync: (() => void) | null = null;
+  private syncChain: Promise<void> = Promise.resolve();
+  private echoes: EchoStamp[] = [];
+  private pinnedDocs = new Set<string>();
+  private pinnedTopics = new Set<string>();
+  private rowGen = new Map<string, number>();
+  private topicGen = new Map<string, number>();
+  private topicsGen = 0;
+  private docListGen = 0;
+  private mapGen = 0;
+  private summaryGen = 0;
+  private nodeGen = 0;
+  private opGen = 0;
+  private hiddenDocs = new Map<string, number>();
+  private hiddenTopics = new Map<string, number>();
+  private topicOpens = 0;
+
+  constructor() {
+    super();
+    try {
+      this.sync = this.resolve(SyncService);
+      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
+    } catch {
+      this.sync = null;
+    }
+  }
 
   get toastService(): ToastService {
     return this.resolve(ToastService);
@@ -371,6 +409,7 @@ export class TopicsService extends Service {
   }
 
   closeDrawer(): void {
+    this.nodeGen += 1;
     this.selectedNodeId = null;
     this.nodeDetail = null;
   }
@@ -429,6 +468,7 @@ export class TopicsService extends Service {
   }
 
   watchJob(job: Job): void {
+    this.jobEpoch += 1;
     this.activeJob = job;
     if (job.status === 'pending' || job.status === 'running') {
       if (this.pollingAllowed) this.startJobPolling();
@@ -438,6 +478,7 @@ export class TopicsService extends Service {
   }
 
   startJobPolling(): void {
+    if (this.syncActive()) return;
     if (this.jobPollTimer !== null) return;
     this.jobPollTimer = setInterval(() => {
       void this.tickJob();
@@ -451,6 +492,7 @@ export class TopicsService extends Service {
   }
 
   startDocPolling(): void {
+    if (this.syncActive()) return;
     if (this.docPollTimer !== null) return;
     this.docPollTimer = setInterval(() => {
       void this.tickPending();
@@ -464,6 +506,10 @@ export class TopicsService extends Service {
   }
 
   syncDocPolling(): void {
+    if (this.syncActive()) {
+      this.stopDocPolling();
+      return;
+    }
     const pending = this.documents.some((item) => item.status === 'pending');
     if (pending && this.pollingAllowed) this.startDocPolling();
     else this.stopDocPolling();
@@ -471,12 +517,30 @@ export class TopicsService extends Service {
 
   async load(): Promise<void> {
     this.error = null;
+    const gen = ++this.topicsGen;
+    const listedAt = this.opGen;
     try {
       const topics = await listTopics();
-      this.items = await Promise.all(topics.map((topic) => this._enrich(topic)));
+      const enriched = await Promise.all(topics.map((topic) => this._enrich(topic)));
+      if (gen === this.topicsGen) {
+        const visible = enriched.filter((item) => this.keepTopic(item.topic.id, listedAt));
+        const seen = new Set(visible.map((item) => item.topic.id));
+        const prev = new Map(this.items.map((item) => [item.topic.id, item]));
+        const pinned = this.items.filter(
+          (item) => this.pinnedTopics.has(item.topic.id) && !seen.has(item.topic.id),
+        );
+        for (const id of seen) this.pinnedTopics.delete(id);
+        this.items = [
+          ...pinned,
+          ...visible.map((item) => {
+            const local = prev.get(item.topic.id);
+            if (!local) return item;
+            return { ...item, topic: newerTopic(local.topic, item.topic) };
+          }),
+        ];
+      }
     } catch (err) {
-      this.error = errorMessage(err, '加载主题失败');
-      return;
+      if (gen === this.topicsGen) this.error = errorMessage(err, '加载主题失败');
     }
     try {
       const stats = await getReviewTopicStats();
@@ -490,6 +554,16 @@ export class TopicsService extends Service {
 
   async openTopic(id: string | null): Promise<void> {
     const gen = ++this.topicLoadGen;
+    this.jobEpoch += 1;
+    this.topicOpens += 1;
+    try {
+      await this.openTopicBody(id, gen);
+    } finally {
+      this.topicOpens -= 1;
+    }
+  }
+
+  private async openTopicBody(id: string | null, gen: number): Promise<void> {
     this.topicId = id;
     this.detailError = null;
     this.closeDrawer();
@@ -499,6 +573,10 @@ export class TopicsService extends Service {
     this.paneMenuOpen = false;
     this.draft = '';
     this.tab = 'docs';
+    const docGen = ++this.docListGen;
+    const mapGen = ++this.mapGen;
+    const summaryGen = ++this.summaryGen;
+    const topicListedAt = this.opGen;
     if (!id) {
       this.topic = null;
       this.tree = [];
@@ -510,40 +588,70 @@ export class TopicsService extends Service {
       return;
     }
     this.collapsedIds = await readCollapsed(id);
-    try {
-      const [topic, map, summary, docs, active] = await Promise.all([
-        getTopic(id),
-        getTopicMap(id),
-        getTopicMapSummary(id),
-        listDocuments({ topicId: id, limit: DOC_PAGE, offset: 0 }),
-        getActiveTopicJob(id),
-      ]);
-      if (gen !== this.topicLoadGen) return;
-      this.topic = topic;
-      this.applyMap(map.nodes);
-      this.summary = summary;
-      this.documents = docs.items;
-      this.documentsTotal = docs.total;
+    const listedAt = this.opGen;
+    const [topicR, mapR, summaryR, docsR, jobR] = await Promise.allSettled([
+      getTopic(id),
+      getTopicMap(id),
+      getTopicMapSummary(id),
+      listDocuments({ topicId: id, limit: DOC_PAGE, offset: 0 }),
+      getActiveTopicJob(id),
+    ]);
+    if (gen !== this.topicLoadGen) return;
+    const hiddenTopicAt = this.hiddenTopics.get(id);
+    if (hiddenTopicAt !== undefined && hiddenTopicAt > topicListedAt) return;
+    if (topicR.status === 'rejected') {
+      this.detailError = errorMessage(topicR.reason, '打不开这个主题');
+      this.topic = null;
+      if (mapGen === this.mapGen) {
+        this.tree = [];
+        this.titleByNodeId = {};
+      }
+      if (summaryGen === this.summaryGen) this.summary = null;
+      if (docGen === this.docListGen) {
+        this.documents = [];
+        this.documentsTotal = 0;
+      }
+      this.stopDocPolling();
+      return;
+    }
+    const topic = topicR.value;
+    if (hiddenTopicAt !== undefined) this.hiddenTopics.delete(id);
+    this.topic = topic;
+    if (mapGen === this.mapGen) {
+      if (mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
+      else {
+        this.tree = [];
+        this.titleByNodeId = {};
+      }
+    }
+    if (summaryGen === this.summaryGen) {
+      this.summary = summaryR.status === 'fulfilled' ? summaryR.value : null;
+    }
+    if (docGen === this.docListGen) {
+      if (docsR.status === 'fulfilled') {
+        this.applyDocPage(docsR.value.items, docsR.value.total, [], false, listedAt);
+      } else {
+        this.documents = [];
+        this.documentsTotal = 0;
+      }
+    }
+    const summary =
+      summaryGen === this.summaryGen && summaryR.status === 'fulfilled' ? summaryR.value : this.summary;
+    if (summary) {
       this.patchItem(id, {
         cardCount: summary.cardCount,
-        documentCount: docs.total,
+        documentCount:
+          docGen === this.docListGen && docsR.status === 'fulfilled'
+            ? docsR.value.total
+            : this.documentsTotal,
         totalNodes: summary.totalNodes,
         uncoveredNodes: summary.uncoveredNodes,
         masteryPct: summary.masteryPct,
       });
-      if (topic.status === 'archived') this.archiveOpen = true;
-      if (active.job) this.watchJob(active.job);
-      this.syncDocPolling();
-    } catch (err) {
-      if (gen !== this.topicLoadGen) return;
-      this.detailError = errorMessage(err, '打不开这个主题');
-      this.topic = null;
-      this.tree = [];
-      this.summary = null;
-      this.documents = [];
-      this.documentsTotal = 0;
-      this.stopDocPolling();
     }
+    if (topic.status === 'archived') this.archiveOpen = true;
+    if (jobR.status === 'fulfilled' && jobR.value.job) this.watchJob(jobR.value.job);
+    this.syncDocPolling();
   }
 
   async createNewTopic(): Promise<string | null> {
@@ -555,7 +663,10 @@ export class TopicsService extends Service {
     this.newTopicError = null;
     try {
       const topic = await createTopic({ title });
-      this.items = [blankItem(topic), ...this.items];
+      this.pinnedTopics.add(topic.id);
+      this.bumpTopic(topic.id);
+      this.items = [blankItem(topic), ...this.items.filter((item) => item.topic.id !== topic.id)];
+      this.echoRow('topic', topic.id, topic.updatedAt);
       this.newTitle = '';
       return topic.id;
     } catch (err) {
@@ -577,7 +688,9 @@ export class TopicsService extends Service {
       this.detailError = null;
       try {
         const updated = await updateTopic(topicId, { title });
+        this.bumpTopic(updated.id);
         if (this.topic?.id === topicId) this.applyTopic(updated);
+        this.echoRow('topic', updated.id, updated.updatedAt);
       } catch (err) {
         this.detailError = errorMessage(err, '标题没保存成');
         return;
@@ -594,7 +707,9 @@ export class TopicsService extends Service {
     this.detailError = null;
     try {
       const updated = await updateTopic(topicId, { goal: next });
+      this.bumpTopic(updated.id);
       if (this.topic?.id === topicId) this.applyTopic(updated);
+      this.echoRow('topic', updated.id, updated.updatedAt);
     } catch (err) {
       this.detailError = errorMessage(err, '学习目标没保存成');
       return;
@@ -607,7 +722,10 @@ export class TopicsService extends Service {
     this.paneMenuOpen = false;
     this.error = null;
     try {
-      this.applyTopic(await archiveTopic(this.topic.id));
+      const archived = await archiveTopic(this.topic.id);
+      this.bumpTopic(archived.id);
+      this.applyTopic(archived);
+      this.echoRow('topic', archived.id, archived.updatedAt);
       this.archiveOpen = true;
       this.showToast('已归档');
     } catch (err) {
@@ -620,7 +738,10 @@ export class TopicsService extends Service {
     this.paneMenuOpen = false;
     this.error = null;
     try {
-      this.applyTopic(await restoreTopic(this.topic.id));
+      const restored = await restoreTopic(this.topic.id);
+      this.bumpTopic(restored.id);
+      this.applyTopic(restored);
+      this.echoRow('topic', restored.id, restored.updatedAt);
       this.showToast('已取消归档');
     } catch (err) {
       this.detailError = errorMessage(err, '恢复失败');
@@ -634,6 +755,7 @@ export class TopicsService extends Service {
     const id = this.topic.id;
     try {
       await deleteTopic(id);
+      this.hideTopic(id);
       this.items = this.items.filter((item) => item.topic.id !== id);
       this.topic = null;
       this.tree = [];
@@ -641,6 +763,9 @@ export class TopicsService extends Service {
       this.documents = [];
       this.documentsTotal = 0;
       this.topicId = null;
+      this.nodeGen += 1;
+      this.selectedNodeId = null;
+      this.nodeDetail = null;
       this.stopJobPolling();
       this.stopDocPolling();
       return true;
@@ -671,6 +796,8 @@ export class TopicsService extends Service {
   }
 
   ingestCreated(created: Document): void {
+    this.pinnedDocs.add(created.id);
+    this.bumpRow(created.id);
     const item = asListItem(created, {
       cardCount: 0,
       topicTitle: this.topic?.title ?? null,
@@ -682,41 +809,46 @@ export class TopicsService extends Service {
         this.patchItem(this.topicId, { documentCount: this.documentsTotal });
       }
     }
+    if (this.topicOpens === 0) this.echoRow('document', created.id, created.updatedAt);
     this.syncDocPolling();
   }
 
   async refreshAfterJob(): Promise<void> {
     if (!this.topicId) return;
-    try {
-      const [map, summary, docs] = await Promise.all([
-        getTopicMap(this.topicId),
-        getTopicMapSummary(this.topicId),
-        listDocuments({ topicId: this.topicId, limit: DOC_PAGE, offset: 0 }),
-      ]);
-      this.applyMap(map.nodes);
-      this.summary = summary;
-      this.documents = docs.items;
-      this.documentsTotal = docs.total;
-      this.patchItem(this.topicId, {
-        cardCount: summary.cardCount,
-        documentCount: docs.total,
-        totalNodes: summary.totalNodes,
-        uncoveredNodes: summary.uncoveredNodes,
-        masteryPct: summary.masteryPct,
-      });
-      if (this.selectedNodeId) await this.openNode(this.selectedNodeId);
-      this.syncDocPolling();
-    } catch (err) {
-      this.detailError = errorMessage(err, '刷新地图失败');
+    const topicId = this.topicId;
+    const docGen = ++this.docListGen;
+    const mapGen = ++this.mapGen;
+    const summaryGen = ++this.summaryGen;
+    const listedAt = this.opGen;
+    const want = Math.min(LIST_LIMIT_MAX, Math.max(this.documents.length, DOC_PAGE));
+    const [mapR, summaryR, docsR] = await Promise.allSettled([
+      getTopicMap(topicId),
+      getTopicMapSummary(topicId),
+      listDocuments({ topicId, limit: want, offset: 0 }),
+    ]);
+    if (this.topicId !== topicId) return;
+    if (mapGen === this.mapGen) {
+      if (mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
+      else this.detailError = errorMessage(mapR.reason, '刷新地图失败');
     }
+    if (summaryGen === this.summaryGen && summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
+    if (docGen === this.docListGen && docsR.status === 'fulfilled') {
+      this.applyDocPage(docsR.value.items, docsR.value.total, [], true, listedAt);
+      this.patchItem(topicId, { documentCount: docsR.value.total });
+    }
+    if (this.selectedNodeId) await this.openNode(this.selectedNodeId);
+    this.syncDocPolling();
   }
 
   async refreshSummary(): Promise<void> {
     if (!this.topicId) return;
+    const topicId = this.topicId;
+    const summaryGen = ++this.summaryGen;
     try {
-      const summary = await getTopicMapSummary(this.topicId);
+      const summary = await getTopicMapSummary(topicId);
+      if (summaryGen !== this.summaryGen || this.topicId !== topicId) return;
       this.summary = summary;
-      this.patchItem(this.topicId, {
+      this.patchItem(topicId, {
         cardCount: summary.cardCount,
         totalNodes: summary.totalNodes,
         uncoveredNodes: summary.uncoveredNodes,
@@ -728,10 +860,14 @@ export class TopicsService extends Service {
   }
 
   async openNode(nodeId: string): Promise<void> {
+    const gen = ++this.nodeGen;
     this.selectedNodeId = nodeId;
     try {
-      this.nodeDetail = await getMapNodeDetail(nodeId);
+      const detail = await getMapNodeDetail(nodeId);
+      if (gen !== this.nodeGen) return;
+      this.nodeDetail = detail;
     } catch (err) {
+      if (gen !== this.nodeGen) return;
       this.detailError = errorMessage(err, '打不开这个节点');
       this.nodeDetail = null;
     }
@@ -797,7 +933,7 @@ export class TopicsService extends Service {
   }
 
   async tickJob(): Promise<void> {
-    if (!this.pollingAllowed) {
+    if (!this.syncActive() && !this.pollingAllowed) {
       this.stopJobPolling();
       return;
     }
@@ -806,8 +942,11 @@ export class TopicsService extends Service {
       this.stopJobPolling();
       return;
     }
+    const epoch = this.jobEpoch;
+    const jobId = current.id;
     try {
-      const job = await getJob(current.id);
+      const job = await getJob(jobId);
+      if (epoch !== this.jobEpoch || this.activeJob?.id !== jobId) return;
       this.activeJob = job;
       if (job.status === 'done' || job.status === 'failed') {
         this.stopJobPolling();
@@ -830,13 +969,22 @@ export class TopicsService extends Service {
 
   async loadMoreDocs(): Promise<void> {
     if (!this.topicId || !this.hasMoreDocs || this.$model.loadMoreDocs.loading) return;
+    const topicId = this.topicId;
+    const docGen = ++this.docListGen;
+    const listedAt = this.opGen;
+    const offset = this.documents.length;
     const page = await listDocuments({
-      topicId: this.topicId,
+      topicId,
       limit: DOC_PAGE,
-      offset: this.documents.length,
+      offset,
     });
+    if (docGen !== this.docListGen || this.topicId !== topicId) return;
     const have = new Set(this.documents.map((item) => item.id));
-    this.documents = [...this.documents, ...page.items.filter((item) => !have.has(item.id))];
+    const incoming = page.items.filter((item) => {
+      if (!this.keepDoc(item.id, listedAt)) return false;
+      return !have.has(item.id);
+    });
+    this.documents = [...this.documents, ...incoming];
     this.documentsTotal = page.total;
     this.patchItem(this.topicId, { documentCount: page.total });
     this.syncDocPolling();
@@ -859,13 +1007,17 @@ export class TopicsService extends Service {
   }
 
   async refreshOne(id: string): Promise<void> {
+    const gen = this.bumpRow(id);
     try {
       const detail = await getDocument(id);
+      if (this.rowGen.get(id) !== gen) return;
+      if (!this.documents.some((item) => item.id === id)) return;
       this.documents = this.documents.map((item) =>
         item.id === id ? mergeDetail(item, detail) : item,
       );
-    } catch {
-      // Transient poll errors should not wipe the list.
+    } catch (err) {
+      if (this.rowGen.get(id) !== gen) return;
+      if (err instanceof ApiError && err.status === 404) this.forgetDocument(id);
     }
   }
 
@@ -890,8 +1042,369 @@ export class TopicsService extends Service {
   }
 
   override destroy(): void {
+    this.unsubscribeSync?.();
+    this.unsubscribeSync = null;
+    this.sync = null;
     this.stopJobPolling();
     this.stopDocPolling();
     super.destroy();
   }
+
+  private syncActive(): boolean {
+    return this.sync?.active === true;
+  }
+
+  private bumpRow(id: string): number {
+    const gen = (this.rowGen.get(id) ?? 0) + 1;
+    this.rowGen.set(id, gen);
+    return gen;
+  }
+
+  private bumpTopic(id: string): number {
+    const gen = (this.topicGen.get(id) ?? 0) + 1;
+    this.topicGen.set(id, gen);
+    return gen;
+  }
+
+  private keepDoc(id: string, listedAt: number): boolean {
+    const hiddenAt = this.hiddenDocs.get(id);
+    if (hiddenAt === undefined) return true;
+    if (hiddenAt > listedAt) return false;
+    this.hiddenDocs.delete(id);
+    return true;
+  }
+
+  private keepTopic(id: string, listedAt: number): boolean {
+    const hiddenAt = this.hiddenTopics.get(id);
+    if (hiddenAt === undefined) return true;
+    if (hiddenAt > listedAt) return false;
+    this.hiddenTopics.delete(id);
+    return true;
+  }
+
+  private hideTopic(id: string): void {
+    this.pinnedTopics.delete(id);
+    this.hiddenTopics.set(id, ++this.opGen);
+  }
+
+  private echoRow(
+    scope: 'document' | 'topic',
+    resourceId: string | null,
+    updatedAt: string | null | undefined,
+  ): void {
+    if (!resourceId || !updatedAt) return;
+    const atMs = Date.parse(updatedAt);
+    if (Number.isNaN(atMs)) return;
+    const dup = this.echoes.some(
+      (echo) => echo.scope === scope && echo.resourceId === resourceId && echo.atMs === atMs,
+    );
+    if (dup) return;
+    this.echoes.push({ scope, resourceId, atMs });
+    if (this.echoes.length > 200) this.echoes.splice(0, this.echoes.length - 200);
+  }
+
+  private applySummary(summary: MapSummary): void {
+    this.summary = summary;
+    if (!this.topicId) return;
+    this.patchItem(this.topicId, {
+      cardCount: summary.cardCount,
+      totalNodes: summary.totalNodes,
+      uncoveredNodes: summary.uncoveredNodes,
+      masteryPct: summary.masteryPct,
+    });
+  }
+
+  private applyDocPage(
+    items: DocumentListItem[],
+    total: number,
+    deleteIds: readonly string[],
+    keepTail: boolean,
+    listedAt: number,
+  ): void {
+    const visible = items.filter((item) => this.keepDoc(item.id, listedAt));
+    const prev = new Map(this.documents.map((item) => [item.id, item]));
+    const seen = new Set(visible.map((item) => item.id));
+    for (const id of seen) this.pinnedDocs.delete(id);
+    const merged = visible.map((item) => newerDoc(prev.get(item.id), item));
+    const pinned = this.documents.filter((item) => this.pinnedDocs.has(item.id) && !seen.has(item.id));
+    const tail = keepTail
+      ? this.documents.filter((item) => !seen.has(item.id) && !this.pinnedDocs.has(item.id))
+      : [];
+    const drop = new Set(deleteIds);
+    this.documents = [...pinned, ...merged, ...tail].filter((item) => !drop.has(item.id));
+    this.documentsTotal = Math.max(total, this.documents.length);
+  }
+
+  private forgetDocument(id: string): void {
+    this.pinnedDocs.delete(id);
+    this.hiddenDocs.set(id, ++this.opGen);
+    const had = this.documents.some((doc) => doc.id === id);
+    this.documents = this.documents.filter((doc) => doc.id !== id);
+    if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
+    if (this.topicId) this.patchItem(this.topicId, { documentCount: this.documentsTotal });
+    this.syncDocPolling();
+  }
+
+  private forgetTopic(id: string): void {
+    this.hideTopic(id);
+    this.items = this.items.filter((item) => item.topic.id !== id);
+    if (this.topicId !== id && this.topic?.id !== id) return;
+    this.topic = null;
+    this.tree = [];
+    this.summary = null;
+    this.documents = [];
+    this.documentsTotal = 0;
+    this.titleByNodeId = {};
+    this.topicId = null;
+    this.activeJob = null;
+    this.nodeGen += 1;
+    this.selectedNodeId = null;
+    this.nodeDetail = null;
+    this.detailError = '打不开这个主题';
+    this.stopJobPolling();
+    this.stopDocPolling();
+  }
+
+  private adoptTopic(topic: Topic): void {
+    if (this.topicId === topic.id) {
+      this.applyTopic(topic);
+      return;
+    }
+    const index = this.items.findIndex((item) => item.topic.id === topic.id);
+    if (index < 0) {
+      this.items = [blankItem(topic), ...this.items];
+      return;
+    }
+    this.items = this.items.map((item, i) => (i === index ? { ...item, topic } : item));
+  }
+
+  private onSyncEvent(event: SyncEvent): void {
+    if (event.type === 'active') {
+      if (event.active) {
+        this.stopJobPolling();
+        this.stopDocPolling();
+      } else {
+        if (this.jobRunning && this.pollingAllowed) this.startJobPolling();
+        this.syncDocPolling();
+      }
+      return;
+    }
+    this.syncChain = this.syncChain.then(() => this.handleSync(event)).catch(() => undefined);
+  }
+
+  private async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'reset') {
+      await this.reloadFromReset();
+      return;
+    }
+    if (event.type !== 'changes') return;
+    const changes = coalesceChanges(consumeEchoes(event.changes, this.echoes));
+    await this.applySyncIntents(planReloads(changes, this.syncView()));
+  }
+
+  private syncView(): SyncView {
+    const topicIds = this.items.map((item) => item.topic.id);
+    if (this.topic && !topicIds.includes(this.topic.id)) topicIds.push(this.topic.id);
+    return {
+      documents: this.topicId
+        ? this.documents.map((item) => ({ id: item.id, updatedAt: item.updatedAt }))
+        : [],
+      openDocumentId: null,
+      listIncludesHead: this.topicId !== null,
+      editor: null,
+      topics: topicIds.map((id) => ({ id })),
+      openTopicId: this.topicId,
+      mapTopicId: this.topicId,
+      readerDocumentId: null,
+      readerActiveCardId: null,
+      reviewInSession: false,
+      jobs: [],
+      activeJobId: this.activeJob?.id ?? null,
+    };
+  }
+
+  private async applySyncIntents(intents: ReloadIntent[]): Promise<void> {
+    const deleteDocs = intents.flatMap((intent) =>
+      intent.kind === 'document' && intent.op === 'delete' ? [intent.id] : [],
+    );
+    const upsertDocs = intents.flatMap((intent) =>
+      intent.kind === 'document' && intent.op === 'upsert' ? [intent.id] : [],
+    );
+    const deleteTopics = intents.flatMap((intent) =>
+      intent.kind === 'topic' && intent.op === 'delete' ? [intent.id] : [],
+    );
+    const upsertTopics = intents.flatMap((intent) =>
+      intent.kind === 'topic' && intent.op === 'upsert' ? [intent.id] : [],
+    );
+    if (intents.some((intent) => intent.kind === 'documents-page') && this.topicId) {
+      await this.reloadDocs(this.topicId, deleteDocs, true);
+    }
+    for (const id of deleteDocs) {
+      this.bumpRow(id);
+      this.forgetDocument(id);
+    }
+    for (const id of upsertDocs) {
+      if (this.documents.some((item) => item.id === id)) await this.refreshOne(id);
+    }
+    if (intents.some((intent) => intent.kind === 'topics-page')) await this.reloadTopics();
+    for (const id of deleteTopics) this.forgetTopic(id);
+    for (const id of upsertTopics) {
+      if (this.topicId === id || this.items.some((item) => item.topic.id === id)) {
+        await this.refreshTopic(id);
+      }
+    }
+    for (const intent of intents) {
+      if (intent.kind === 'map' && intent.topicId === this.topicId) await this.refreshMap(intent.topicId);
+      if (intent.kind === 'job' && this.activeJob?.id === intent.id) await this.tickJob();
+    }
+  }
+
+  private async reloadFromReset(): Promise<void> {
+    await this.reloadTopics();
+    if (!this.topicId) {
+      try {
+        const stats = await getReviewTopicStats();
+        const next: Record<string, ReviewTopicStat> = {};
+        for (const stat of stats) next[stat.topicId] = stat;
+        this.topicStats = next;
+      } catch {
+        // Retention is optional.
+      }
+      return;
+    }
+    const topicId = this.topicId;
+    await this.reloadDocs(topicId, [], false);
+    const mapGen = ++this.mapGen;
+    const summaryGen = ++this.summaryGen;
+    const [topicR, mapR, summaryR, jobR] = await Promise.allSettled([
+      getTopic(topicId),
+      getTopicMap(topicId),
+      getTopicMapSummary(topicId),
+      getActiveTopicJob(topicId),
+    ]);
+    if (this.topicId !== topicId) return;
+    if (topicR.status === 'fulfilled') this.applyTopic(topicR.value);
+    else if (topicR.reason instanceof ApiError && topicR.reason.status === 404) {
+      this.forgetTopic(topicId);
+      return;
+    }
+    if (mapGen === this.mapGen && mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
+    if (summaryGen === this.summaryGen && summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
+    if (jobR.status === 'fulfilled') {
+      if (jobR.value.job) this.watchJob(jobR.value.job);
+      else {
+        this.activeJob = null;
+        this.stopJobPolling();
+      }
+    }
+    if (this.selectedNodeId) await this.openNode(this.selectedNodeId);
+    this.syncDocPolling();
+  }
+
+  private async reloadTopics(): Promise<void> {
+    const gen = ++this.topicsGen;
+    const listedAt = this.opGen;
+    try {
+      const topics = await listTopics();
+      if (gen !== this.topicsGen) return;
+      const prev = new Map(this.items.map((item) => [item.topic.id, item]));
+      const next: TopicListItem[] = [];
+      for (const topic of topics) {
+        const existing = prev.get(topic.id);
+        if (existing) next.push({ ...existing, topic: newerTopic(existing.topic, topic) });
+        else next.push(await this._enrich(topic));
+      }
+      if (gen !== this.topicsGen) return;
+      const visible = next.filter((item) => this.keepTopic(item.topic.id, listedAt));
+      const seen = new Set(visible.map((item) => item.topic.id));
+      const pinned = this.items.filter(
+        (item) => this.pinnedTopics.has(item.topic.id) && !seen.has(item.topic.id),
+      );
+      for (const id of seen) this.pinnedTopics.delete(id);
+      this.items = [...pinned, ...visible];
+      if (this.topicId) {
+        const fresh = this.items.find((item) => item.topic.id === this.topicId);
+        if (fresh) this.topic = fresh.topic;
+      }
+    } catch {
+      // Keep the topics already on screen.
+    }
+  }
+
+  private async reloadDocs(
+    topicId: string,
+    deleteIds: readonly string[],
+    keepTail: boolean,
+  ): Promise<void> {
+    const gen = ++this.docListGen;
+    const listedAt = this.opGen;
+    const want = Math.max(this.documents.length, DOC_PAGE);
+    try {
+      const items: DocumentListItem[] = [];
+      let total = 0;
+      let offset = 0;
+      while (items.length < want) {
+        const limit = Math.min(LIST_LIMIT_MAX, want - items.length);
+        const page = await listDocuments({ topicId, limit, offset });
+        total = page.total;
+        items.push(...page.items);
+        if (page.items.length === 0 || items.length >= total) break;
+        offset += page.items.length;
+      }
+      if (gen !== this.docListGen || this.topicId !== topicId) return;
+      this.applyDocPage(items, total, deleteIds, keepTail, listedAt);
+      if (this.topicId) this.patchItem(this.topicId, { documentCount: this.documentsTotal });
+      this.syncDocPolling();
+    } catch {
+      // Keep the rows already on screen.
+    }
+  }
+
+  private async refreshTopic(id: string): Promise<void> {
+    const gen = this.bumpTopic(id);
+    const listedAt = this.opGen;
+    try {
+      const topic = await getTopic(id);
+      if (this.topicGen.get(id) !== gen) return;
+      const hiddenAt = this.hiddenTopics.get(id);
+      if (hiddenAt !== undefined && hiddenAt > listedAt) return;
+      if (hiddenAt !== undefined) this.hiddenTopics.delete(id);
+      this.adoptTopic(topic);
+    } catch (err) {
+      if (this.topicGen.get(id) !== gen) return;
+      if (err instanceof ApiError && err.status === 404) this.forgetTopic(id);
+    }
+  }
+
+  private async refreshMap(topicId: string): Promise<void> {
+    if (this.topicId !== topicId) return;
+    const mapGen = ++this.mapGen;
+    const summaryGen = ++this.summaryGen;
+    const [mapR, summaryR] = await Promise.allSettled([
+      getTopicMap(topicId),
+      getTopicMapSummary(topicId),
+    ]);
+    if (this.topicId !== topicId) return;
+    if (mapGen === this.mapGen && mapR.status === 'fulfilled') this.applyMap(mapR.value.nodes);
+    if (summaryGen === this.summaryGen && summaryR.status === 'fulfilled') this.applySummary(summaryR.value);
+    if (this.selectedNodeId) await this.openNode(this.selectedNodeId);
+  }
+}
+
+function newerTopic(local: Topic, incoming: Topic): Topic {
+  const localMs = Date.parse(local.updatedAt);
+  const nextMs = Date.parse(incoming.updatedAt);
+  if (!Number.isNaN(localMs) && !Number.isNaN(nextMs) && localMs > nextMs) return local;
+  return incoming;
+}
+
+function newerDoc(
+  local: DocumentListItem | undefined,
+  incoming: DocumentListItem,
+): DocumentListItem {
+  if (!local) return incoming;
+  const localMs = Date.parse(local.updatedAt);
+  const nextMs = Date.parse(incoming.updatedAt);
+  if (!Number.isNaN(localMs) && !Number.isNaN(nextMs) && localMs > nextMs) return local;
+  return incoming;
 }

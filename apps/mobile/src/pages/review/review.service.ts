@@ -15,7 +15,10 @@ import {
   getStrugglingCards,
   updateReviewSettings,
 } from '@/api/review';
+import { consumeEchoes } from '@/lib/sync-echo';
+import { coalesceChanges, planReloads, type EchoStamp, type SyncView } from '@/lib/sync-plan';
 import { LayoutService } from '@/services/layout.service';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
 import { countsByDate, isCurrentMonth, monthKeyOf, shiftMonthKey } from './checkin-logic';
 import { adoptSettings, cloneSettings, normalizeDraft } from './review-settings-logic';
@@ -31,6 +34,21 @@ export class ReviewService extends Service {
   struggling: ReviewStrugglingCard[] = [];
   calMonth: string = monthKeyOf(new Date());
   checkins: Record<string, number> = {};
+  private sync: SyncService | null = null;
+  private unsubscribeSync: (() => void) | null = null;
+  private syncChain: Promise<void> = Promise.resolve();
+  private echoes: EchoStamp[] = [];
+  private reloadGen = 0;
+
+  constructor() {
+    super();
+    try {
+      this.sync = this.resolve(SyncService);
+      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
+    } catch {
+      this.sync = null;
+    }
+  }
 
   get layout(): LayoutService {
     return this.resolve(LayoutService);
@@ -144,6 +162,56 @@ export class ReviewService extends Service {
       this.error = errorMessage(err, '设置保存失败');
       return false;
     }
+  }
+
+  async reloadQueueAndStats(): Promise<void> {
+    const gen = ++this.reloadGen;
+    const [todayResult, statsResult] = await Promise.allSettled([getReviewToday(), getReviewStats()]);
+    if (gen !== this.reloadGen) return;
+    if (todayResult.status === 'fulfilled') this.applyToday(todayResult.value);
+    if (statsResult.status === 'fulfilled') this.stats = statsResult.value;
+  }
+
+  override destroy(): void {
+    this.unsubscribeSync?.();
+    this.unsubscribeSync = null;
+    this.sync = null;
+    super.destroy();
+  }
+
+  private onSyncEvent(event: SyncEvent): void {
+    this.syncChain = this.syncChain.then(() => this.handleSync(event)).catch(() => undefined);
+  }
+
+  private async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'active') return;
+    if (event.type === 'reset') {
+      await this.reloadQueueAndStats();
+      void this.loadStruggling();
+      void this.loadCheckins(this.calMonth);
+      return;
+    }
+    const changes = coalesceChanges(consumeEchoes(event.changes, this.echoes));
+    const intents = planReloads(changes, this.syncView());
+    if (!intents.some((intent) => intent.kind === 'review')) return;
+    await this.reloadQueueAndStats();
+  }
+
+  private syncView(): SyncView {
+    return {
+      documents: [],
+      openDocumentId: null,
+      listIncludesHead: false,
+      editor: null,
+      topics: [],
+      openTopicId: null,
+      mapTopicId: null,
+      readerDocumentId: null,
+      readerActiveCardId: null,
+      reviewInSession: false,
+      jobs: [],
+      activeJobId: null,
+    };
   }
 
   async restoreDefaults(): Promise<ReviewSettings | null> {
