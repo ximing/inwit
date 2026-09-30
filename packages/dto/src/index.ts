@@ -18,3 +18,4 @@ export * from './admin.js';
 export * from './report.js';
 export * from './search.js';
 export * from './asset.js';
+export * from './sync.js';

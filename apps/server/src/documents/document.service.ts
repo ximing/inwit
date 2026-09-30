@@ -535,6 +535,7 @@ export async function archiveDocument(userId: string, id: string): Promise<void>
       .update(cards)
       .set({ deletedAt: now, updatedAt: now })
       .where(and(eq(cards.documentId, id), eq(cards.userId, userId), isNull(cards.deletedAt)));
+    // Document update stays last: sync coalesce needs that delete to win.
     await tx
       .update(documents)
       .set({ deletedAt: now, updatedAt: now })
