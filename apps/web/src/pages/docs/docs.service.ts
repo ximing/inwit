@@ -1793,7 +1793,6 @@ export class DocsService extends Service {
 
   private kickReplay(): void {
     if (this.recoveryInflight || this.isWriteInflight()) return;
-    // Leave the queue entry while a current-generation read of that id is already in flight.
     const next = this.replayQueue.find(
       (item) => !this.inflightReads.some((read) => read.id === item.id && read.gen === this.cardWriteGen),
     );
