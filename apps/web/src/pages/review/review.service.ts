@@ -26,6 +26,8 @@ import {
   submitReviewFeedback,
   updateReviewSettings,
 } from '@/api/review';
+import { reviewReloadMode } from '@/lib/sync-plan';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { LayoutService } from '@/shell/layout.service';
 
 const TOAST_MS = 3200;
@@ -75,6 +77,22 @@ export class ReviewService extends Service {
   /** 打卡月历当前展示的月份（YYYY-MM）与每日复习次数（date → count）。 */
   calMonth: string = monthKeyOf(new Date());
   checkins: Record<string, number> = {};
+  /** load / startSession 加一，避免在飞的 hub 重载盖掉它们。 */
+  private queueEpoch = 0;
+  /** exitSession 自己会 load()，这期间不再跟一发同步重载。 */
+  private exiting = false;
+  private unsubSync: (() => void) | null = null;
+
+  constructor() {
+    super();
+    try {
+      this.unsubSync = this.resolve(SyncService).subscribe((event) => {
+        void this.handleSync(event);
+      });
+    } catch {
+      this.unsubSync = null;
+    }
+  }
 
   get layout(): LayoutService {
     return this.resolve(LayoutService);
@@ -231,6 +249,7 @@ export class ReviewService extends Service {
   }
 
   async load(): Promise<void> {
+    const epoch = ++this.queueEpoch;
     this.error = null;
     this.flipped = false;
     this.lastFeedback = null;
@@ -240,16 +259,19 @@ export class ReviewService extends Service {
         getReviewStats(),
         getReviewSettings(),
       ]);
+      if (epoch !== this.queueEpoch) return;
       this.applyToday(today);
       this.stats = stats;
       this.settings = cloneSettings(settings);
       this.calMonth = monthKeyOf(new Date());
       this.refreshDueBadge();
     } catch (err) {
+      if (epoch !== this.queueEpoch) return;
       this.error = errorMessage(err, '复习中心加载失败');
     } finally {
       this.ready = true;
     }
+    if (epoch !== this.queueEpoch) return;
     void this.loadStruggling();
     void this.loadCheckins();
   }
@@ -285,6 +307,7 @@ export class ReviewService extends Service {
   }
 
   async startSession(): Promise<void> {
+    const epoch = ++this.queueEpoch;
     this.error = null;
     this.flipped = false;
     this.lastFeedback = null;
@@ -292,19 +315,50 @@ export class ReviewService extends Service {
     this.sessionRecap = { remembered: 0, fuzzy: 0, forgot: 0 };
     try {
       const today = await getReviewToday();
+      if (epoch !== this.queueEpoch) return;
       this.applyToday(today);
       this.mode = 'session';
       this.refreshDueBadge();
     } catch (err) {
+      if (epoch !== this.queueEpoch) return;
       this.error = errorMessage(err, '今日队列拿不下来');
     }
   }
 
   async exitSession(): Promise<void> {
+    this.exiting = true;
     this.mode = 'hub';
     this.flipped = false;
     this.lastFeedback = null;
-    await this.load();
+    try {
+      await this.load();
+    } finally {
+      this.exiting = false;
+    }
+  }
+
+  async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'active') return;
+    if (event.type === 'reset') {
+      await this.refreshFromSync();
+      return;
+    }
+    if (event.type === 'changes' && event.changes.some((change) => change.scope === 'review')) {
+      await this.refreshFromSync();
+    }
+  }
+
+  /** 队列和统计。不把 calMonth 拨回当月，也不动会话里的卡片。 */
+  async reloadQueueAndStats(): Promise<void> {
+    const epoch = this.queueEpoch;
+    try {
+      const [today, stats] = await Promise.all([getReviewToday(), getReviewStats()]);
+      if (epoch !== this.queueEpoch || this.mode === 'session') return;
+      this.applyToday(today);
+      this.stats = stats;
+    } catch {
+      // keep last snapshot
+    }
   }
 
   /** 打分前先播一个飞出动画，再提交反馈。 */
@@ -376,10 +430,33 @@ export class ReviewService extends Service {
   }
 
   override destroy(): void {
+    this.unsubSync?.();
+    this.unsubSync = null;
     if (this.toastTimer !== null) {
       clearTimeout(this.toastTimer);
       this.toastTimer = null;
     }
     super.destroy();
+  }
+
+  private async refreshFromSync(): Promise<void> {
+    // load() 会把 calMonth 拨回当月；会话中的队列以本机 items 为准。
+    if (reviewReloadMode(this.mode === 'session' && !this.exiting) === 'stats') {
+      await this.refreshStats();
+      return;
+    }
+    if (this.exiting) return;
+    await this.reloadQueueAndStats();
+  }
+
+  private async refreshStats(): Promise<void> {
+    const epoch = this.queueEpoch;
+    try {
+      const stats = await getReviewStats();
+      if (epoch !== this.queueEpoch) return;
+      this.stats = stats;
+    } catch {
+      // keep last snapshot
+    }
   }
 }
