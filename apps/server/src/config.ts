@@ -98,6 +98,8 @@ export const envSchema = z.object({
    * the model or consume feedback. Same string enum as DIGEST_CARD_GATE.
    */
   MEMORY_ORGANIZE_ENABLED: boolEnum.default('true'),
+  /** When false, GET /api/sync is not registered. Row triggers keep writing. */
+  SYNC_ENABLED: boolEnum.default('true'),
 });
 
 export const config = envSchema.parse(process.env);

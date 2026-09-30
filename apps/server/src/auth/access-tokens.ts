@@ -19,6 +19,7 @@ import {
   hashAccessToken,
   previewAccessToken,
   requestPathForLog,
+  shouldRecordAccessTokenCall,
 } from './access-token-logic.js';
 
 export async function findAccessTokenByHash(
@@ -180,6 +181,11 @@ export function registerAccessTokenLogHook(app: FastifyInstance): void {
     const userId = req.user?.id;
     const accessTokenId = req.user?.accessTokenId;
     if (!userId || !accessTokenId) {
+      done();
+      return;
+    }
+    // req.url still has the query; shouldRecordAccessTokenCall strips it.
+    if (!shouldRecordAccessTokenCall(req.method, req.url)) {
       done();
       return;
     }
