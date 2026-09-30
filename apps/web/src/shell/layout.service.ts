@@ -4,6 +4,7 @@ import { SyncService, type SyncEvent } from '@/services/sync.service';
 
 export class LayoutService extends Service {
   dueCount = 0;
+  private dueGen = 0;
   private unsubSync: (() => void) | null = null;
 
   constructor() {
@@ -35,10 +36,13 @@ export class LayoutService extends Service {
   }
 
   async refreshDue(): Promise<void> {
+    const gen = ++this.dueGen;
     try {
       const today = await getReviewToday();
+      if (gen !== this.dueGen) return;
       this.dueCount = Math.max(0, today.total - today.reviewedToday);
     } catch {
+      if (gen !== this.dueGen) return;
       this.dueCount = 0;
     }
   }

@@ -218,4 +218,105 @@ describe('TodayService sync', () => {
     await service.handleSync({ type: 'active', active: false });
     expect(service.pollTimer).not.toBeNull();
   });
+
+  it('drops a head refetch that started before send and keeps the new row visible', async () => {
+    service = new TodayService();
+    service.documents = [row('a'), row('b'), row('c'), row('d')];
+    service.documentTotal = 4;
+    let release!: (page: { items: DocumentListItem[]; total: number; limit: number; offset: number }) => void;
+    vi.mocked(listDocuments).mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const pending = service.handleSync({
+      type: 'changes',
+      changes: [change({ id: '8', resourceId: '99999999-9999-4999-8999-999999999999' })],
+    });
+    vi.mocked(createDocument).mockResolvedValue({
+      id: DOC,
+      updatedAt: T2,
+      title: 'n',
+      status: 'digested',
+    } as Document);
+    vi.mocked(listJobs).mockResolvedValue({ items: [], total: 0, limit: 5, offset: 0 });
+    service.draft = 'hello note';
+    await service.send('paste');
+    release({ items: [row('a'), row('b'), row('c'), row('d')], total: 4, limit: 4, offset: 0 });
+    await pending;
+    expect(service.recentDocuments.map((doc) => doc.id)).toEqual([DOC, 'a', 'b', 'c']);
+    expect(service.documentTotal).toBe(5);
+  });
+
+  it('keeps a leading local-only row in front when the head page omits it', async () => {
+    service = new TodayService();
+    service.documents = [row(DOC), row('a'), row('b'), row('c'), row('d')];
+    service.documentTotal = 5;
+    vi.mocked(listDocuments).mockResolvedValue({
+      items: [row('a'), row('b'), row('c'), row('d')],
+      total: 4,
+      limit: 4,
+      offset: 0,
+    });
+    await service.handleSync({
+      type: 'changes',
+      changes: [change({ id: '8', resourceId: '99999999-9999-4999-8999-999999999999' })],
+    });
+    expect(service.documents.map((doc) => doc.id)).toEqual([DOC, 'a', 'b', 'c', 'd']);
+    expect(service.documentTotal).toBe(5);
+  });
+
+  it('does not apply an older review strip or jobs list over a newer one', async () => {
+    service = new TodayService();
+    let releaseToday!: (today: { items: []; reviewedToday: number; total: number; truncated: number }) => void;
+    vi.mocked(getReviewToday).mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseToday = resolve;
+      }),
+    );
+    vi.mocked(getReviewStats).mockResolvedValueOnce({
+      streak: { current: 1, longest: 1 },
+      totalCards: 1,
+      overdueCount: 0,
+    } as ReviewStats);
+    const olderReview = service.loadReview();
+    vi.mocked(getReviewToday).mockResolvedValueOnce({ items: [], reviewedToday: 0, total: 4, truncated: 0 });
+    vi.mocked(getReviewStats).mockResolvedValueOnce({
+      streak: { current: 6, longest: 6 },
+      totalCards: 8,
+      overdueCount: 0,
+    } as ReviewStats);
+    await service.loadReview();
+    releaseToday({ items: [], reviewedToday: 0, total: 1, truncated: 0 });
+    await olderReview;
+    expect(service.dueCount).toBe(4);
+    expect(service.streak).toBe(6);
+
+    let releaseJobs!: (page: { items: { id: string }[]; total: number; limit: number; offset: number }) => void;
+    vi.mocked(listJobs).mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseJobs = resolve;
+      }),
+    );
+    const olderJobs = service.loadJobs();
+    vi.mocked(listJobs).mockResolvedValueOnce({ items: [{ id: 'new' }], total: 1, limit: 5, offset: 0 } as never);
+    await service.loadJobs();
+    releaseJobs({ items: [{ id: 'old' }], total: 1, limit: 5, offset: 0 });
+    await olderJobs;
+    expect(service.jobs.map((job) => job.id)).toEqual(['new']);
+  });
+
+  it('does not raise the page banner when a background head merge fails', async () => {
+    service = new TodayService();
+    service.documents = [row('a')];
+    service.documentTotal = 3;
+    vi.mocked(listDocuments).mockRejectedValueOnce(new Error('down'));
+    await service.handleSync({
+      type: 'changes',
+      changes: [change({ id: '8', resourceId: '99999999-9999-4999-8999-999999999999' })],
+    });
+    expect(service.error).toBeNull();
+    expect(service.documents.map((doc) => doc.id)).toEqual(['a']);
+    expect(service.documentTotal).toBe(3);
+  });
 });

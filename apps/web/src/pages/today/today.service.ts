@@ -6,7 +6,6 @@ import {
   type DocumentListItem,
   type Job,
   type ReviewStats,
-  type SyncChange,
   type Topic,
   type TopicSuggestion,
   type WeeklyReportLatest,
@@ -80,6 +79,11 @@ export class TodayService extends Service {
   pollTimer: ReturnType<typeof setInterval> | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
   loadGen = 0;
+  private reviewGen = 0;
+  private jobsGen = 0;
+  private reportGen = 0;
+  private suggestGen = 0;
+  private resurfaceGen = 0;
   private sync: SyncService | null = null;
   private unsubSync: (() => void) | null = null;
   private echoes: EchoStamp[] = [];
@@ -197,8 +201,10 @@ export class TodayService extends Service {
   }
 
   async loadReview(): Promise<void> {
+    const gen = ++this.reviewGen;
     try {
       const [today, stats] = await Promise.all([getReviewToday(), getReviewStats()]);
+      if (gen !== this.reviewGen) return;
       this.dueCount = Math.max(0, today.total - today.reviewedToday);
       this.applyStats(stats);
       this.reviewLoaded = true;
@@ -208,8 +214,10 @@ export class TodayService extends Service {
   }
 
   async loadJobs(): Promise<void> {
+    const gen = ++this.jobsGen;
     try {
       const page = await listJobs({ limit: RECENT_JOBS, offset: 0 });
+      if (gen !== this.jobsGen) return;
       this.jobs = page.items;
     } catch {
       // Activity is optional; keep the last snapshot.
@@ -230,6 +238,8 @@ export class TodayService extends Service {
       });
       this.captureHandle?.clear();
       this.draft = '';
+      // 进行中的首页请求是在这次插入之前发出的，回来不能盖掉刚收下的行。
+      ++this.loadGen;
       this.documents = [
         asListItem(created, {
           cardCount: 0,
@@ -286,21 +296,18 @@ export class TodayService extends Service {
       else this.syncPolling();
       return;
     }
-    const run = this.syncChain.then(() => this.applySync(event));
-    this.syncChain = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    try {
-      await run;
-    } catch {
-      // 加载失败已经落在各 loader 里；这里不能让监听器的 promise 再抛出去。
-    }
+    // 加载失败留在各 loader 的快照里，链本身要继续。
+    const run = (this.syncChain = this.syncChain
+      .then(() => this.applySync(event))
+      .catch(() => undefined));
+    await run;
   }
 
   async loadSuggestions(): Promise<void> {
+    const gen = ++this.suggestGen;
     try {
       const items = await listTopicSuggestions();
+      if (gen !== this.suggestGen) return;
       this.suggestion = items[0] ?? null;
       if (this.suggestion) this.suggestDeadline = 0;
     } catch {
@@ -309,8 +316,10 @@ export class TodayService extends Service {
   }
 
   async loadWeeklyReport(): Promise<void> {
+    const gen = ++this.reportGen;
     try {
       const result = await getLatestWeeklyReport();
+      if (gen !== this.reportGen) return;
       this.weeklyReport = result.report;
     } catch {
       // Card is optional; keep the last snapshot.
@@ -345,8 +354,10 @@ export class TodayService extends Service {
   }
 
   async loadResurface(): Promise<void> {
+    const gen = ++this.resurfaceGen;
     try {
       const result = await getAnnotationResurface();
+      if (gen !== this.resurfaceGen) return;
       this.resurface = result.resurface;
     } catch {
       // Resurface banner is optional; keep the last snapshot.
@@ -435,7 +446,15 @@ export class TodayService extends Service {
     }
     if (event.type !== 'changes') return;
     const kept = stripEchoes(event.changes, this.echoes);
-    this.echoes = retainEchoes(event.changes, this.echoes);
+    const keptSet = new Set(kept);
+    for (const change of event.changes) {
+      if (change.op === 'delete' || keptSet.has(change)) continue;
+      const atMs = Date.parse(change.at);
+      const index = this.echoes.findIndex(
+        (echo) => echo.scope === change.scope && echo.resourceId === change.resourceId && echo.atMs === atMs,
+      );
+      if (index >= 0) this.echoes.splice(index, 1);
+    }
     await this.applyIntents(planReloads(coalesceChanges(kept), this.syncView()));
   }
 
@@ -519,46 +538,24 @@ export class TodayService extends Service {
     this.syncPolling();
   }
 
-  /** 今日保持 4 条。服务端顺序在前，本地还握着、这次没返回的接在后面。 */
   private async mergeRecentDocuments(): Promise<boolean> {
     const gen = ++this.loadGen;
     try {
       const page = await listDocuments({ limit: RECENT_DOCS, offset: 0 });
       if (gen !== this.loadGen) return false;
-      const seen = new Set(page.items.map((item) => item.id));
-      this.documents = [...page.items, ...this.documents.filter((item) => !seen.has(item.id))];
-      this.documentTotal = page.total;
+      const pageIds = new Set(page.items.map((item) => item.id));
+      const held = this.documents;
+      const overlap = held.findIndex((item) => pageIds.has(item.id));
+      // 插在这一页前面的本地行还没被服务端算进 total，不能接到第四条后面。
+      const front = overlap < 0 ? [] : held.slice(0, overlap);
+      const tail = (overlap < 0 ? held : held.slice(overlap)).filter((item) => !pageIds.has(item.id));
+      this.documents = [...front, ...page.items, ...tail];
+      this.documentTotal = page.total + front.length;
       this.syncPolling();
       return true;
-    } catch (err) {
+    } catch {
       if (gen !== this.loadGen) return false;
-      this.error = errorMessage(err, '加载文档失败');
       return false;
     }
   }
-}
-
-function echoKey(scope: string, resourceId: string | null, atMs: number): string {
-  return `${scope}\0${resourceId ?? ''}\0${atMs}`;
-}
-
-/** 一条 upsert 吃掉一条回声。delete 不吃。没对上的留到后面的 poll。 */
-function retainEchoes(changes: SyncChange[], echoes: EchoStamp[]): EchoStamp[] {
-  const hits = new Map<string, number>();
-  for (const change of changes) {
-    if (change.op === 'delete') continue;
-    const key = echoKey(change.scope, change.resourceId, Date.parse(change.at));
-    hits.set(key, (hits.get(key) ?? 0) + 1);
-  }
-  const remain: EchoStamp[] = [];
-  for (const echo of echoes) {
-    const key = echoKey(echo.scope, echo.resourceId, echo.atMs);
-    const left = hits.get(key) ?? 0;
-    if (left > 0) {
-      hits.set(key, left - 1);
-      continue;
-    }
-    remain.push(echo);
-  }
-  return remain;
 }
