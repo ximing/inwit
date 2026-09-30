@@ -11,7 +11,7 @@ import type {
   ReviewTopicStat,
   Topic,
 } from '@inwit/dto';
-import { isChatQuestion, topicJobPayloadFrom } from '@inwit/dto';
+import { isChatQuestion, listBodyPreview, toDocumentListItem, topicJobPayloadFrom } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
 import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
 import { getJob } from '@/api/jobs';
@@ -100,12 +100,7 @@ function asListItem(
   doc: Document,
   extra: { cardCount: number; topicTitle: string | null },
 ): DocumentListItem {
-  return {
-    ...doc,
-    cardCount: extra.cardCount,
-    proposedCount: 0,
-    topicTitle: extra.topicTitle,
-  };
+  return toDocumentListItem(doc, extra);
 }
 
 function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentListItem {
@@ -113,7 +108,6 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     ...item,
     title: detail.title,
     description: detail.description,
-    contentJson: detail.contentJson,
     status: detail.status,
     answer: detail.answer,
     linkHint: detail.linkHint,
@@ -124,6 +118,7 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     cardCount: detail.cards.filter((card) => card.acceptance === 'accepted').length,
     proposedCount: detail.cards.filter((card) => card.acceptance === 'proposed').length,
     topicTitle: detail.topicTitle ?? item.topicTitle,
+    preview: listBodyPreview(detail.contentJson),
   };
 }
 

@@ -10,8 +10,10 @@ import {
   docDisplayTitle,
   docOwnedTitle,
   documentIdFromJobPayload,
+  documentListItemSchema,
   documentSourceSchema,
   EMPTY_PM_DOC,
+  listBodyPreview,
   textFromPmJson,
   titleFromDoc,
   updateDocumentInputSchema,
@@ -175,6 +177,47 @@ describe('docCardFace', () => {
         contentJson: para('过拟合：模型把噪声也记住了。'),
       }).preview,
     ).toBe('模型把噪声也记住了。');
+  });
+
+  it('uses the list excerpt when the body is not on the row', () => {
+    expect(docCardFace({ title: null, preview: '列表摘要' })).toEqual({
+      title: null,
+      preview: '列表摘要',
+    });
+    expect(
+      docCardFace({ title: '过拟合', preview: '过拟合：模型把噪声也记住了。' }).preview,
+    ).toBe('模型把噪声也记住了。');
+  });
+});
+
+describe('document list item', () => {
+  it('keeps a text preview and drops the body', () => {
+    expect(listBodyPreview(para('学习率太大时会震荡'))).toBe('学习率太大时会震荡');
+    expect(listBodyPreview(EMPTY_PM_DOC)).toBeNull();
+    const parsed = documentListItemSchema.parse({
+      id: '11111111-1111-4111-8111-111111111111',
+      userId: '22222222-2222-4222-8222-222222222222',
+      topicId: null,
+      mapNodeId: null,
+      title: null,
+      description: null,
+      source: 'editor',
+      status: 'digested',
+      failReason: null,
+      answer: null,
+      linkHint: null,
+      fileMime: null,
+      pageCount: null,
+      createdAt: '2026-09-30T00:00:00.000Z',
+      updatedAt: '2026-09-30T00:00:00.000Z',
+      cardCount: 0,
+      proposedCount: 0,
+      topicTitle: null,
+      preview: '学习率',
+      contentJson: para('不应留在列表里'),
+    });
+    expect(parsed.preview).toBe('学习率');
+    expect(parsed).not.toHaveProperty('contentJson');
   });
 });
 

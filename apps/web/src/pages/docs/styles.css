@@ -226,6 +226,7 @@ html.is-resizing-doc-list * {
 .ws-more { display: flex; justify-content: center; padding: 8px 0 4px; }
 
 .icon-spin { animation: spin 0.8s linear infinite; }
+.empty .icon-spin { margin-right: 6px; vertical-align: -2px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .icon-spin { animation: none; }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EMPTY_PM_DOC, type DocumentListItem, type Job, type MapTreeNode, type Topic } from '@inwit/dto';
+import type { DocumentListItem, Job, MapTreeNode, Topic } from '@inwit/dto';
 import { ApiError } from '@/api/client';
 import { listDocuments } from '@/api/documents';
 import { getJob } from '@/api/jobs';
@@ -212,7 +212,7 @@ function docItem(id: string): DocumentListItem {
     mapNodeId: null,
     title: id,
     description: null,
-    contentJson: EMPTY_PM_DOC,
+    preview: null,
     source: 'import',
     status: 'digested',
     failReason: null,

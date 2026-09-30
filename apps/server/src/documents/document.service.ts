@@ -18,6 +18,7 @@ import type {
   Paginated,
   UpdateDocumentInput,
 } from '@inwit/dto';
+import { toDocumentListItem } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, like, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { shouldIndexCard } from '../cards/card-acceptance-logic.js';
 import { toPublicCard, toPublicQuestion } from '../cards/card.mapper.js';
@@ -244,12 +245,13 @@ export async function listDocuments(
     .offset(query.offset);
 
   return {
-    items: rows.map((row) => ({
-      ...toPublicDocument(row.document),
-      cardCount: Number(row.cardCount ?? 0),
-      proposedCount: Number(row.proposedCount ?? 0),
-      topicTitle: row.topicTitle ?? null,
-    })),
+    items: rows.map((row) =>
+      toDocumentListItem(toPublicDocument(row.document), {
+        cardCount: Number(row.cardCount ?? 0),
+        proposedCount: Number(row.proposedCount ?? 0),
+        topicTitle: row.topicTitle ?? null,
+      }),
+    ),
     total: Number(totalRow?.n ?? 0),
     limit: query.limit,
     offset: query.offset,
@@ -275,12 +277,13 @@ export async function getDocumentListItemsByIds(
     .leftJoin(topics, eq(topics.id, documents.topicId))
     .where(and(eq(documents.userId, userId), inArray(documents.id, ids), isNull(documents.deletedAt)));
 
-  return rows.map((row) => ({
-    ...toPublicDocument(row.document),
-    cardCount: Number(row.cardCount ?? 0),
-    proposedCount: Number(row.proposedCount ?? 0),
-    topicTitle: row.topicTitle ?? null,
-  }));
+  return rows.map((row) =>
+    toDocumentListItem(toPublicDocument(row.document), {
+      cardCount: Number(row.cardCount ?? 0),
+      proposedCount: Number(row.proposedCount ?? 0),
+      topicTitle: row.topicTitle ?? null,
+    }),
+  );
 }
 
 export async function updateDocument(

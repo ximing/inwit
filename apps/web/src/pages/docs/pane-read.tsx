@@ -49,7 +49,10 @@ export const PaneRead = observer(function PaneRead() {
   if (service.$model.loadDoc.loading && !doc) {
     return (
       <div className="pane-inner">
-        <p className="empty">打开这张纸…</p>
+        <p className="empty" role="status">
+          <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+          打开这张纸…
+        </p>
       </div>
     );
   }

@@ -1,4 +1,4 @@
-import type { DocumentListItem } from '@inwit/dto';
+import { listBodyPreview, type DocumentListItem } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { formatRelativeTime } from '@/lib/format';
 import { DocsService } from './docs.service';
@@ -23,7 +23,7 @@ export const DocPaneMeta = observer(function DocPaneMeta({
     id: docId,
     status,
     source,
-    contentJson,
+    preview: contentJson === undefined ? null : listBodyPreview(contentJson),
   });
   return (
     <div className="pane-meta">

@@ -1,5 +1,7 @@
 import {
   isChatQuestion,
+  listBodyPreview,
+  toDocumentListItem,
   type Document,
   type DocumentDetail,
   type DocumentListItem,
@@ -20,12 +22,7 @@ export function asListItem(
   doc: Document,
   extra: { cardCount: number; topicTitle: string | null },
 ): DocumentListItem {
-  return {
-    ...doc,
-    cardCount: extra.cardCount,
-    proposedCount: 0,
-    topicTitle: extra.topicTitle,
-  };
+  return toDocumentListItem(doc, extra);
 }
 
 export function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentListItem {
@@ -33,7 +30,6 @@ export function mergeDetail(item: DocumentListItem, detail: DocumentDetail): Doc
     ...item,
     title: detail.title,
     description: detail.description,
-    contentJson: detail.contentJson,
     status: detail.status,
     answer: detail.answer,
     linkHint: detail.linkHint,
@@ -44,6 +40,7 @@ export function mergeDetail(item: DocumentListItem, detail: DocumentDetail): Doc
     cardCount: detail.cards.filter((card) => card.acceptance === 'accepted').length,
     proposedCount: detail.cards.filter((card) => card.acceptance === 'proposed').length,
     topicTitle: detail.topicTitle ?? item.topicTitle,
+    preview: listBodyPreview(detail.contentJson),
   };
 }
 

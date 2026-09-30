@@ -1,4 +1,5 @@
 import { observer, useService } from '@rabjs/react';
+import { Loader2 } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { ROUTES } from '@/routes';
@@ -46,7 +47,10 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
           <div className="pane-inner">
             <DocTopRow editing docId={docId} />
             {editor.phase === 'loading' ? (
-              <p className="empty">打开这张纸…</p>
+              <p className="empty" role="status">
+                <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+                打开这张纸…
+              </p>
             ) : (
               <>
                 <input

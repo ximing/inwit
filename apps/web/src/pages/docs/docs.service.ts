@@ -4,6 +4,8 @@ import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
 import {
   EMPTY_PM_DOC,
   isChatQuestion,
+  listBodyPreview,
+  toDocumentListItem,
   type Annotation,
   type AnnotationGeometry,
   type Card,
@@ -66,7 +68,6 @@ import {
 import { type PresignedUrlEntry } from '@/lib/presign-cache-logic';
 import { isLostTextEntity, type DocEditorHost } from '@/lib/entity-marks';
 import { asPmJson, jsonEqual, textToPmDoc } from '@/lib/pm-doc';
-import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import {
   classifyRemoteDetail,
   coalesceChanges,
@@ -354,6 +355,7 @@ export class DocsService extends Service {
     id: string;
     status: DocumentStatus;
     source: DocumentSource;
+    preview?: string | null;
     contentJson?: unknown;
   }): DocPipelineStage {
     const job = this.jobFor(doc.id);
@@ -369,7 +371,9 @@ export class DocsService extends Service {
       source: doc.source,
       uploadPercent,
       hasCheckpoint: Boolean(checkpoint),
-      hasContent: !isBlankPmDoc(doc.contentJson),
+      hasContent:
+        Boolean(doc.preview?.trim()) ||
+        (doc.contentJson !== undefined && listBodyPreview(doc.contentJson) !== null),
       job: upload ? null : job,
     });
   }
@@ -524,7 +528,14 @@ export class DocsService extends Service {
     const had = this.documents.some((item) => item.id === id);
     this.documents = remove
       ? this.documents.filter((item) => item.id !== id)
-      : this.documents.map((item) => item.id === id ? { ...item, ...updated, topicTitle } : item);
+      : this.documents.map((item) => {
+          if (item.id !== id || !updated) return item;
+          return toDocumentListItem(updated, {
+            cardCount: item.cardCount,
+            proposedCount: item.proposedCount,
+            topicTitle,
+          });
+        });
     if (remove && had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
     if (!updated) {
       if (this.doc?.id === id) this.closeDoc();
@@ -1371,7 +1382,9 @@ export class DocsService extends Service {
   ): void {
     const stamp = updatedAt && !Number.isNaN(Date.parse(updatedAt)) ? updatedAt : null;
     this.documents = this.documents.map((item) =>
-      item.id === id ? { ...item, title, contentJson, ...(stamp ? { updatedAt: stamp } : {}) } : item,
+      item.id === id
+        ? { ...item, title, preview: listBodyPreview(contentJson), ...(stamp ? { updatedAt: stamp } : {}) }
+        : item,
     );
     if (this.doc?.id === id) {
       this.doc = { ...this.doc, title, contentJson, ...(stamp ? { updatedAt: stamp } : {}) };

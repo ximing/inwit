@@ -426,6 +426,12 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
+        {service.$model.boot.loading || service.$model.loadDocuments.loading ? (
+          <p className="ws-importing" role="status">
+            <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+            正在加载文档…
+          </p>
+        ) : null}
         {importing ? (
           <p className="ws-importing">
             <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
@@ -460,7 +466,14 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
               disabled={service.$model.loadMore.loading}
               onClick={() => void service.loadMore()}
             >
-              {service.$model.loadMore.loading ? '载入中…' : '更早的文档'}
+              {service.$model.loadMore.loading ? (
+                <>
+                  <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+                  载入中…
+                </>
+              ) : (
+                '更早的文档'
+              )}
             </button>
           </div>
         ) : null}

@@ -8,6 +8,8 @@ import {
   DOCUMENT_TITLE_MAX,
   UNNAMED_DOCUMENT_TITLE,
   docOwnedTitle,
+  type Document,
+  type DocumentListItem,
 } from './document.js';
 
 const CARD_PREVIEW_DEFAULT = 160;
@@ -177,6 +179,29 @@ export function textFromPmJson(value: unknown, max = CARD_PREVIEW_DEFAULT): stri
   return clipUnicode(collapseWs(blocks.join(' ')), max);
 }
 
+/** Excerpt stored on list rows. Null when the body has no text. */
+export const LIST_PREVIEW_MAX = 160;
+
+export function listBodyPreview(contentJson: unknown): string | null {
+  const text = textFromPmJson(contentJson, LIST_PREVIEW_MAX);
+  return text.length > 0 ? text : null;
+}
+
+/** Drop the ProseMirror body when a full document is placed on a list. */
+export function toDocumentListItem(
+  doc: Document,
+  extra: { cardCount: number; proposedCount?: number; topicTitle: string | null },
+): DocumentListItem {
+  const { contentJson, ...rest } = doc;
+  return {
+    ...rest,
+    cardCount: extra.cardCount,
+    proposedCount: extra.proposedCount ?? 0,
+    topicTitle: extra.topicTitle,
+    preview: listBodyPreview(contentJson),
+  };
+}
+
 function stripTitlePrefix(preview: string, title: string): string {
   if (!preview.startsWith(title)) return preview;
   return collapseWs(preview.slice(title.length).replace(/^[\s，。、：:；;！!？?\-—–]+/u, ''));
@@ -194,11 +219,16 @@ export function docCardFace(
     description?: string | null;
     answer?: string | null;
     contentJson?: unknown;
+    /** List rows carry this instead of `contentJson`. */
+    preview?: string | null;
   },
   previewMax = CARD_PREVIEW_DEFAULT,
 ): DocCardFace {
   const title = docOwnedTitle(doc.title);
-  const fromContent = textFromPmJson(doc.contentJson, previewMax);
+  const fromContent =
+    doc.contentJson !== undefined
+      ? textFromPmJson(doc.contentJson, previewMax)
+      : collapseWs(doc.preview ?? '');
   const fromDesc = collapseWs(doc.description ?? '');
   const fromAnswer = doc.answer ? plainFromMarkup(doc.answer) : '';
 

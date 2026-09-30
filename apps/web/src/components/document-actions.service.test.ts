@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EMPTY_PM_DOC, type DocumentListItem } from '@inwit/dto';
+import type { DocumentListItem } from '@inwit/dto';
 import { DocumentActionsService } from './document-actions.service';
 import { deleteDocument, getDocument, retryDocument, updateDocument } from '@/api/documents';
 
 vi.mock('@/api/documents', () => ({ updateDocument: vi.fn(), deleteDocument: vi.fn(), retryDocument: vi.fn(), getDocument: vi.fn() }));
 const doc: DocumentListItem = {
   id: 'doc-1', userId: 'user-1', topicId: null, mapNodeId: null,
-  title: '原名', description: null, contentJson: EMPTY_PM_DOC, source: 'editor',
+  title: '原名', description: null, preview: null, source: 'editor',
   status: 'digested', failReason: null, answer: null, linkHint: null, fileMime: null,
   pageCount: null, createdAt: '', updatedAt: '', cardCount: 0, proposedCount: 0, topicTitle: null,
 };

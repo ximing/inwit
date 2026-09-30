@@ -2,6 +2,8 @@ import { Service } from '@rabjs/react';
 import {
   EMPTY_PM_DOC,
   isChatQuestion,
+  listBodyPreview,
+  toDocumentListItem,
   type Document,
   type DocumentDetail,
   type DocumentListItem,
@@ -24,7 +26,7 @@ import { getJobQueue } from '@/api/jobs';
 import { createTopic, listTopics } from '@/api/topics';
 import { describeDocumentStage, pickDocumentJob, type DocPipelineStage } from '@/lib/doc-pipeline';
 import { checkpointPercent } from '@/lib/import-logic';
-import { isBlankPmDoc, textToPmDoc } from '@/lib/pm-doc';
+import { textToPmDoc } from '@/lib/pm-doc';
 import { consumeEchoes } from '@/lib/sync-echo';
 import {
   coalesceChanges,
@@ -45,12 +47,7 @@ function asListItem(
   doc: Document,
   extra: { cardCount: number; topicTitle: string | null },
 ): DocumentListItem {
-  return {
-    ...doc,
-    cardCount: extra.cardCount,
-    proposedCount: 0,
-    topicTitle: extra.topicTitle,
-  };
+  return toDocumentListItem(doc, extra);
 }
 
 function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentListItem {
@@ -58,7 +55,6 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     ...item,
     title: detail.title,
     description: detail.description,
-    contentJson: detail.contentJson,
     status: detail.status,
     answer: detail.answer,
     linkHint: detail.linkHint,
@@ -69,6 +65,7 @@ function mergeDetail(item: DocumentListItem, detail: DocumentDetail): DocumentLi
     cardCount: detail.cards.filter((card) => card.acceptance === 'accepted').length,
     proposedCount: detail.cards.filter((card) => card.acceptance === 'proposed').length,
     topicTitle: detail.topicTitle ?? item.topicTitle,
+    preview: listBodyPreview(detail.contentJson),
   };
 }
 
@@ -152,6 +149,7 @@ export class DocsService extends Service {
     id: string;
     status: DocumentStatus;
     source: DocumentSource;
+    preview?: string | null;
     contentJson?: unknown;
   }): DocPipelineStage {
     const upload = this.importService.uploadByDoc[doc.id];
@@ -167,7 +165,9 @@ export class DocsService extends Service {
       source: doc.source,
       uploadPercent,
       hasCheckpoint: Boolean(checkpoint),
-      hasContent: !isBlankPmDoc(doc.contentJson),
+      hasContent:
+        Boolean(doc.preview?.trim()) ||
+        (doc.contentJson !== undefined && listBodyPreview(doc.contentJson) !== null),
       job,
     });
   }

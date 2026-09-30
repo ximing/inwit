@@ -221,10 +221,15 @@ export const listDocumentsQuerySchema = paginationQuerySchema.extend({
 });
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
 
-export const documentListItemSchema = documentSchema.extend({
+/**
+ * List/search rows. `preview` is a plain-text excerpt; the ProseMirror body
+ * stays on GET /documents/:id so a page of documents does not ship every doc.
+ */
+export const documentListItemSchema = documentSchema.omit({ contentJson: true }).extend({
   cardCount: z.number().int().nonnegative(),
   proposedCount: z.number().int().nonnegative(),
   topicTitle: z.string().nullable(),
+  preview: z.string().nullable(),
 });
 export type DocumentListItem = z.infer<typeof documentListItemSchema>;
 

@@ -1,5 +1,6 @@
 import { bindServices, observer, useService } from '@rabjs/react';
-import { useEffect, useRef, type CSSProperties } from 'react';
+import { Loader2 } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { SearchService } from '@/components/search';
 import { ANCHOR_HIT_SELECTOR } from '@/lib/anchors';
@@ -37,6 +38,8 @@ const DocsPageContent = observer(function DocsPageContent() {
   const editing = isPdf ? false : prefs.editing;
   const editingRef = useRef(editing);
   const paneRef = useRef<HTMLDivElement>(null);
+  const [settledDocId, setSettledDocId] = useState<string | null>(null);
+  if (!docId && settledDocId !== null) setSettledDocId(null);
 
   useEffect(() => {
     if (!editParam) return;
@@ -138,46 +141,51 @@ const DocsPageContent = observer(function DocsPageContent() {
     let cancelled = false;
 
     const sync = async () => {
-      if (leavingEdit) {
-        await editor.save();
-        if (cancelled) return;
-        if (editor.id) {
-          service.noteEditorSaved(
-            editor.id,
-            editor.draftTitle.trim() || editor.lastSavedTitle.trim() || null,
-            editor.draftJson,
-          );
-        }
-        editor.idle();
-      }
-      if (cancelled) return;
-      if (!docId && service.composingNew) {
-        if (!editing) {
-          service.endComposeNew();
-          editor.idle();
-          return;
-        }
-        await editor.open('new', newTopicId);
-        return;
-      }
-      if (!docId) {
-        service.closeDoc();
-        if (editor.phase !== 'idle') {
+      try {
+        if (leavingEdit) {
           await editor.save();
           if (cancelled) return;
+          if (editor.id) {
+            service.noteEditorSaved(
+              editor.id,
+              editor.draftTitle.trim() || editor.lastSavedTitle.trim() || null,
+              editor.draftJson,
+            );
+          }
           editor.idle();
         }
-        return;
-      }
-      if (service.doc?.id !== docId || leavingEdit) {
-        await service.loadDoc(docId, urlAnchor, urlAnnotation);
-      } else {
-        service.applyUrlAnchor(urlAnchor);
-        service.applyUrlAnnotation(urlAnnotation);
-      }
-      if (cancelled) return;
-      if (editing) {
-        await editor.open(docId, service.doc?.topicId ?? newTopicId);
+        if (cancelled) return;
+        if (!docId && service.composingNew) {
+          if (!editing) {
+            service.endComposeNew();
+            editor.idle();
+            return;
+          }
+          await editor.open('new', newTopicId);
+          return;
+        }
+        if (!docId) {
+          service.closeDoc();
+          if (editor.phase !== 'idle') {
+            await editor.save();
+            if (cancelled) return;
+            editor.idle();
+          }
+          return;
+        }
+        if (service.doc?.id !== docId || leavingEdit) {
+          await service.loadDoc(docId, urlAnchor, urlAnnotation);
+        } else {
+          service.applyUrlAnchor(urlAnchor);
+          service.applyUrlAnnotation(urlAnnotation);
+        }
+        if (cancelled) return;
+        if (editing) {
+          await editor.open(docId, service.doc?.topicId ?? newTopicId);
+        }
+      } finally {
+        // 详情和编辑器都回来后再收起等待态，避免慢请求先画出空白编辑器。
+        if (!cancelled && docId) setSettledDocId(docId);
       }
     };
     void sync();
@@ -223,9 +231,10 @@ const DocsPageContent = observer(function DocsPageContent() {
   }, [service, service.bodyFocusCardId, service.bodyFocusAnnotationId]);
 
   const composingNew = !docId && service.composingNew;
+  const openingDoc = Boolean(docId) && settledDocId !== docId;
   const showEmpty = !docId && !composingNew;
-  const showEdit = composingNew || (Boolean(docId) && editing);
-  const showRead = Boolean(docId) && !editing;
+  const showEdit = !openingDoc && (composingNew || (Boolean(docId) && editing));
+  const showRead = !openingDoc && Boolean(docId) && !editing;
 
   return (
     <div
@@ -234,6 +243,14 @@ const DocsPageContent = observer(function DocsPageContent() {
     >
       <WorkbenchList selectedId={docId} />
       <div className="ws-pane" ref={paneRef}>
+        {openingDoc ? (
+          <div className="pane-inner">
+            <p className="empty" role="status">
+              <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+              打开这张纸…
+            </p>
+          </div>
+        ) : null}
         {showEmpty ? <PaneEmpty /> : null}
         {showRead ? <PaneRead /> : null}
         {showEdit ? <PaneEdit docId={docId} /> : null}
