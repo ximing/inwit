@@ -32,6 +32,15 @@ import { listJobs } from '@/api/jobs';
 import { getLatestWeeklyReport } from '@/api/reports';
 import { getReviewStats, getReviewToday } from '@/api/review';
 import {
+  coalesceChanges,
+  planReloads,
+  stripEchoes,
+  type EchoStamp,
+  type ReloadIntent,
+  type SyncView,
+} from '@/lib/sync-plan';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
+import {
   acceptTopicSuggestion,
   createTopic,
   dismissTopicSuggestion,
@@ -70,6 +79,27 @@ export class TodayService extends Service {
   pollTimer: ReturnType<typeof setInterval> | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
   loadGen = 0;
+  private reviewGen = 0;
+  private jobsGen = 0;
+  private reportGen = 0;
+  private suggestGen = 0;
+  private resurfaceGen = 0;
+  private sync: SyncService | null = null;
+  private unsubSync: (() => void) | null = null;
+  private echoes: EchoStamp[] = [];
+  private syncChain: Promise<void> = Promise.resolve();
+
+  constructor() {
+    super();
+    try {
+      this.sync = this.resolve(SyncService);
+      this.unsubSync = this.sync.subscribe((event) => {
+        void this.handleSync(event);
+      });
+    } catch {
+      this.sync = null;
+    }
+  }
 
   get currentTopic(): Topic | null {
     if (this.topicId === null) return null;
@@ -171,8 +201,10 @@ export class TodayService extends Service {
   }
 
   async loadReview(): Promise<void> {
+    const gen = ++this.reviewGen;
     try {
       const [today, stats] = await Promise.all([getReviewToday(), getReviewStats()]);
+      if (gen !== this.reviewGen) return;
       this.dueCount = Math.max(0, today.total - today.reviewedToday);
       this.applyStats(stats);
       this.reviewLoaded = true;
@@ -182,8 +214,10 @@ export class TodayService extends Service {
   }
 
   async loadJobs(): Promise<void> {
+    const gen = ++this.jobsGen;
     try {
       const page = await listJobs({ limit: RECENT_JOBS, offset: 0 });
+      if (gen !== this.jobsGen) return;
       this.jobs = page.items;
     } catch {
       // Activity is optional; keep the last snapshot.
@@ -204,6 +238,8 @@ export class TodayService extends Service {
       });
       this.captureHandle?.clear();
       this.draft = '';
+      // 插入前发出的首页请求作废。再拉一次才能把新行和其余最近文档一起画上；回声会被剥掉，不会补这次列表。
+      ++this.loadGen;
       this.documents = [
         asListItem(created, {
           cardCount: 0,
@@ -212,8 +248,10 @@ export class TodayService extends Service {
         ...this.documents,
       ];
       this.documentTotal += 1;
+      this.rememberDocument(created);
       this.showToast(useChat ? '问题扔出去了，正在答' : '已收下，消化中');
       this.syncPolling();
+      void this.loadDocuments();
       void this.loadJobs();
     } catch (err) {
       this.error = errorMessage(err, useChat ? '提问失败' : '发送失败');
@@ -246,14 +284,31 @@ export class TodayService extends Service {
   }
 
   override destroy(): void {
+    this.unsubSync?.();
+    this.unsubSync = null;
     this.stopPolling();
     stopToast(this);
     super.destroy();
   }
 
+  async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'active') {
+      if (event.active) this.stopPolling();
+      else this.syncPolling();
+      return;
+    }
+    // 加载失败留在各 loader 的快照里，链本身要继续。
+    const run = (this.syncChain = this.syncChain
+      .then(() => this.applySync(event))
+      .catch(() => undefined));
+    await run;
+  }
+
   async loadSuggestions(): Promise<void> {
+    const gen = ++this.suggestGen;
     try {
       const items = await listTopicSuggestions();
+      if (gen !== this.suggestGen) return;
       this.suggestion = items[0] ?? null;
       if (this.suggestion) this.suggestDeadline = 0;
     } catch {
@@ -262,8 +317,10 @@ export class TodayService extends Service {
   }
 
   async loadWeeklyReport(): Promise<void> {
+    const gen = ++this.reportGen;
     try {
       const result = await getLatestWeeklyReport();
+      if (gen !== this.reportGen) return;
       this.weeklyReport = result.report;
     } catch {
       // Card is optional; keep the last snapshot.
@@ -298,8 +355,10 @@ export class TodayService extends Service {
   }
 
   async loadResurface(): Promise<void> {
+    const gen = ++this.resurfaceGen;
     try {
       const result = await getAnnotationResurface();
+      if (gen !== this.resurfaceGen) return;
       this.resurface = result.resurface;
     } catch {
       // Resurface banner is optional; keep the last snapshot.
@@ -337,6 +396,11 @@ export class TodayService extends Service {
   }
 
   startPolling(): void {
+    // 握手可能在本页构造前就已经 active，开定时器前再看一次。
+    if (this.sync?.active === true) {
+      this.stopPolling();
+      return;
+    }
     startPolling(this, () => void this.tickPending());
   }
 
@@ -367,5 +431,133 @@ export class TodayService extends Service {
     this.streak = stats.streak.current;
     this.totalCards = stats.totalCards;
     this.overdueBacklog = Math.max(0, stats.overdueCount - this.dueCount);
+  }
+
+  /** 只压刚写上屏幕的这一行，不用文档 updatedAt 盖掉更早的卡片扇出。 */
+  private rememberDocument(doc: { id: string; updatedAt: string }): void {
+    const atMs = Date.parse(doc.updatedAt);
+    if (!Number.isFinite(atMs)) return;
+    this.echoes.push({ scope: 'document', resourceId: doc.id, atMs });
+  }
+
+  private async applySync(event: SyncEvent): Promise<void> {
+    if (event.type === 'reset') {
+      await this.load();
+      return;
+    }
+    if (event.type !== 'changes') return;
+    const kept = stripEchoes(event.changes, this.echoes);
+    const keptSet = new Set(kept);
+    for (const change of event.changes) {
+      if (change.op === 'delete' || keptSet.has(change)) continue;
+      const atMs = Date.parse(change.at);
+      const index = this.echoes.findIndex(
+        (echo) => echo.scope === change.scope && echo.resourceId === change.resourceId && echo.atMs === atMs,
+      );
+      if (index >= 0) this.echoes.splice(index, 1);
+    }
+    await this.applyIntents(planReloads(coalesceChanges(kept), this.syncView()));
+  }
+
+  private syncView(): SyncView {
+    return {
+      documents: this.documents.map((doc) => ({ id: doc.id, updatedAt: doc.updatedAt })),
+      openDocumentId: null,
+      listIncludesHead: true,
+      editor: null,
+      topics: [],
+      openTopicId: null,
+      mapTopicId: null,
+      readerDocumentId: null,
+      readerActiveCardId: null,
+      reviewInSession: false,
+      jobs: this.jobs.map((job) => ({ id: job.id, updatedAt: job.updatedAt })),
+      activeJobId: null,
+    };
+  }
+
+  private async applyIntents(intents: ReloadIntent[]): Promise<void> {
+    const refreshIds: string[] = [];
+    const deleteIds: string[] = [];
+    let page = false;
+    let review = false;
+    let report = false;
+    let suggest = false;
+    let resurface = false;
+    let jobs = false;
+    for (const intent of intents) {
+      switch (intent.kind) {
+        case 'documents-page':
+          page = true;
+          break;
+        case 'document':
+          if (intent.op === 'delete') deleteIds.push(intent.id);
+          else refreshIds.push(intent.id);
+          break;
+        case 'review':
+          review = true;
+          break;
+        case 'report':
+          report = true;
+          break;
+        case 'suggest':
+          suggest = true;
+          break;
+        case 'resurface':
+          resurface = true;
+          break;
+        case 'job':
+          jobs = true;
+          break;
+        default:
+          break;
+      }
+    }
+    await this.syncDocuments(refreshIds, deleteIds, page);
+    await Promise.all([
+      review ? this.loadReview() : Promise.resolve(),
+      report ? this.loadWeeklyReport() : Promise.resolve(),
+      suggest ? this.loadSuggestions() : Promise.resolve(),
+      resurface ? this.loadResurface() : Promise.resolve(),
+      jobs ? this.loadJobs() : Promise.resolve(),
+    ]);
+  }
+
+  private async syncDocuments(refreshIds: string[], deleteIds: string[], page: boolean): Promise<void> {
+    const drop = new Set(deleteIds);
+    // 先合并列表，再丢掉本批 delete，避免刚删的 id 被这一页带回来。
+    let merged = false;
+    if (page || drop.size > 0) merged = await this.mergeRecentDocuments(drop);
+    const refresh = refreshIds.filter((id) => !drop.has(id));
+    if (refresh.length > 0) await Promise.all(refresh.map((id) => this.refreshOne(id)));
+    if (drop.size === 0) return;
+    const next = this.documents.filter((doc) => !drop.has(doc.id));
+    const removed = this.documents.length - next.length;
+    if (removed === 0) return;
+    this.documents = next;
+    if (!merged) this.documentTotal = Math.max(0, this.documentTotal - removed);
+    this.syncPolling();
+  }
+
+  private async mergeRecentDocuments(drop: ReadonlySet<string>): Promise<boolean> {
+    const gen = ++this.loadGen;
+    try {
+      const page = await listDocuments({ limit: RECENT_DOCS, offset: 0 });
+      if (gen !== this.loadGen) return false;
+      const pageIds = new Set(page.items.map((item) => item.id));
+      const held = this.documents;
+      const overlap = held.findIndex((item) => pageIds.has(item.id));
+      // 插在这一页前面的本地行还没被服务端算进 total，不能接到第四条后面。
+      const front = overlap < 0 ? [] : held.slice(0, overlap);
+      const tail = (overlap < 0 ? held : held.slice(overlap)).filter((item) => !pageIds.has(item.id));
+      this.documents = [...front, ...page.items, ...tail];
+      // page.total 已不含回收站。本批要删的队首不能再加一次；页内删掉的 id 也不在这里减。
+      const keptFront = front.filter((item) => !drop.has(item.id)).length;
+      this.documentTotal = page.total + keptFront;
+      this.syncPolling();
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

@@ -26,6 +26,8 @@ import {
   submitReviewFeedback,
   updateReviewSettings,
 } from '@/api/review';
+import { reviewReloadMode } from '@/lib/sync-plan';
+import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { LayoutService } from '@/shell/layout.service';
 
 const TOAST_MS = 3200;
@@ -75,6 +77,28 @@ export class ReviewService extends Service {
   /** 打卡月历当前展示的月份（YYYY-MM）与每日复习次数（date → count）。 */
   calMonth: string = monthKeyOf(new Date());
   checkins: Record<string, number> = {};
+  /** load 一开始加一。startSession 要等队列拿到手才加，失败不能把更新的 hub 快照丢掉。 */
+  private queueEpoch = 0;
+  /** 只区分重叠的 hub 重载和统计刷新，不跟着 startSession 走。 */
+  private reloadGen = 0;
+  /** 后一次 startSession 盖掉前一次的失败提示。 */
+  private sessionAttempt = 0;
+  private strugglingGen = 0;
+  private checkinGen = 0;
+  /** exitSession 自己会 load()，这期间不再跟一发同步重载。 */
+  private exiting = false;
+  private unsubSync: (() => void) | null = null;
+
+  constructor() {
+    super();
+    try {
+      this.unsubSync = this.resolve(SyncService).subscribe((event) => {
+        void this.handleSync(event);
+      });
+    } catch {
+      this.unsubSync = null;
+    }
+  }
 
   get layout(): LayoutService {
     return this.resolve(LayoutService);
@@ -231,6 +255,7 @@ export class ReviewService extends Service {
   }
 
   async load(): Promise<void> {
+    const epoch = ++this.queueEpoch;
     this.error = null;
     this.flipped = false;
     this.lastFeedback = null;
@@ -240,24 +265,30 @@ export class ReviewService extends Service {
         getReviewStats(),
         getReviewSettings(),
       ]);
+      if (epoch !== this.queueEpoch) return;
       this.applyToday(today);
       this.stats = stats;
       this.settings = cloneSettings(settings);
       this.calMonth = monthKeyOf(new Date());
       this.refreshDueBadge();
     } catch (err) {
+      if (epoch !== this.queueEpoch) return;
       this.error = errorMessage(err, '复习中心加载失败');
     } finally {
       this.ready = true;
     }
+    if (epoch !== this.queueEpoch) return;
     void this.loadStruggling();
     void this.loadCheckins();
   }
 
   /** 薄弱卡片是锦上添花，失败时静默保留旧列表。 */
   private async loadStruggling(): Promise<void> {
+    const gen = ++this.strugglingGen;
     try {
-      this.struggling = await getStrugglingCards();
+      const cards = await getStrugglingCards();
+      if (gen !== this.strugglingGen) return;
+      this.struggling = cards;
     } catch {
       // keep last snapshot
     }
@@ -269,9 +300,10 @@ export class ReviewService extends Service {
 
   /** 打卡图同样是锦上添花，失败时静默保留旧数据。 */
   async loadCheckins(month = this.calMonth): Promise<void> {
+    const gen = ++this.checkinGen;
     try {
       const data = await getReviewCheckins(month);
-      if (month !== this.calMonth) return;
+      if (gen !== this.checkinGen || month !== this.calMonth) return;
       this.checkins = Object.fromEntries(data.days.map((day) => [day.date, day.count]));
     } catch {
       // keep last snapshot
@@ -285,6 +317,8 @@ export class ReviewService extends Service {
   }
 
   async startSession(): Promise<void> {
+    const epoch = this.queueEpoch;
+    const attempt = ++this.sessionAttempt;
     this.error = null;
     this.flipped = false;
     this.lastFeedback = null;
@@ -292,19 +326,53 @@ export class ReviewService extends Service {
     this.sessionRecap = { remembered: 0, fuzzy: 0, forgot: 0 };
     try {
       const today = await getReviewToday();
+      if (epoch !== this.queueEpoch || attempt !== this.sessionAttempt) return;
+      ++this.queueEpoch;
       this.applyToday(today);
       this.mode = 'session';
       this.refreshDueBadge();
     } catch (err) {
+      if (epoch !== this.queueEpoch || attempt !== this.sessionAttempt) return;
       this.error = errorMessage(err, '今日队列拿不下来');
     }
   }
 
   async exitSession(): Promise<void> {
+    this.exiting = true;
     this.mode = 'hub';
     this.flipped = false;
     this.lastFeedback = null;
-    await this.load();
+    try {
+      await this.load();
+    } finally {
+      this.exiting = false;
+    }
+  }
+
+  async handleSync(event: SyncEvent): Promise<void> {
+    if (event.type === 'active') return;
+    if (event.type === 'reset') {
+      await this.refreshFromSync();
+      return;
+    }
+    if (event.type === 'changes' && event.changes.some((change) => change.scope === 'review')) {
+      await this.refreshFromSync();
+    }
+  }
+
+  /** 队列和统计。不把 calMonth 拨回当月，也不动会话里的卡片。 */
+  async reloadQueueAndStats(): Promise<void> {
+    const reload = ++this.reloadGen;
+    const epoch = this.queueEpoch;
+    try {
+      const [today, stats] = await Promise.all([getReviewToday(), getReviewStats()]);
+      if (reload !== this.reloadGen || epoch !== this.queueEpoch || this.mode === 'session') return;
+      this.applyToday(today);
+      this.stats = stats;
+      await Promise.all([this.loadStruggling(), this.loadCheckins()]);
+    } catch {
+      // keep last snapshot
+    }
   }
 
   /** 打分前先播一个飞出动画，再提交反馈。 */
@@ -331,6 +399,8 @@ export class ReviewService extends Service {
       if (this.isCurrentCalMonth) {
         const key = dateKeyOf(new Date());
         this.checkins = { ...this.checkins, [key]: (this.checkins[key] ?? 0) + 1 };
+        // 这次打分前发出的打卡图不能把刚加上的一格盖掉。
+        ++this.checkinGen;
       }
       this.items = this.items.slice(1);
       this.flipped = false;
@@ -376,10 +446,34 @@ export class ReviewService extends Service {
   }
 
   override destroy(): void {
+    this.unsubSync?.();
+    this.unsubSync = null;
     if (this.toastTimer !== null) {
       clearTimeout(this.toastTimer);
       this.toastTimer = null;
     }
     super.destroy();
+  }
+
+  private async refreshFromSync(): Promise<void> {
+    // load() 会把 calMonth 拨回当月；会话中的队列以本机 items 为准。
+    if (this.exiting) return;
+    if (reviewReloadMode(this.mode === 'session') === 'stats') {
+      await this.refreshStats();
+      return;
+    }
+    await this.reloadQueueAndStats();
+  }
+
+  private async refreshStats(): Promise<void> {
+    const reload = ++this.reloadGen;
+    const epoch = this.queueEpoch;
+    try {
+      const stats = await getReviewStats();
+      if (reload !== this.reloadGen || epoch !== this.queueEpoch) return;
+      this.stats = stats;
+    } catch {
+      // keep last snapshot
+    }
   }
 }
