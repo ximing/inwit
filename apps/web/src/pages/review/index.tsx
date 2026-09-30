@@ -7,14 +7,16 @@ import {
 } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Pause, Trash2, X } from 'lucide-react';
-import { useEffect, useState, type ReactElement } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { ReportsPane } from './reports-pane';
+import { loadReportsPane } from './load-reports';
 import { weeklyReportsPath, ROUTES } from '@/routes';
 import { cardPath } from '@/routes';
 import { cloneSettings, ReviewService } from './review.service';
 import { ReviewSectionHead, todayLabel } from './section-head';
 import { estimateReviewMinutes } from '@/lib/review-eta';
+
+const ReportsPane = lazy(() => loadReportsPane().then((mod) => ({ default: mod.ReportsPane })));
 
 const LEARNING_STEP_OPTIONS = [1, 3, 6, 10] as const;
 
@@ -103,7 +105,15 @@ const ReviewPageContent = observer(function ReviewPageContent() {
 
   return (
     <>
-      {reportsActive ? <ReportsPane /> : service.mode === 'session' ? <SessionPane /> : <HubPane />}
+      {reportsActive ? (
+        <Suspense fallback={<p className="empty">正在打开…</p>}>
+          <ReportsPane />
+        </Suspense>
+      ) : service.mode === 'session' ? (
+        <SessionPane />
+      ) : (
+        <HubPane />
+      )}
       {service.toast ? (
         <p className="toast" role="status">
           {service.toast}

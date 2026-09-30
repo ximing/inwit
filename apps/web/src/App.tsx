@@ -1,15 +1,18 @@
+import { Suspense } from 'react';
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router';
 import { AppDialog } from '@/components/app-dialog';
-import { DocsPage } from '@/pages/docs';
-import { JobsPage } from '@/pages/jobs';
-import { LoginPage } from '@/pages/login';
-import { MemoryPage } from '@/pages/memory';
-import { ReviewPage } from '@/pages/review';
-import { SettingsPage } from '@/pages/settings';
-import { TodayPage } from '@/pages/today';
-import { TopicsPage } from '@/pages/topics';
 import { PAGE_LIST, ROUTES, docPath, editorNewPath, editorPath, routeSegment, topicPath } from '@/routes';
 import { Layout } from '@/shell/Layout';
+import {
+  DocsPage,
+  JobsPage,
+  LoginPage,
+  MemoryPage,
+  ReviewPage,
+  SettingsPage,
+  TodayPage,
+  TopicsPage,
+} from '@/shell/page-loaders';
 import { RequireAuth } from '@/shell/RequireAuth';
 
 const REQUIRED_PATHS = [
@@ -50,7 +53,20 @@ export function App() {
   return (
     <>
       <Routes>
-        <Route path={ROUTES.login} element={<LoginPage />} />
+        <Route
+          path={ROUTES.login}
+          element={
+            <Suspense
+              fallback={
+                <div className="splash">
+                  <p className="brand-mark">Inwit</p>
+                </div>
+              }
+            >
+              <LoginPage />
+            </Suspense>
+          }
+        />
         <Route element={<RequireAuth />}>
           <Route path="/doc/:id" element={<LegacyDocRedirect />} />
           <Route path="/editor/:id" element={<LegacyEditorRedirect />} />

@@ -1,6 +1,6 @@
 import { ASSET_IMAGE_MAX_BYTES, ASSET_VIDEO_MAX_BYTES, EMPTY_PM_DOC } from '@inwit/dto';
 import { describe, expect, it, vi } from 'vitest';
-import { isBlankPmDoc } from '@/lib/pm-doc';
+import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import {
   AssetUploadError,
   classifyAssetFile,

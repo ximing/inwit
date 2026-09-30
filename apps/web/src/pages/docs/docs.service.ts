@@ -65,7 +65,8 @@ import {
 } from '@/lib/multipart-logic';
 import { type PresignedUrlEntry } from '@/lib/presign-cache-logic';
 import { isLostTextEntity, type DocEditorHost } from '@/lib/entity-marks';
-import { asPmJson, isBlankPmDoc, jsonEqual, textToPmDoc } from '@/lib/pm-doc';
+import { asPmJson, jsonEqual, textToPmDoc } from '@/lib/pm-doc';
+import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import {
   classifyRemoteDetail,
   coalesceChanges,

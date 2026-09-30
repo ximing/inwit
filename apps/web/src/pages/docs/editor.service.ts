@@ -3,7 +3,8 @@ import { EMPTY_PM_DOC, type Document, type PmDocJson, type UpdateDocumentInput }
 import { createDocument, getDocument, updateDocument } from '@/api/documents';
 import { errorMessage } from '@/api/client';
 import { formatTimeHm } from '@/lib/format';
-import { asPmJson, clonePmJson, isBlankPmDoc, jsonEqual } from '@/lib/pm-doc';
+import { asPmJson, clonePmJson, jsonEqual } from '@/lib/pm-doc';
+import { isBlankPmDoc } from '@/lib/pm-doc-read';
 
 const SAVE_DEBOUNCE_MS = 2000;
 

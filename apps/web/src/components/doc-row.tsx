@@ -31,10 +31,14 @@ export function DocRow({
   doc,
   hanging,
   onOpen,
+  onPointerEnter,
+  onFocus,
 }: {
   doc: DocumentListItem;
   hanging?: string | null;
   onOpen?: (docId: string) => void;
+  onPointerEnter?: () => void;
+  onFocus?: () => void;
 }) {
   const agentLabel = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   const face = docCardFace(doc, 160);
@@ -79,13 +83,26 @@ export function DocRow({
   const label = docCardLabel(face);
   if (onOpen) {
     return (
-      <button type="button" className={className} aria-label={label} onClick={() => onOpen(doc.id)}>
+      <button
+        type="button"
+        className={className}
+        aria-label={label}
+        onClick={() => onOpen(doc.id)}
+        onPointerEnter={onPointerEnter}
+        onFocus={onFocus}
+      >
         {body}
       </button>
     );
   }
   return (
-    <Link to={docPath(doc.id)} className={className} aria-label={label}>
+    <Link
+      to={docPath(doc.id)}
+      className={className}
+      aria-label={label}
+      onPointerEnter={onPointerEnter}
+      onFocus={onFocus}
+    >
       {body}
     </Link>
   );

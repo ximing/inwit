@@ -7,10 +7,10 @@ import {
 } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { ChevronDown, ChevronRight, Tags } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { DocumentActions, useDocumentMenu } from '@/components/document-actions';
-import { ReaderOverlay } from '@/components/reader/ReaderOverlay';
+import { loadReaderOverlay, prefetchReaderOverlay } from '@/components/reader/load-reader';
 import { ReaderService } from '@/components/reader/reader.service';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
@@ -22,6 +22,21 @@ import { AssetUrlsService } from '@/services/asset-urls.service';
 import { DialogService } from '@/services/dialog.service';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
 import { TopicsService, type TopicListItem } from './topics.service';
+
+const ReaderOverlay = lazy(() =>
+  loadReaderOverlay().then((mod) => ({ default: mod.ReaderOverlay })),
+);
+
+function ReaderFallback() {
+  return (
+    <div className="reader-overlay-root" role="status">
+      <div className="reader-overlay-mask" />
+      <div className="reader-overlay">
+        <p className="empty">正在打开…</p>
+      </div>
+    </div>
+  );
+}
 
 const TopicsPageContent = observer(function TopicsPageContent() {
   const service = useService(TopicsService);
@@ -88,7 +103,11 @@ const TopicsPageContent = observer(function TopicsPageContent() {
           {service.toast}
         </p>
       ) : null}
-      <ReaderOverlay />
+      {reader.isOpen ? (
+        <Suspense fallback={<ReaderFallback />}>
+          <ReaderOverlay />
+        </Suspense>
+      ) : null}
     </div>
   );
 });
@@ -572,6 +591,8 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
       className={`topic-doc-card${face.title ? '' : ' is-untitled'}`}
       aria-label={docCardLabel(face)}
       {...menu}
+      onPointerEnter={() => prefetchReaderOverlay()}
+      onFocus={() => prefetchReaderOverlay()}
       onClick={() => {
         const to = service.readerNavForDoc(doc.id);
         if (to) navigate(to);

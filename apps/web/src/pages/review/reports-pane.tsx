@@ -3,7 +3,7 @@ import { bindServices, observer, useService } from '@rabjs/react';
 import { ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { isBlankPmDoc } from '@/lib/pm-doc';
+import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { DocView } from '@/components/doc/DocView';
 import { ROUTES, weeklyReportsPath } from '@/routes';
 import { ReportsService } from './reports.service';

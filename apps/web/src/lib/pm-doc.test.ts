@@ -1,6 +1,7 @@
 import { EMPTY_PM_DOC } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
-import { isBlankPmDoc, textToPmDoc } from './pm-doc';
+import { textToPmDoc } from './pm-doc';
+import { isBlankPmDoc } from './pm-doc-read';
 
 describe('isBlankPmDoc', () => {
   it('treats empty and ZWSP docs as blank', () => {

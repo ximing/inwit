@@ -4,6 +4,7 @@ import { getCardLinks } from '@/api/cards';
 import { ApiError, errorMessage } from '@/api/client';
 import { getDocument, getDocumentFile } from '@/api/documents';
 import { isPdfMime } from '@/lib/mime';
+import { prefetchReaderOverlay } from './load-reader';
 
 export class ReaderService extends Service {
   doc: DocumentDetail | null = null;
@@ -35,6 +36,7 @@ export class ReaderService extends Service {
   }
 
   async openDoc(docId: string): Promise<void> {
+    prefetchReaderOverlay();
     if (this.doc?.id === docId && !this.loading) {
       this.error = null;
       this.activeCardId = null;
@@ -74,11 +76,13 @@ export class ReaderService extends Service {
   }
 
   async openCard(cardId: string, docId: string): Promise<void> {
+    prefetchReaderOverlay();
     this.cardTrail = [];
     await this.focusCard(cardId, docId);
   }
 
   async openLinkedCard(cardId: string): Promise<void> {
+    prefetchReaderOverlay();
     const prev = this.activeCardId;
     if (prev) this.cardTrail = [...this.cardTrail, prev];
     const local = this.doc?.cards.find((card) => card.id === cardId);

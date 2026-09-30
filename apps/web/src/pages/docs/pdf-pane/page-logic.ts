@@ -1,5 +1,6 @@
 import { blocksFromPmJSON } from '@inwit/doc-schema';
-import { asSchemaJson, isBlankPmDoc } from '@/lib/pm-doc';
+import { asSchemaJson } from '@/lib/pm-doc';
+import { isBlankPmDoc } from '@/lib/pm-doc-read';
 
 export function pageTextsFromContent(contentJson: unknown): string[] {
   try {

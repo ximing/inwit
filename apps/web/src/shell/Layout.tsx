@@ -14,9 +14,9 @@ import {
   Tags,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { isSearchHotkey, requestSearchFocus } from '@/components/search';
+import { isSearchHotkey, requestSearchFocus } from '@/components/search/search-hotkey';
 import { UserAvatar } from '@/components/user-avatar';
 import { ROUTES } from '@/routes';
 import { AuthService } from '@/services/auth.service';
@@ -25,6 +25,7 @@ import { SyncService } from '@/services/sync.service';
 import { ThemeService } from '@/services/theme.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { LayoutService } from './layout.service';
+import { prefetchPage, scheduleShellPrefetch } from './page-loaders';
 
 const NAV: ReadonlyArray<{
   to: string;
@@ -55,6 +56,8 @@ const LayoutContent = observer(function LayoutContent() {
   const dark = theme.resolved === 'dark';
   const collapsed = prefs.navRailCollapsed;
   const label = auth.displayLabel;
+
+  useEffect(() => scheduleShellPrefetch(location.pathname), [location.pathname]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -99,6 +102,8 @@ const LayoutContent = observer(function LayoutContent() {
                 end={item.end}
                 data-label={item.label}
                 className={({ isActive }) => (isActive ? 'nav-item is-on' : 'nav-item')}
+                onPointerEnter={() => prefetchPage(item.to)}
+                onFocus={() => prefetchPage(item.to)}
               >
                 <span className="nav-ico">
                   <Icon strokeWidth={1.8} />
@@ -117,6 +122,8 @@ const LayoutContent = observer(function LayoutContent() {
               to={ROUTES.settings}
               className="rail-user"
               title={label || '设置'}
+              onPointerEnter={() => prefetchPage(ROUTES.settings)}
+              onFocus={() => prefetchPage(ROUTES.settings)}
             >
               <UserAvatar />
               <span className="rail-user-meta">
@@ -149,7 +156,9 @@ const LayoutContent = observer(function LayoutContent() {
         </div>
       </aside>
       <main className="main">
-        <Outlet />
+        <Suspense fallback={<p className="empty">正在打开…</p>}>
+          <Outlet />
+        </Suspense>
       </main>
       {shot.toast ? (
         <p className="toast" role="status">

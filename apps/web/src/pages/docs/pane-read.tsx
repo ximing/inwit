@@ -9,15 +9,17 @@ import { lazy, Suspense, useLayoutEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { DocView } from '@/components/doc/DocView';
 import { Tag } from '@/components/tag';
-import { isBlankPmDoc, textToPmDoc } from '@/lib/pm-doc';
+import { textToPmDoc } from '@/lib/pm-doc';
+import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { ROUTES } from '@/routes';
 import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
 import { DocTopRow } from './doc-toprow';
 import { ReadSelectionToolbar } from './selection-toolbar';
+import { loadPdfPane } from './pdf-pane-loader';
 
-const PdfPane = lazy(() => import('./pdf-pane'));
+const PdfPane = lazy(() => loadPdfPane());
 
 export function PaneEmpty() {
   return (

@@ -9,7 +9,8 @@ import {
   ensureEntityMarksOnEditor,
   type DocEditorHost,
 } from '@/lib/entity-marks';
-import { asPmJson, isBlankPmDoc } from '@/lib/pm-doc';
+import { asPmJson } from '@/lib/pm-doc';
+import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { AnchorHighlight } from '@/pages/docs/anchor-highlight';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { createDocExtensions } from './extensions';

@@ -1,4 +1,4 @@
-import { pmJsonToText, type PmJson } from '@inwit/doc-schema';
+import type { PmJson } from '@inwit/doc-schema';
 import { EMPTY_PM_DOC, type PmDocJson } from '@inwit/dto';
 
 export function asPmJson(value: unknown): PmDocJson {
@@ -14,14 +14,6 @@ export function clonePmJson(value: unknown): PmDocJson {
 
 export function asSchemaJson(value: unknown): PmJson {
   return asPmJson(value) as unknown as PmJson;
-}
-
-export function isBlankPmDoc(value: unknown): boolean {
-  try {
-    return pmJsonToText(asSchemaJson(value)).replaceAll('\u200b', '').trim().length === 0;
-  } catch {
-    return true;
-  }
 }
 
 /** Plain text / chat answer / AI 摘要 → 按空行切段的 PM JSON。 */

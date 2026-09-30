@@ -15,6 +15,11 @@
       "types": "./src/schema/code-block-view.ts",
       "import": "./dist/schema/code-block-view.js",
       "default": "./dist/schema/code-block-view.js"
+    },
+    "./math-html": {
+      "types": "./src/schema/math-html.ts",
+      "import": "./dist/schema/math-html.js",
+      "default": "./dist/schema/math-html.js"
     }
   },
   "scripts": {

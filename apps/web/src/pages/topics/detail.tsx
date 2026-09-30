@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { DocRow } from '@/components/doc-row';
+import { prefetchReaderOverlay } from '@/components/reader/load-reader';
 import { ReaderService } from '@/components/reader/reader.service';
 import { formatRelativeTime } from '@/lib/format';
 import { chapterMeta, TopicsService } from './topics.service';
@@ -257,6 +258,8 @@ export const FeedTab = observer(function FeedTab() {
               <DocRow
                 doc={doc}
                 hanging={service.hangingTitle(doc)}
+                onPointerEnter={() => prefetchReaderOverlay()}
+                onFocus={() => prefetchReaderOverlay()}
                 onOpen={(id) => {
                   const to = service.readerNavForDoc(id);
                   if (to) navigate(to);
@@ -345,6 +348,8 @@ export const NodeDrawer = observer(function NodeDrawer() {
                 <button
                   type="button"
                   className="related-card related-card-link"
+                  onPointerEnter={() => prefetchReaderOverlay()}
+                  onFocus={() => prefetchReaderOverlay()}
                   onClick={() => {
                     const to = service.readerNavForCard(card.id, card.documentId);
                     if (to) navigate(to);
@@ -370,6 +375,8 @@ export const NodeDrawer = observer(function NodeDrawer() {
               <li key={doc.id}>
                 <button
                   type="button"
+                  onPointerEnter={() => prefetchReaderOverlay()}
+                  onFocus={() => prefetchReaderOverlay()}
                   onClick={() => {
                     const to = service.readerNavForDoc(doc.id);
                     if (to) navigate(to);

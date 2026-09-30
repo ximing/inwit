@@ -9,11 +9,13 @@ import { SearchPalette, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
 import { formatRelativeTime } from '@/lib/format';
+import { isPdfMime } from '@/lib/mime';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { docsPath } from '@/routes';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { DocListResizer } from './doc-list-resizer';
 import { DocsService } from './docs.service';
+import { prefetchPdfPane } from './pdf-pane-loader';
 import { TopicPicker } from './topic-picker';
 
 function transferHasFiles(event: DragEvent): boolean {
@@ -68,7 +70,17 @@ const DocStreamRow = observer(function DocStreamRow({
   const hasTags = Boolean(kind || doc.status === 'failed');
   return (
     <div className={`row ws-doc-row${selected ? ' is-on' : ''}${face.title ? '' : ' is-untitled'}`} {...menu}>
-      <Link to={docsPath(doc.id)} className="ws-doc-row-link" aria-label={docCardLabel(face)}>
+      <Link
+        to={docsPath(doc.id)}
+        className="ws-doc-row-link"
+        aria-label={docCardLabel(face)}
+        onPointerEnter={() => {
+          if (isPdfMime(doc.fileMime)) prefetchPdfPane();
+        }}
+        onFocus={() => {
+          if (isPdfMime(doc.fileMime)) prefetchPdfPane();
+        }}
+      >
         {face.title ? (
           <div className="row-title">
             <span className="t">{face.title}</span>

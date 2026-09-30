@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import { ROUTES, weeklyReportsPath } from '@/routes';
+import { prefetchReportsPane } from './load-reports';
 
 const WEEKDAY_CN = ['日', '一', '二', '三', '四', '五', '六'] as const;
 
@@ -26,6 +27,8 @@ export function ReviewSectionHead({ active, lede }: { active: 'hub' | 'reports';
           className={active === 'reports' ? 'hub-tab is-on' : 'hub-tab'}
           to={weeklyReportsPath()}
           aria-current={active === 'reports' ? 'page' : undefined}
+          onPointerEnter={() => prefetchReportsPane()}
+          onFocus={() => prefetchReportsPane()}
         >
           学习周报
         </Link>
