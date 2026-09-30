@@ -105,14 +105,16 @@ export class SyncService extends Service {
 
   /** @returns whether another page should be pulled immediately. */
   private _apply(res: SyncPollResponse, handshake: boolean): boolean {
+    // A failed or 404 poll leaves cursor null. That later handshake would skip the gap.
+    const recover = handshake && (this.degraded || this.failures > 0);
     this.failures = 0;
     this.degraded = false;
     this.cursor = res.cursor;
     this._setActive(true);
     const more = res.more === true;
     if (handshake) {
-      // No `since`: remember the cursor. Do not replay the empty handshake page.
-      devDebug('sync.handshake', { cursor: res.cursor });
+      devDebug('sync.handshake', { cursor: res.cursor, recover });
+      if (recover) this._emit({ type: 'reset' });
       return more;
     }
     if (res.reset === true) {

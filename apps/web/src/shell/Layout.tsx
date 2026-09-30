@@ -46,7 +46,7 @@ const LayoutContent = observer(function LayoutContent() {
   const auth = useService(AuthService);
   const shot = useService(ScreenshotService);
   const theme = useService(ThemeService);
-  // Resolving starts the one shell poll. Pages do not subscribe in this pass.
+  // bindServices does not construct the class.
   useService(SyncService);
   const layout = useService(LayoutService);
   const prefs = useService(UiPrefsService);
