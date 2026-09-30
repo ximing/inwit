@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MapTreeNode } from '@inwit/dto';
 import { getTopicMap, getTopicMapSummary } from '@/api/maps';
-import { TopicsService } from './topics.service';
+import { mergeListedRows, TopicsService } from './topics.service';
 
 vi.mock('@/api/maps', async (original) => ({
   ...await original<typeof import('@/api/maps')>(),
@@ -38,5 +38,38 @@ describe('topic map refresh after document changes', () => {
     await pending;
     expect(service.tree).toEqual([]);
     expect(service.summary).toBeNull();
+  });
+});
+
+describe('mergeListedRows', () => {
+  it('keeps server order and appends the local tail', () => {
+    const merged = mergeListedRows(
+      [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+      [{ id: 'b' }, { id: 'a' }],
+      [],
+      (row) => row.id,
+    );
+    expect(merged.map((row) => row.id)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('drops deleted ids after the merge so the tail cannot restore them', () => {
+    const merged = mergeListedRows(
+      [{ id: 'a' }, { id: 'gone' }],
+      [{ id: 'gone' }, { id: 'a' }],
+      ['gone'],
+      (row) => row.id,
+    );
+    expect(merged.map((row) => row.id)).toEqual(['a']);
+  });
+
+  it('reads topic ids from the nested topic', () => {
+    const local = [
+      { topic: { id: 't1' }, n: 1 },
+      { topic: { id: 't2' }, n: 2 },
+    ];
+    const server = [{ topic: { id: 't2' }, n: 9 }];
+    expect(mergeListedRows(local, server, ['t1'], (row) => row.topic.id)).toEqual([
+      { topic: { id: 't2' }, n: 9 },
+    ]);
   });
 });

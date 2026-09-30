@@ -1,7 +1,7 @@
 import type { CardLinksResponse, DocumentCard, DocumentDetail } from '@inwit/dto';
 import { Service } from '@rabjs/react';
 import { getCardLinks } from '@/api/cards';
-import { errorMessage } from '@/api/client';
+import { ApiError, errorMessage } from '@/api/client';
 import { getDocument, getDocumentFile } from '@/api/documents';
 import { isPdfMime } from '@/lib/mime';
 
@@ -109,6 +109,27 @@ export class ReaderService extends Service {
     this.pendingScrollTop = false;
     this.pdfUrl = null;
     this.pdfError = null;
+  }
+
+  /**
+   * 打开中的文档被远端 upsert。弹层没有未保存正文。
+   * 清掉整份脉络缓存：backToList 会留着缓存，openLinkedCard 返回时还会命中。
+   */
+  async refreshOpenDocument(docId: string): Promise<void> {
+    if (this.doc?.id !== docId) return;
+    const gen = ++this.loadGen;
+    try {
+      const detail = await getDocument(docId);
+      if (gen !== this.loadGen || this.doc?.id !== docId) return;
+      this.doc = detail;
+      this.loading = false;
+      this.error = null;
+      this.linksCache = {};
+      if (this.activeCardId !== null) await this.ensureLinks(this.activeCardId, gen);
+    } catch (err) {
+      if (gen !== this.loadGen) return;
+      if (err instanceof ApiError && err.status === 404) this.close();
+    }
   }
 
   clearFocus(): void {
