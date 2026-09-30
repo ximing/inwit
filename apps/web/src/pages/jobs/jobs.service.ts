@@ -87,7 +87,6 @@ const WEEKDAY_SHORT = ['日', '一', '二', '三', '四', '五', '六'] as const
 
 const EMPTY_COUNTS: JobQueueCounts = { running: 0, pending: 0, doneToday: 0, failed: 0 };
 
-/** Every job id is an intent. An empty list must not be read as "nothing to reload". */
 const JOBS_SYNC_VIEW: SyncView = {
   documents: [],
   openDocumentId: null,
@@ -507,7 +506,7 @@ export class JobsService extends Service {
 
   startPolling(): void {
     if (this.closed || this.pollTimer !== null) return;
-    // Read at start time: the page can mount after the handshake already set active.
+    // Handshake may already have finished before this interval would start.
     if (this.syncService.active) return;
     this.pollTimer = setInterval(() => {
       void this.tickQueue();
@@ -567,21 +566,19 @@ export class JobsService extends Service {
     for (const intent of intents) {
       if (this.closed) return;
       if (intent.kind !== 'job') continue;
-      // Signature ignores payload, so an OCR page update still has to reload the queue.
       await this.tickQueue();
     }
   }
 
   private async reloadAfterGap(): Promise<void> {
     if (this.closed) return;
-    // The cursor jumped. Stamps from before the gap must not eat the next upsert.
+    this.error = null;
     this.echoes = [];
     await Promise.all([this.loadQueue(), this.loadHistory(), this.loadFailed(), this.loadRecent()]);
     if (this.closed) return;
     this.syncPolling();
   }
 
-  /** One stamp consumes one upsert. Deletes stay, and unmatched stamps stay for a later poll. */
   private consumeEchoes(changes: SyncChange[]): SyncChange[] {
     const kept = stripEchoes(changes, this.echoes);
     if (kept.length === changes.length) return kept;
@@ -600,11 +597,7 @@ export class JobsService extends Service {
     return kept;
   }
 
-  /**
-   * Stamp only once the queue shows this write.
-   * A failed reload must not eat the sync event that would retry it.
-   * Jobs this page never painted are not echoes.
-   */
+  // Stamp only after this queue snapshot shows the cancel or retry.
   private noteJobEcho(job: Job): void {
     if (!this.queue) return;
     const atMs = Date.parse(job.updatedAt);
