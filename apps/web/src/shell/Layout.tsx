@@ -21,6 +21,7 @@ import { UserAvatar } from '@/components/user-avatar';
 import { ROUTES } from '@/routes';
 import { AuthService } from '@/services/auth.service';
 import { ScreenshotService } from '@/services/screenshot.service';
+import { SyncService } from '@/services/sync.service';
 import { ThemeService } from '@/services/theme.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { LayoutService } from './layout.service';
@@ -45,6 +46,8 @@ const LayoutContent = observer(function LayoutContent() {
   const auth = useService(AuthService);
   const shot = useService(ScreenshotService);
   const theme = useService(ThemeService);
+  // Resolving starts the one shell poll. Pages do not subscribe in this pass.
+  useService(SyncService);
   const layout = useService(LayoutService);
   const prefs = useService(UiPrefsService);
   const navigate = useNavigate();
@@ -162,4 +165,4 @@ const LayoutContent = observer(function LayoutContent() {
   );
 });
 
-export const Layout = bindServices(LayoutContent, [LayoutService]);
+export const Layout = bindServices(LayoutContent, [SyncService, LayoutService]);
