@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Job, MapTreeNode, Topic } from '@inwit/dto';
+import { EMPTY_PM_DOC, type DocumentListItem, type Job, type MapTreeNode, type Topic } from '@inwit/dto';
 import { ApiError } from '@/api/client';
+import { listDocuments } from '@/api/documents';
 import { getJob } from '@/api/jobs';
-import { getMapNodeDetail, getTopicMap, getTopicMapSummary } from '@/api/maps';
-import { listTopics } from '@/api/topics';
+import { getActiveTopicJob, getMapNodeDetail, getTopicMap, getTopicMapSummary } from '@/api/maps';
+import { getTopic, listTopics } from '@/api/topics';
 import { mergeListedRows, TopicsService, type TopicListItem } from './topics.service';
 
 vi.mock('@/api/maps', async (original) => ({
@@ -11,10 +12,12 @@ vi.mock('@/api/maps', async (original) => ({
   getTopicMap: vi.fn(),
   getTopicMapSummary: vi.fn(),
   getMapNodeDetail: vi.fn(),
+  getActiveTopicJob: vi.fn(),
 }));
 vi.mock('@/api/topics', async (original) => ({
   ...(await original<typeof import('@/api/topics')>()),
   listTopics: vi.fn(),
+  getTopic: vi.fn(),
   deleteTopic: vi.fn(async () => undefined),
 }));
 vi.mock('@/api/jobs', async (original) => ({
@@ -198,6 +201,65 @@ describe('topic job tick', () => {
     await pending;
     expect(service.activeJob).toBeNull();
     expect(service.detailError).toBeNull();
+  });
+});
+
+function docItem(id: string): DocumentListItem {
+  return {
+    id,
+    userId: 'user',
+    topicId: 'topic-1',
+    mapNodeId: null,
+    title: id,
+    description: null,
+    contentJson: EMPTY_PM_DOC,
+    source: 'import',
+    status: 'digested',
+    failReason: null,
+    answer: null,
+    linkHint: null,
+    fileMime: null,
+    pageCount: null,
+    createdAt: '2026-09-30T00:00:00.000Z',
+    updatedAt: '2026-09-30T00:00:00.000Z',
+    cardCount: 0,
+    proposedCount: 0,
+    topicTitle: null,
+  };
+}
+
+describe('reset document window', () => {
+  it('drops rows the reset window omitted and keeps rows added during the reload', async () => {
+    const topic = topicItem('topic-1', '主题', '2026-09-30T00:00:00.000Z').topic;
+    const keep = docItem('keep');
+    const omitted = docItem('omitted');
+    const doomed = docItem('doomed');
+    const added = docItem('added');
+    const service = new TopicsService();
+    service.topic = topic;
+    service.topicId = topic.id;
+    service.docsHeadReady = true;
+    service.documents = [keep, omitted, doomed];
+    service.documentsTotal = 3;
+    vi.mocked(listTopics).mockImplementation(async () => {
+      service.documents = [...service.documents, added];
+      return [topic];
+    });
+    vi.mocked(getTopic).mockResolvedValue(topic);
+    vi.mocked(getTopicMap).mockResolvedValue({ nodes: [] });
+    vi.mocked(getTopicMapSummary).mockResolvedValue(summary);
+    vi.mocked(getActiveTopicJob).mockResolvedValue({ job: null });
+    vi.mocked(listDocuments).mockImplementation(async (query) => {
+      if (query.limit === 1) return { items: [], total: 2 };
+      service.documents = service.documents.filter((item) => item.id !== doomed.id);
+      return { items: [keep, doomed], total: 2 };
+    });
+
+    await (service as unknown as {
+      _handleSync(event: { type: 'reset' }): Promise<void>;
+    })._handleSync({ type: 'reset' });
+
+    expect(service.documents.map((item) => item.id)).toEqual(['keep', 'added']);
   });
 });
 

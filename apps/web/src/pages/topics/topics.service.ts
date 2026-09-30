@@ -1076,12 +1076,20 @@ export class TopicsService extends Service {
     }
     if (event.type === 'reset') {
       this.syncEchoes = [];
-      await this.load();
-      if (this.syncStopped) return;
-      await this._reloadMountedTopic();
-      if (this._container) {
-        const readerId = this.reader.doc?.id;
-        if (readerId) await this.reader.refreshOpenDocument(readerId);
+      const docsAtReset = this.documents.map((item) => item.id);
+      this.docSyncPending = false;
+      this.resetReloading = true;
+      try {
+        await this.load();
+        if (!this.syncStopped) {
+          await this._reloadMountedTopic(docsAtReset);
+          if (this._container) {
+            const readerId = this.reader.doc?.id;
+            if (readerId) await this.reader.refreshOpenDocument(readerId);
+          }
+        }
+      } finally {
+        this.resetReloading = false;
       }
       return;
     }
@@ -1439,14 +1447,13 @@ export class TopicsService extends Service {
     if (pane.topic.status === 'archived') this.archiveOpen = true;
   }
 
-  private async _reloadMountedTopic(): Promise<void> {
+  private async _reloadMountedTopic(docsAtReset: readonly string[]): Promise<void> {
     const id = this.topicId;
     if (!id) return;
     const gen = ++this.topicLoadGen;
     this.docListGen += 1;
     const listGen = this.docListGen;
     this.openInFlight = false;
-    this.docSyncPending = false;
     this.resetReloading = true;
     const nodeId = this.selectedNodeId;
     const held = this.docsHeadReady ? this.documents.length : 0;
@@ -1465,9 +1472,16 @@ export class TopicsService extends Service {
         Date.parse(local.updatedAt) > Date.parse(pane.topic.updatedAt)
           ? local
           : pane.topic;
+      const atStart = new Set(docsAtReset);
+      const serverIds = new Set(pane.documents.map((item) => item.id));
+      const localIds = new Set(this.documents.map((item) => item.id));
+      const dropIds: string[] = [];
+      for (const docId of atStart) {
+        if (!serverIds.has(docId) || !localIds.has(docId)) dropIds.push(docId);
+      }
       const documents =
         this.docListGen === listGen && this.docsHeadReady
-          ? mergeListedRows(this.documents, pane.documents, [], (item) => item.id)
+          ? mergeListedRows(this.documents, pane.documents, dropIds, (item) => item.id)
           : pane.documents;
       this.detailError = null;
       this.resetReloading = false;
