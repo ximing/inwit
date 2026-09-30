@@ -115,8 +115,6 @@ export const PaperEditor = observer(function PaperEditor({
   const pasteRef = useRef<(dt: DataTransfer, insertAt: number) => boolean>(() => false);
   const rehostRef = useRef<() => Promise<void>>(async () => undefined);
   const uploadingRef = useRef(false);
-  const preserveRef = useRef(preserveViewport);
-  preserveRef.current = preserveViewport;
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   onChangeRef.current = onChange;
@@ -356,10 +354,11 @@ export const PaperEditor = observer(function PaperEditor({
   useEffect(() => {
     if (!editor) return;
     const scroller = editor.view.dom.closest('.pane-scroll');
-    const keep = preserveRef.current;
+    // The seedKey render already carries this flag. Toggling it alone must not reseed.
+    const keep = preserveViewport;
     const previousTop = scroller instanceof HTMLElement ? scroller.scrollTop : 0;
-    if (keep) editor.commands.setContent(contentFromSeed(seedDoc), { emitUpdate: false });
-    else editor.commands.setContent(contentFromSeed(seedDoc));
+    // emitUpdate would mark a normalized document dirty and drop the open-document refresh.
+    editor.commands.setContent(contentFromSeed(seedDoc), { emitUpdate: false });
     if (!keep) editor.commands.focus('start', { scrollIntoView: false });
     ensureEntityMarksOnEditor(editor, cardsRef.current, annotationsRef.current);
     const pinScroll = () => {

@@ -99,6 +99,18 @@ function clipReason(reason: string): string {
   return chars.length <= 500 ? chars.join('') : chars.slice(0, 500).join('');
 }
 
+/** One getDocument. Generation and doc load are captured when the request starts. */
+type DetailRead = {
+  id: string;
+  gen: number;
+  floor: number | null;
+  docLoadGen: number;
+  openAtStart: boolean;
+  /** This id was the open document, so a later close must not treat the old generation as current. */
+  protectedAtStart: boolean;
+  changeAt: string | null;
+};
+
 function decisionError(err: unknown, action: 'accept' | 'reject'): string {
   if (err instanceof ApiError) {
     if (err.code === 'CARD_INDEX_FAILED') {
@@ -156,8 +168,6 @@ export class DocsService extends Service {
   selectionPollDocId: string | null = null;
   selectionCardCountAtStart = 0;
   selectionJobId: string | null = null;
-  /** Docs list always loads offset 0; load-more appends, so the head stays. */
-  listIncludesHead = true;
   selectionPop: {
     kind: 'annotate' | 'card';
     text: string;
@@ -189,11 +199,13 @@ export class DocsService extends Service {
   private saveFloors = new Map<string, number>();
   private conflictNotifiedAt: string | null = null;
   private goneNotifiedId: string | null = null;
-  private inflightReads: { id: string; gen: number }[] = [];
-  private replayQueue: string[] = [];
+  private inflightReads: DetailRead[] = [];
+  private replayQueue: { id: string; changeAt: string | null }[] = [];
   private recoveryInflight = false;
-  /** One automatic replay per document + generation + floor. A newer write changes the key. */
-  private replayStamp: string | null = null;
+  /** Last give-up key per document. Another id must not clear it. A newer write changes the key. */
+  private replayStamp = new Map<string, string>();
+  /** Topic PUT still in flight. Dropped GETs wait until its floor is stored. */
+  private topicWrites = 0;
 
   constructor() {
     super();
@@ -207,7 +219,7 @@ export class DocsService extends Service {
     try {
       const editor = this.resolve(EditorService);
       editor.onLocalWriteStart = () => this.bumpCardWriteGen();
-      editor.onLocalWriteEnd = () => this.noteWritesSettled();
+      editor.onLocalWriteEnd = () => this.kickReplay();
     } catch {
       // Same unattached instance.
     }
@@ -1036,10 +1048,6 @@ export class DocsService extends Service {
     if (this.echoes.length > 200) this.echoes.splice(0, this.echoes.length - 200);
   }
 
-  noteWritesSettled(): void {
-    this.kickReplay();
-  }
-
   get cardDecisionBusy(): boolean {
     return this.decidingCardId !== null || this.acceptingProposed;
   }
@@ -1250,7 +1258,6 @@ export class DocsService extends Service {
     this.armSelectionLoop(documentId);
   }
 
-  /** Arms the 2s getDocument loop. No-op while sync is healthy or a tick is already running. */
   private armSelectionLoop(documentId: string): void {
     if (this.syncActive()) return;
     if (this.selectionTickTimer !== null || this.selectionTickInflight) return;
@@ -1316,8 +1323,13 @@ export class DocsService extends Service {
     }
     this.paneTopicMenuOpen = false;
     this.error = null;
+    // In-flight GETs of this document predate the move. Refetch after the new floor is stored.
+    this.bumpCardWriteGen();
+    this.topicWrites += 1;
     try {
       const updated = await updateDocument(id, { topicId });
+      const floorMs = Date.parse(updated.updatedAt);
+      if (!Number.isNaN(floorMs)) this.saveFloors.set(id, floorMs);
       const topicTitle = this.topicTitleById(updated.topicId);
       if (this.doc?.id === id) {
         const topicMoved = this.doc.topicId !== updated.topicId;
@@ -1340,6 +1352,9 @@ export class DocsService extends Service {
       }
     } catch (err) {
       this.error = errorMessage(err, '没换上主题');
+    } finally {
+      this.topicWrites -= 1;
+      this.kickReplay();
     }
   }
 
@@ -1429,33 +1444,44 @@ export class DocsService extends Service {
   }
 
   async refreshOne(id: string, changeAt?: string | null): Promise<void> {
-    const openAtStart = this.doc?.id === id;
-    const read = {
+    let editorId: string | null = null;
+    try {
+      editorId = this.resolve(EditorService).id;
+    } catch {
+      editorId = null;
+    }
+    const read: DetailRead = {
       id,
       gen: this.cardWriteGen,
       floor: this.saveFloors.get(id) ?? null,
+      docLoadGen: this.docLoadGen,
+      openAtStart: this.doc?.id === id,
+      protectedAtStart: this.doc?.id === id || editorId === id,
+      changeAt: changeAt ?? null,
     };
     this.inflightReads.push(read);
     try {
       const [detail, notes] = await Promise.all([
         getDocument(id),
-        openAtStart
+        read.openAtStart
           ? listDocumentAnnotations(id).catch(() => this.annotations)
           : Promise.resolve(null),
       ]);
-      const mode = this.classifyDetail(id, read.gen, read.floor, detail.updatedAt);
+      const mode = this.classifyDetail(id, read, detail.updatedAt);
       if (mode === 'drop') {
-        this.noteDetailDropped(id);
+        this.noteDetailDropped(read);
         return;
       }
+      const queuedAt = this.replayQueue.find((item) => item.id === id)?.changeAt ?? null;
+      const at = read.changeAt ?? queuedAt;
       if (read.gen === this.cardWriteGen) {
-        this.replayQueue = this.replayQueue.filter((queued) => queued !== id);
-        if (this.replayStamp === this.replayKey(id)) this.replayStamp = null;
+        this.replayQueue = this.replayQueue.filter((item) => item.id !== id);
+        if (this.replayStamp.get(id) === this.replayKey(id)) this.replayStamp.delete(id);
       }
-      this.applyRemoteDetail(id, detail, notes, mode, changeAt ?? null);
+      this.applyRemoteDetail(id, detail, notes, mode, at, read.docLoadGen);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
-        this.replayQueue = this.replayQueue.filter((queued) => queued !== id);
+        this.replayQueue = this.replayQueue.filter((item) => item.id !== id);
         this.forgetDocument(id);
         return;
       }
@@ -1503,7 +1529,7 @@ export class DocsService extends Service {
     return {
       documents: this.documents.map((item) => ({ id: item.id, updatedAt: item.updatedAt })),
       openDocumentId: this.doc?.id ?? null,
-      listIncludesHead: this.listIncludesHead,
+      listIncludesHead: true,
       editor:
         editorLive && editor.id
           ? {
@@ -1575,61 +1601,53 @@ export class DocsService extends Service {
 
   private async reloadListMerging(deleteIds: readonly string[], keepTail = true): Promise<void> {
     const gen = ++this.loadGen;
-    const held = Math.max(this.documents.length, DOC_PAGE);
+    const want = Math.max(this.documents.length, DOC_PAGE);
     try {
-      const page = await this.fetchListCovering(held);
+      // Server list limit is 100.
+      const items: DocumentListItem[] = [];
+      let total = 0;
+      let offset = 0;
+      while (items.length < want) {
+        const limit = Math.min(LIST_LIMIT_MAX, want - items.length);
+        const page = await listDocuments({
+          ...(this.filterTopicId ? { topicId: this.filterTopicId } : {}),
+          limit,
+          offset,
+        });
+        total = page.total;
+        items.push(...page.items);
+        if (page.items.length === 0 || items.length >= total) break;
+        offset += page.items.length;
+      }
       if (gen !== this.loadGen) return;
-      const seen = new Set(page.items.map((item) => item.id));
+      const seen = new Set(items.map((item) => item.id));
       const tail = keepTail ? this.documents.filter((item) => !seen.has(item.id)) : [];
       const drop = new Set(deleteIds);
-      this.documents = [...page.items, ...tail].filter((item) => !drop.has(item.id));
-      this.documentsTotal = page.total;
-      this.listIncludesHead = true;
+      this.documents = [...items, ...tail].filter((item) => !drop.has(item.id));
+      this.documentsTotal = total;
       this.syncPolling();
     } catch {
       // Keep the rows already on screen.
     }
   }
 
-  /** Server list limit is 100. Page until the held window is covered. */
-  private async fetchListCovering(minRows: number): Promise<{ items: DocumentListItem[]; total: number }> {
-    const want = Math.max(minRows, 1);
-    const items: DocumentListItem[] = [];
-    let total = 0;
-    let offset = 0;
-    while (items.length < want) {
-      const limit = Math.min(LIST_LIMIT_MAX, want - items.length);
-      const page = await listDocuments({
-        ...(this.filterTopicId ? { topicId: this.filterTopicId } : {}),
-        limit,
-        offset,
-      });
-      total = page.total;
-      items.push(...page.items);
-      if (page.items.length === 0 || items.length >= total) break;
-      offset += page.items.length;
-    }
-    return { items, total };
-  }
-
   private classifyDetail(
     id: string,
-    capturedGen: number,
-    floorUpdatedAtMs: number | null,
+    read: DetailRead,
     updatedAt: string,
   ): 'drop' | 'merge-keep-body' | 'merge-seed-body' {
     const editor = this.resolve(EditorService);
-    const local = this.doc?.id === id || editor.id === id;
     const bodyDirty = editor.id === id && !jsonEqual(editor.draftJson, editor.lastSavedJson);
     const inflight = editor.id === id && editor.saveInflight !== null;
-    // Writes bump the counter for the open document only. Other rows keep their snapshot.
+    // A read that started on this document keeps its generation after close.
+    // Other rows ignore the counter so a card edit does not cancel their refresh.
     return classifyRemoteDetail({
-      capturedGen: local ? capturedGen : this.cardWriteGen,
+      capturedGen: read.protectedAtStart ? read.gen : this.cardWriteGen,
       currentGen: this.cardWriteGen,
       dirty: bodyDirty,
       inflight,
       detailUpdatedAtMs: Date.parse(updatedAt),
-      floorUpdatedAtMs,
+      floorUpdatedAtMs: read.floor,
     });
   }
 
@@ -1639,11 +1657,23 @@ export class DocsService extends Service {
     notes: Annotation[] | null,
     mode: 'merge-keep-body' | 'merge-seed-body',
     changeAt: string | null,
+    docLoadGenAtStart: number,
   ): void {
+    if (docLoadGenAtStart !== this.docLoadGen) {
+      // The open snapshot arrived after this GET. Do not write the editor or an older list row.
+      const stored =
+        this.doc?.id === id
+          ? this.doc.updatedAt
+          : this.documents.find((item) => item.id === id)?.updatedAt;
+      const detailMs = Date.parse(detail.updatedAt);
+      const storedMs = stored === undefined ? Number.NaN : Date.parse(stored);
+      const older = stored !== undefined && detailMs < storedMs;
+      if (!older) this.patchListFromDetail(detail);
+      this.syncPolling();
+      return;
+    }
     const editor = this.resolve(EditorService);
-    this.documents = this.documents.map((item) =>
-      item.id === id ? mergeDetail(item, detail) : item,
-    );
+    this.patchListFromDetail(detail);
     if (this.doc?.id === id) {
       this.doc = detail;
       if (notes) this.annotations = notes;
@@ -1714,26 +1744,46 @@ export class DocsService extends Service {
     this.syncPolling();
   }
 
+  /** Generation and PUT floor. The document id is the map key. */
   private replayKey(id: string): string {
-    return `${id}:${this.cardWriteGen}:${this.saveFloors.get(id) ?? ''}`;
+    return `${this.cardWriteGen}:${this.saveFloors.get(id) ?? ''}`;
   }
 
-  private noteDetailDropped(id: string): void {
-    const stamp = this.replayKey(id);
-    if (stamp === this.replayStamp) return;
-    const covered = this.inflightReads.some((read) => read.id === id && read.gen === this.cardWriteGen);
+  private noteDetailDropped(read: DetailRead): void {
+    const id = read.id;
+    if (read.changeAt) {
+      const queued = this.replayQueue.find((item) => item.id === id);
+      if (queued) {
+        if (!queued.changeAt) queued.changeAt = read.changeAt;
+      } else {
+        const inflight = this.inflightReads.find(
+          (item) => item !== read && item.id === id && item.gen === this.cardWriteGen,
+        );
+        if (inflight && !inflight.changeAt) inflight.changeAt = read.changeAt;
+      }
+    }
+    const key = this.replayKey(id);
+    if (this.replayStamp.get(id) === key) return;
+    // This read stays listed until finally. Only another current-generation read covers it.
+    const covered = this.inflightReads.some(
+      (item) => item !== read && item.id === id && item.gen === this.cardWriteGen,
+    );
     const decision = planDroppedDocumentReplay({
       dropped: true,
       writeInflight: this.isWriteInflight(),
       recoveryInflight: this.recoveryInflight || covered,
     });
     if (decision === 'none') return;
-    this.replayStamp = stamp;
-    if (!this.replayQueue.includes(id)) this.replayQueue.push(id);
+    this.replayStamp.set(id, key);
+    if (!this.replayQueue.some((item) => item.id === id)) {
+      this.replayQueue.push({ id, changeAt: read.changeAt });
+    }
     if (decision === 'start') this.kickReplay();
   }
 
   private isWriteInflight(): boolean {
+    // The topic PUT stores its floor on success. A replay before that would put the old topic back.
+    if (this.topicWrites > 0) return true;
     try {
       return this.resolve(EditorService).saveInflight !== null;
     } catch {
@@ -1743,15 +1793,19 @@ export class DocsService extends Service {
 
   private kickReplay(): void {
     if (this.recoveryInflight || this.isWriteInflight()) return;
-    const id = this.replayQueue.shift();
-    if (!id) return;
-    void this.runReplay(id);
+    // Leave the queue entry while a current-generation read of that id is already in flight.
+    const next = this.replayQueue.find(
+      (item) => !this.inflightReads.some((read) => read.id === item.id && read.gen === this.cardWriteGen),
+    );
+    if (!next) return;
+    this.replayQueue = this.replayQueue.filter((item) => item !== next);
+    void this.runReplay(next.id, next.changeAt);
   }
 
-  private async runReplay(id: string): Promise<void> {
+  private async runReplay(id: string, changeAt: string | null): Promise<void> {
     this.recoveryInflight = true;
     try {
-      await this.refreshOne(id);
+      await this.refreshOne(id, changeAt);
     } finally {
       this.recoveryInflight = false;
       this.kickReplay();
