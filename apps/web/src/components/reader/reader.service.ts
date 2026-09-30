@@ -21,6 +21,9 @@ export class ReaderService extends Service {
   pdfUrl: string | null = null;
   pdfError: string | null = null;
   loadGen = 0;
+  /** PDF 预签名不跟文档 loadGen 走，刷新文档不能丢掉还在飞的文件地址。 */
+  private pdfGen = 0;
+  private loadingGen = 0;
 
   get isOpen(): boolean {
     return this.loading || this.error !== null || this.doc !== null;
@@ -43,6 +46,7 @@ export class ReaderService extends Service {
     }
     const gen = ++this.loadGen;
     this.loading = true;
+    this.loadingGen = gen;
     this.error = null;
     this.activeCardId = null;
     this.focusCardId = null;
@@ -51,12 +55,18 @@ export class ReaderService extends Service {
     this.pendingScrollTop = true;
     try {
       const detail = await getDocument(docId);
-      if (gen !== this.loadGen) return;
+      if (gen !== this.loadGen) {
+        if (this.loadingGen === gen) this.loading = false;
+        return;
+      }
       this.doc = detail;
       this.loading = false;
-      this.syncPdf(detail, gen);
+      this.syncPdf(detail);
     } catch (err) {
-      if (gen !== this.loadGen) return;
+      if (gen !== this.loadGen) {
+        if (this.loadingGen === gen) this.loading = false;
+        return;
+      }
       this.loading = false;
       this.doc = null;
       this.error = errorMessage(err, '打不开这份文档');
@@ -117,6 +127,8 @@ export class ReaderService extends Service {
    */
   async refreshOpenDocument(docId: string): Promise<void> {
     if (this.doc?.id !== docId) return;
+    this.linksCache = {};
+    this.links = null;
     const gen = ++this.loadGen;
     try {
       const detail = await getDocument(docId);
@@ -124,11 +136,14 @@ export class ReaderService extends Service {
       this.doc = detail;
       this.loading = false;
       this.error = null;
-      this.linksCache = {};
       if (this.activeCardId !== null) await this.ensureLinks(this.activeCardId, gen);
     } catch (err) {
-      if (gen !== this.loadGen) return;
-      if (err instanceof ApiError && err.status === 404) this.close();
+      if (gen !== this.loadGen || this.doc?.id !== docId) return;
+      if (err instanceof ApiError && err.status === 404) {
+        this.close();
+        return;
+      }
+      if (this.activeCardId !== null) await this.ensureLinks(this.activeCardId, gen);
     }
   }
 
@@ -151,19 +166,26 @@ export class ReaderService extends Service {
     }
     const gen = ++this.loadGen;
     this.loading = true;
+    this.loadingGen = gen;
     this.error = null;
     try {
       const detail = await getDocument(docId);
-      if (gen !== this.loadGen) return;
+      if (gen !== this.loadGen) {
+        if (this.loadingGen === gen) this.loading = false;
+        return;
+      }
       this.doc = detail;
       this.loading = false;
       this.activeCardId = cardId;
       this.focusCardId = cardId;
       this.pendingScrollTop = false;
-      this.syncPdf(detail, gen);
+      this.syncPdf(detail);
       await this.ensureLinks(cardId, gen);
     } catch (err) {
-      if (gen !== this.loadGen) return;
+      if (gen !== this.loadGen) {
+        if (this.loadingGen === gen) this.loading = false;
+        return;
+      }
       this.loading = false;
       this.doc = null;
       this.activeCardId = null;
@@ -173,17 +195,18 @@ export class ReaderService extends Service {
     }
   }
 
-  private syncPdf(doc: DocumentDetail, gen: number): void {
+  private syncPdf(doc: DocumentDetail): void {
+    const gen = ++this.pdfGen;
     this.pdfUrl = null;
     this.pdfError = null;
     if (!isPdfMime(doc.fileMime)) return;
     void (async () => {
       try {
         const file = await getDocumentFile(doc.id);
-        if (gen !== this.loadGen || this.doc?.id !== doc.id) return;
+        if (gen !== this.pdfGen || this.doc?.id !== doc.id) return;
         this.pdfUrl = file.url;
       } catch (err) {
-        if (gen !== this.loadGen || this.doc?.id !== doc.id) return;
+        if (gen !== this.pdfGen || this.doc?.id !== doc.id) return;
         this.pdfError = errorMessage(err, '打不开这份 PDF');
       }
     })();

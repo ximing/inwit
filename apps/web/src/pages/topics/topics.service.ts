@@ -93,11 +93,6 @@ function changeIds(
   return ids;
 }
 
-function echoStampKey(scope: string, resourceId: string | null, atMs: number): string {
-  return `${scope}\0${resourceId ?? ''}\0${atMs}`;
-}
-
-/** limit 超过 100 会被拒绝，按页拼到至少持有的行数。 */
 async function fetchDocumentWindow(
   topicId: string,
   held: number,
@@ -239,9 +234,14 @@ export class TopicsService extends Service {
   private syncEchoes: EchoStamp[] = [];
   private syncStopped = false;
   private docListGen = 0;
-  /** openTopic 进行中：先别把文档并进还没换掉的上一份列表。 */
+  /** 进行中的 openTopic 在等待期间收到变更后会再拉一次。 */
   private docSyncPending = false;
   private openInFlight = false;
+  /** reset 的快照还没落地，这段写入会被盖掉，先不要记回声。 */
+  private resetReloading = false;
+  private loadsInFlight = 0;
+  /** load() 等待期间删掉的主题。晚到的 listTopics 不能把它们插回去。 */
+  private removedDuringLoad = new Set<string>();
 
   constructor() {
     super();
@@ -527,11 +527,43 @@ export class TopicsService extends Service {
   async load(): Promise<void> {
     this.error = null;
     void this.loadTopicStats();
+    const startedWith = new Set(this.items.map((item) => item.topic.id));
+    this.loadsInFlight += 1;
     try {
       const topics = await listTopics();
-      this.items = await Promise.all(topics.map((topic) => this._enrich(topic)));
+      const enriched = await Promise.all(topics.map((topic) => this._enrich(topic)));
+      if (this.syncStopped) return;
+      const gone = new Set(this.removedDuringLoad);
+      for (const id of startedWith) {
+        if (this.items.some((item) => item.topic.id === id)) continue;
+        gone.add(id);
+      }
+      const seen = new Set<string>();
+      const merged: TopicListItem[] = [];
+      const localById = new Map(this.items.map((item) => [item.topic.id, item]));
+      for (const row of enriched) {
+        if (gone.has(row.topic.id)) continue;
+        seen.add(row.topic.id);
+        const prev = localById.get(row.topic.id);
+        const topic =
+          prev && Date.parse(prev.topic.updatedAt) > Date.parse(row.topic.updatedAt)
+            ? prev.topic
+            : row.topic;
+        merged.push({ ...row, topic });
+      }
+      for (const id of startedWith) {
+        if (seen.has(id) || gone.has(id)) continue;
+        this.removedDuringLoad.add(id);
+      }
+      const created = this.items.filter(
+        (item) => !seen.has(item.topic.id) && !gone.has(item.topic.id) && !startedWith.has(item.topic.id),
+      );
+      this.items = [...created, ...merged];
     } catch (err) {
       this.error = errorMessage(err, '加载主题失败');
+    } finally {
+      this.loadsInFlight -= 1;
+      if (this.loadsInFlight === 0) this.removedDuringLoad.clear();
     }
   }
 
@@ -577,7 +609,6 @@ export class TopicsService extends Service {
     if (this.topicId !== id) this.reader.close();
     const gen = ++this.topicLoadGen;
     this.docListGen += 1;
-    const listGen = this.docListGen;
     this.topicId = id;
     this.detailError = null;
     this.closeDrawer();
@@ -601,23 +632,15 @@ export class TopicsService extends Service {
         return;
       }
       this.collapsedIds = readCollapsed(id);
-      const loaded = await this._loadTopicPane(id, DOC_PAGE);
-      if (gen !== this.topicLoadGen || this.docListGen !== listGen) return;
-      let { topic, map, summary, documents, documentsTotal, job } = loaded;
-      while (this.docSyncPending && gen === this.topicLoadGen && this.docListGen === listGen) {
+      let loaded = await this._loadTopicPane(id, 0);
+      if (gen !== this.topicLoadGen) return;
+      while (this.docSyncPending && gen === this.topicLoadGen) {
         this.docSyncPending = false;
-        const again = await this._loadTopicPane(id, Math.max(DOC_PAGE, documents.length));
-        if (gen !== this.topicLoadGen || this.docListGen !== listGen) return;
-        topic = again.topic;
-        map = again.map;
-        summary = again.summary;
-        documents = again.documents;
-        documentsTotal = again.documentsTotal;
-        job = again.job;
+        loaded = await this._loadTopicPane(id, loaded.documents.length);
+        if (gen !== this.topicLoadGen) return;
       }
-      if (gen !== this.topicLoadGen || this.docListGen !== listGen) return;
-      this._applyTopicPane(id, { topic, map, summary, documents, documentsTotal, job });
-      if (job) this.watchJob(job);
+      this._applyTopicPane(id, loaded);
+      if (loaded.job) this.watchJob(loaded.job);
       this.syncDocPolling();
     } catch (err) {
       if (gen !== this.topicLoadGen) return;
@@ -732,6 +755,7 @@ export class TopicsService extends Service {
     const id = this.topic.id;
     try {
       await deleteTopic(id);
+      this._noteTopicsRemoved([id]);
       this.items = this.items.filter((item) => item.topic.id !== id);
       this.topic = null;
       this.tree = [];
@@ -795,7 +819,7 @@ export class TopicsService extends Service {
     if (!topicId) return;
     const topicGen = this.topicLoadGen;
     const listGen = this.docListGen;
-    const held = Math.max(DOC_PAGE, this.documents.length);
+    const held = this.documents.length;
     try {
       const [map, summary, docs] = await Promise.all([
         getTopicMap(topicId),
@@ -833,25 +857,38 @@ export class TopicsService extends Service {
     const nodeId = this.selectedNodeId;
     if (!topicId) return false;
     try {
-      const [summary, map, detail] = await Promise.all([
+      const [summary, map] = await Promise.all([
         getTopicMapSummary(topicId),
         refreshMap ? getTopicMap(topicId) : Promise.resolve(null),
-        refreshMap && nodeId ? getMapNodeDetail(nodeId) : Promise.resolve(null),
       ]);
       if (this.topicId !== topicId || this.topicLoadGen !== gen) return false;
       this.summary = summary;
       if (map) this.applyMap(map.nodes);
-      if (detail && this.selectedNodeId === nodeId) this.nodeDetail = detail;
       this.patchItem(topicId, {
         cardCount: summary.cardCount,
         totalNodes: summary.totalNodes,
         uncoveredNodes: summary.uncoveredNodes,
         masteryPct: summary.masteryPct,
       });
-      return true;
     } catch {
       return false;
     }
+    if (!refreshMap || !nodeId) return true;
+    try {
+      const detail = await getMapNodeDetail(nodeId);
+      if (this.topicId === topicId && this.topicLoadGen === gen && this.selectedNodeId === nodeId) {
+        this.nodeDetail = detail;
+      }
+    } catch (err) {
+      if (this.topicId !== topicId || this.topicLoadGen !== gen || this.selectedNodeId !== nodeId) {
+        return true;
+      }
+      if (err instanceof ApiError && err.status === 404) {
+        this.selectedNodeId = null;
+        this.nodeDetail = null;
+      }
+    }
+    return true;
   }
 
   async openNode(nodeId: string): Promise<void> {
@@ -916,8 +953,10 @@ export class TopicsService extends Service {
       this.stopJobPolling();
       return;
     }
+    const gen = this.topicLoadGen;
     try {
       const job = await getJob(current.id);
+      if (this.topicLoadGen !== gen || this.activeJob?.id !== current.id) return;
       this.activeJob = job;
       if (job.status === 'done' || job.status === 'failed') {
         this.stopJobPolling();
@@ -1040,7 +1079,10 @@ export class TopicsService extends Service {
       await this.load();
       if (this.syncStopped) return;
       await this._reloadMountedTopic();
-      await this._refreshReader();
+      if (this._container) {
+        const readerId = this.reader.doc?.id;
+        if (readerId) await this.reader.refreshOpenDocument(readerId);
+      }
       return;
     }
     const changes = this._consumeEchoes(event.changes);
@@ -1061,6 +1103,10 @@ export class TopicsService extends Service {
   }
 
   private _noteEcho(scope: EchoStamp['scope'], resourceId: string, updatedAt: string): void {
+    if (this.resetReloading) {
+      this.docSyncPending = true;
+      return;
+    }
     if (!this._syncActive()) return;
     const atMs = Date.parse(updatedAt);
     if (Number.isNaN(atMs)) return;
@@ -1070,30 +1116,20 @@ export class TopicsService extends Service {
     }
   }
 
-  /** 一条回声只吃掉一条 upsert。没吃掉的留着，delete 不吃。 */
   private _consumeEchoes(changes: readonly SyncChange[]): SyncChange[] {
     const kept = stripEchoes([...changes], this.syncEchoes);
-    const left = new Map<string, number>();
-    for (const echo of this.syncEchoes) {
-      const key = echoStampKey(echo.scope, echo.resourceId, echo.atMs);
-      left.set(key, (left.get(key) ?? 0) + 1);
-    }
+    const keptSet = new Set(kept);
     for (const change of changes) {
-      if (change.op === 'delete') continue;
-      const key = echoStampKey(change.scope, change.resourceId, Date.parse(change.at));
-      const remaining = left.get(key) ?? 0;
-      if (remaining <= 0) continue;
-      left.set(key, remaining - 1);
+      if (change.op === 'delete' || keptSet.has(change)) continue;
+      const atMs = Date.parse(change.at);
+      const index = this.syncEchoes.findIndex(
+        (echo) =>
+          echo.scope === change.scope &&
+          echo.resourceId === change.resourceId &&
+          echo.atMs === atMs,
+      );
+      if (index >= 0) this.syncEchoes.splice(index, 1);
     }
-    const next: EchoStamp[] = [];
-    for (const echo of this.syncEchoes) {
-      const key = echoStampKey(echo.scope, echo.resourceId, echo.atMs);
-      const remaining = left.get(key) ?? 0;
-      if (remaining <= 0) continue;
-      left.set(key, remaining - 1);
-      next.push(echo);
-    }
-    this.syncEchoes = next;
     return kept;
   }
 
@@ -1174,12 +1210,16 @@ export class TopicsService extends Service {
       const serverItems: TopicListItem[] = [];
       for (const topic of topics) {
         const prev = previous.get(topic.id);
-        if (prev) serverItems.push({ ...prev, topic });
-        else {
+        if (prev) {
+          const topicRow =
+            Date.parse(prev.topic.updatedAt) > Date.parse(topic.updatedAt) ? prev.topic : topic;
+          serverItems.push({ ...prev, topic: topicRow });
+        } else {
           serverItems.push(blankItem(topic));
           newcomers.push(topic);
         }
       }
+      this._noteTopicsRemoved(deleteIds);
       this.items = mergeListedRows(this.items, serverItems, deleteIds, (item) => item.topic.id);
     }
     const openId = this.topicId;
@@ -1227,6 +1267,7 @@ export class TopicsService extends Service {
       });
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
+        this._noteTopicsRemoved([id]);
         this.items = this.items.filter((item) => item.topic.id !== id);
         if (this.topicId === id) this._dropTopic(id);
       }
@@ -1249,6 +1290,7 @@ export class TopicsService extends Service {
   }
 
   private _dropTopic(id: string): void {
+    this._noteTopicsRemoved([id]);
     this.items = this.items.filter((item) => item.topic.id !== id);
     if (this.topicId !== id) return;
     this.topicLoadGen += 1;
@@ -1277,13 +1319,8 @@ export class TopicsService extends Service {
     const upserts = intents.flatMap((intent) =>
       intent.kind === 'document' && intent.op === 'upsert' ? [intent.id] : [],
     );
-    if (!this.docsHeadReady) {
-      if (page || deleteIds.length > 0 || upserts.length > 0) this.docSyncPending = true;
-    } else if (page) {
-      await this._mergeDocumentWindow(deleteIds);
-    } else if (deleteIds.length > 0) {
-      this._removeDocuments(deleteIds);
-    }
+    if (this.docsHeadReady && page) await this._mergeDocumentWindow(deleteIds);
+    else if (this.docsHeadReady && deleteIds.length > 0) this._removeDocuments(deleteIds);
     this._closeReaderIfDeleted(deleteIds);
     if (this.openInFlight || this.syncStopped) return;
     for (const id of upserts) {
@@ -1300,14 +1337,11 @@ export class TopicsService extends Service {
   private async _mergeDocumentWindow(deleteIds: readonly string[]): Promise<void> {
     const topicId = this.topicId;
     const topicGen = this.topicLoadGen;
+    if (!topicId) return;
     const listGen = ++this.docListGen;
-    if (!topicId || !this.docsHeadReady) {
-      this.docSyncPending = true;
-      return;
-    }
     let page: { items: DocumentListItem[]; total: number };
     try {
-      page = await fetchDocumentWindow(topicId, Math.max(DOC_PAGE, this.documents.length));
+      page = await fetchDocumentWindow(topicId, this.documents.length);
     } catch {
       if (this.topicId === topicId && this.topicLoadGen === topicGen && this.docsHeadReady) {
         this._removeDocuments(deleteIds);
@@ -1330,17 +1364,13 @@ export class TopicsService extends Service {
   }
 
   private _removeDocuments(ids: readonly string[]): void {
-    if (!this.topicId || !this.docsHeadReady) {
-      if (ids.length > 0) this.docSyncPending = true;
-      return;
-    }
     const drop = new Set(ids);
     const before = this.documents.length;
     this.documents = this.documents.filter((item) => !drop.has(item.id));
     const removed = before - this.documents.length;
     if (removed > 0) {
       this.documentsTotal = Math.max(0, this.documentsTotal - removed);
-      this.patchItem(this.topicId, { documentCount: this.documentsTotal });
+      if (this.topicId) this.patchItem(this.topicId, { documentCount: this.documentsTotal });
     }
     this.syncDocPolling();
   }
@@ -1351,11 +1381,9 @@ export class TopicsService extends Service {
     if (open && ids.includes(open)) this.reader.close();
   }
 
-  private async _refreshReader(): Promise<void> {
-    if (!this._container) return;
-    const id = this.reader.doc?.id;
-    if (!id) return;
-    await this.reader.refreshOpenDocument(id);
+  private _noteTopicsRemoved(ids: readonly string[]): void {
+    if (this.loadsInFlight === 0) return;
+    for (const id of ids) this.removedDuringLoad.add(id);
   }
 
   private async _loadTopicPane(id: string, documentLimit: number): Promise<{
@@ -1418,13 +1446,33 @@ export class TopicsService extends Service {
     this.docListGen += 1;
     const listGen = this.docListGen;
     this.openInFlight = false;
+    this.docSyncPending = false;
+    this.resetReloading = true;
     const nodeId = this.selectedNodeId;
     const held = this.docsHeadReady ? this.documents.length : 0;
     try {
-      const pane = await this._loadTopicPane(id, Math.max(DOC_PAGE, held));
-      if (this.syncStopped || gen !== this.topicLoadGen || this.docListGen !== listGen) return;
+      let pane = await this._loadTopicPane(id, held);
+      if (this.syncStopped || this.topicId !== id || gen !== this.topicLoadGen) return;
+      while (this.docSyncPending && this.topicId === id && gen === this.topicLoadGen) {
+        this.docSyncPending = false;
+        pane = await this._loadTopicPane(id, this.documents.length);
+        if (this.syncStopped || this.topicId !== id || gen !== this.topicLoadGen) return;
+      }
+      const local = this.topic;
+      const topic =
+        local &&
+        local.id === pane.topic.id &&
+        Date.parse(local.updatedAt) > Date.parse(pane.topic.updatedAt)
+          ? local
+          : pane.topic;
+      const documents =
+        this.docListGen === listGen && this.docsHeadReady
+          ? mergeListedRows(this.documents, pane.documents, [], (item) => item.id)
+          : pane.documents;
       this.detailError = null;
-      this._applyTopicPane(id, pane);
+      this.resetReloading = false;
+      this._applyTopicPane(id, { ...pane, topic, documents });
+      if (topic === pane.topic) this.applyTopic(topic);
       if (pane.job && (pane.job.status === 'pending' || pane.job.status === 'running')) {
         this.watchJob(pane.job);
       } else {
@@ -1441,11 +1489,14 @@ export class TopicsService extends Service {
       }
     } catch (err) {
       if (gen !== this.topicLoadGen) return;
-      if (err instanceof ApiError && err.status === 404) {
+      if (this.topicId === id && err instanceof ApiError && err.status === 404) {
         this._dropTopic(id);
         return;
       }
+      if (this.topicId !== id) return;
       this.detailError = errorMessage(err, '打不开这个主题');
+    } finally {
+      this.resetReloading = false;
     }
   }
 }

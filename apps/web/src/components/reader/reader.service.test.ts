@@ -2,7 +2,7 @@ import { EMPTY_PM_DOC, type CardLinksResponse, type DocumentDetail } from '@inwi
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCardLinks } from '@/api/cards';
 import { ApiError } from '@/api/client';
-import { getDocument } from '@/api/documents';
+import { getDocument, getDocumentFile } from '@/api/documents';
 import { ReaderService } from './reader.service';
 
 vi.mock('@/api/documents', () => ({ getDocument: vi.fn(), getDocumentFile: vi.fn() }));
@@ -128,5 +128,95 @@ describe('reader remote document upsert', () => {
 
     expect(service.activeCardId).toBeNull();
     expect(service.linksCache['card-a']).toEqual({ outgoing: [], incoming: [] });
+  });
+
+  it('drops cached links before the detail request finishes', async () => {
+    let release!: (doc: DocumentDetail) => void;
+    vi.mocked(getDocument).mockReturnValue(new Promise((resolve) => {
+      release = resolve;
+    }));
+    const service = new ReaderService();
+    service.doc = detail('doc-1');
+    service.activeCardId = 'card-a';
+    service.links = oldLinks;
+    service.linksCache = { 'card-a': oldLinks, 'card-b': oldLinks };
+
+    const pending = service.refreshOpenDocument('doc-1');
+
+    expect(service.links).toBeNull();
+    expect(service.linksCache).toEqual({});
+    release(detail('doc-1'));
+    await pending;
+  });
+
+  it('refetches links when the detail request fails and does not keep the old cache', async () => {
+    vi.mocked(getDocument).mockRejectedValue(new ApiError(500, 'INTERNAL', '失败'));
+    vi.mocked(getCardLinks).mockResolvedValue({ outgoing: [], incoming: [] });
+    const service = new ReaderService();
+    service.doc = detail('doc-1');
+    service.activeCardId = 'card-a';
+    service.links = oldLinks;
+    service.linksCache = { 'card-a': oldLinks, 'card-b': oldLinks };
+
+    await service.refreshOpenDocument('doc-1');
+
+    expect(service.doc?.id).toBe('doc-1');
+    expect(service.linksCache['card-b']).toBeUndefined();
+    expect(getCardLinks).toHaveBeenCalledWith('card-a');
+    expect(service.isOpen).toBe(true);
+  });
+
+  it('keeps an in-flight PDF presign when the document is refreshed', async () => {
+    const pdf = { ...detail('doc-1'), fileMime: 'application/pdf' };
+    vi.mocked(getDocument).mockResolvedValue(pdf);
+    let release!: (file: { url: string; mime: string }) => void;
+    vi.mocked(getDocumentFile).mockReturnValue(new Promise((resolve) => {
+      release = resolve;
+    }));
+    const service = new ReaderService();
+
+    await service.openDoc('doc-1');
+    expect(service.pdfUrl).toBeNull();
+    await service.refreshOpenDocument('doc-1');
+    release({ url: 'https://files.example/a.pdf', mime: 'application/pdf' });
+    await vi.waitFor(() => {
+      expect(service.pdfUrl).toBe('https://files.example/a.pdf');
+    });
+  });
+
+  it('leaves a displayed PDF url in place when the document is refreshed', async () => {
+    const pdf = { ...detail('doc-1'), fileMime: 'application/pdf' };
+    vi.mocked(getDocument).mockResolvedValue(pdf);
+    const service = new ReaderService();
+    service.doc = pdf;
+    service.pdfUrl = 'https://files.example/old.pdf';
+
+    await service.refreshOpenDocument('doc-1');
+
+    expect(service.pdfUrl).toBe('https://files.example/old.pdf');
+  });
+
+  it('clears loading when a newer refresh supersedes an open', async () => {
+    const first = detail('doc-1');
+    let release!: (doc: DocumentDetail) => void;
+    vi.mocked(getDocument).mockImplementation((id: string) => {
+      if (id === 'doc-2') {
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      }
+      return Promise.resolve(first);
+    });
+    const service = new ReaderService();
+    service.doc = first;
+
+    const pending = service.openDoc('doc-2');
+    expect(service.loading).toBe(true);
+    await service.refreshOpenDocument('doc-1');
+    release(detail('doc-2'));
+    await pending;
+
+    expect(service.loading).toBe(false);
+    expect(service.doc?.id).toBe('doc-1');
   });
 });
