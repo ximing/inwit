@@ -48,3 +48,8 @@ export function requestPathForLog(url: string): string {
   if (path.length <= ACCESS_TOKEN_LOG_PATH_MAX) return path;
   return path.slice(0, ACCESS_TOKEN_LOG_PATH_MAX);
 }
+
+/** Sync polls are every 2s and would fill access_token_logs. */
+export function shouldRecordAccessTokenCall(method: string, path: string): boolean {
+  return !(method === 'GET' && requestPathForLog(path) === '/api/sync');
+}

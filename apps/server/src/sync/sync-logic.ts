@@ -1,5 +1,5 @@
 import { ANNOTATION_RESURFACE_KEY_PREFIX, TOPIC_SUGGESTION_KEY_PREFIX } from '@inwit/dto';
-import type { SyncOp, SyncScope } from '@inwit/dto';
+import type { SyncOp, SyncPollResponse, SyncScope } from '@inwit/dto';
 
 export const SYNC_PAGE_LIMIT = 200;
 
@@ -166,6 +166,57 @@ export function decideSyncPoll(input: {
     reset: false,
     more,
     changes,
+  };
+}
+
+/**
+ * Identity ids are bigint. A JS number past 2^53 is already rounded and would move the cursor.
+ */
+export function syncIdFromDriver(value: number | string | bigint): bigint {
+  if (typeof value === 'bigint') return value;
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error('sync id is not a safe integer');
+    }
+    return BigInt(value);
+  }
+  if (!/^\d+$/.test(value)) throw new Error('sync id is not a decimal string');
+  return BigInt(value);
+}
+
+export function syncChangeFromDriver(row: {
+  id: number | string | bigint;
+  scope: SyncScope;
+  resourceId: string | null;
+  op: SyncOp;
+  at: Date;
+}): SyncChange {
+  return {
+    id: syncIdFromDriver(row.id),
+    scope: row.scope,
+    resourceId: row.resourceId,
+    op: row.op,
+    at: row.at,
+  };
+}
+
+export function toSyncPollResponse(result: {
+  cursor: bigint;
+  reset: boolean;
+  more: boolean;
+  changes: SyncChange[];
+}): SyncPollResponse {
+  return {
+    cursor: result.cursor.toString(),
+    reset: result.reset,
+    more: result.more,
+    changes: result.changes.map((change) => ({
+      id: change.id.toString(),
+      scope: change.scope,
+      resourceId: change.resourceId,
+      op: change.op,
+      at: change.at.toISOString(),
+    })),
   };
 }
 

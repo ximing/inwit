@@ -12,6 +12,7 @@ import { config } from './config.js';
 import { pool } from './db/index.js';
 import { pruneAccessTokenLogs } from './auth/access-tokens.js';
 import { purgeExpiredDocuments } from './documents/document.service.js';
+import { pruneSyncChanges } from './sync/sync.service.js';
 import { drainJobs, processDueJobs, recoverStuckJobs } from './jobs/queue.js';
 import { repairDirtyMemoryIndexes } from './retrieval/memory-index-repair.js';
 import { ensureRetrievalStores } from './retrieval/registry.js';
@@ -30,6 +31,7 @@ let lastAccessTokenLogPrune = 0;
 let lastMultipartSweep = 0;
 let lastRecycleBinPurge = 0;
 let lastAgentLogPrune = 0;
+let lastSyncPrune = 0;
 
 function track(fn: () => Promise<void>): void {
   if (stopping || running.has(fn)) return;
@@ -92,6 +94,16 @@ async function tick(): Promise<void> {
       }
     } catch (err) {
       logger.error('worker.agent_log.prune_failed', err);
+    }
+  }
+  if (now - lastSyncPrune >= AGENT_LOG_PRUNE_MS) {
+    lastSyncPrune = now;
+    try {
+      // SYNC_ENABLED only hides the route. The 7-day log still has to be deleted.
+      const deleted = await pruneSyncChanges();
+      if (deleted > 0) logger.info('sync.prune', { deleted });
+    } catch (err) {
+      logger.error('sync.prune_failed', err);
     }
   }
 }

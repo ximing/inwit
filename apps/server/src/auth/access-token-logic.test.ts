@@ -10,6 +10,7 @@ import {
   previewAccessToken,
   readBearerToken,
   requestPathForLog,
+  shouldRecordAccessTokenCall,
 } from './access-token-logic.js';
 
 describe('generateAccessToken', () => {
@@ -68,6 +69,16 @@ describe('requestPathForLog', () => {
     expect(requestPathForLog('/api/topics?x=1')).toBe('/api/topics');
     expect(requestPathForLog('/api/me')).toBe('/api/me');
     expect(requestPathForLog(`/${'a'.repeat(600)}`).length).toBe(512);
+  });
+});
+
+describe('shouldRecordAccessTokenCall', () => {
+  it('skips the sync poll after the same query strip the hook relies on', () => {
+    expect(shouldRecordAccessTokenCall('GET', '/api/sync')).toBe(false);
+    expect(shouldRecordAccessTokenCall('GET', '/api/sync?since=1')).toBe(false);
+    expect(shouldRecordAccessTokenCall('GET', requestPathForLog('/api/sync?since=1'))).toBe(false);
+    expect(shouldRecordAccessTokenCall('GET', '/api/documents')).toBe(true);
+    expect(shouldRecordAccessTokenCall('GET', '/api/documents?since=1')).toBe(true);
   });
 });
 

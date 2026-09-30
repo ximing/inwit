@@ -24,6 +24,7 @@ import { registerEvolveRoutes } from './agent/evolve.routes.js';
 import { registerWeeklyRoutes } from './agent/weekly.routes.js';
 import { registerReviewRoutes } from './review/review.routes.js';
 import { registerSearchRoutes } from './search/search.routes.js';
+import { registerSyncRoutes } from './sync/sync.routes.js';
 import { registerTopicRoutes } from './topics/topic.routes.js';
 import { registerUserRoutes } from './users/users.routes.js';
 import './types.js';
@@ -80,6 +81,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerEvolveRoutes(app);
   registerWeeklyRoutes(app);
   registerJobRoutes(app);
+  if (config.SYNC_ENABLED) {
+    registerSyncRoutes(app);
+  }
   registerAdminRoutes(app);
 
   await registerWebStatic(app);

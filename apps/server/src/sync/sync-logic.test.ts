@@ -1,11 +1,18 @@
-import { ANNOTATION_RESURFACE_KEY_PREFIX, TOPIC_SUGGESTION_KEY_PREFIX } from '@inwit/dto';
+import {
+  ANNOTATION_RESURFACE_KEY_PREFIX,
+  TOPIC_SUGGESTION_KEY_PREFIX,
+  syncPollResponseSchema,
+} from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 import {
   SYNC_PAGE_LIMIT,
   SYNC_RETENTION_MS,
   decideSyncPoll,
   eventsForRow,
+  syncChangeFromDriver,
+  syncIdFromDriver,
   syncRetentionCutoff,
+  toSyncPollResponse,
   type CardSyncImage,
   type DocumentSyncImage,
   type JobSyncImage,
@@ -150,6 +157,50 @@ describe('syncRetentionCutoff', () => {
     expect(syncRetentionCutoff(now).toISOString()).toBe('2026-09-23T12:00:00.000Z');
     expect(now.getTime() - syncRetentionCutoff(now).getTime()).toBe(SYNC_RETENTION_MS);
     expect(SYNC_RETENTION_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+});
+
+describe('sync poll dto', () => {
+  it('renders driver ids as decimal strings and at as ISO', () => {
+    const big = '9007199254740993';
+    const row = syncChangeFromDriver({
+      id: big,
+      scope: 'job',
+      resourceId: DOC,
+      op: 'delete',
+      at: AT,
+    });
+    expect(row.id).toBe(BigInt(big));
+    const response = toSyncPollResponse(
+      decideSyncPoll({ since: 0n, oldestId: null, newestId: null, rows: [row] }),
+    );
+    expect(syncPollResponseSchema.parse(response)).toEqual({
+      cursor: big,
+      reset: false,
+      more: false,
+      changes: [
+        {
+          id: big,
+          scope: 'job',
+          resourceId: DOC,
+          op: 'delete',
+          at: '2026-09-30T08:00:00.000Z',
+        },
+      ],
+    });
+  });
+
+  it('rejects a number id past the safe integer range', () => {
+    expect(() => syncIdFromDriver(Number.MAX_SAFE_INTEGER + 1)).toThrow(/safe integer/);
+    expect(syncIdFromDriver(Number.MAX_SAFE_INTEGER)).toBe(BigInt(Number.MAX_SAFE_INTEGER));
+    expect(syncIdFromDriver(12)).toBe(12n);
+    expect(syncIdFromDriver('0')).toBe(0n);
+  });
+
+  it('renders a handshake cursor of 0', () => {
+    expect(
+      toSyncPollResponse(decideSyncPoll({ since: null, oldestId: null, newestId: null, rows: [] })),
+    ).toEqual({ cursor: '0', reset: false, more: false, changes: [] });
   });
 });
 
