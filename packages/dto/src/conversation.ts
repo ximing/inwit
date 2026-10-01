@@ -53,6 +53,10 @@ export const conversationMessageSchema = z.object({
   conversationId: z.string().uuid(),
   role: conversationMessageRoleSchema,
   content: z.string(),
+  /** Model reasoning shown beside the reply. Empty when the model did not think aloud. */
+  thinking: z.string().default(''),
+  /** Short status while the reply is still being written, such as 正在阅读文档. */
+  activity: z.string().nullable().default(null),
   documents: z.array(conversationDocumentRefSchema),
   actions: z.array(conversationActionSchema),
   status: conversationMessageStatusSchema,

@@ -14,7 +14,7 @@ import { DialogService } from '@/services/dialog.service';
 import { EditorPresenceService } from '@/services/editor-presence.service';
 
 const STORAGE_KEY = 'inwit-assistant-conversation';
-const POLL_MS = 2000;
+const POLL_MS = 400;
 
 function readStored(): string | null {
   try {

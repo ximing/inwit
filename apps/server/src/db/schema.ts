@@ -783,6 +783,10 @@ export const agentMessages = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     role: varchar('role', { length: 16 }).$type<'user' | 'assistant'>().notNull(),
     content: text('content').notNull().default(''),
+    /** Live and final model reasoning for an assistant message. Empty for user rows. */
+    thinking: text('thinking').notNull().default(''),
+    /** What the assistant is doing while the reply is still pending. */
+    activity: varchar('activity', { length: 40 }),
     documentIds: jsonb('document_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     actions: jsonb('actions').$type<ConversationAction[]>().notNull().default(sql`'[]'::jsonb`),
     status: varchar('status', { length: 16 })

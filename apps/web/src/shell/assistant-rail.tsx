@@ -15,6 +15,7 @@ import {
   assistantWidthFromDrag,
   assistantWidthFromKey,
 } from '@/services/ui-prefs-logic';
+import { AssistantMarkdown } from './assistant-markdown-view';
 import { AssistantService } from './assistant.service';
 
 const MENTION_CAP = 5;
@@ -94,6 +95,8 @@ export const AssistantRail = observer(function AssistantRail() {
     service.current?.messages.length,
     service.current?.messages.at(-1)?.status,
     service.current?.messages.at(-1)?.content,
+    service.current?.messages.at(-1)?.thinking,
+    service.current?.messages.at(-1)?.activity,
   ]);
 
   useEffect(() => {
@@ -288,10 +291,25 @@ export const AssistantRail = observer(function AssistantRail() {
                       ))}
                     </p>
                   ) : null}
-                  {message.role === 'assistant' && message.status === 'pending' ? (
+                  {message.role === 'assistant' && message.thinking ? (
+                    <div className="assistant-thinking">
+                      <span className="assistant-thinking-label">思考</span>
+                      <AssistantMarkdown text={message.thinking} />
+                    </div>
+                  ) : null}
+                  {message.role === 'assistant' && message.status === 'pending' && !message.content ? (
                     <p className="assistant-pending" role="status">
                       <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
-                      正在处理…
+                      {message.activity ?? '正在处理…'}
+                    </p>
+                  ) : null}
+                  {message.role === 'assistant' &&
+                  message.status === 'pending' &&
+                  message.content &&
+                  message.activity ? (
+                    <p className="assistant-pending" role="status">
+                      <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+                      {message.activity}
                     </p>
                   ) : null}
                   {message.role === 'assistant' && message.status === 'failed' ? (
@@ -304,7 +322,12 @@ export const AssistantRail = observer(function AssistantRail() {
                       ) : null}
                     </div>
                   ) : null}
-                  {message.content ? <p className="assistant-body">{message.content}</p> : null}
+                  {message.role === 'assistant' && message.content ? (
+                    <AssistantMarkdown text={message.content} live={message.status === 'pending'} />
+                  ) : null}
+                  {message.role === 'user' && message.content ? (
+                    <p className="assistant-body">{message.content}</p>
+                  ) : null}
                   {message.actions.length > 0 ? (
                     <ul className="assistant-actions">
                       {message.actions.map((action, index) => {

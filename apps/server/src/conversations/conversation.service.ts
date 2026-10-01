@@ -76,6 +76,8 @@ function toMessage(row: AgentMessageRow, titles: Map<string, string>): Conversat
     conversationId: row.conversationId,
     role: row.role,
     content: row.content,
+    thinking: row.thinking,
+    activity: row.activity,
     documents: documentRefs(documentIds, titles),
     actions: readActions(row.actions),
     status: row.status,
@@ -314,6 +316,8 @@ export async function retryConversationMessage(
       .set({
         status: 'pending',
         content: '',
+        thinking: '',
+        activity: null,
         actions: [],
         failReason: null,
         jobId: job.id,
@@ -327,11 +331,37 @@ export async function retryConversationMessage(
   return detailOf(userId, conversationId);
 }
 
+export async function patchConversationDraft(input: {
+  userId: string;
+  conversationId: string;
+  messageId: string;
+  content: string;
+  thinking: string;
+  activity: string | null;
+}): Promise<void> {
+  await getDb()
+    .update(agentMessages)
+    .set({
+      content: input.content,
+      thinking: input.thinking,
+      activity: input.activity,
+    })
+    .where(
+      and(
+        eq(agentMessages.id, input.messageId),
+        eq(agentMessages.conversationId, input.conversationId),
+        eq(agentMessages.userId, input.userId),
+        eq(agentMessages.status, 'pending'),
+      ),
+    );
+}
+
 export async function completeConversationMessage(input: {
   userId: string;
   conversationId: string;
   messageId: string;
   content: string;
+  thinking: string;
   actions: ConversationAction[];
 }): Promise<void> {
   const now = new Date();
@@ -340,6 +370,8 @@ export async function completeConversationMessage(input: {
       .update(agentMessages)
       .set({
         content: input.content,
+        thinking: input.thinking,
+        activity: null,
         actions: input.actions,
         status: 'done',
         failReason: null,
@@ -369,6 +401,7 @@ export async function failConversationMessage(job: JobRow, reason: string): Prom
     .update(agentMessages)
     .set({
       status: 'failed',
+      activity: null,
       failReason: clipReason(reason),
     })
     .where(

@@ -53,6 +53,12 @@ export interface AgentJobRun {
    * the document in context) instead of failing the run outright.
    */
   nudgePrompt?: string | ((err: unknown) => string);
+  /**
+   * Live model events. Called synchronously from the agent subscription so a
+   * slow listener cannot stall the stream. Conversation uses this to publish
+   * partial text and thinking.
+   */
+  onEvent?: (event: AgentEvent) => void;
 }
 
 /**
@@ -114,6 +120,7 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
         });
 
         const unsubscribe = agent.subscribe(async (event: AgentEvent) => {
+          run.onEvent?.(event);
           if (event.type === 'tool_execution_start') {
             toolStarted.set(event.toolCallId, {
               name: event.toolName,

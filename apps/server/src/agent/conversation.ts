@@ -1,14 +1,87 @@
+import type { AgentEvent } from '@earendil-works/pi-agent-core';
 import { conversationJobPayloadSchema } from '@inwit/dto';
 import type { JobRow } from '../db/schema.js';
 import { logger } from '../utils/logger.js';
 import {
   completeConversationMessage,
   loadConversationRun,
+  patchConversationDraft,
 } from '../conversations/conversation.service.js';
 import { wantsCards, buildConversationPrompt, fallbackReply } from './conversation-logic.js';
+import {
+  applyConversationStream,
+  conversationStreamView,
+  emptyConversationStream,
+  readAssistantPieces,
+  type ConversationStreamState,
+  type ConversationStreamView,
+} from './conversation-stream-logic.js';
 import { conversationTools, type ConversationSession } from './conversation-tools.js';
-import { extractAssistantText } from './messages.js';
+import { extractAssistantText, isAssistantMessage } from './messages.js';
 import { runAgentJob } from './run-agent-job.js';
+
+const DRAFT_FLUSH_MS = 150;
+
+function streamEventOf(event: AgentEvent): Parameters<typeof applyConversationStream>[1] | null {
+  if (event.type === 'message_update') {
+    const inner = event.assistantMessageEvent;
+    if (inner.type === 'text_delta') return { type: 'text_delta', delta: inner.delta };
+    if (inner.type === 'thinking_delta') return { type: 'thinking_delta', delta: inner.delta };
+    return null;
+  }
+  if (event.type === 'message_end' && isAssistantMessage(event.message)) {
+    return { type: 'message_end', ...readAssistantPieces(event.message) };
+  }
+  if (event.type === 'tool_execution_start') return { type: 'tool_start', toolName: event.toolName };
+  if (event.type === 'tool_execution_end') return { type: 'tool_end' };
+  return null;
+}
+
+function createDraftSink(
+  write: (view: ConversationStreamView) => Promise<void>,
+): {
+  push(event: AgentEvent): void;
+  finish(): Promise<ConversationStreamView>;
+} {
+  let state: ConversationStreamState = emptyConversationStream();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let chain = Promise.resolve();
+  let dirty = false;
+
+  const enqueue = () => {
+    dirty = false;
+    const view = conversationStreamView(state);
+    chain = chain.then(() => write(view)).catch((err: unknown) => {
+      logger.warn('conversation.draft_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  };
+
+  return {
+    push(event) {
+      const next = streamEventOf(event);
+      if (!next) return;
+      state = applyConversationStream(state, next);
+      dirty = true;
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        enqueue();
+      }, DRAFT_FLUSH_MS);
+      timer.unref?.();
+    },
+    async finish() {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (dirty) enqueue();
+      await chain;
+      return conversationStreamView(state);
+    },
+  };
+}
 
 export const CONVERSATION_SYSTEM_PROMPT = `你是 Inwit 的对话助手。用户在侧栏里和你多轮交谈，可以 @ 文档，也可以让你修改文档或新写一篇。
 
@@ -43,6 +116,17 @@ export async function processConversation(job: JobRow): Promise<void> {
     writtenCardIds: [],
   };
 
+  const draft = createDraftSink((view) =>
+    patchConversationDraft({
+      userId: job.userId,
+      conversationId,
+      messageId: assistantMessageId,
+      content: view.content,
+      thinking: view.thinking,
+      activity: view.activity,
+    }),
+  );
+
   await runAgentJob({
     job,
     agentType: 'conversation',
@@ -56,7 +140,9 @@ export async function processConversation(job: JobRow): Promise<void> {
     }),
     tools: conversationTools(session),
     maxTurns: 12,
+    onEvent: (event) => draft.push(event),
     verify: async ({ agent }) => {
+      const view = await draft.finish();
       const text = extractAssistantText(agent.state.messages);
       const reply = text || fallbackReply(session.actions);
       if (!reply) throw new Error('回答是空的');
@@ -65,6 +151,7 @@ export async function processConversation(job: JobRow): Promise<void> {
         conversationId,
         messageId: assistantMessageId,
         content: reply,
+        thinking: view.thinking,
         actions: session.actions,
       });
       return `actions=${String(session.actions.length)}`;
