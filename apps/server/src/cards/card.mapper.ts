@@ -26,6 +26,8 @@ export function toPublicCardBase(row: CardRow): Card {
     documentId: row.documentId,
     topicId: row.topicId,
     mapNodeId: row.mapNodeId,
+    outlineParentId: row.outlineParentId ?? null,
+    outlinePosition: row.outlinePosition,
     concept: row.concept,
     example: row.example,
     confusionPoint: row.confusionPoint,

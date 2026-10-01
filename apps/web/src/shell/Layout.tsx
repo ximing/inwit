@@ -56,6 +56,10 @@ const LayoutContent = observer(function LayoutContent() {
   const dark = theme.resolved === 'dark';
   const collapsed = prefs.navRailCollapsed;
   const label = auth.displayLabel;
+  const zen =
+    prefs.zenMode &&
+    location.pathname === ROUTES.docs &&
+    new URLSearchParams(location.search).has('doc');
 
   useEffect(() => scheduleShellPrefetch(location.pathname), [location.pathname]);
 
@@ -74,7 +78,7 @@ const LayoutContent = observer(function LayoutContent() {
   }, [location.pathname, navigate]);
 
   return (
-    <div className="shell">
+    <div className={zen ? 'shell is-zen' : 'shell'}>
       <aside className={collapsed ? 'rail is-collapsed' : 'rail'}>
         <div className="brand">
           <div className="brand-text">

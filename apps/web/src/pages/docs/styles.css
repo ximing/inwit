@@ -394,7 +394,8 @@ html.is-resizing-doc-list * {
 .doc-fab .save-state { font-size: 11px; padding: 0 4px 0 2px; white-space: nowrap; }
 .doc-fab .mode-seg { border: 0; background: none; padding: 0; gap: 2px; }
 .doc-fab .mode-seg-btn { height: 24px; padding: 0 9px; font-size: 11.5px; }
-.doc-fab-close {
+.doc-fab-close,
+.doc-fab-zen {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -407,8 +408,15 @@ html.is-resizing-doc-list * {
   cursor: pointer;
   flex: none;
 }
-.doc-fab-close:hover { background: var(--bg-sunken); color: var(--ink); }
-.doc-fab-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.doc-fab-close:hover,
+.doc-fab-zen:hover { background: var(--bg-sunken); color: var(--ink); }
+.doc-fab-close:focus-visible,
+.doc-fab-zen:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.doc-fab-zen.is-on { color: var(--accent-deep); background: var(--accent-soft); }
+.doc-fab:has(.doc-fab-zen.is-on) {
+  background: var(--surface);
+  border-color: var(--line);
+}
 
 .mode-seg {
   display: inline-flex;
@@ -448,10 +456,20 @@ html.is-resizing-doc-list * {
   min-height: 39px;
 }
 .pane-title {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
+  overflow-wrap: anywhere;
+}
+.pane-title .tag {
+  margin-left: 10px;
+  vertical-align: 0.15em;
+}
+/* 正文栏变窄时缩小标题，避免单行输入框把长标题裁掉。默认分栏大约 580px，仍用 30px。 */
+@container (max-width: 560px) {
+  .pane-title,
+  .title-input { font-size: 24px; }
+}
+@container (max-width: 440px) {
+  .pane-title,
+  .title-input { font-size: 20px; }
 }
 .pane-meta {
   font-size: 12.5px;
@@ -516,4 +534,48 @@ html.is-resizing-doc-list * {
   }
   .doc-list-resizer { display: none; }
   .pane-inner { --write-gap: 22px; }
+  /* 工具条不跟主题挤在同一行，避免主题名被压成一字一行 */
+  .doc-toprow {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .doc-toprow .spacer { display: none; }
+  .doc-toprow .topic-pick-wrap {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .doc-toprow .doc-fab {
+    margin-left: auto;
+    max-width: 100%;
+  }
+}
+
+/* 比窄屏规则更具体：禅模式藏列表，正文和卡片仍左右分栏 */
+.shell.is-zen .ws { grid-template-columns: minmax(0, 1fr); }
+.shell.is-zen .ws-list,
+.shell.is-zen .doc-list-resizer { display: none; }
+
+/* 窄屏禅模式改为上下分栏，卡片不再盖住正文 */
+.shell.is-zen .pane-main:has(> .card-rail.is-zen-stack) {
+  flex-direction: column;
+}
+.shell.is-zen .pane-main:has(> .card-rail.is-zen-stack) > .pane-scroll {
+  flex: 1.2 1 58%;
+  min-height: 0;
+}
+.shell.is-zen .pane-main:has(> .card-rail.is-zen-stack.is-map) > .pane-scroll {
+  flex: 1 1 44%;
+}
+.shell.is-zen .card-rail.is-zen-stack {
+  position: relative;
+  width: auto;
+  flex: 1 1 42%;
+  min-height: 0;
+  border-left: 0;
+  border-top: 1px solid var(--line-soft);
+  box-shadow: none;
+  animation: none;
+}
+.shell.is-zen .card-rail.is-zen-stack.is-map {
+  flex: 1.4 1 56%;
 }

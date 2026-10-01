@@ -33,6 +33,7 @@ import { presignGet } from '../storage/client.js';
 import { shouldIndexCard } from './card-acceptance-logic.js';
 import { diffCardQuestions, normalizeTags } from './card-logic.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
+import { applyOutlineDetach } from './outline.service.js';
 
 function toPublicLink(row: CardLinkRow): CardLink {
   return {
@@ -338,6 +339,7 @@ export async function archiveCard(userId: string, id: string): Promise<void> {
   if (card.deletedAt) return;
   const now = new Date();
   await getDb().transaction(async (tx) => {
+    await applyOutlineDetach(tx, userId, id);
     await tx
       .update(cards)
       .set({ deletedAt: now, updatedAt: now })
@@ -358,6 +360,37 @@ export async function restoreCard(userId: string, id: string): Promise<Card> {
       .where(and(eq(cards.id, id), eq(cards.userId, userId)))
       .returning();
     if (!row) throw AppError.of(404, 'CARD_NOT_FOUND');
+    if (row.outlineParentId) {
+      const [parent] = await tx
+        .select({
+          id: cards.id,
+          documentId: cards.documentId,
+          userId: cards.userId,
+          deletedAt: cards.deletedAt,
+          acceptance: cards.acceptance,
+        })
+        .from(cards)
+        .where(eq(cards.id, row.outlineParentId))
+        .limit(1);
+      const parentOk =
+        parent &&
+        parent.userId === userId &&
+        parent.deletedAt == null &&
+        parent.acceptance !== 'rejected' &&
+        parent.documentId != null &&
+        parent.documentId === row.documentId;
+      if (!parentOk) {
+        const [cleared] = await tx
+          .update(cards)
+          .set({ outlineParentId: null, updatedAt: now })
+          .where(eq(cards.id, row.id))
+          .returning();
+        if (cleared) {
+          if (cleared.mapNodeId) await recalculateMapNodeStatus(cleared.mapNodeId, tx);
+          return cleared;
+        }
+      }
+    }
     if (row.mapNodeId) await recalculateMapNodeStatus(row.mapNodeId, tx);
     return row;
   });

@@ -89,9 +89,21 @@ const DocsPageContent = observer(function DocsPageContent() {
         search.clear();
         return;
       }
-      if (service.topicMenuOpen) service.closeTopicMenu();
-      if (service.paneTopicMenuOpen) service.closePaneTopicMenu();
-      if (service.activeCardId || service.activeAnnotationId) service.closeHighlight();
+      let handled = false;
+      if (service.topicMenuOpen) {
+        service.closeTopicMenu();
+        handled = true;
+      }
+      if (service.paneTopicMenuOpen) {
+        service.closePaneTopicMenu();
+        handled = true;
+      }
+      if (service.activeCardId || service.activeAnnotationId) {
+        service.closeHighlight();
+        handled = true;
+      }
+      if (handled) return;
+      if (prefs.zenMode) prefs.setZenMode(false);
     };
     const onPointer = (event: MouseEvent) => {
       const target = event.target;
@@ -122,7 +134,7 @@ const DocsPageContent = observer(function DocsPageContent() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('mousedown', onPointer);
     };
-  }, [service, search]);
+  }, [service, search, prefs]);
 
   useEffect(() => {
     const el = paneRef.current;
@@ -202,6 +214,8 @@ const DocsPageContent = observer(function DocsPageContent() {
 
   useEffect(() => {
     if (!service.scrollCardId) return;
+    // 脑图画布自己把这张卡移到视口中央，这里清掉会让它来不及平移。
+    if (document.querySelector('.doc-canvas')) return;
     const id = service.scrollCardId;
     const el = document.querySelector(`.card-rail .mini-card[data-card-id="${id}"]`);
     if (el instanceof HTMLElement) {

@@ -38,6 +38,7 @@ export const ERROR_MESSAGES = {
   ORGANIZE_JOB_IN_PROGRESS: '已经有一条记忆整理在排队或进行中',
   JOB_NOT_CANCELABLE: '只有等待中的任务可以取消',
   CARD_NOT_FOUND: '卡片不存在',
+  CARD_OUTLINE_INVALID: '不能这样摆放卡片（会成环、层级过深，或不在同一篇文档）',
   CARD_NOT_ACCEPTED: '这张卡还没有确认，不能进入复习',
   CARD_NOT_ACCEPTABLE: '这张卡不能确认或修改',
   CARD_ALREADY_REVIEWED: '这张卡已经复习过，请放进回收站',

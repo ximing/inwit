@@ -2,7 +2,7 @@
 
 # 管理
 
-Generated 2026-09-24T10:19:45.342Z. 5 endpoints.
+Generated 2026-09-30T15:45:27.824Z. 5 endpoints.
 
 ### GET `/api/admin/executions`
 

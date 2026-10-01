@@ -20,6 +20,8 @@ import {
   type Job,
   type PmDocJson,
   type SyncChange,
+  planOutlineDetach,
+  planOutlineMove,
   type Topic,
   type UpdateCardInput,
 } from '@inwit/dto';
@@ -30,6 +32,7 @@ import {
   createCard,
   rejectCard,
   resumeCard,
+  placeCardOutline,
   suspendCard,
   updateCard,
 } from '@/api/cards';
@@ -94,6 +97,26 @@ function asDocumentCard(card: Card): DocumentCard {
     questions: [],
     review: { dueAt: new Date().toISOString(), intervalDays: 0, suspendedAt: null },
   };
+}
+
+function cardsWithout(cards: DocumentCard[], id: string): DocumentCard[] {
+  const plan = planOutlineDetach(
+    cards.map((card) => ({
+      id: card.id,
+      parentId: card.outlineParentId,
+      position: card.outlinePosition,
+    })),
+    id,
+  );
+  const moves = new Map(plan.moves.map((move) => [move.id, move]));
+  return cards
+    .filter((card) => card.id !== id)
+    .map((card) => {
+      const move = moves.get(card.id);
+      return move
+        ? { ...card, outlineParentId: move.parentId, outlinePosition: move.position }
+        : card;
+    });
 }
 
 function clipReason(reason: string): string {
@@ -1101,6 +1124,52 @@ export class DocsService extends Service {
     }
   }
 
+  /** 脑图：收到另一张卡下面，或 parentId 为空时独立成树。位置由服务端排到同层末尾。 */
+  async placeCardOnOutline(cardId: string, parentId: string | null): Promise<void> {
+    if (!this.doc) return;
+    const nodes = this.doc.cards.map((card) => ({
+      id: card.id,
+      parentId: card.outlineParentId,
+      position: card.outlinePosition,
+    }));
+    const plan = planOutlineMove(nodes, cardId, parentId);
+    if (!plan.ok || plan.unchanged) return;
+    const snapshot = this.doc.cards;
+    this.cardWriteGen += 1;
+    const gen = this.cardWriteGen;
+    this.doc = {
+      ...this.doc,
+      cards: snapshot.map((card) =>
+        card.id === cardId
+          ? { ...card, outlineParentId: plan.parentId, outlinePosition: plan.position }
+          : card,
+      ),
+    };
+    try {
+      const updated = await placeCardOutline(cardId, { parentId: plan.parentId });
+      if (!this.doc || this.cardWriteGen !== gen) return;
+      this.doc = {
+        ...this.doc,
+        cards: this.doc.cards.map((card) =>
+          card.id === cardId
+            ? {
+                ...card,
+                outlineParentId: updated.outlineParentId,
+                outlinePosition: updated.outlinePosition,
+                updatedAt: updated.updatedAt,
+              }
+            : card,
+        ),
+      };
+      this.echoDocumentRow(updated.documentId, updated.updatedAt);
+    } catch (err) {
+      if (this.doc && this.cardWriteGen === gen) {
+        this.doc = { ...this.doc, cards: snapshot };
+      }
+      this.showToast(errorMessage(err, '没放上去'));
+    }
+  }
+
   /** Soft delete: the card moves to 回收站 and can be restored from settings. */
   async archiveDocCard(id: string): Promise<void> {
     if (this.acceptingProposed) return;
@@ -1108,7 +1177,7 @@ export class DocsService extends Service {
       await archiveCard(id);
       if (this.doc) {
         this.cardWriteGen += 1;
-        this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
+        this.doc = { ...this.doc, cards: cardsWithout(this.doc.cards, id) };
         this.patchListFromDetail(this.doc);
       }
       this.expandedCardIds = this.expandedCardIds.filter((cardId) => cardId !== id);
@@ -1208,7 +1277,7 @@ export class DocsService extends Service {
   private dropDocCard(id: string): void {
     if (this.doc) {
       this.cardWriteGen += 1;
-      this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
+      this.doc = { ...this.doc, cards: cardsWithout(this.doc.cards, id) };
       this.patchListFromDetail(this.doc);
     }
     this.openCardIds = this.openCardIds.filter((cardId) => cardId !== id);

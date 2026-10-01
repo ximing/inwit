@@ -2,7 +2,7 @@
 
 # 记忆
 
-Generated 2026-09-24T10:19:45.342Z. 2 endpoints.
+Generated 2026-09-30T15:45:27.824Z. 2 endpoints.
 
 ### GET `/api/memory/collections`
 

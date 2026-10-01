@@ -1,13 +1,25 @@
 export const CARD_RAIL_WIDTH_DEFAULT = 300;
 export const CARD_RAIL_WIDTH_MIN = 220;
 export const CARD_RAIL_WIDTH_MAX = 520;
+/** 禅模式和脑图用的右栏上限。列表模式仍停在 CARD_RAIL_WIDTH_MAX。 */
+export const CARD_RAIL_WIDE_MAX = 1120;
+export const CANVAS_PANE_WIDTH_DEFAULT = 560;
 
-export function clampCardRailWidth(width: number, paneWidth = 0): number {
-  const paneMax =
-    paneWidth > 0 ? Math.max(CARD_RAIL_WIDTH_MIN, Math.floor(paneWidth * 0.48)) : CARD_RAIL_WIDTH_MAX;
-  const max = Math.min(CARD_RAIL_WIDTH_MAX, paneMax);
-  if (!Number.isFinite(width)) return CARD_RAIL_WIDTH_DEFAULT;
-  return Math.min(max, Math.max(CARD_RAIL_WIDTH_MIN, Math.round(width)));
+/** 脑图栏变宽时，正文至少留出标题和工具条能横排的宽度。 */
+const WIDE_DOC_MIN = 520;
+
+export function cardRailLimits(wide: boolean, paneWidth = 0): { min: number; max: number } {
+  const absMax = wide ? CARD_RAIL_WIDE_MAX : CARD_RAIL_WIDTH_MAX;
+  const fraction = wide ? 0.72 : 0.48;
+  let paneCap = paneWidth > 0 ? Math.floor(paneWidth * fraction) : absMax;
+  if (wide && paneWidth > 0) paneCap = Math.min(paneCap, paneWidth - WIDE_DOC_MIN);
+  return { min: CARD_RAIL_WIDTH_MIN, max: Math.min(absMax, Math.max(CARD_RAIL_WIDTH_MIN, paneCap)) };
+}
+
+export function clampCardRailWidth(width: number, paneWidth = 0, wide = false): number {
+  const { min, max } = cardRailLimits(wide, paneWidth);
+  if (!Number.isFinite(width)) return wide ? CANVAS_PANE_WIDTH_DEFAULT : CARD_RAIL_WIDTH_DEFAULT;
+  return Math.min(max, Math.max(min, Math.round(width)));
 }
 
 export function parseCardRailWidth(raw: string | null | undefined): number {
@@ -22,11 +34,18 @@ export function cardRailWidthFromDrag(startWidth: number, startX: number, client
   return startWidth + (startX - clientX);
 }
 
-export function cardRailWidthFromKey(current: number, key: string, step = 16): number | null {
+export function cardRailWidthFromKey(
+  current: number,
+  key: string,
+  step = 16,
+  limits?: { min: number; max: number },
+): number | null {
+  const min = limits?.min ?? CARD_RAIL_WIDTH_MIN;
+  const max = limits?.max ?? CARD_RAIL_WIDTH_MAX;
   if (key === 'ArrowLeft') return current + step;
   if (key === 'ArrowRight') return current - step;
-  if (key === 'Home') return CARD_RAIL_WIDTH_MAX;
-  if (key === 'End') return CARD_RAIL_WIDTH_MIN;
+  if (key === 'Home') return max;
+  if (key === 'End') return min;
   return null;
 }
 

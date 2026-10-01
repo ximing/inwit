@@ -33,7 +33,7 @@ export function TopicPicker({
         onClick={onToggle}
       >
         <span className={topicId ? 'dot' : 'dot is-off'} />
-        {label}
+        <span className="topic-pick-label">{label}</span>
         <ChevronDown width={10} height={10} strokeWidth={2.4} />
       </button>
       {open ? (

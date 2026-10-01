@@ -19,6 +19,7 @@
 @import './pages/docs/editor.css';
 @import './components/reader/mini-card.css';
 @import './pages/docs/card-rail.css';
+@import './pages/docs/card-canvas.css';
 @import './pages/docs/selection-toolbar.css';
 @import './pages/docs/pdf-pane/styles.css';
 @import './components/reader/styles.css';

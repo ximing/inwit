@@ -27,6 +27,14 @@ describe('clampCardRailWidth', () => {
     expect(clampCardRailWidth(500, 800)).toBe(384);
     expect(clampCardRailWidth(200, 800)).toBe(CARD_RAIL_WIDTH_MIN);
   });
+
+  it('lets the mind-map rail grow past the list maximum, while the document keeps 520px', () => {
+    expect(clampCardRailWidth(800, 0, true)).toBe(800);
+    expect(clampCardRailWidth(2000, 0, true)).toBe(1120);
+    expect(clampCardRailWidth(900, 1000, true)).toBe(480);
+    expect(clampCardRailWidth(900, 1600, true)).toBe(900);
+    expect(cardRailWidthFromKey(560, 'Home', 16, { min: 220, max: 1120 })).toBe(1120);
+  });
 });
 
 describe('parseCardRailWidth', () => {

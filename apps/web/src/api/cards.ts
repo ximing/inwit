@@ -8,6 +8,7 @@ import type {
   CreateCardInput,
   RejectCardInput,
   ReviewState,
+  SetCardOutlineInput,
   UpdateCardInput,
 } from '@inwit/dto';
 import { request } from './client';
@@ -21,6 +22,13 @@ export function createCard(input: CreateCardInput): Promise<Card> {
 
 export function getCard(id: string): Promise<CardDetail> {
   return request<CardDetail>(`/api/cards/${id}`);
+}
+
+export function placeCardOutline(id: string, input: SetCardOutlineInput): Promise<Card> {
+  return request<Card>(`/api/cards/${id}/outline`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  });
 }
 
 export function updateCard(id: string, input: UpdateCardInput): Promise<CardDetail> {

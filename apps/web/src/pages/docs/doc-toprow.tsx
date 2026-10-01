@@ -1,5 +1,5 @@
 import { observer, useService } from '@rabjs/react';
-import { X } from 'lucide-react';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { ROUTES } from '@/routes';
 import { UiPrefsService, type DocMode } from '@/services/ui-prefs.service';
@@ -48,6 +48,7 @@ export const DocTopRow = observer(function DocTopRow({
 }) {
   const service = useService(DocsService);
   const editor = useService(EditorService);
+  const prefs = useService(UiPrefsService);
   const navigate = useNavigate();
   const topicId = editing
     ? (editor.topicId ?? service.doc?.topicId ?? null)
@@ -89,6 +90,20 @@ export const DocTopRow = observer(function DocTopRow({
         ) : null}
         {showMode ? <ModeSwitch /> : null}
         <span className="divider" />
+        <button
+          type="button"
+          className={`doc-fab-zen${prefs.zenMode ? ' is-on' : ''}`}
+          aria-pressed={prefs.zenMode}
+          aria-label={prefs.zenMode ? '退出禅模式' : '进入禅模式'}
+          title={prefs.zenMode ? '退出禅模式' : '进入禅模式'}
+          onClick={() => prefs.setZenMode(!prefs.zenMode)}
+        >
+          {prefs.zenMode ? (
+            <Minimize2 width={13} height={13} strokeWidth={1.8} />
+          ) : (
+            <Maximize2 width={13} height={13} strokeWidth={1.8} />
+          )}
+        </button>
         <button type="button" className="doc-fab-close" onClick={close} title="关闭" aria-label="关闭">
           <X width={13} height={13} strokeWidth={1.8} />
         </button>

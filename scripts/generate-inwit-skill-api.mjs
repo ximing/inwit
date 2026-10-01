@@ -184,10 +184,13 @@ function extractLocalSchemas(source) {
 }
 
 function precedingComment(source, index) {
-  const before = source.slice(Math.max(0, index - 500), index);
-  const match = before.match(/\/\*\*\s*([\s\S]*?)\*\/\s*$/);
+  const before = source.slice(Math.max(0, index - 800), index);
+  // 只取紧挨着这条路由的最后一块注释，避免把上一条路由的实现吞进来。
+  const match = before.match(/\/\*\*(?:[^*]|\*(?!\/))*\*\/\s*$/);
   if (!match) return undefined;
-  return match[1]
+  return match[0]
+    .replace(/^\/\*\*/, '')
+    .replace(/\*\/\s*$/, '')
     .split('\n')
     .map((line) => line.replace(/^\s*\*\s?/, '').trim())
     .filter((line) => line.length > 0)
@@ -519,6 +522,7 @@ export const API_MODULES = [
   { id: 'assets', title: '媒体资源', groups: ['assets'] },
   { id: 'account', title: '账号与设置', groups: ['auth', 'me', 'llm-configs', 'ocr-config', 'health'] },
   { id: 'admin', title: '管理', groups: ['admin'] },
+  { id: 'sync', title: '内容同步', groups: ['sync'] },
 ];
 
 const GROUP_TO_MODULE = new Map(

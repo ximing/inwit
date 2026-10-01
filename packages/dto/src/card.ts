@@ -32,6 +32,10 @@ export const cardSchema = z.object({
   documentId: z.string().uuid().nullable(),
   topicId: z.string().uuid().nullable(),
   mapNodeId: z.string().uuid().nullable(),
+  /** 脑图父卡。空表示这张卡自己是一棵树的根。 */
+  outlineParentId: z.string().uuid().nullable().default(null),
+  /** 同一个父卡下的顺序，小的在上。 */
+  outlinePosition: z.number().int().nonnegative().default(0),
   concept: z.string().min(1),
   example: z.string(),
   confusionPoint: z.string(),
@@ -177,6 +181,12 @@ export const cardImageResponseSchema = z.object({
   url: z.string().url(),
 });
 export type CardImageResponse = z.infer<typeof cardImageResponseSchema>;
+
+/** 把一张卡收到另一张下面。parentId 为空表示独立成一棵树。 */
+export const setCardOutlineInputSchema = z.object({
+  parentId: z.string().uuid().nullable(),
+});
+export type SetCardOutlineInput = z.infer<typeof setCardOutlineInputSchema>;
 
 function clipChars(text: string, max: number): string {
   const chars = [...text];

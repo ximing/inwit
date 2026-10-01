@@ -360,3 +360,6 @@ img.avatar { background: var(--bg-sunken); }
   }
   .rail-tools { padding: 0; }
 }
+
+/* 禅模式只在打开文档时挂上，导航让出整屏 */
+.shell.is-zen .rail { display: none; }

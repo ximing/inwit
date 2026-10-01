@@ -1,5 +1,6 @@
 import { Service } from '@rabjs/react';
 import {
+  CANVAS_PANE_WIDTH_DEFAULT,
   CARD_RAIL_WIDTH_DEFAULT,
   DOC_LIST_WIDTH_DEFAULT,
   clampCardRailWidth,
@@ -9,10 +10,14 @@ import {
 } from './ui-prefs-logic';
 
 export type DocMode = 'edit' | 'preview';
+export type CardLayout = 'list' | 'map';
 
 export const DOC_MODE_STORAGE_KEY = 'inwit-doc-mode';
 export const CARD_RAIL_COLLAPSED_KEY = 'inwit-card-rail-collapsed';
 export const CARD_RAIL_WIDTH_KEY = 'inwit-card-rail-width';
+export const CANVAS_PANE_WIDTH_KEY = 'inwit-canvas-pane-width';
+export const CARD_LAYOUT_KEY = 'inwit-card-layout';
+export const ZEN_MODE_KEY = 'inwit-zen-mode';
 export const DOC_LIST_WIDTH_KEY = 'inwit-doc-list-width';
 export const NAV_RAIL_COLLAPSED_KEY = 'inwit-nav-rail-collapsed';
 
@@ -27,6 +32,16 @@ function readDocMode(): DocMode {
     // private mode / blocked storage
   }
   return 'edit';
+}
+
+function readCardLayout(): CardLayout {
+  try {
+    const raw = localStorage.getItem(CARD_LAYOUT_KEY);
+    if (raw === 'list' || raw === 'map') return raw;
+  } catch {
+    // private mode / blocked storage
+  }
+  return 'list';
 }
 
 function readFlag(key: string): boolean {
@@ -49,19 +64,30 @@ export class UiPrefsService extends Service {
   docMode: DocMode = 'edit';
   cardRailCollapsed = false;
   cardRailWidth = CARD_RAIL_WIDTH_DEFAULT;
+  canvasPaneWidth = CANVAS_PANE_WIDTH_DEFAULT;
+  cardLayout: CardLayout = 'list';
+  zenMode = false;
   docListWidth = DOC_LIST_WIDTH_DEFAULT;
   navRailCollapsed = false;
 
   constructor() {
     super();
     this.docMode = readDocMode();
+    this.cardLayout = readCardLayout();
     this.cardRailCollapsed = readFlag(CARD_RAIL_COLLAPSED_KEY);
     this.navRailCollapsed = readFlag(NAV_RAIL_COLLAPSED_KEY);
+    this.zenMode = readFlag(ZEN_MODE_KEY);
     try {
       this.cardRailWidth = parseCardRailWidth(localStorage.getItem(CARD_RAIL_WIDTH_KEY));
+      const canvasRaw = localStorage.getItem(CANVAS_PANE_WIDTH_KEY);
+      this.canvasPaneWidth =
+        canvasRaw == null || canvasRaw === ''
+          ? CANVAS_PANE_WIDTH_DEFAULT
+          : clampCardRailWidth(Number(canvasRaw), 0, true);
       this.docListWidth = parseDocListWidth(localStorage.getItem(DOC_LIST_WIDTH_KEY));
     } catch {
       this.cardRailWidth = CARD_RAIL_WIDTH_DEFAULT;
+      this.canvasPaneWidth = CANVAS_PANE_WIDTH_DEFAULT;
       this.docListWidth = DOC_LIST_WIDTH_DEFAULT;
     }
   }
@@ -87,6 +113,25 @@ export class UiPrefsService extends Service {
     if (next === this.cardRailWidth) return;
     this.cardRailWidth = next;
     writeStorage(CARD_RAIL_WIDTH_KEY, String(next));
+  }
+
+  setCanvasPaneWidth(width: number, paneWidth = 0): void {
+    const next = clampCardRailWidth(width, paneWidth, true);
+    if (next === this.canvasPaneWidth) return;
+    this.canvasPaneWidth = next;
+    writeStorage(CANVAS_PANE_WIDTH_KEY, String(next));
+  }
+
+  setCardLayout(layout: CardLayout): void {
+    if (this.cardLayout === layout) return;
+    this.cardLayout = layout;
+    writeStorage(CARD_LAYOUT_KEY, layout);
+  }
+
+  setZenMode(on: boolean): void {
+    if (this.zenMode === on) return;
+    this.zenMode = on;
+    writeStorage(ZEN_MODE_KEY, on ? '1' : '0');
   }
 
   setDocListWidth(width: number): void {

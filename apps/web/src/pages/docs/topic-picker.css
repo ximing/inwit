@@ -23,6 +23,8 @@
   letter-spacing: 0.1em;
   color: var(--gold);
   max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .topic-pick.is-kicker::before {
   content: '';
@@ -32,6 +34,11 @@
   flex: none;
 }
 .topic-pick.is-kicker .dot { display: none; }
+.topic-pick.is-kicker .topic-pick-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .topic-pick.is-kicker:hover { background: none; color: var(--gold); opacity: 0.75; }
 
 .topic-menu {

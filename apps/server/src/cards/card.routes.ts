@@ -2,6 +2,7 @@ import {
   archiveListQuerySchema,
   createCardInputSchema,
   rejectCardInputSchema,
+  setCardOutlineInputSchema,
   updateCardInputSchema,
 } from '@inwit/dto';
 import type { FastifyInstance } from 'fastify';
@@ -20,6 +21,7 @@ import {
   restoreCard,
   updateCard,
 } from './card.service.js';
+import { placeCardOutline } from './outline.service.js';
 import { acceptCard, rejectCard } from './card-decision.service.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
@@ -47,6 +49,13 @@ export function registerCardRoutes(app: FastifyInstance): void {
     const { id } = idParamsSchema.parse(req.params);
     const input = updateCardInputSchema.parse(req.body);
     return updateCard(requireUser(req).id, id, input);
+  });
+
+  /** 脑图：收到另一张卡下面，或 parentId 为空时独立成树。 */
+  app.patch('/api/cards/:id/outline', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const input = setCardOutlineInputSchema.parse(req.body);
+    return placeCardOutline(requireUser(req).id, id, input);
   });
 
   /** Soft delete: the card moves to 回收站 and can be restored. */

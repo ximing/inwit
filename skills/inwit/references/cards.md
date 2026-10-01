@@ -2,7 +2,7 @@
 
 # 卡片
 
-Generated 2026-09-24T10:19:45.342Z. 15 endpoints.
+Generated 2026-09-30T15:45:27.824Z. 16 endpoints.
 
 ### DELETE `/api/card-links/:id`
 
@@ -317,6 +317,47 @@ auth=bearer
   },
   "required": [
     "nodeId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### PATCH `/api/cards/:id/outline`
+
+auth=bearer
+
+脑图：收到另一张卡下面，或 parentId 为空时独立成树。
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `setCardOutlineInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "parentId": {
+      "type": "string",
+      "format": "uuid",
+      "nullable": true
+    }
+  },
+  "required": [
+    "parentId"
   ],
   "additionalProperties": false
 }

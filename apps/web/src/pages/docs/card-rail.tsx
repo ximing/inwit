@@ -18,13 +18,15 @@ import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb'
 import { ROUTES } from '@/routes';
 import { DialogService } from '@/services/dialog.service';
 import {
+  CANVAS_PANE_WIDTH_DEFAULT,
   CARD_RAIL_WIDTH_DEFAULT,
-  CARD_RAIL_WIDTH_MAX,
-  CARD_RAIL_WIDTH_MIN,
+  cardRailLimits,
   cardRailWidthFromDrag,
   cardRailWidthFromKey,
+  clampCardRailWidth,
 } from '@/services/ui-prefs-logic';
 import { UiPrefsService } from '@/services/ui-prefs.service';
+import { CardCanvas } from './card-canvas';
 import { DocsService } from './docs.service';
 
 const AnnotationThumb = observer(function AnnotationThumb({
@@ -282,9 +284,17 @@ export const CardRail = observer(function CardRail() {
     if (!ok) return;
     await service.acceptAllProposed();
   };
-  const docked = !service.cardRailNarrow && !prefs.cardRailCollapsed;
-  const showOverlay = !docked && service.cardRailOverlayOpen;
-  const visible = docked || showOverlay;
+  const wide = prefs.cardLayout === 'map' || prefs.zenMode;
+  const limits = cardRailLimits(wide, service.paneWidth);
+  const shownWidth = clampCardRailWidth(
+    wide ? prefs.canvasPaneWidth : prefs.cardRailWidth,
+    service.paneWidth,
+    wide,
+  );
+  const stack = prefs.zenMode && service.cardRailNarrow;
+  const docked = !stack && !service.cardRailNarrow && (!prefs.cardRailCollapsed || prefs.zenMode);
+  const showOverlay = !stack && !docked && (service.cardRailOverlayOpen || prefs.zenMode);
+  const visible = docked || showOverlay || stack;
   const pending = service.doc?.status === 'pending';
   const badge = cards.length + notes.length;
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -299,14 +309,15 @@ export const CardRail = observer(function CardRail() {
   }, []);
 
   const applyWidth = (width: number) => {
-    prefs.setCardRailWidth(width, service.paneWidth);
+    if (wide) prefs.setCanvasPaneWidth(width, service.paneWidth);
+    else prefs.setCardRailWidth(width, service.paneWidth);
   };
 
   const onResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     event.preventDefault();
     const startX = event.clientX;
-    const startWidth = prefs.cardRailWidth;
+    const startWidth = shownWidth;
     dragRef.current = { startX, startWidth };
     document.documentElement.classList.add('is-resizing-card-rail');
 
@@ -326,7 +337,7 @@ export const CardRail = observer(function CardRail() {
   };
 
   const onResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const next = cardRailWidthFromKey(prefs.cardRailWidth, event.key);
+    const next = cardRailWidthFromKey(shownWidth, event.key, 16, limits);
     if (next == null) return;
     event.preventDefault();
     applyWidth(next);
@@ -334,7 +345,7 @@ export const CardRail = observer(function CardRail() {
 
   return (
     <>
-      {showOverlay ? (
+      {showOverlay && !prefs.zenMode ? (
         <div
           className="card-rail-scrim"
           aria-hidden
@@ -343,23 +354,27 @@ export const CardRail = observer(function CardRail() {
       ) : null}
       {visible ? (
         <aside
-          className={`card-rail${showOverlay ? ' is-overlay' : ''}`}
+          className={`card-rail${showOverlay ? ' is-overlay' : ''}${stack ? ' is-zen-stack' : ''}${prefs.cardLayout === 'map' ? ' is-map' : ''}`}
           aria-label="批注与卡片"
-          style={{ width: prefs.cardRailWidth }}
+          style={stack ? undefined : { width: shownWidth }}
         >
+          {stack ? null : (
           <div
             className="card-rail-resizer"
             role="separator"
             aria-orientation="vertical"
             aria-label="调整卡片栏宽度"
-            aria-valuemin={CARD_RAIL_WIDTH_MIN}
-            aria-valuemax={CARD_RAIL_WIDTH_MAX}
-            aria-valuenow={prefs.cardRailWidth}
+            aria-valuemin={limits.min}
+            aria-valuemax={limits.max}
+            aria-valuenow={shownWidth}
             tabIndex={0}
             onPointerDown={onResizePointerDown}
-            onDoubleClick={() => applyWidth(CARD_RAIL_WIDTH_DEFAULT)}
+            onDoubleClick={() =>
+              applyWidth(wide ? CANVAS_PANE_WIDTH_DEFAULT : CARD_RAIL_WIDTH_DEFAULT)
+            }
             onKeyDown={onResizeKeyDown}
           />
+          )}
           <div className="card-rail-head">
             <span className="card-rail-title">本文</span>
             {canAcceptAll ? (
@@ -389,7 +404,7 @@ export const CardRail = observer(function CardRail() {
               >
                 <PanelRightClose width={14} height={14} strokeWidth={1.8} />
               </button>
-            ) : (
+            ) : prefs.zenMode ? null : (
               <>
                 {!service.cardRailNarrow ? (
                   <button
@@ -417,7 +432,7 @@ export const CardRail = observer(function CardRail() {
             )}
           </div>
 
-          <section className="card-rail-sec" aria-label="批注">
+          <section className="card-rail-sec is-notes" aria-label="批注">
             <h3 className="card-rail-sec-title">批注 · {notes.length}</h3>
             {notes.length === 0 ? (
               <p className="hint">划过的句子会出现在这里。</p>
@@ -430,12 +445,39 @@ export const CardRail = observer(function CardRail() {
             )}
           </section>
 
-          <section className="card-rail-sec" aria-label="本文卡片">
-            <h3 className="card-rail-sec-title">本文卡片 · {cards.length}</h3>
+          <section className="card-rail-sec is-cards" aria-label="本文卡片">
+            <div className="card-rail-sec-head">
+              <h3 className="card-rail-sec-title">本文卡片 · {cards.length}</h3>
+              <div className="card-layout-seg" role="radiogroup" aria-label="卡片布局">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={prefs.cardLayout === 'list'}
+                  className={prefs.cardLayout === 'list' ? 'is-on' : undefined}
+                  onClick={() => prefs.setCardLayout('list')}
+                >
+                  列表
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={prefs.cardLayout === 'map'}
+                  className={prefs.cardLayout === 'map' ? 'is-on' : undefined}
+                  onClick={() => prefs.setCardLayout('map')}
+                >
+                  脑图
+                </button>
+              </div>
+            </div>
             {cards.length === 0 ? (
               <p className="hint">
                 {pending ? '处理完成后卡片会出现在这里。' : '这篇还没有卡片。'}
               </p>
+            ) : prefs.cardLayout === 'map' ? (
+              <CardCanvas
+                cards={cards}
+                renderCard={(card) => <DocCardButton card={card} digested={digested} />}
+              />
             ) : (
               <div className="mini-grid">
                 {cards.map((card) => (
@@ -446,7 +488,7 @@ export const CardRail = observer(function CardRail() {
           </section>
         </aside>
       ) : null}
-      {!docked ? (
+      {!docked && !stack ? (
         <button
           type="button"
           className="card-rail-handle"

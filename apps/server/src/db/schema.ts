@@ -314,6 +314,10 @@ export const cards = pgTable(
     documentId: uuid('document_id').references(() => documents.id, { onDelete: 'set null' }),
     topicId: uuid('topic_id').references(() => topics.id, { onDelete: 'set null' }),
     mapNodeId: uuid('map_node_id').references(() => mapNodes.id, { onDelete: 'set null' }),
+    /** 脑图父卡。空表示这张卡自己是一棵树的根。 */
+    outlineParentId: uuid('outline_parent_id'),
+    /** 同一个父卡下的顺序，小的在上。 */
+    outlinePosition: integer('outline_position').notNull().default(0),
     concept: text('concept').notNull(),
     example: text('example').notNull(),
     confusionPoint: text('confusion_point').notNull(),
@@ -341,6 +345,7 @@ export const cards = pgTable(
     index('idx_cards_document').on(t.documentId),
     index('idx_cards_topic').on(t.topicId),
     index('idx_cards_map_node').on(t.mapNodeId),
+    index('idx_cards_document_outline').on(t.documentId, t.outlineParentId, t.outlinePosition),
     index('idx_cards_tags').using('gin', t.tags),
     index('idx_cards_user_acceptance')
       .on(t.userId, t.acceptance)
@@ -348,6 +353,15 @@ export const cards = pgTable(
     enumCheck('cards_source_check', t.source, CARD_SOURCES),
     enumCheck('cards_acceptance_check', t.acceptance, CARD_ACCEPTANCES),
     check('cards_reject_reason_len_check', sql`char_length(${t.rejectReason}) <= 500`),
+    check(
+      'cards_outline_not_self_check',
+      sql`${t.outlineParentId} IS NULL OR ${t.outlineParentId} <> ${t.id}`,
+    ),
+    foreignKey({
+      name: 'cards_outline_parent_id_cards_id_fk',
+      columns: [t.outlineParentId],
+      foreignColumns: [t.id],
+    }).onDelete('set null'),
   ],
 );
 

@@ -2,7 +2,7 @@
 
 # 任务与周报
 
-Generated 2026-09-24T10:19:45.342Z. 11 endpoints.
+Generated 2026-09-30T15:45:27.824Z. 11 endpoints.
 
 ### POST `/api/evolve/analyze`
 
