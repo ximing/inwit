@@ -5,6 +5,7 @@ import { errorMessage } from '@/api/client';
 import { formatTimeHm } from '@/lib/format';
 import { asPmJson, clonePmJson, jsonEqual } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
+import { AssetUrlsService } from '@/services/asset-urls.service';
 
 const SAVE_DEBOUNCE_MS = 2000;
 
@@ -145,6 +146,9 @@ export class EditorService extends Service {
     this.error = null;
     try {
       const doc = await getDocument(id);
+      if (doc.assetUrls) {
+        this.resolve(AssetUrlsService).seed(doc.assetUrls, doc.assetUrlsFetchedAt);
+      }
       const json = clonePmJson(doc.contentJson);
       const blank = isBlankPmDoc(json);
       this.id = doc.id;

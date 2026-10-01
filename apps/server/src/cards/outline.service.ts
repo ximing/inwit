@@ -1,6 +1,7 @@
 import type { Card, SetCardOutlineInput } from '@inwit/dto';
-import { planOutlineDetach, planOutlineMove } from '@inwit/dto';
+import { planOutlineDetach } from '@inwit/dto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
+import { placeCanvasMember } from '../canvas/canvas.service.js';
 import { getDb, type Database } from '../db/index.js';
 import { cards } from '../db/schema.js';
 import { AppError } from '../errors.js';
@@ -72,51 +73,29 @@ export async function placeCardOutline(
   cardId: string,
   input: SetCardOutlineInput,
 ): Promise<Card> {
-  const now = new Date();
-  return getDb().transaction(async (tx) => {
-    const [card] = await tx
-      .select()
-      .from(cards)
-      .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
-      .limit(1);
-    if (!card) throw AppError.of(404, 'CARD_NOT_FOUND');
-    if (card.acceptance === 'rejected') throw AppError.of(409, 'CARD_NOT_ACCEPTABLE');
-    if (!card.documentId) throw AppError.of(400, 'CARD_OUTLINE_INVALID');
+  const [card] = await getDb()
+    .select()
+    .from(cards)
+    .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
+    .limit(1);
+  if (!card) throw AppError.of(404, 'CARD_NOT_FOUND');
+  if (card.acceptance === 'rejected') throw AppError.of(409, 'CARD_NOT_ACCEPTABLE');
+  if (!card.documentId) throw AppError.of(400, 'CARD_OUTLINE_INVALID');
 
-    const rows = await tx
-      .select({
-        id: cards.id,
-        parentId: cards.outlineParentId,
-        position: cards.outlinePosition,
-        acceptance: cards.acceptance,
-      })
-      .from(cards)
-      .where(
-        and(
-          eq(cards.userId, userId),
-          eq(cards.documentId, card.documentId),
-          isNull(cards.deletedAt),
-        ),
-      )
-      .orderBy(asc(cards.id));
+  try {
+    await placeCanvasMember(userId, card.documentId, cardId, input.parentId);
+  } catch (err) {
+    if (err instanceof AppError && err.code === 'CANVAS_NODE_INVALID') {
+      throw AppError.of(400, 'CARD_OUTLINE_INVALID');
+    }
+    throw err;
+  }
 
-    const visible = rows
-      .filter((row) => row.acceptance !== 'rejected')
-      .map((row) => ({ id: row.id, parentId: row.parentId, position: row.position }));
-    const plan = planOutlineMove(visible, cardId, input.parentId);
-    if (!plan.ok) throw AppError.of(400, 'CARD_OUTLINE_INVALID');
-    if (plan.unchanged) return toPublicCardBase(card);
-
-    const [updated] = await tx
-      .update(cards)
-      .set({
-        outlineParentId: plan.parentId,
-        outlinePosition: plan.position,
-        updatedAt: now,
-      })
-      .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
-      .returning();
-    if (!updated) throw AppError.of(404, 'CARD_NOT_FOUND');
-    return toPublicCardBase(updated);
-  });
+  const [updated] = await getDb()
+    .select()
+    .from(cards)
+    .where(and(eq(cards.id, cardId), eq(cards.userId, userId)))
+    .limit(1);
+  if (!updated) throw AppError.of(404, 'CARD_NOT_FOUND');
+  return toPublicCardBase(updated);
 }

@@ -232,6 +232,13 @@
       "when": 1790782957847,
       "tag": "0032_card_outline",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790822513965,
+      "tag": "0033_canvas_nodes",
+      "breakpoints": true
     }
   ]
 }

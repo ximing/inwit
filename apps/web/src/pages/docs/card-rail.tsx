@@ -445,9 +445,16 @@ export const CardRail = observer(function CardRail() {
             )}
           </section>
 
-          <section className="card-rail-sec is-cards" aria-label="本文卡片">
+          <section
+            className="card-rail-sec is-cards"
+            aria-label={prefs.cardLayout === 'map' ? '脑图' : '本文卡片'}
+          >
             <div className="card-rail-sec-head">
-              <h3 className="card-rail-sec-title">本文卡片 · {cards.length}</h3>
+              <h3 className="card-rail-sec-title">
+                {prefs.cardLayout === 'map'
+                  ? `脑图 · ${service.canvasForest.length}`
+                  : `本文卡片 · ${cards.length}`}
+              </h3>
               <div className="card-layout-seg" role="radiogroup" aria-label="卡片布局">
                 <button
                   type="button"
@@ -469,15 +476,12 @@ export const CardRail = observer(function CardRail() {
                 </button>
               </div>
             </div>
-            {cards.length === 0 ? (
+            {prefs.cardLayout === 'map' ? (
+              <CardCanvas renderCard={(card) => <DocCardButton card={card} digested={digested} />} />
+            ) : cards.length === 0 ? (
               <p className="hint">
                 {pending ? '处理完成后卡片会出现在这里。' : '这篇还没有卡片。'}
               </p>
-            ) : prefs.cardLayout === 'map' ? (
-              <CardCanvas
-                cards={cards}
-                renderCard={(card) => <DocCardButton card={card} digested={digested} />}
-              />
             ) : (
               <div className="mini-grid">
                 {cards.map((card) => (

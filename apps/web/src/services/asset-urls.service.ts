@@ -19,6 +19,14 @@ export class AssetUrlsService extends Service {
     return liveAssetUrl(src, this.cache);
   }
 
+  seed(urls: Readonly<Record<string, string>>, fetchedAt = Date.now()): void {
+    // Preserve live signatures so polling/reopening a document does not reload its images.
+    const missing = Object.fromEntries(Object.entries(urls).filter(([src]) => !this.urlFor(src)));
+    if (Object.keys(missing).length === 0) return;
+    this.cache = mergeResolvedUrls(this.cache, missing, fetchedAt);
+    this.#notify();
+  }
+
   subscribe(listener: () => void): () => void {
     this.#listeners.add(listener);
     return () => {
@@ -56,7 +64,8 @@ export class AssetUrlsService extends Service {
   }
 
   async #resolveAll(srcs: string[]): Promise<void> {
-    let next = this.cache;
+    // Collect only this request's entries; concurrent requests may update the cache while we await.
+    let next: AssetUrlCache = {};
     let changed = false;
     for (const group of chunkSrcs(srcs)) {
       const fetchedAt = Date.now();
@@ -75,7 +84,7 @@ export class AssetUrlsService extends Service {
       }
     }
     if (!changed) return;
-    this.cache = next;
+    this.cache = { ...this.cache, ...next };
     this.#notify();
   }
 

@@ -8,6 +8,7 @@ import { registerAdminRoutes } from './admin/admin.routes.js';
 import { registerAnnotationRoutes } from './annotations/annotation.routes.js';
 import { registerAssetRoutes } from './assets/asset.routes.js';
 import { registerAuthRoutes } from './auth/auth.routes.js';
+import { registerCanvasRoutes } from './canvas/canvas.routes.js';
 import { registerCardRoutes } from './cards/card.routes.js';
 import { registerDocumentRoutes } from './documents/document.routes.js';
 import { registerOpenDocumentsRoutes } from './documents/open-documents.routes.js';
@@ -74,6 +75,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerSearchRoutes(app);
   registerAnnotationRoutes(app);
   registerCardRoutes(app);
+  registerCanvasRoutes(app);
   registerMemoryRoutes(app);
   registerTopicRoutes(app);
   registerMapRoutes(app);

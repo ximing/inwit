@@ -56,6 +56,7 @@ import { isBlankDocumentContent, planDigestOnSave, type DigestPlan } from './doc
 import { retryJobKindForDocument } from './extract-logic.js';
 import { excerptKeyFor, validateExcerptUpload } from './excerpt-logic.js';
 import { documentObjectPrefix } from './import-logic.js';
+import { resolveDocumentAssets } from './document-assets.js';
 
 export function toPublicDocument(row: DocumentRow): Document {
   return {
@@ -477,9 +478,12 @@ export async function getDocument(userId: string, id: string): Promise<DocumentD
             ),
           );
   const reviewByCard = new Map(reviewRows.map((row) => [row.cardId, row]));
+  const publicDocument = toPublicDocument(document);
+  const assets = await resolveDocumentAssets(userId, publicDocument.contentJson);
 
   return {
-    ...toPublicDocument(document),
+    ...publicDocument,
+    ...assets,
     topicTitle,
     cards: cardRows.map((row) => {
       const state = reviewByCard.get(row.id);

@@ -471,6 +471,7 @@ export class ReaderService extends Service {
       this.syncPolling();
       return;
     }
+    if (detail.assetUrls) this.assets.seed(detail.assetUrls, detail.assetUrlsFetchedAt);
     this.doc = detail;
     this.annotations = notes;
     this.seedEditor(detail);
@@ -1447,6 +1448,7 @@ export class ReaderService extends Service {
   ): void {
     const prev = this.doc;
     if (!prev || prev.id !== detail.id) return;
+    if (detail.assetUrls) this.assets.seed(detail.assetUrls, detail.assetUrlsFetchedAt);
     const keepBody = mode === 'merge-keep-body';
     const keepTitle = this.titleDirty;
     const prevCards = JSON.stringify(prev.cards);

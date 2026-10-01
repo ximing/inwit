@@ -1,10 +1,12 @@
 /**
- * 文档画布。平移、缩放的世界坐标里，第一层是卡片脑图（自动布局，不记住坐标）。
+ * 文档画布。平移、缩放的世界坐标里，卡片、批注、文本和图片在同一片林子里（自动布局，不记住坐标）。
  * 以后的形状放在同一个 world 里，不要另起一套视口。
  */
-import { planOutlineMove, type DocumentCard, type OutlineMove } from '@inwit/dto';
+import { planOutlineMove, type CanvasMember, type DocumentCard, type OutlineMove } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
+import { ImagePlus, Type } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { CanvasFreeNode, CanvasNoteNode } from './canvas-nodes';
 import { DocsService } from './docs.service';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
 
@@ -21,17 +23,17 @@ type Drag = {
 };
 
 function dropHint(
-  cards: readonly DocumentCard[],
-  cardId: string,
+  members: readonly CanvasMember[],
+  memberId: string,
   parentId: string | null,
 ): { text: string | null; accept: boolean } {
   const plan: OutlineMove = planOutlineMove(
-    cards.map((card) => ({
-      id: card.id,
-      parentId: card.outlineParentId,
-      position: card.outlinePosition,
+    members.map((member) => ({
+      id: member.id,
+      parentId: member.parentId,
+      position: member.position,
     })),
-    cardId,
+    memberId,
     parentId,
   );
   if (plan.ok && plan.unchanged) return { text: null, accept: false };
@@ -99,14 +101,15 @@ function edgePath(from: MindBox, to: MindBox): string {
   return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
 }
 
+const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
+
 export const CardCanvas = observer(function CardCanvas({
-  cards,
   renderCard,
 }: {
-  cards: readonly DocumentCard[];
   renderCard: (card: DocumentCard) => ReactNode;
 }) {
   const service = useService(DocsService);
+  const fileRef = useRef<HTMLInputElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const userMoved = useRef(false);
   const cardKeyRef = useRef('');
@@ -137,18 +140,31 @@ export const CardCanvas = observer(function CardCanvas({
     });
   }, []);
 
+  const forest = service.canvasForest;
+  const cardById = useMemo(
+    () => new Map((service.doc?.cards ?? []).map((card) => [card.id, card])),
+    [service.doc],
+  );
+  const noteById = useMemo(
+    () => new Map(service.annotations.map((item) => [item.id, item])),
+    [service.annotations],
+  );
+  const nodeById = useMemo(
+    () => new Map(service.canvasNodes.map((node) => [node.id, node])),
+    [service.canvasNodes],
+  );
   const layout = useMemo(
     () =>
       layoutMindForest(
-        cards.map((card) => ({
-          id: card.id,
-          parentId: card.outlineParentId,
-          position: card.outlinePosition,
-          width: sizes[card.id]?.w ?? NODE_W,
-          height: sizes[card.id]?.h ?? NODE_H,
+        forest.map((member) => ({
+          id: member.id,
+          parentId: member.parentId,
+          position: member.position,
+          width: sizes[member.id]?.w ?? NODE_W,
+          height: sizes[member.id]?.h ?? NODE_H,
         })),
       ),
-    [cards, sizes],
+    [forest, sizes],
   );
   const boxById = useMemo(() => new Map(layout.boxes.map((box) => [box.id, box])), [layout.boxes]);
 
@@ -207,7 +223,7 @@ export const CardCanvas = observer(function CardCanvas({
     placeView(zoom);
   }, [placeView, zoomFor]);
 
-  const cardKey = cards.map((card) => card.id).join('|');
+  const cardKey = forest.map((member) => member.id).join('|');
   useLayoutEffect(() => {
     if (cardKeyRef.current !== cardKey) {
       cardKeyRef.current = cardKey;
@@ -269,7 +285,22 @@ export const CardCanvas = observer(function CardCanvas({
     service.clearScrollCard();
   }, [service, service.scrollCardId, boxById]);
 
-  const hint = drag ? dropHint(cards, drag.id, drag.over) : null;
+  useEffect(() => {
+    const id = service.scrollAnnotationId;
+    if (!id) return;
+    const box = boxById.get(id);
+    const el = viewportRef.current;
+    if (!box || !el) return;
+    userMoved.current = true;
+    setView((prev) => ({
+      ...prev,
+      panX: el.clientWidth / 2 - (box.x + box.width / 2) * prev.zoom,
+      panY: el.clientHeight / 2 - (box.y + box.height / 2) * prev.zoom,
+    }));
+    service.clearScrollAnnotation();
+  }, [service, service.scrollAnnotationId, boxById]);
+
+  const hint = drag ? dropHint(forest, drag.id, drag.over) : null;
 
   const onViewportPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -305,7 +336,7 @@ export const CardCanvas = observer(function CardCanvas({
   const onNodePointerDown = (cardId: string, event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.target;
-    if (target instanceof Element && target.closest('.note-op, .mini-decision, a, input, textarea')) {
+    if (target instanceof Element && target.closest('.note-op, .canvas-node-op, .mini-decision, a, input, textarea')) {
       event.stopPropagation();
       return;
     }
@@ -317,7 +348,11 @@ export const CardCanvas = observer(function CardCanvas({
       originY: event.clientY,
       moved: false,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Capture can fail for a synthetic pointer; moves on this node still count.
+    }
   };
 
   const onNodePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -343,8 +378,12 @@ export const CardCanvas = observer(function CardCanvas({
     const gesture = dragGesture.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     dragGesture.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      // Already released.
     }
     if (!gesture.moved) {
       setDrag(null);
@@ -353,9 +392,9 @@ export const CardCanvas = observer(function CardCanvas({
     suppressClick.current = true;
     const world = worldPoint(event.clientX, event.clientY);
     const parentId = hitCard(world.x, world.y, gesture.id);
-    const plan = dropHint(cards, gesture.id, parentId);
+    const plan = dropHint(forest, gesture.id, parentId);
     setDrag(null);
-    if (plan.accept) void service.placeCardOnOutline(gesture.id, parentId);
+    if (plan.accept) void service.placeOnCanvas(gesture.id, parentId);
   };
 
   const zoomBy = (factor: number) => {
@@ -377,7 +416,7 @@ export const CardCanvas = observer(function CardCanvas({
       ref={viewportRef}
       className="doc-canvas"
       role="application"
-      aria-label="卡片脑图"
+      aria-label="脑图"
       style={{
         backgroundSize: `${22 * view.zoom}px ${22 * view.zoom}px`,
         backgroundPosition: `${view.panX}px ${view.panY}px`,
@@ -408,15 +447,18 @@ export const CardCanvas = observer(function CardCanvas({
             return <path key={`${edge.from}-${edge.to}`} d={edgePath(from, to)} />;
           })}
         </svg>
-        {cards.map((card) => {
-          const box = boxById.get(card.id);
+        {forest.map((member) => {
+          const box = boxById.get(member.id);
           if (!box) return null;
-          const dragging = drag?.id === card.id;
-          const accept = drag?.over === card.id && hint?.accept === true && hint.text === '成为子节点';
+          const dragging = drag?.id === member.id;
+          const accept = drag?.over === member.id && hint?.accept === true && hint.text === '成为子节点';
+          const card = member.kind === 'card' ? cardById.get(member.id) : undefined;
+          const note = member.kind === 'annotation' ? noteById.get(member.id) : undefined;
+          const stored = nodeById.get(member.id);
           return (
             <SizedNode
-              key={card.id}
-              id={card.id}
+              key={member.id}
+              id={member.id}
               className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${accept ? ' is-drop' : ''}`}
               style={{
                 left: box.x,
@@ -425,7 +467,7 @@ export const CardCanvas = observer(function CardCanvas({
                 transform: dragging ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined,
               }}
               onSize={onSize}
-              onPointerDown={(event) => onNodePointerDown(card.id, event)}
+              onPointerDown={(event) => onNodePointerDown(member.id, event)}
               onPointerMove={onNodePointerMove}
               onPointerUp={onNodePointerUp}
               onClickCapture={(event) => {
@@ -435,7 +477,16 @@ export const CardCanvas = observer(function CardCanvas({
                 event.stopPropagation();
               }}
             >
-              {renderCard(card)}
+              {card ? renderCard(card) : null}
+              {note ? <CanvasNoteNode item={note} /> : null}
+              {member.kind === 'text' || member.kind === 'image' ? (
+                <CanvasFreeNode
+                  id={member.id}
+                  kind={member.kind}
+                  text={stored?.text ?? ''}
+                  imageKey={stored?.imageKey ?? null}
+                />
+              ) : null}
             </SizedNode>
           );
         })}
@@ -445,9 +496,33 @@ export const CardCanvas = observer(function CardCanvas({
           {hint.text}
         </div>
       ) : (
-        <p className="doc-canvas-tip">拖到另一张卡上成为子卡，拖到空白处独立成树</p>
+        <p className="doc-canvas-tip">拖到节点上成为子节点，拖到空白处独立成树</p>
       )}
       <div className="doc-canvas-tools">
+        <button type="button" aria-label="文本节点" onClick={() => void service.addCanvasText()}>
+          <Type width={13} height={13} strokeWidth={1.8} />
+          文本
+        </button>
+        <button
+          type="button"
+          aria-label="图片节点"
+          disabled={service.canvasUploading}
+          onClick={() => fileRef.current?.click()}
+        >
+          <ImagePlus width={13} height={13} strokeWidth={1.8} />
+          图片
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept={IMAGE_ACCEPT}
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) void service.addCanvasImage(file);
+          }}
+        />
         <button type="button" aria-label="缩小" onClick={() => zoomBy(1 / 1.12)}>
           －
         </button>

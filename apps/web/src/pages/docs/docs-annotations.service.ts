@@ -90,6 +90,7 @@ export class DocsAnnotationsService extends Service {
     try {
       await deleteAnnotation(id);
       this.docs.bumpCardWriteGen();
+      this.docs.detachCanvasLocal(id);
       this.annotations = this.annotations.filter((item) => item.id !== id);
       if (this.docs.activeAnnotationId === id) this.docs.activeAnnotationId = null;
       if (this.annotationImageUrls[id]) {

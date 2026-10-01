@@ -33,6 +33,7 @@ import { presignGet } from '../storage/client.js';
 import { shouldIndexCard } from './card-acceptance-logic.js';
 import { diffCardQuestions, normalizeTags } from './card-logic.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
+import { detachCanvasMember } from '../canvas/canvas.service.js';
 import { applyOutlineDetach } from './outline.service.js';
 
 function toPublicLink(row: CardLinkRow): CardLink {
@@ -340,6 +341,7 @@ export async function archiveCard(userId: string, id: string): Promise<void> {
   const now = new Date();
   await getDb().transaction(async (tx) => {
     await applyOutlineDetach(tx, userId, id);
+    await detachCanvasMember(tx, userId, id);
     await tx
       .update(cards)
       .set({ deletedAt: now, updatedAt: now })

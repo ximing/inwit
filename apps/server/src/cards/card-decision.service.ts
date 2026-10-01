@@ -22,6 +22,7 @@ import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.j
 import { logger } from '../utils/logger.js';
 import { decideCardAcceptance, normalizeRejectReason } from './card-acceptance-logic.js';
 import { getCard } from './card.service.js';
+import { detachCanvasMember } from '../canvas/canvas.service.js';
 import { applyOutlineDetach } from './outline.service.js';
 
 type Db = Pick<Database, 'select' | 'insert' | 'update' | 'delete'>;
@@ -408,6 +409,7 @@ export async function rejectCard(userId: string, cardId: string, input: RejectCa
       const now = new Date();
       const oldMapNodeId = card.mapNodeId;
       await applyOutlineDetach(tx, userId, cardId);
+      await detachCanvasMember(tx, userId, cardId);
       const [updated] = await tx
         .update(cards)
         .set({

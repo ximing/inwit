@@ -10,6 +10,7 @@ import { and, asc, count, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations, documents, type AnnotationRow } from '../db/schema.js';
 import { isExcerptKeyFor } from '../documents/excerpt-logic.js';
+import { detachCanvasMember } from '../canvas/canvas.service.js';
 import { getOwnedDocument } from '../documents/document.service.js';
 import { AppError } from '../errors.js';
 import { tryDeleteAnnotationFromIndex, tryIndexAnnotation } from '../retrieval/pipeline.js';
@@ -140,10 +141,13 @@ export async function archiveAnnotation(userId: string, id: string): Promise<voi
   const row = await getOwnedAnnotationAny(userId, id);
   if (row.deletedAt) return;
   const now = new Date();
-  await getDb()
-    .update(annotations)
-    .set({ deletedAt: now, updatedAt: now })
-    .where(and(eq(annotations.id, id), eq(annotations.userId, userId)));
+  await getDb().transaction(async (tx) => {
+    await detachCanvasMember(tx, userId, id);
+    await tx
+      .update(annotations)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(annotations.id, id), eq(annotations.userId, userId)));
+  });
   await tryDeleteAnnotationFromIndex(id);
 }
 

@@ -4,11 +4,41 @@ import { getCardLinks } from '@/api/cards';
 import { ApiError } from '@/api/client';
 import { getDocument, getDocumentFile } from '@/api/documents';
 import { ReaderService } from './reader.service';
+import { AssetUrlsService } from '@/services/asset-urls.service';
 
 vi.mock('@/api/documents', () => ({ getDocument: vi.fn(), getDocumentFile: vi.fn() }));
 vi.mock('@/api/cards', () => ({ getCardLinks: vi.fn() }));
 
 const oldLinks: CardLinksResponse = { outgoing: [], incoming: [] };
+
+describe('reader document asset URLs', () => {
+  it.each(['document', 'card', 'refresh'] as const)('seeds image URLs when opening a %s', async (mode) => {
+    const src = 'asset:users/11111111-1111-4111-8111-111111111111/doc-assets/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png';
+    const doc = {
+      ...detail('images'),
+      assetUrls: { [src]: 'https://cdn.example/image.png' },
+      assetUrlsFetchedAt: Date.now(),
+    };
+    vi.mocked(getDocument).mockResolvedValue(doc);
+    vi.mocked(getCardLinks).mockResolvedValue(oldLinks);
+    const service = new ReaderService();
+    const assets = new AssetUrlsService();
+    vi.spyOn(service, 'resolve').mockReturnValue(assets);
+    try {
+      if (mode === 'document') await service.openDoc(doc.id);
+      else if (mode === 'card') await service.openCard('card-1', doc.id);
+      else {
+        service.doc = detail(doc.id);
+        await service.refreshOpenDocument(doc.id);
+      }
+      expect(service.doc?.id).toBe(doc.id);
+      expect(assets.urlFor(src)).toBe('https://cdn.example/image.png');
+    } finally {
+      service.close();
+      assets.destroy();
+    }
+  });
+});
 
 function detail(id: string): DocumentDetail {
   return {

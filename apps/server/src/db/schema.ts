@@ -21,6 +21,7 @@ import {
   AGENT_EXECUTION_STATUSES,
   AGENT_TYPES,
   ANNOTATION_KINDS,
+  CANVAS_NODE_KINDS,
   CARD_ACCEPTANCES,
   CARD_LINK_ORIGINS,
   CARD_LINK_TYPES,
@@ -48,6 +49,7 @@ import type {
   AgentType,
   AnnotationGeometry,
   AnnotationKind,
+  CanvasNodeKind,
   CardAcceptance,
   CardLinkOrigin,
   CardLinkType,
@@ -360,6 +362,59 @@ export const cards = pgTable(
     foreignKey({
       name: 'cards_outline_parent_id_cards_id_fk',
       columns: [t.outlineParentId],
+      foreignColumns: [t.id],
+    }).onDelete('set null'),
+  ],
+);
+
+/**
+ * 一篇文档的画布树。卡片、批注、文本、图片可以互为父子。
+ * 卡片和批注的 id 与原记录相同；没摆过的不写行，读的时候补成根。
+ */
+export const canvasNodes = pgTable(
+  'canvas_nodes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    kind: varchar('kind', { length: 16 }).$type<CanvasNodeKind>().notNull(),
+    cardId: uuid('card_id').references(() => cards.id, { onDelete: 'cascade' }),
+    annotationId: uuid('annotation_id').references(() => annotations.id, { onDelete: 'cascade' }),
+    text: text('text'),
+    /** Object storage key (not a URL). */
+    imageKey: text('image_key'),
+    parentId: uuid('parent_id'),
+    position: integer('position').notNull().default(0),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_canvas_nodes_document').on(t.documentId, t.parentId, t.position),
+    uniqueIndex('canvas_nodes_card_id_unique').on(t.cardId).where(sql`${t.cardId} IS NOT NULL`),
+    uniqueIndex('canvas_nodes_annotation_id_unique')
+      .on(t.annotationId)
+      .where(sql`${t.annotationId} IS NOT NULL`),
+    enumCheck('canvas_nodes_kind_check', t.kind, CANVAS_NODE_KINDS),
+    check(
+      'canvas_nodes_not_self_check',
+      sql`${t.parentId} IS NULL OR ${t.parentId} <> ${t.id}`,
+    ),
+    check(
+      'canvas_nodes_shape_check',
+      sql`(
+        (${t.kind} = 'card' AND ${t.cardId} IS NOT NULL AND ${t.annotationId} IS NULL AND ${t.text} IS NULL AND ${t.imageKey} IS NULL AND ${t.id} = ${t.cardId})
+        OR (${t.kind} = 'annotation' AND ${t.annotationId} IS NOT NULL AND ${t.cardId} IS NULL AND ${t.text} IS NULL AND ${t.imageKey} IS NULL AND ${t.id} = ${t.annotationId})
+        OR (${t.kind} = 'text' AND ${t.text} IS NOT NULL AND char_length(${t.text}) BETWEEN 1 AND 4000 AND ${t.cardId} IS NULL AND ${t.annotationId} IS NULL AND ${t.imageKey} IS NULL)
+        OR (${t.kind} = 'image' AND ${t.imageKey} IS NOT NULL AND char_length(${t.imageKey}) BETWEEN 1 AND 512 AND ${t.cardId} IS NULL AND ${t.annotationId} IS NULL AND ${t.text} IS NULL)
+      )`,
+    ),
+    foreignKey({
+      name: 'canvas_nodes_parent_id_fk',
+      columns: [t.parentId],
       foreignColumns: [t.id],
     }).onDelete('set null'),
   ],
@@ -948,6 +1003,8 @@ export type AnnotationRow = typeof annotations.$inferSelect;
 export type NewAnnotation = typeof annotations.$inferInsert;
 export type CardRow = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
+export type CanvasNodeRow = typeof canvasNodes.$inferSelect;
+export type NewCanvasNode = typeof canvasNodes.$inferInsert;
 export type CardLinkRow = typeof cardLinks.$inferSelect;
 export type NewCardLink = typeof cardLinks.$inferInsert;
 export type CardQuestionRow = typeof cardQuestions.$inferSelect;

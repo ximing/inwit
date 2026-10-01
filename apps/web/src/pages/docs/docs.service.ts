@@ -1,3 +1,4 @@
+import { AssetUrlsService } from '@/services/asset-urls.service';
 import type { DocumentChange } from '@/components/document-actions.service';
 import { Service } from '@rabjs/react';
 import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
@@ -19,7 +20,11 @@ import {
   type DocumentStatus,
   type Job,
   type PmDocJson,
+  type CanvasMember,
+  type CanvasNode,
+  type CreateCanvasNodeInput,
   type SyncChange,
+  mergeCanvasForest,
   planOutlineDetach,
   planOutlineMove,
   type Topic,
@@ -27,12 +32,18 @@ import {
 } from '@inwit/dto';
 import { listDocumentAnnotations } from '@/api/annotations';
 import {
+  completeAssetMultipart,
+  initAssetMultipart,
+  presignAsset,
+  signAssetMultipart,
+} from '@/api/assets';
+import { createCanvasNode, deleteCanvasNode, listCanvasNodes, updateCanvasNode } from '@/api/canvas';
+import {
   acceptCard,
   archiveCard,
   createCard,
   rejectCard,
   resumeCard,
-  placeCardOutline,
   suspendCard,
   updateCard,
 } from '@/api/cards';
@@ -80,11 +91,22 @@ import {
   type EchoStamp,
   type SyncView,
 } from '@/lib/sync-plan';
+import { putPresigned } from '@/lib/presign-put';
+import { DialogService } from '@/services/dialog.service';
 import { CARD_RAIL_NARROW_PX } from '@/services/ui-prefs.service';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
+import { AssetUploadError, storeDocAsset, type UploadDocAssetApi } from './upload-asset';
 import { DocsAnnotationsService } from './docs-annotations.service';
 import { DocsImportService, importFailMessage } from './docs-import.service';
 import { EditorService } from './editor.service';
+
+const canvasAssetApi: UploadDocAssetApi = {
+  presign: presignAsset,
+  initMultipart: initAssetMultipart,
+  signMultipart: signAssetMultipart,
+  completeMultipart: completeAssetMultipart,
+  put: putPresigned,
+};
 
 const DOC_PAGE = 20;
 const LIST_LIMIT_MAX = 100;
@@ -99,23 +121,84 @@ function asDocumentCard(card: Card): DocumentCard {
   };
 }
 
-function cardsWithout(cards: DocumentCard[], id: string): DocumentCard[] {
-  const plan = planOutlineDetach(
-    cards.map((card) => ({
-      id: card.id,
-      parentId: card.outlineParentId,
-      position: card.outlinePosition,
-    })),
-    id,
+function memberStub(
+  documentId: string,
+  member: CanvasMember,
+  parentId: string | null,
+  position: number,
+): CanvasNode {
+  const now = new Date().toISOString();
+  return {
+    id: member.id,
+    documentId,
+    kind: member.kind,
+    cardId: member.kind === 'card' ? member.id : null,
+    annotationId: member.kind === 'annotation' ? member.id : null,
+    text: null,
+    imageKey: null,
+    parentId,
+    position,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function upsertCanvas(nodes: CanvasNode[], next: CanvasNode): CanvasNode[] {
+  const index = nodes.findIndex((node) => node.id === next.id);
+  if (index < 0) return [...nodes, next];
+  const copy = nodes.slice();
+  copy[index] = next;
+  return copy;
+}
+
+function forestOf(
+  cards: readonly { id: string }[],
+  notes: readonly { id: string }[],
+  nodes: readonly CanvasNode[],
+): CanvasMember[] {
+  return mergeCanvasForest(
+    cards.map((card) => card.id),
+    notes.map((note) => note.id),
+    nodes,
   );
+}
+
+function applyCanvasDetach(
+  nodes: CanvasNode[],
+  forest: readonly CanvasMember[],
+  removedId: string,
+  documentId: string,
+): CanvasNode[] {
+  const plan = planOutlineDetach(forest, removedId);
+  let next = nodes;
+  for (const move of plan.moves) {
+    const member = forest.find((item) => item.id === move.id);
+    if (!member) continue;
+    const existing = next.find((node) => node.id === move.id);
+    const base = existing ?? memberStub(documentId, member, move.parentId, move.position);
+    next = upsertCanvas(next, { ...base, parentId: move.parentId, position: move.position });
+  }
+  return next;
+}
+
+function cardsAfterDetach(
+  cards: DocumentCard[],
+  forest: readonly CanvasMember[],
+  removedId: string,
+): DocumentCard[] {
+  const plan = planOutlineDetach(forest, removedId);
   const moves = new Map(plan.moves.map((move) => [move.id, move]));
   return cards
-    .filter((card) => card.id !== id)
+    .filter((card) => card.id !== removedId)
     .map((card) => {
       const move = moves.get(card.id);
-      return move
-        ? { ...card, outlineParentId: move.parentId, outlinePosition: move.position }
-        : card;
+      if (!move) return card;
+      const parent = move.parentId ? forest.find((item) => item.id === move.parentId) : null;
+      return {
+        ...card,
+        outlineParentId: parent?.kind === 'card' ? parent.id : null,
+        outlinePosition: move.position,
+      };
     });
 }
 
@@ -312,6 +395,22 @@ export class DocsService extends Service {
   }
   set annotations(value: Annotation[]) {
     this.annotationService.annotations = value;
+  }
+
+  /** 已经落库的画布节点。没摆过的卡片和批注不在这里，读的时候补成根。 */
+  canvasNodes: CanvasNode[] = [];
+  canvasUploading = false;
+
+  get canvasForest(): CanvasMember[] {
+    return forestOf(this.doc?.cards ?? [], this.annotations, this.canvasNodes);
+  }
+
+  /** 一个节点离开可见树时，子节点升上去。卡片和批注的画布行留着，恢复后还能挂回。 */
+  detachCanvasLocal(removedId: string): void {
+    if (!this.doc) return;
+    const forest = forestOf(this.doc.cards, this.annotations, this.canvasNodes);
+    this.canvasNodes = applyCanvasDetach(this.canvasNodes, forest, removedId, this.doc.id);
+    this.doc = { ...this.doc, cards: cardsAfterDetach(this.doc.cards, forest, removedId) };
   }
 
   get annotationImageUrls(): Record<string, PresignedUrlEntry> {
@@ -776,6 +875,7 @@ export class DocsService extends Service {
     if (this.doc?.id !== id) {
       this.doc = null;
       this.annotations = [];
+      this.canvasNodes = [];
       this.annotationImageUrls = {};
       this.cardImageUrls = {};
       this.closeHighlight();
@@ -785,13 +885,18 @@ export class DocsService extends Service {
     const gen = ++this.docLoadGen;
     if (this.goneNotifiedId === id) this.goneNotifiedId = null;
     try {
-      const [detail, notes] = await Promise.all([
+      const [detail, notes, canvas] = await Promise.all([
         getDocument(id),
         listDocumentAnnotations(id).catch(() => [] as Annotation[]),
+        listCanvasNodes(id).catch(() => (this.doc?.id === id ? this.canvasNodes : [])),
       ]);
       if (gen !== this.docLoadGen) return;
+      if (detail.assetUrls) {
+        this.resolve(AssetUrlsService).seed(detail.assetUrls, detail.assetUrlsFetchedAt);
+      }
       this.doc = detail;
       this.annotations = notes;
+      this.canvasNodes = canvas;
       this.pruneOpenCards();
       this.patchListFromDetail(detail);
       this.syncEditorFromRemote(detail);
@@ -804,6 +909,7 @@ export class DocsService extends Service {
       this.docError = errorMessage(err, '打不开这份文档');
       this.doc = null;
       this.annotations = [];
+      this.canvasNodes = [];
     }
   }
 
@@ -812,6 +918,7 @@ export class DocsService extends Service {
     this.editorHost = null;
     this.doc = null;
     this.annotations = [];
+    this.canvasNodes = [];
     this.annotationImageUrls = {};
     this.cardImageUrls = {};
     this.docError = null;
@@ -1124,48 +1231,184 @@ export class DocsService extends Service {
     }
   }
 
-  /** 脑图：收到另一张卡下面，或 parentId 为空时独立成树。位置由服务端排到同层末尾。 */
-  async placeCardOnOutline(cardId: string, parentId: string | null): Promise<void> {
+  /** 脑图：拖到一个节点上成为子节点，拖到空白处独立成树。 */
+  async placeOnCanvas(memberId: string, parentId: string | null): Promise<void> {
     if (!this.doc) return;
-    const nodes = this.doc.cards.map((card) => ({
-      id: card.id,
-      parentId: card.outlineParentId,
-      position: card.outlinePosition,
-    }));
-    const plan = planOutlineMove(nodes, cardId, parentId);
+    const documentId = this.doc.id;
+    const forest = forestOf(this.doc.cards, this.annotations, this.canvasNodes);
+    const plan = planOutlineMove(forest, memberId, parentId);
     if (!plan.ok || plan.unchanged) return;
-    const snapshot = this.doc.cards;
+    const member = forest.find((item) => item.id === memberId);
+    if (!member) return;
+    const nodeSnapshot = this.canvasNodes;
+    const cardSnapshot = this.doc.cards;
     this.cardWriteGen += 1;
     const gen = this.cardWriteGen;
-    this.doc = {
-      ...this.doc,
-      cards: snapshot.map((card) =>
-        card.id === cardId
-          ? { ...card, outlineParentId: plan.parentId, outlinePosition: plan.position }
-          : card,
-      ),
-    };
-    try {
-      const updated = await placeCardOutline(cardId, { parentId: plan.parentId });
-      if (!this.doc || this.cardWriteGen !== gen) return;
+    const existing = nodeSnapshot.find((node) => node.id === memberId);
+    const base = existing ?? memberStub(documentId, member, plan.parentId, plan.position);
+    this.canvasNodes = upsertCanvas(nodeSnapshot, {
+      ...base,
+      parentId: plan.parentId,
+      position: plan.position,
+    });
+    if (member.kind === 'card') {
+      const parent = plan.parentId ? forest.find((item) => item.id === plan.parentId) : null;
       this.doc = {
         ...this.doc,
-        cards: this.doc.cards.map((card) =>
-          card.id === cardId
+        cards: cardSnapshot.map((card) =>
+          card.id === memberId
             ? {
                 ...card,
-                outlineParentId: updated.outlineParentId,
-                outlinePosition: updated.outlinePosition,
-                updatedAt: updated.updatedAt,
+                outlineParentId: parent?.kind === 'card' ? parent.id : null,
+                outlinePosition: plan.position,
               }
             : card,
         ),
       };
+    }
+    try {
+      const updated = await updateCanvasNode(documentId, memberId, { parentId: plan.parentId });
+      if (!this.doc || this.doc.id !== documentId || this.cardWriteGen !== gen) return;
+      this.canvasNodes = upsertCanvas(this.canvasNodes, updated);
+      this.mirrorPlacedCard(updated);
       this.echoDocumentRow(updated.documentId, updated.updatedAt);
     } catch (err) {
       if (this.doc && this.cardWriteGen === gen) {
-        this.doc = { ...this.doc, cards: snapshot };
+        this.canvasNodes = nodeSnapshot;
+        this.doc = { ...this.doc, cards: cardSnapshot };
       }
+      this.showToast(errorMessage(err, '没放上去'));
+    }
+  }
+
+  private mirrorPlacedCard(node: CanvasNode): void {
+    if (!this.doc || node.kind !== 'card') return;
+    const parent = node.parentId
+      ? forestOf(this.doc.cards, this.annotations, this.canvasNodes).find((item) => item.id === node.parentId)
+      : null;
+    this.doc = {
+      ...this.doc,
+      cards: this.doc.cards.map((card) =>
+        card.id === node.id
+          ? {
+              ...card,
+              outlineParentId: parent?.kind === 'card' ? parent.id : null,
+              outlinePosition: node.position,
+              updatedAt: node.updatedAt,
+            }
+          : card,
+      ),
+    };
+  }
+
+  async addCanvasText(): Promise<void> {
+    if (!this.doc) return;
+    const text = await this.resolve(DialogService).prompt('写在这个节点上的话', '', {
+      title: '文本节点',
+      placeholder: '要记住的一句',
+      ok: '放上画布',
+    });
+    if (text === null) return;
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    if ([...trimmed].length > 4000) {
+      this.showToast('太长了，四千字以内');
+      return;
+    }
+    await this.insertCanvasNode({ kind: 'text', text: trimmed });
+  }
+
+  async addCanvasImage(file: File): Promise<void> {
+    if (!this.doc || this.canvasUploading) return;
+    this.canvasUploading = true;
+    try {
+      const stored = await storeDocAsset(file, canvasAssetApi);
+      if (stored.kind !== 'image') {
+        this.showToast('请选择图片');
+        return;
+      }
+      const imageKey = stored.assetSrc.startsWith('asset:')
+        ? stored.assetSrc.slice('asset:'.length)
+        : stored.assetSrc;
+      await this.insertCanvasNode({ kind: 'image', imageKey });
+    } catch (err) {
+      const fallback = err instanceof AssetUploadError ? err.message : '图片没放上去';
+      this.showToast(errorMessage(err, fallback));
+    } finally {
+      this.canvasUploading = false;
+    }
+  }
+
+  async saveCanvasText(id: string, text: string): Promise<boolean> {
+    if (!this.doc) return false;
+    const trimmed = text.trim();
+    if (!trimmed) {
+      this.showToast('写点内容');
+      return false;
+    }
+    if ([...trimmed].length > 4000) {
+      this.showToast('太长了，四千字以内');
+      return false;
+    }
+    const documentId = this.doc.id;
+    const snapshot = this.canvasNodes;
+    const existing = snapshot.find((node) => node.id === id);
+    if (!existing || existing.kind !== 'text' || existing.text === trimmed) return existing?.text === trimmed;
+    this.cardWriteGen += 1;
+    const gen = this.cardWriteGen;
+    this.canvasNodes = upsertCanvas(snapshot, { ...existing, text: trimmed });
+    try {
+      const updated = await updateCanvasNode(documentId, id, { text: trimmed });
+      if (!this.doc || this.cardWriteGen !== gen) return true;
+      this.canvasNodes = upsertCanvas(this.canvasNodes, updated);
+      this.echoDocumentRow(updated.documentId, updated.updatedAt);
+      return true;
+    } catch (err) {
+      if (this.doc && this.cardWriteGen === gen) this.canvasNodes = snapshot;
+      this.showToast(errorMessage(err, '没改上'));
+      return false;
+    }
+  }
+
+  async removeCanvasNode(id: string): Promise<void> {
+    if (!this.doc) return;
+    const node = this.canvasNodes.find((item) => item.id === id);
+    if (!node || (node.kind !== 'text' && node.kind !== 'image')) return;
+    const ok = await this.resolve(DialogService).confirm('下面的节点会升到上一层。', {
+      title: '删除这个节点',
+      ok: '删除',
+      danger: true,
+    });
+    if (!ok || !this.doc) return;
+    const documentId = this.doc.id;
+    const nodeSnapshot = this.canvasNodes;
+    const cardSnapshot = this.doc.cards;
+    this.cardWriteGen += 1;
+    const gen = this.cardWriteGen;
+    this.detachCanvasLocal(id);
+    this.canvasNodes = this.canvasNodes.filter((item) => item.id !== id);
+    try {
+      await deleteCanvasNode(documentId, id);
+    } catch (err) {
+      if (this.doc && this.cardWriteGen === gen) {
+        this.canvasNodes = nodeSnapshot;
+        this.doc = { ...this.doc, cards: cardSnapshot };
+      }
+      this.showToast(errorMessage(err, '没删掉'));
+    }
+  }
+
+  private async insertCanvasNode(input: CreateCanvasNodeInput): Promise<void> {
+    if (!this.doc) return;
+    const documentId = this.doc.id;
+    this.cardWriteGen += 1;
+    const gen = this.cardWriteGen;
+    try {
+      const created = await createCanvasNode(documentId, input);
+      if (!this.doc || this.doc.id !== documentId || this.cardWriteGen !== gen) return;
+      this.canvasNodes = upsertCanvas(this.canvasNodes, created);
+      this.echoDocumentRow(created.documentId, created.updatedAt);
+    } catch (err) {
       this.showToast(errorMessage(err, '没放上去'));
     }
   }
@@ -1177,7 +1420,7 @@ export class DocsService extends Service {
       await archiveCard(id);
       if (this.doc) {
         this.cardWriteGen += 1;
-        this.doc = { ...this.doc, cards: cardsWithout(this.doc.cards, id) };
+        this.detachCanvasLocal(id);
         this.patchListFromDetail(this.doc);
       }
       this.expandedCardIds = this.expandedCardIds.filter((cardId) => cardId !== id);
@@ -1277,7 +1520,7 @@ export class DocsService extends Service {
   private dropDocCard(id: string): void {
     if (this.doc) {
       this.cardWriteGen += 1;
-      this.doc = { ...this.doc, cards: cardsWithout(this.doc.cards, id) };
+      this.detachCanvasLocal(id);
       this.patchListFromDetail(this.doc);
     }
     this.openCardIds = this.openCardIds.filter((cardId) => cardId !== id);
@@ -1544,10 +1787,13 @@ export class DocsService extends Service {
     };
     this.inflightReads.push(read);
     try {
-      const [detail, notes] = await Promise.all([
+      const [detail, notes, canvas] = await Promise.all([
         getDocument(id),
         read.openAtStart
           ? listDocumentAnnotations(id).catch(() => this.annotations)
+          : Promise.resolve(null),
+        read.openAtStart
+          ? listCanvasNodes(id).catch(() => this.canvasNodes)
           : Promise.resolve(null),
       ]);
       const mode = this.classifyDetail(id, read, detail.updatedAt);
@@ -1561,7 +1807,7 @@ export class DocsService extends Service {
         this.replayQueue = this.replayQueue.filter((item) => item.id !== id);
         if (this.replayStamp.get(id) === this.replayKey(id)) this.replayStamp.delete(id);
       }
-      this.applyRemoteDetail(id, detail, notes, mode, at, read.docLoadGen);
+      this.applyRemoteDetail(id, detail, notes, canvas, mode, at, read.docLoadGen);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         this.replayQueue = this.replayQueue.filter((item) => item.id !== id);
@@ -1738,6 +1984,7 @@ export class DocsService extends Service {
     id: string,
     detail: DocumentDetail,
     notes: Annotation[] | null,
+    canvas: CanvasNode[] | null,
     mode: 'merge-keep-body' | 'merge-seed-body',
     changeAt: string | null,
     docLoadGenAtStart: number,
@@ -1758,8 +2005,12 @@ export class DocsService extends Service {
     const editor = this.resolve(EditorService);
     this.patchListFromDetail(detail);
     if (this.doc?.id === id) {
+      if (detail.assetUrls) {
+        this.resolve(AssetUrlsService).seed(detail.assetUrls, detail.assetUrlsFetchedAt);
+      }
       this.doc = detail;
       if (notes) this.annotations = notes;
+      if (canvas) this.canvasNodes = canvas;
       this.pruneOpenCards();
     }
     if (editor.id === id && !editor.remoteGone) {
@@ -1798,6 +2049,7 @@ export class DocsService extends Service {
       this.docLoadGen += 1;
       this.doc = null;
       this.annotations = [];
+      this.canvasNodes = [];
       this.annotationImageUrls = {};
       this.cardImageUrls = {};
       this.closeHighlight();

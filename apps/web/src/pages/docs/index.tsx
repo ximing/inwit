@@ -226,6 +226,8 @@ const DocsPageContent = observer(function DocsPageContent() {
 
   useEffect(() => {
     if (!service.scrollAnnotationId) return;
+    // 脑图画布自己把这条批注移到视口中央。
+    if (document.querySelector('.doc-canvas')) return;
     const id = service.scrollAnnotationId;
     const el = document.querySelector(`.card-rail .note-item[data-annotation-id="${id}"]`);
     if (el instanceof HTMLElement) {

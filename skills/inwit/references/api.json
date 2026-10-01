@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-30T15:45:27.824Z",
+  "generatedAt": "2026-10-01T02:48:23.237Z",
   "modules": [
     {
       "id": "open",
@@ -9,7 +9,7 @@
     {
       "id": "documents",
       "title": "文档与问答",
-      "count": 22
+      "count": 26
     },
     {
       "id": "cards",
@@ -1785,6 +1785,201 @@
           "additionalProperties": false
         },
         "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/:id/canvas",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "comment": "这篇文档画布上已经落库的节点。没摆过的卡片和批注由客户端补成根。",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/:id/canvas",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "comment": "在画布上新建文本或图片节点，可以挂到某个节点下面。",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "createCanvasNodeInputSchema",
+        "origin": "dto",
+        "schema": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "text"
+                },
+                "text": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "parentId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "optional": true,
+                  "nullable": true
+                }
+              },
+              "required": [
+                "kind",
+                "text"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "image"
+                },
+                "imageKey": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "parentId": {
+                  "optional": true,
+                  "nullable": true
+                }
+              },
+              "required": [
+                "kind",
+                "imageKey"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/documents/:id/canvas/:nodeId",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "comment": "删除文本或图片节点。卡片和批注请走各自的删除。",
+      "params": {
+        "name": "nodeParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nodeId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id",
+            "nodeId"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid(), nodeId: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/documents/:id/canvas/:nodeId",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "comment": "移动节点，或修改文本节点的文字。",
+      "params": {
+        "name": "nodeParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "nodeId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id",
+            "nodeId"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid(), nodeId: z.string().uuid() })"
+      },
+      "body": {
+        "name": "setCanvasNodeInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "parentId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true,
+              "nullable": true
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000,
+              "optional": true
+            }
+          },
+          "additionalProperties": false,
+          "refined": true
+        }
       }
     },
     {

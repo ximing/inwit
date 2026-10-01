@@ -1,3 +1,4 @@
+import { AssetUrlsService } from '@/services/asset-urls.service';
 import type { CardLinksResponse, DocumentCard, DocumentDetail } from '@inwit/dto';
 import { Service } from '@rabjs/react';
 import { getCardLinks } from '@/api/cards';
@@ -60,6 +61,9 @@ export class ReaderService extends Service {
       if (gen !== this.loadGen) {
         if (this.loadingGen === gen) this.loading = false;
         return;
+      }
+      if (detail.assetUrls) {
+        this.resolve(AssetUrlsService).seed(detail.assetUrls, detail.assetUrlsFetchedAt);
       }
       this.doc = detail;
       this.loading = false;
@@ -137,6 +141,9 @@ export class ReaderService extends Service {
     try {
       const detail = await getDocument(docId);
       if (gen !== this.loadGen || this.doc?.id !== docId) return;
+      if (detail.assetUrls) {
+        this.resolve(AssetUrlsService).seed(detail.assetUrls, detail.assetUrlsFetchedAt);
+      }
       this.doc = detail;
       this.loading = false;
       this.error = null;
@@ -177,6 +184,9 @@ export class ReaderService extends Service {
       if (gen !== this.loadGen) {
         if (this.loadingGen === gen) this.loading = false;
         return;
+      }
+      if (detail.assetUrls) {
+        this.resolve(AssetUrlsService).seed(detail.assetUrls, detail.assetUrlsFetchedAt);
       }
       this.doc = detail;
       this.loading = false;

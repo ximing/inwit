@@ -2,7 +2,7 @@
 
 # 文档与问答
 
-Generated 2026-09-30T15:45:27.824Z. 22 endpoints.
+Generated 2026-10-01T02:48:23.237Z. 26 endpoints.
 
 ### POST `/api/chat`
 
@@ -244,6 +244,185 @@ auth=bearer
     "id"
   ],
   "additionalProperties": false
+}
+```
+
+### GET `/api/documents/:id/canvas`
+
+auth=bearer
+
+这篇文档画布上已经落库的节点。没摆过的卡片和批注由客户端补成根。
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/documents/:id/canvas`
+
+auth=bearer · 201
+
+在画布上新建文本或图片节点，可以挂到某个节点下面。
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `createCanvasNodeInputSchema` (dto)
+```json
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "parentId": {
+          "type": "string",
+          "format": "uuid",
+          "optional": true,
+          "nullable": true
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "image"
+        },
+        "imageKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "parentId": {
+          "optional": true,
+          "nullable": true
+        }
+      },
+      "required": [
+        "kind",
+        "imageKey"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}
+```
+
+### DELETE `/api/documents/:id/canvas/:nodeId`
+
+auth=bearer · 204
+
+删除文本或图片节点。卡片和批注请走各自的删除。
+
+- **params** `nodeParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "nodeId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id",
+    "nodeId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### PATCH `/api/documents/:id/canvas/:nodeId`
+
+auth=bearer
+
+移动节点，或修改文本节点的文字。
+
+- **params** `nodeParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "nodeId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id",
+    "nodeId"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `setCanvasNodeInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "parentId": {
+      "type": "string",
+      "format": "uuid",
+      "optional": true,
+      "nullable": true
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "optional": true
+    }
+  },
+  "additionalProperties": false,
+  "refined": true
 }
 ```
 

@@ -7,6 +7,7 @@ export * from './annotation-resurface.js';
 export * from './capture.js';
 export * from './card.js';
 export * from './outline.js';
+export * from './canvas.js';
 export * from './topic.js';
 export * from './map.js';
 export * from './review.js';

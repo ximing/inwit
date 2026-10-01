@@ -253,6 +253,10 @@ export type DocumentCard = z.infer<typeof documentCardSchema>;
 export const documentDetailSchema = documentSchema.extend({
   cards: z.array(documentCardSchema),
   topicTitle: z.string().nullable(),
+  /** Display-only signed URLs; contentJson keeps stable asset: references. */
+  assetUrls: z.record(z.string()).optional(),
+  /** Signing time in milliseconds, used to expire URLs even when a response is cached. */
+  assetUrlsFetchedAt: z.number().optional(),
 });
 export type DocumentDetail = z.infer<typeof documentDetailSchema>;
 
