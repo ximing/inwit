@@ -1885,8 +1885,6 @@ export class DocsService extends Service {
       topics: [],
       openTopicId: null,
       mapTopicId: null,
-      readerDocumentId: null,
-      readerActiveCardId: null,
       reviewInSession: false,
       jobs: [],
       activeJobId: null,

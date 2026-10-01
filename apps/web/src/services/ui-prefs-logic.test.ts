@@ -6,12 +6,19 @@ import {
   DOC_LIST_WIDTH_DEFAULT,
   DOC_LIST_WIDTH_MAX,
   DOC_LIST_WIDTH_MIN,
+  ASSISTANT_WIDTH_DEFAULT,
+  ASSISTANT_WIDTH_MAX,
+  ASSISTANT_WIDTH_MIN,
+  assistantWidthFromDrag,
+  assistantWidthFromKey,
   cardRailWidthFromDrag,
   cardRailWidthFromKey,
+  clampAssistantWidth,
   clampCardRailWidth,
   clampDocListWidth,
   docListWidthFromDrag,
   docListWidthFromKey,
+  parseAssistantWidth,
   parseCardRailWidth,
   parseDocListWidth,
 } from './ui-prefs-logic';
@@ -73,6 +80,37 @@ describe('clampDocListWidth / parseDocListWidth', () => {
     expect(parseDocListWidth('')).toBe(DOC_LIST_WIDTH_DEFAULT);
     expect(parseDocListWidth('nope')).toBe(DOC_LIST_WIDTH_DEFAULT);
     expect(parseDocListWidth('420')).toBe(420);
+  });
+});
+
+describe('clampAssistantWidth / parseAssistantWidth', () => {
+  it('clamps to the conversation rail min and max', () => {
+    expect(clampAssistantWidth(100)).toBe(ASSISTANT_WIDTH_MIN);
+    expect(clampAssistantWidth(900)).toBe(ASSISTANT_WIDTH_MAX);
+    expect(clampAssistantWidth(360)).toBe(360);
+    expect(clampAssistantWidth(Number.NaN)).toBe(ASSISTANT_WIDTH_DEFAULT);
+  });
+
+  it('falls back to the default for missing or junk values', () => {
+    expect(parseAssistantWidth(null)).toBe(ASSISTANT_WIDTH_DEFAULT);
+    expect(parseAssistantWidth('')).toBe(ASSISTANT_WIDTH_DEFAULT);
+    expect(parseAssistantWidth('nope')).toBe(ASSISTANT_WIDTH_DEFAULT);
+    expect(parseAssistantWidth('400')).toBe(400);
+  });
+});
+
+describe('assistantWidthFromDrag / assistantWidthFromKey', () => {
+  it('grows the rail when the pointer moves left', () => {
+    expect(assistantWidthFromDrag(360, 1000, 940)).toBe(420);
+    expect(assistantWidthFromDrag(360, 1000, 1060)).toBe(300);
+  });
+
+  it('maps arrow keys to width deltas', () => {
+    expect(assistantWidthFromKey(360, 'ArrowLeft')).toBe(376);
+    expect(assistantWidthFromKey(360, 'ArrowRight')).toBe(344);
+    expect(assistantWidthFromKey(360, 'Home')).toBe(ASSISTANT_WIDTH_MAX);
+    expect(assistantWidthFromKey(360, 'End')).toBe(ASSISTANT_WIDTH_MIN);
+    expect(assistantWidthFromKey(360, 'Enter')).toBeNull();
   });
 });
 

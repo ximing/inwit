@@ -1,4 +1,65 @@
 /* ---------- 主题工作台 ---------- */
+.topics-host {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.topics-host > .ws-topics {
+  flex: 1;
+  min-height: 0;
+}
+.topic-doc-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg);
+}
+.topic-doc-layer > .ws {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+.topic-doc-exit {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 16px 6px 8px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg);
+}
+.topic-doc-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.topic-doc-back:hover { background: var(--bg-sunken); }
+.topic-doc-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.topic-doc-exit-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-3);
+  font-size: 13px;
+}
 .ws-topics .ws-head {
   display: flex;
   padding: 12px 12px 8px;

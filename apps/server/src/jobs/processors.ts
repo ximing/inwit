@@ -1,5 +1,6 @@
 import type { JobType } from '@inwit/dto';
 import { processChat } from '../agent/chat.js';
+import { processConversation } from '../agent/conversation.js';
 import { processDigest } from '../agent/digest.js';
 import { processEvolve } from '../agent/evolve.js';
 import { processMemoryOrganize } from '../agent/memory-organize.js';
@@ -24,6 +25,7 @@ const HANDLERS: Record<JobType, (job: JobRow) => Promise<void>> = {
   ocr: processOcr,
   annotation_resurface: processAnnotationResurface,
   memory_organize: processMemoryOrganize,
+  conversation: processConversation,
 };
 
 export async function processJob(job: JobRow): Promise<void> {

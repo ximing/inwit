@@ -46,6 +46,7 @@ export const JOB_TYPES: JobType[] = [
   'ocr',
   'annotation_resurface',
   'memory_organize',
+  'conversation',
 ];
 export const JOB_STATUSES: JobStatus[] = ['pending', 'running', 'done', 'failed'];
 
@@ -60,6 +61,7 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
   ocr: '识别',
   annotation_resurface: '批注回顾',
   memory_organize: '记忆整理',
+  conversation: '对话栏',
 };
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
@@ -81,6 +83,7 @@ const USAGE_TYPE_LABELS: Record<string, string> = {
   embed: '向量',
   rerank: '精排',
   memory_organize: '记忆整理',
+  conversation: '对话栏',
 };
 
 const WEEKDAY_SHORT = ['日', '一', '二', '三', '四', '五', '六'] as const;
@@ -95,8 +98,6 @@ const JOBS_SYNC_VIEW: SyncView = {
   topics: [],
   openTopicId: null,
   mapTopicId: null,
-  readerDocumentId: null,
-  readerActiveCardId: null,
   reviewInSession: false,
   jobs: [],
   activeJobId: null,

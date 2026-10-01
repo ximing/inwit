@@ -54,7 +54,7 @@ export const SearchPalette = observer(function SearchPalette() {
 
   if (!search.surfaceOpen) return null;
 
-  const openHits = search.results ? flattenSearchHits(search.results) : [];
+  const openHits = search.results ? flattenSearchHits(search.results, search.topicId) : [];
   const activeId = openHits.length > 0 ? `search-hit-${String(search.activeIndex)}` : undefined;
 
   return createPortal(

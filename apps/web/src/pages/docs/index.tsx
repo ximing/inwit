@@ -1,11 +1,11 @@
 import { bindServices, observer, useService } from '@rabjs/react';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { SearchService } from '@/components/search';
 import { ANCHOR_HIT_SELECTOR } from '@/lib/anchors';
 import { scrollFlashAnnotationAnchor, scrollFlashCardAnchor } from '@/lib/anchor-scroll';
-import { ROUTES, docsPath } from '@/routes';
+import { docsPath, fromTopicOf, topicDocPath, topicHostId } from '@/routes';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { CardEditDialog } from './card-edit-dialog';
@@ -25,7 +25,9 @@ const DocsPageContent = observer(function DocsPageContent() {
   const search = useService(SearchService);
   const prefs = useService(UiPrefsService);
   const navigate = useNavigate();
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
+  const hostTopic = topicHostId(location.pathname, params);
   const docId = params.get('doc');
   const editParam = params.get('edit') === '1';
   const urlAnchor = params.get('anchor');
@@ -122,7 +124,7 @@ const DocsPageContent = observer(function DocsPageContent() {
         service.closeCardRailOverlay();
       }
       if (service.activeCardId || service.activeAnnotationId) {
-        if (target.closest('.mini-card, .note-item, .search-hit')) return;
+        if (target.closest('.mini-card, .note-item, .search-hit, .card-links')) return;
         if (target.closest(ANCHOR_HIT_SELECTOR)) return;
         service.closeHighlight();
       }
@@ -208,9 +210,12 @@ const DocsPageContent = observer(function DocsPageContent() {
 
   useEffect(() => {
     if (!docId && editor.justCreated && editor.id) {
-      navigate(docsPath(editor.id), { replace: true });
+      navigate(
+        hostTopic ? topicDocPath(hostTopic, editor.id) : docsPath(editor.id, { fromTopic: fromTopicOf(params) }),
+        { replace: true },
+      );
     }
-  }, [docId, editor.justCreated, editor.id, navigate]);
+  }, [docId, editor.justCreated, editor.id, hostTopic, navigate, params]);
 
   useEffect(() => {
     if (!service.scrollCardId) return;
@@ -254,10 +259,10 @@ const DocsPageContent = observer(function DocsPageContent() {
 
   return (
     <div
-      className="ws"
-      style={{ '--doc-list-w': `${prefs.docListWidth}px` } as CSSProperties}
+      className={hostTopic ? 'ws is-topic-host' : 'ws'}
+      style={hostTopic ? undefined : ({ '--doc-list-w': `${prefs.docListWidth}px` } as CSSProperties)}
     >
-      <WorkbenchList selectedId={docId} />
+      {hostTopic ? null : <WorkbenchList selectedId={docId} />}
       <div className="ws-pane" ref={paneRef}>
         {openingDoc ? (
           <div className="pane-inner">

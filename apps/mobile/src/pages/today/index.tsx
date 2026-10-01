@@ -12,6 +12,7 @@ import {
   BrainCircuit,
   FileText,
   MessageCircle,
+  MessagesSquare,
   Library,
   ScanText,
   StickyNote,
@@ -47,6 +48,7 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
   ocr: ScanText,
   annotation_resurface: StickyNote,
   memory_organize: Library,
+  conversation: MessagesSquare,
 };
 
 function estimateReviewMinutes(count: number): number {
@@ -81,6 +83,11 @@ function jobHeadline(job: Job): string {
     return '识别中';
   }
   if (job.type === 'memory_organize') return '记忆整理';
+  if (job.type === 'conversation') {
+    if (job.status === 'done') return '对话完成';
+    if (job.status === 'failed') return '对话失败';
+    return '对话中';
+  }
   return '主题进化';
 }
 

@@ -35,8 +35,6 @@ export type SyncView = {
   topics: { id: string }[];
   openTopicId: string | null;
   mapTopicId: string | null;
-  readerDocumentId: string | null;
-  readerActiveCardId: string | null;
   reviewInSession: boolean;
   jobs: { id: string; updatedAt: string }[];
   activeJobId: string | null;
@@ -202,7 +200,7 @@ function pushMap(
 }
 
 function documentKnown(view: SyncView, id: string): boolean {
-  if (view.openDocumentId === id || view.readerDocumentId === id || view.editor?.id === id) {
+  if (view.openDocumentId === id || view.editor?.id === id) {
     return true;
   }
   return view.documents.some((doc) => doc.id === id);

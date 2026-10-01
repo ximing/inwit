@@ -6,12 +6,10 @@ import {
   type DocumentListItem,
 } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
-import { ChevronDown, ChevronRight, Tags } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronRight, Tags } from 'lucide-react';
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { DocumentActions, useDocumentMenu } from '@/components/document-actions';
-import { loadReaderOverlay, prefetchReaderOverlay } from '@/components/reader/load-reader';
-import { ReaderService } from '@/components/reader/reader.service';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
@@ -19,38 +17,27 @@ import { prefetchDocument } from '@/lib/document-prefetch';
 import { formatRelativeTime } from '@/lib/format';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { ROUTES, topicPath } from '@/routes';
-import { AssetUrlsService } from '@/services/asset-urls.service';
+
+const HostedDocsPage = lazy(() =>
+  import('@/pages/docs').then((mod) => ({ default: mod.DocsPage })),
+);
 import { DialogService } from '@/services/dialog.service';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
 import { TopicsService, type TopicListItem } from './topics.service';
 
-const ReaderOverlay = lazy(() =>
-  loadReaderOverlay().then((mod) => ({ default: mod.ReaderOverlay })),
-);
-
 function warmTopicDoc(id: string): void {
   prefetchDocument(id);
-  prefetchReaderOverlay();
-}
-
-function ReaderFallback() {
-  return (
-    <div className="reader-overlay-root" role="status">
-      <div className="reader-overlay-mask" />
-      <div className="reader-overlay">
-        <p className="empty">正在打开…</p>
-      </div>
-    </div>
-  );
 }
 
 const TopicsPageContent = observer(function TopicsPageContent() {
   const service = useService(TopicsService);
   const search = useService(SearchService);
-  const reader = useService(ReaderService);
+  const navigate = useNavigate();
   const [params] = useSearchParams();
   const raw = params.get('topic');
   const topicId = raw && raw.length > 0 ? raw : null;
+  const docId = params.get('doc');
+  const docOpen = Boolean(topicId && docId);
 
   useLayoutEffect(() => {
     search.setTopicId(topicId);
@@ -71,7 +58,6 @@ const TopicsPageContent = observer(function TopicsPageContent() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      if (reader.isOpen) return;
       if (service.editing) {
         service.cancelEdit();
         return;
@@ -95,24 +81,48 @@ const TopicsPageContent = observer(function TopicsPageContent() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('mousedown', onPointer);
     };
-  }, [service, reader]);
+  }, [service]);
+
+  const closeDoc = () => {
+    if (!topicId) return;
+    navigate(topicPath(topicId), { replace: true });
+  };
 
   return (
-    <div className="ws ws-topics">
-      <TopicList selectedId={topicId} />
-      <div className={`ws-pane${service.drawerOpen ? ' is-drawer-open' : ''}`}>
-        {topicId ? <TopicPane topicId={topicId} /> : <PaneEmpty />}
-        <NodeDrawer />
+    <div className="topics-host">
+      <div className="ws ws-topics" inert={docOpen ? true : undefined}>
+        <TopicList selectedId={topicId} />
+        <div className={`ws-pane${service.drawerOpen ? ' is-drawer-open' : ''}`}>
+          {topicId ? <TopicPane topicId={topicId} /> : <PaneEmpty />}
+          <NodeDrawer />
+        </div>
+        {service.toast ? (
+          <p className="toast" role="status">
+            {service.toast}
+          </p>
+        ) : null}
       </div>
-      {service.toast ? (
-        <p className="toast" role="status">
-          {service.toast}
-        </p>
-      ) : null}
-      {reader.isOpen ? (
-        <Suspense fallback={<ReaderFallback />}>
-          <ReaderOverlay />
-        </Suspense>
+      {docOpen ? (
+        <div className="topic-doc-layer">
+          <div className="topic-doc-exit">
+            <button type="button" className="topic-doc-back" onClick={closeDoc} autoFocus>
+              <ArrowLeft width={15} height={15} strokeWidth={1.8} />
+              返回主题
+            </button>
+            {service.topic?.title ? (
+              <span className="topic-doc-exit-name">{service.topic.title}</span>
+            ) : null}
+          </div>
+          <Suspense
+            fallback={
+              <p className="empty" role="status">
+                打开这张纸…
+              </p>
+            }
+          >
+            <HostedDocsPage />
+          </Suspense>
+        </div>
       ) : null}
     </div>
   );
@@ -572,8 +582,7 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
   const service = useService(TopicsService);
   const navigate = useNavigate();
   const menu = useDocumentMenu(doc, (change) => service.applyDocumentChange(change), () => {
-    const to = service.readerNavForDoc(doc.id);
-    if (to) navigate(to);
+    navigate(service.docHref(doc.id));
   });
   const kind = rowKindTag(doc);
   const face = docCardFace(doc, 180);
@@ -599,10 +608,7 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
       {...menu}
       onPointerEnter={() => warmTopicDoc(doc.id)}
       onFocus={() => warmTopicDoc(doc.id)}
-      onClick={() => {
-        const to = service.readerNavForDoc(doc.id);
-        if (to) navigate(to);
-      }}
+      onClick={() => navigate(service.docHref(doc.id))}
     >
       {face.title ? (
         <h3>
@@ -696,9 +702,4 @@ const TopicSearch = observer(function TopicSearch() {
   );
 });
 
-export const TopicsPage = bindServices(TopicsPageContent, [
-  TopicsService,
-  SearchService,
-  ReaderService,
-  AssetUrlsService,
-]);
+export const TopicsPage = bindServices(TopicsPageContent, [TopicsService, SearchService]);

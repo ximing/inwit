@@ -65,6 +65,35 @@ export function parseDocListWidth(raw: string | null | undefined): number {
   return clampDocListWidth(n);
 }
 
+export const ASSISTANT_WIDTH_DEFAULT = 360;
+export const ASSISTANT_WIDTH_MIN = 300;
+export const ASSISTANT_WIDTH_MAX = 520;
+/** Viewport narrower than this opens the conversation as an overlay. */
+export const ASSISTANT_DOCK_MIN_PX = 1100;
+
+export function clampAssistantWidth(width: number): number {
+  if (!Number.isFinite(width)) return ASSISTANT_WIDTH_DEFAULT;
+  return Math.min(ASSISTANT_WIDTH_MAX, Math.max(ASSISTANT_WIDTH_MIN, Math.round(width)));
+}
+
+export function parseAssistantWidth(raw: string | null | undefined): number {
+  if (raw == null || raw === '') return ASSISTANT_WIDTH_DEFAULT;
+  return clampAssistantWidth(Number(raw));
+}
+
+/** Panel sits on the right: dragging the left edge leftward increases width. */
+export function assistantWidthFromDrag(startWidth: number, startX: number, clientX: number): number {
+  return startWidth + (startX - clientX);
+}
+
+export function assistantWidthFromKey(current: number, key: string, step = 16): number | null {
+  if (key === 'ArrowLeft') return current + step;
+  if (key === 'ArrowRight') return current - step;
+  if (key === 'Home') return ASSISTANT_WIDTH_MAX;
+  if (key === 'End') return ASSISTANT_WIDTH_MIN;
+  return null;
+}
+
 /** List sits on the left: dragging the right edge rightward increases width. */
 export function docListWidthFromDrag(startWidth: number, startX: number, clientX: number): number {
   return startWidth + (clientX - startX);

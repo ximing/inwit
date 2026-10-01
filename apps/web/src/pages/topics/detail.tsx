@@ -4,14 +4,11 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { DocRow } from '@/components/doc-row';
-import { prefetchReaderOverlay } from '@/components/reader/load-reader';
 import { prefetchDocument } from '@/lib/document-prefetch';
-import { ReaderService } from '@/components/reader/reader.service';
 import { formatRelativeTime } from '@/lib/format';
 import { chapterMeta, TopicsService } from './topics.service';
 
 function warmTopicDoc(id: string | null): void {
-  prefetchReaderOverlay();
   if (id) prefetchDocument(id);
 }
 
@@ -266,10 +263,7 @@ export const FeedTab = observer(function FeedTab() {
                 hanging={service.hangingTitle(doc)}
                 onPointerEnter={() => warmTopicDoc(doc.id)}
                 onFocus={() => warmTopicDoc(doc.id)}
-                onOpen={(id) => {
-                  const to = service.readerNavForDoc(id);
-                  if (to) navigate(to);
-                }}
+                onOpen={(id) => navigate(service.docHref(id))}
               />
             </div>
           </div>
@@ -296,7 +290,6 @@ function StatusDot({ status }: { status: MapNodeStatus }) {
 
 export const NodeDrawer = observer(function NodeDrawer() {
   const service = useService(TopicsService);
-  const reader = useService(ReaderService);
   const navigate = useNavigate();
   const open = service.drawerOpen;
   const detail = service.nodeDetail;
@@ -309,12 +302,10 @@ export const NodeDrawer = observer(function NodeDrawer() {
       if (!(target instanceof Element)) return;
       if (target.closest('.card-drawer')) return;
       if (target.closest('.map-concept')) return;
-      if (target.closest('.reader-overlay-root')) return;
       service.closeDrawer();
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      if (reader.isOpen) return;
       service.closeDrawer();
     };
     document.addEventListener('mousedown', onDown);
@@ -323,7 +314,7 @@ export const NodeDrawer = observer(function NodeDrawer() {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [service, reader, open]);
+  }, [service, open]);
 
   return (
     <aside
@@ -356,10 +347,7 @@ export const NodeDrawer = observer(function NodeDrawer() {
                   className="related-card related-card-link"
                   onPointerEnter={() => warmTopicDoc(card.documentId)}
                   onFocus={() => warmTopicDoc(card.documentId)}
-                  onClick={() => {
-                    const to = service.readerNavForCard(card.id, card.documentId);
-                    if (to) navigate(to);
-                  }}
+                  onClick={() => navigate(service.cardHref(card.id, card.documentId))}
                 >
                   <h4>{card.concept}</h4>
                   {card.tags.length > 0 ? (
@@ -383,10 +371,7 @@ export const NodeDrawer = observer(function NodeDrawer() {
                   type="button"
                   onPointerEnter={() => warmTopicDoc(doc.id)}
                   onFocus={() => warmTopicDoc(doc.id)}
-                  onClick={() => {
-                    const to = service.readerNavForDoc(doc.id);
-                    if (to) navigate(to);
-                  }}
+                  onClick={() => navigate(service.docHref(doc.id))}
                 >
                   {docCardLabel(docCardFace(doc, 80))}
                 </button>

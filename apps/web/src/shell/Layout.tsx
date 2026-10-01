@@ -24,6 +24,8 @@ import { ScreenshotService } from '@/services/screenshot.service';
 import { SyncService } from '@/services/sync.service';
 import { ThemeService } from '@/services/theme.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
+import { AssistantRail } from './assistant-rail';
+import { AssistantService } from './assistant.service';
 import { LayoutService } from './layout.service';
 import { prefetchPage, scheduleShellPrefetch } from './page-loaders';
 
@@ -56,10 +58,12 @@ const LayoutContent = observer(function LayoutContent() {
   const dark = theme.resolved === 'dark';
   const collapsed = prefs.navRailCollapsed;
   const label = auth.displayLabel;
+  const search = new URLSearchParams(location.search);
   const zen =
     prefs.zenMode &&
-    location.pathname === ROUTES.docs &&
-    new URLSearchParams(location.search).has('doc');
+    search.has('doc') &&
+    (location.pathname === ROUTES.docs ||
+      (location.pathname === ROUTES.topics && search.has('topic')));
 
   useEffect(() => scheduleShellPrefetch(location.pathname), [location.pathname]);
 
@@ -164,6 +168,7 @@ const LayoutContent = observer(function LayoutContent() {
           <Outlet />
         </Suspense>
       </main>
+      <AssistantRail />
       {shot.toast ? (
         <p className="toast" role="status">
           {shot.toast}
@@ -178,4 +183,4 @@ const LayoutContent = observer(function LayoutContent() {
   );
 });
 
-export const Layout = bindServices(LayoutContent, [SyncService, LayoutService]);
+export const Layout = bindServices(LayoutContent, [SyncService, LayoutService, AssistantService]);

@@ -6,12 +6,12 @@ import {
 import { observer, useService } from '@rabjs/react';
 import { Loader2, PenLine } from 'lucide-react';
 import { lazy, Suspense, useLayoutEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { DocView } from '@/components/doc/DocView';
 import { Tag } from '@/components/tag';
 import { textToPmDoc } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
-import { ROUTES } from '@/routes';
+import { documentReturnTarget } from '@/routes';
 import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
@@ -34,8 +34,10 @@ export function PaneEmpty() {
 export const PaneRead = observer(function PaneRead() {
   const service = useService(DocsService);
   const navigate = useNavigate();
+  const location = useLocation();
   const [params] = useSearchParams();
   const urlAnchor = params.get('anchor');
+  const returnTo = documentReturnTarget(location.pathname, params);
   const doc = service.doc;
   const scrollRef = useRef<HTMLDivElement>(null);
   const docId = doc?.id ?? null;
@@ -62,8 +64,12 @@ export const PaneRead = observer(function PaneRead() {
       <div className="pane-inner">
         <p className="empty">
           {service.docError}{' '}
-          <button type="button" className="btn btn-ghost" onClick={() => navigate(ROUTES.docs)}>
-            回文档列表
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => navigate(returnTo.path, returnTo.replace ? { replace: true } : undefined)}
+          >
+            {returnTo.path.startsWith('/topics') ? '返回主题' : '回文档列表'}
           </button>
         </p>
       </div>

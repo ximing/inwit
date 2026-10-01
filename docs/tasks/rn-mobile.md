@@ -73,7 +73,7 @@ packages/doc-engine/            # WebView 文档引擎，独立 vite 构建，�
 
 - **expo-router** 文件式路由；底部 Tab 对齐 web 侧边栏：今日 / 文档 / 复习（dueCount badge）/ 主题 / 我的（设置）。
 - web 的 `?doc=xx&anchor=yy` query 式深链 → RN 的 Stack push 参数；`anchor` 深链保留（点卡片跳文档锚点闪烁）。
-- 文档详情、阅读弹层（ReaderOverlay 等价物）= Stack 页面 + 底部 Sheet，不做 web 式 overlay portal。
+- 文档详情是 Stack 页面 + 底部 Sheet。Web 主题里打开的是同一份文档页（`/topics?topic=&doc=`，见 `docs/design/v2/topics-hosted-doc.spec.md`）。移动端不照搬那一层，也不做 overlay portal。
 
 ### 4.2 状态管理
 

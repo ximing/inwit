@@ -32,6 +32,21 @@ describe('summarizeJob', () => {
     });
   });
 
+  it('uses payload text for the conversation rail, truncated to 30 chars', () => {
+    expect(summarizeJob('conversation', { text: '帮我改一下这篇笔记的开头' })).toEqual({
+      summary: '对话栏 · 「帮我改一下这篇笔记的开头」',
+      description: '在对话栏里回答或修改文档',
+    });
+    const long = `${'改'.repeat(35)}写`;
+    const summarized = summarizeJob('conversation', { text: long });
+    const inner = [...summarized.summary].slice([...'对话栏 · 「'].length, -1).join('');
+    expect([...inner]).toHaveLength(30);
+    expect(summarizeJob('conversation', {})).toEqual({
+      summary: '对话栏 · 一条消息',
+      description: '在对话栏里回答或修改文档',
+    });
+  });
+
   it('uses payload question for chat, truncated to 30 chars, and falls back', () => {
     expect(
       summarizeJob('chat', { documentId: DOC_ID, question: 'L1 和 L2 正则化到底啥区别？' }),

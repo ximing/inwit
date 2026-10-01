@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   FileText,
   MessageCircle,
+  MessagesSquare,
   Library,
   ScanText,
   StickyNote,
@@ -50,6 +51,7 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
   ocr: ScanText,
   annotation_resurface: StickyNote,
   memory_organize: Library,
+  conversation: MessagesSquare,
 };
 
 const JobsContent = observer(function JobsContent() {

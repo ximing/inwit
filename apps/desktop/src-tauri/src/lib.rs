@@ -176,7 +176,8 @@ fn document_allowed(config: &tauri::Config, url: &url::Url) -> bool {
 }
 
 /// wry 对子框架同样调用这个回调，且没有 is_main_frame。
-/// 不能在这里按主机拒绝 https，否则 ReaderOverlay 的 PDF iframe 会被取消。
+/// 不按主机拒绝 http/https：分不出主框架时，按主机拒绝会一并取消子框架。
+/// Web 的 PDF 由 @embedpdf fetch 预签名 URL，不是 iframe 导航。
 fn navigation_allowed(url: &url::Url) -> bool {
     if url.scheme() == "tauri" || url.host_str() == Some("tauri.localhost") {
         return false;

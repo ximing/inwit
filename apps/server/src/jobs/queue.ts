@@ -7,6 +7,7 @@ import {
 import { config } from '../config.js';
 import { getDb, type Database } from '../db/index.js';
 import { jobs, type JobRow } from '../db/schema.js';
+import { failConversationMessage } from '../conversations/conversation.service.js';
 import { markDocumentFailed, pipelineDocumentId } from '../documents/document-status.js';
 import { logger } from '../utils/logger.js';
 import { heartbeatJob } from './heartbeat.js';
@@ -110,6 +111,16 @@ async function markFailedTerminal(job: JobRow, message: string, now: Date): Prom
     lastError: message,
   });
   await settleDocumentFailure(job, message);
+  await settleConversationFailure(job, message);
+}
+
+async function settleConversationFailure(job: JobRow, message: string): Promise<void> {
+  if (job.type !== 'conversation') return;
+  try {
+    await failConversationMessage(job, message);
+  } catch (err) {
+    logger.error('job.conversation_settle_failed', err);
+  }
 }
 
 async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<void> {
@@ -133,6 +144,7 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
       .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
     logger.warn('job.failed', { jobId: job.id, type: job.type, attempts, lastError: message });
     await settleDocumentFailure(job, message);
+    await settleConversationFailure(job, message);
     await planOrganizeAfterRelease(job);
     return;
   }

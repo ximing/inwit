@@ -1,7 +1,7 @@
 import { observer, useService } from '@rabjs/react';
 import { Maximize2, Minimize2, X } from 'lucide-react';
-import { useNavigate } from 'react-router';
-import { ROUTES } from '@/routes';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { documentReturnTarget } from '@/routes';
 import { UiPrefsService, type DocMode } from '@/services/ui-prefs.service';
 import { DocsService } from './docs.service';
 import { EditorService } from './editor.service';
@@ -50,13 +50,17 @@ export const DocTopRow = observer(function DocTopRow({
   const editor = useService(EditorService);
   const prefs = useService(UiPrefsService);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const returnTo = documentReturnTarget(location.pathname, params);
+  const backToTopic = returnTo.path.startsWith('/topics');
   const topicId = editing
     ? (editor.topicId ?? service.doc?.topicId ?? null)
     : (service.doc?.topicId ?? null);
 
   const close = () => {
     service.endComposeNew();
-    navigate(ROUTES.docs);
+    navigate(returnTo.path, returnTo.replace ? { replace: true } : undefined);
   };
 
   const showSave = editing && Boolean(editor.saveLabel);
@@ -104,7 +108,13 @@ export const DocTopRow = observer(function DocTopRow({
             <Maximize2 width={13} height={13} strokeWidth={1.8} />
           )}
         </button>
-        <button type="button" className="doc-fab-close" onClick={close} title="关闭" aria-label="关闭">
+        <button
+          type="button"
+          className="doc-fab-close"
+          onClick={close}
+          title={backToTopic ? '返回主题' : '关闭'}
+          aria-label={backToTopic ? '返回主题' : '关闭'}
+        >
           <X width={13} height={13} strokeWidth={1.8} />
         </button>
       </div>

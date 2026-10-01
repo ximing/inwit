@@ -1,8 +1,8 @@
 import { observer, useService } from '@rabjs/react';
 import { Loader2 } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
-import { useNavigate } from 'react-router';
-import { ROUTES } from '@/routes';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { documentReturnTarget } from '@/routes';
 import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
@@ -14,6 +14,9 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
   const service = useService(DocsService);
   const editor = useService(EditorService);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const returnTo = documentReturnTarget(location.pathname, params);
   const scrollRef = useRef<HTMLDivElement>(null);
   const justCreatedRef = useRef(false);
   justCreatedRef.current = editor.justCreated;
@@ -29,8 +32,12 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
       <div className="pane-inner">
         <p className="empty">
           {editor.error ?? '找不到这份文档。'}{' '}
-          <button type="button" className="btn btn-ghost" onClick={() => navigate(ROUTES.docs)}>
-            回文档列表
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => navigate(returnTo.path, returnTo.replace ? { replace: true } : undefined)}
+          >
+            {returnTo.path.startsWith('/topics') ? '返回主题' : '回文档列表'}
           </button>
         </p>
       </div>

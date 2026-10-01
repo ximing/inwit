@@ -3,6 +3,7 @@
 @import './styles.css';
 @import './components/app-dialog.css';
 @import './shell/styles.css';
+@import './shell/assistant.css';
 @import './pages/today/styles.css';
 @import './pages/review/styles.css';
 @import './components/capture/styles.css';
@@ -22,6 +23,5 @@
 @import './pages/docs/card-canvas.css';
 @import './pages/docs/selection-toolbar.css';
 @import './pages/docs/pdf-pane/styles.css';
-@import './components/reader/styles.css';
 @import './pages/docs/card-edit-dialog.css';
 @import './pages/review/reports.css';

@@ -12,6 +12,7 @@ export const JOB_TYPES = [
   'ocr',
   'annotation_resurface',
   'memory_organize',
+  'conversation',
 ] as const;
 export const jobTypeSchema = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof jobTypeSchema>;
@@ -71,6 +72,14 @@ export const chatJobPayloadSchema = digestJobPayloadSchema.extend({
   question: z.string().optional(),
 });
 export type ChatJobPayload = z.infer<typeof chatJobPayloadSchema>;
+
+export const conversationJobPayloadSchema = z.object({
+  conversationId: z.string().uuid(),
+  assistantMessageId: z.string().uuid(),
+  dirtyDocumentIds: z.array(z.string().uuid()).default([]),
+  text: z.string().optional(),
+});
+export type ConversationJobPayload = z.infer<typeof conversationJobPayloadSchema>;
 
 export const selectionJobPayloadSchema = z.object({
   documentId: z.string().uuid(),

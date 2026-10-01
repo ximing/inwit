@@ -336,7 +336,7 @@ export const CardCanvas = observer(function CardCanvas({
   const onNodePointerDown = (cardId: string, event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.target;
-    if (target instanceof Element && target.closest('.note-op, .canvas-node-op, .mini-decision, a, input, textarea')) {
+    if (target instanceof Element && target.closest('.note-op, .canvas-node-op, .mini-decision, .card-links, a, input, textarea')) {
       event.stopPropagation();
       return;
     }

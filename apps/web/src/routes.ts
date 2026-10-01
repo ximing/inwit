@@ -13,16 +13,24 @@ export const ROUTES = {
 
 export function docsPath(
   docId?: string,
-  opts?: { edit?: boolean; anchor?: string; annotation?: string },
+  opts?: { edit?: boolean; anchor?: string; annotation?: string; fromTopic?: string | null },
 ): string {
-  if (!docId && !opts?.edit && !opts?.anchor && !opts?.annotation) return ROUTES.docs;
+  const fromTopic = opts?.fromTopic || undefined;
+  if (!docId && !opts?.edit && !opts?.anchor && !opts?.annotation && !fromTopic) return ROUTES.docs;
   const params = new URLSearchParams();
   if (docId) params.set('doc', docId);
   if (opts?.edit) params.set('edit', '1');
   if (opts?.anchor) params.set('anchor', opts.anchor);
   if (opts?.annotation) params.set('annotation', opts.annotation);
+  if (fromTopic) params.set('fromTopic', fromTopic);
   const qs = params.toString();
   return qs ? `${ROUTES.docs}?${qs}` : ROUTES.docs;
+}
+
+/** Entrance that should close back to a topic. Empty values are not an entrance. */
+export function fromTopicOf(params: URLSearchParams): string | null {
+  const value = params.get('fromTopic');
+  return value && value.length > 0 ? value : null;
 }
 
 export function editorPath(id: string): string {
@@ -42,6 +50,41 @@ export function topicPath(id?: string): string {
   return `${ROUTES.topics}?${params.toString()}`;
 }
 
+/** Open a document without leaving the topic page. */
+export function topicDocPath(
+  topicId: string,
+  docId: string,
+  opts?: { anchor?: string; annotation?: string },
+): string {
+  const params = new URLSearchParams();
+  params.set('topic', topicId);
+  params.set('doc', docId);
+  if (opts?.anchor) params.set('anchor', opts.anchor);
+  if (opts?.annotation) params.set('annotation', opts.annotation);
+  return `${ROUTES.topics}?${params.toString()}`;
+}
+
+/** Topic page currently showing a document. Empty when the document lives on /docs. */
+export function topicHostId(pathname: string, params: URLSearchParams): string | null {
+  if (pathname !== ROUTES.topics) return null;
+  const topic = params.get('topic');
+  const doc = params.get('doc');
+  if (!topic || !doc) return null;
+  return topic;
+}
+
+/** Where the open document's close control should land. Hosted documents replace the current entry. */
+export function documentReturnTarget(
+  pathname: string,
+  params: URLSearchParams,
+): { path: string; replace: boolean } {
+  const host = topicHostId(pathname, params);
+  if (host) return { path: topicPath(host), replace: true };
+  const fromTopic = fromTopicOf(params);
+  if (fromTopic) return { path: topicPath(fromTopic), replace: false };
+  return { path: ROUTES.docs, replace: false };
+}
+
 export function docPath(id: string): string {
   return docsPath(id);
 }
@@ -51,12 +94,16 @@ export function cardPath(cardId: string, documentId?: string | null): string {
   return ROUTES.review;
 }
 
-export function docAnchorPath(docId: string, cardId: string): string {
-  return docsPath(docId, { anchor: cardId });
+export function docAnchorPath(docId: string, cardId: string, fromTopic?: string | null): string {
+  return docsPath(docId, { anchor: cardId, fromTopic });
 }
 
-export function docAnnotationPath(docId: string, annotationId: string): string {
-  return docsPath(docId, { annotation: annotationId });
+export function docAnnotationPath(
+  docId: string,
+  annotationId: string,
+  fromTopic?: string | null,
+): string {
+  return docsPath(docId, { annotation: annotationId, fromTopic });
 }
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];

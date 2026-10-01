@@ -52,6 +52,7 @@ import type {
   CanvasNodeKind,
   CardAcceptance,
   CardLinkOrigin,
+  ConversationAction,
   CardLinkType,
   CardQuestionType,
   CardSource,
@@ -756,6 +757,49 @@ export const agentExecutions = pgTable(
   ],
 );
 
+export const agentConversations = pgTable(
+  'agent_conversations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: varchar('title', { length: 80 }).notNull().default(''),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('idx_agent_conversations_user_updated').on(t.userId, t.updatedAt.desc())],
+);
+
+export const agentMessages = pgTable(
+  'agent_messages',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    conversationId: uuid('conversation_id')
+      .notNull()
+      .references(() => agentConversations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: varchar('role', { length: 16 }).$type<'user' | 'assistant'>().notNull(),
+    content: text('content').notNull().default(''),
+    documentIds: jsonb('document_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    actions: jsonb('actions').$type<ConversationAction[]>().notNull().default(sql`'[]'::jsonb`),
+    status: varchar('status', { length: 16 })
+      .$type<'pending' | 'done' | 'failed'>()
+      .notNull()
+      .default('done'),
+    failReason: text('fail_reason'),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_agent_messages_conversation_created').on(t.conversationId, t.createdAt),
+    enumCheck('agent_messages_role_check', t.role, ['user', 'assistant']),
+    enumCheck('agent_messages_status_check', t.status, ['pending', 'done', 'failed']),
+  ],
+);
+
 export const llmUsageLogs = pgTable(
   'llm_usage_logs',
   {
@@ -1029,5 +1073,9 @@ export type OcrPageRow = typeof ocrPages.$inferSelect;
 export type NewOcrPage = typeof ocrPages.$inferInsert;
 export type AgentExecutionRow = typeof agentExecutions.$inferSelect;
 export type NewAgentExecution = typeof agentExecutions.$inferInsert;
+export type AgentConversationRow = typeof agentConversations.$inferSelect;
+export type NewAgentConversation = typeof agentConversations.$inferInsert;
+export type AgentMessageRow = typeof agentMessages.$inferSelect;
+export type NewAgentMessage = typeof agentMessages.$inferInsert;
 export type LlmUsageLogRow = typeof llmUsageLogs.$inferSelect;
 export type NewLlmUsageLog = typeof llmUsageLogs.$inferInsert;

@@ -6,6 +6,7 @@ import { formatTimeHm } from '@/lib/format';
 import { asPmJson, clonePmJson, jsonEqual } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { AssetUrlsService } from '@/services/asset-urls.service';
+import { EditorPresenceService } from '@/services/editor-presence.service';
 
 const SAVE_DEBOUNCE_MS = 2000;
 
@@ -89,6 +90,7 @@ export class EditorService extends Service {
     this.seedKey = nextKey === this.seedKey ? `${nextKey}:r` : nextKey;
     this.savedAt = new Date(doc.updatedAt);
     if (!this.dirty) this.saveState = 'saved';
+    this.publishPresence();
   }
 
   async open(routeId: string, topicId: string | null): Promise<void> {
@@ -125,6 +127,7 @@ export class EditorService extends Service {
     this.savedAt = null;
     this.error = null;
     this.justCreated = false;
+    this.publishPresence();
   }
 
   idle(): void {
@@ -136,6 +139,7 @@ export class EditorService extends Service {
     this.justCreated = false;
     this.error = null;
     this.saveState = 'idle';
+    this.publishPresence();
   }
 
   async load(id: string): Promise<void> {
@@ -144,6 +148,7 @@ export class EditorService extends Service {
     this.preserveViewport = false;
     this.phase = 'loading';
     this.error = null;
+    this.publishPresence();
     try {
       const doc = await getDocument(id);
       if (doc.assetUrls) {
@@ -166,6 +171,7 @@ export class EditorService extends Service {
       this.phase = 'missing';
       this.error = errorMessage(err, '打不开这份文档');
     }
+    this.publishPresence();
   }
 
   noteTitleChange(title: string): void {
@@ -183,6 +189,7 @@ export class EditorService extends Service {
   }
 
   private noteDirty(): void {
+    this.publishPresence();
     if (this.remoteGone) return;
     if (!this.dirty) {
       this.clearTimer();
@@ -216,10 +223,12 @@ export class EditorService extends Service {
     }
     const run = this.persist();
     this.saveInflight = run;
+    this.publishPresence();
     try {
       await run;
     } finally {
       if (this.saveInflight === run) this.saveInflight = null;
+      this.publishPresence();
       this.onLocalWriteEnd?.();
     }
   }
@@ -292,6 +301,21 @@ export class EditorService extends Service {
 
   override destroy(): void {
     this.clearTimer();
+    this.id = null;
+    this.phase = 'idle';
+    this.publishPresence();
     super.destroy();
+  }
+
+  private publishPresence(): void {
+    try {
+      const active =
+        (this.phase === 'ready' || this.phase === 'new') &&
+        this.id !== null &&
+        (this.dirty || this.saveInflight !== null);
+      this.resolve(EditorPresenceService).set(active ? this.id : null);
+    } catch {
+      // Unit tests construct the editor without the app container.
+    }
   }
 }

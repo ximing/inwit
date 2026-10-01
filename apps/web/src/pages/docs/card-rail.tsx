@@ -12,10 +12,10 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { cardsForRail, MiniCard } from '@/components/reader/mini-card';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
-import { ROUTES } from '@/routes';
+import { ROUTES, topicHostId } from '@/routes';
 import { DialogService } from '@/services/dialog.service';
 import {
   CANVAS_PANE_WIDTH_DEFAULT,
@@ -27,6 +27,7 @@ import {
 } from '@/services/ui-prefs-logic';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { CardCanvas } from './card-canvas';
+import { CardLinks } from './card-link-list';
 import { DocsService } from './docs.service';
 
 const AnnotationThumb = observer(function AnnotationThumb({
@@ -263,6 +264,7 @@ const DocCardButton = observer(function DocCardButton({
           </button>
         </div>
       ) : null}
+      {open ? <CardLinks cardId={card.id} documentId={service.doc?.id ?? null} /> : null}
     </div>
   );
 });
@@ -284,6 +286,9 @@ export const CardRail = observer(function CardRail() {
     if (!ok) return;
     await service.acceptAllProposed();
   };
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const hosted = topicHostId(location.pathname, params) !== null;
   const wide = prefs.cardLayout === 'map' || prefs.zenMode;
   const limits = cardRailLimits(wide, service.paneWidth);
   const shownWidth = clampCardRailWidth(
@@ -292,8 +297,14 @@ export const CardRail = observer(function CardRail() {
     wide,
   );
   const stack = prefs.zenMode && service.cardRailNarrow;
-  const docked = !stack && !service.cardRailNarrow && (!prefs.cardRailCollapsed || prefs.zenMode);
-  const showOverlay = !stack && !docked && (service.cardRailOverlayOpen || prefs.zenMode);
+  // 主题里打开的文档：列表和脑图跟正文并排，不改成浮层。锚点只负责展开卡片。
+  const hostedDocked =
+    hosted && !stack && (!prefs.cardRailCollapsed || service.cardRailOverlayOpen || prefs.zenMode);
+  const docked =
+    hostedDocked ||
+    (!hosted && !stack && !service.cardRailNarrow && (!prefs.cardRailCollapsed || prefs.zenMode));
+  const showOverlay =
+    !hosted && !stack && !docked && (service.cardRailOverlayOpen || prefs.zenMode);
   const visible = docked || showOverlay || stack;
   const pending = service.doc?.status === 'pending';
   const badge = cards.length + notes.length;
@@ -497,7 +508,13 @@ export const CardRail = observer(function CardRail() {
           type="button"
           className="card-rail-handle"
           aria-label={`打开卡片栏，${cards.length} 张卡，${notes.length} 条批注`}
-          onClick={() => service.openCardRailOverlay()}
+          onClick={() => {
+            if (hosted) {
+              prefs.setCardRailCollapsed(false);
+              return;
+            }
+            service.openCardRailOverlay();
+          }}
         >
           <PanelRight width={16} height={16} strokeWidth={1.8} />
           {badge > 0 ? <span className="card-rail-badge">{badge}</span> : null}

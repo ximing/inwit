@@ -477,8 +477,6 @@ export class TodayService extends Service {
       topics: [],
       openTopicId: null,
       mapTopicId: null,
-      readerDocumentId: null,
-      readerActiveCardId: null,
       reviewInSession: false,
       jobs: this.jobs.map((job) => ({ id: job.id, updatedAt: job.updatedAt })),
       activeJobId: null,

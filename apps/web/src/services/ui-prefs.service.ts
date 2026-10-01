@@ -3,8 +3,11 @@ import {
   CANVAS_PANE_WIDTH_DEFAULT,
   CARD_RAIL_WIDTH_DEFAULT,
   DOC_LIST_WIDTH_DEFAULT,
+  ASSISTANT_WIDTH_DEFAULT,
+  clampAssistantWidth,
   clampCardRailWidth,
   clampDocListWidth,
+  parseAssistantWidth,
   parseCardRailWidth,
   parseDocListWidth,
 } from './ui-prefs-logic';
@@ -20,6 +23,8 @@ export const CARD_LAYOUT_KEY = 'inwit-card-layout';
 export const ZEN_MODE_KEY = 'inwit-zen-mode';
 export const DOC_LIST_WIDTH_KEY = 'inwit-doc-list-width';
 export const NAV_RAIL_COLLAPSED_KEY = 'inwit-nav-rail-collapsed';
+export const ASSISTANT_COLLAPSED_KEY = 'inwit-assistant-collapsed';
+export const ASSISTANT_WIDTH_KEY = 'inwit-assistant-width';
 
 /** Pane narrower than this docks the card rail as an overlay instead of a column. */
 export const CARD_RAIL_NARROW_PX = 880;
@@ -52,6 +57,17 @@ function readFlag(key: string): boolean {
   }
 }
 
+function readCollapsed(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === '1') return true;
+    if (raw === '0') return false;
+  } catch {
+    return fallback;
+  }
+  return fallback;
+}
+
 function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
@@ -69,6 +85,8 @@ export class UiPrefsService extends Service {
   zenMode = false;
   docListWidth = DOC_LIST_WIDTH_DEFAULT;
   navRailCollapsed = false;
+  assistantCollapsed = true;
+  assistantWidth = ASSISTANT_WIDTH_DEFAULT;
 
   constructor() {
     super();
@@ -76,6 +94,7 @@ export class UiPrefsService extends Service {
     this.cardLayout = readCardLayout();
     this.cardRailCollapsed = readFlag(CARD_RAIL_COLLAPSED_KEY);
     this.navRailCollapsed = readFlag(NAV_RAIL_COLLAPSED_KEY);
+    this.assistantCollapsed = readCollapsed(ASSISTANT_COLLAPSED_KEY, true);
     this.zenMode = readFlag(ZEN_MODE_KEY);
     try {
       this.cardRailWidth = parseCardRailWidth(localStorage.getItem(CARD_RAIL_WIDTH_KEY));
@@ -85,10 +104,12 @@ export class UiPrefsService extends Service {
           ? CANVAS_PANE_WIDTH_DEFAULT
           : clampCardRailWidth(Number(canvasRaw), 0, true);
       this.docListWidth = parseDocListWidth(localStorage.getItem(DOC_LIST_WIDTH_KEY));
+      this.assistantWidth = parseAssistantWidth(localStorage.getItem(ASSISTANT_WIDTH_KEY));
     } catch {
       this.cardRailWidth = CARD_RAIL_WIDTH_DEFAULT;
       this.canvasPaneWidth = CANVAS_PANE_WIDTH_DEFAULT;
       this.docListWidth = DOC_LIST_WIDTH_DEFAULT;
+      this.assistantWidth = ASSISTANT_WIDTH_DEFAULT;
     }
   }
 
@@ -149,5 +170,18 @@ export class UiPrefsService extends Service {
 
   toggleNavRail(): void {
     this.setNavRailCollapsed(!this.navRailCollapsed);
+  }
+
+  setAssistantCollapsed(collapsed: boolean): void {
+    if (this.assistantCollapsed === collapsed) return;
+    this.assistantCollapsed = collapsed;
+    writeStorage(ASSISTANT_COLLAPSED_KEY, collapsed ? '1' : '0');
+  }
+
+  setAssistantWidth(width: number): void {
+    const next = clampAssistantWidth(width);
+    if (next === this.assistantWidth) return;
+    this.assistantWidth = next;
+    writeStorage(ASSISTANT_WIDTH_KEY, String(next));
   }
 }

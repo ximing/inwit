@@ -17,6 +17,9 @@
 .ws.ws-topics {
   grid-template-columns: 340px minmax(0, 1fr);
 }
+.ws.is-topic-host {
+  grid-template-columns: minmax(0, 1fr);
+}
 .ws-topics .ws-pane { overflow: hidden; }
 .ws-topics .pane-topic {
   flex: 1;

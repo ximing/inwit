@@ -16,7 +16,6 @@ import { isChatQuestion, topicJobPayloadFrom } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
 import { getReviewTopicStats } from '@/api/review';
 import { listDocuments } from '@/api/documents';
-import { ReaderService } from '@/components/reader/reader.service';
 import {
   asListItem,
   captureIsChat,
@@ -37,7 +36,7 @@ import {
   type ReloadIntent,
   type SyncView,
 } from '@/lib/sync-plan';
-import { cardPath } from '@/routes';
+import { cardPath, docAnchorPath, docsPath, topicDocPath } from '@/routes';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { getJob } from '@/api/jobs';
 import {
@@ -312,10 +311,6 @@ export class TopicsService extends Service {
     return this.summary?.totalNodes ?? this.selectedItem?.totalNodes ?? 0;
   }
 
-  get reader(): ReaderService {
-    return this.resolve(ReaderService);
-  }
-
   get canSend(): boolean {
     return (
       this.draft.trim().length > 0 &&
@@ -367,17 +362,17 @@ export class TopicsService extends Service {
     this.tab = tab;
   }
 
-  /** 在当前主题页打开阅读弹层。 */
-  readerNavForDoc(docId: string): string | null {
-    void this.reader.openDoc(docId);
-    return null;
+  /** 在当前主题页打开文档，地址仍是 /topics，关闭后主题页不会被卸掉。 */
+  docHref(docId: string): string {
+    if (!this.topicId) return docsPath(docId);
+    return topicDocPath(this.topicId, docId);
   }
 
-  /** 无所属文档时返回跳转路径；否则打开卡片模式弹层（PDF 同样走弹层）。 */
-  readerNavForCard(cardId: string, documentId: string | null): string | null {
+  /** 无所属文档时去复习；否则在当前主题页打开文档并定位到这张卡。 */
+  cardHref(cardId: string, documentId: string | null): string {
     if (!documentId) return cardPath(cardId, documentId);
-    void this.reader.openCard(cardId, documentId);
-    return null;
+    if (!this.topicId) return docAnchorPath(documentId, cardId);
+    return topicDocPath(this.topicId, documentId, { anchor: cardId });
   }
 
   setDraft(value: string): void {
@@ -584,13 +579,7 @@ export class TopicsService extends Service {
       : this.documents.map((item) => item.id === id ? { ...item, ...updated, topicTitle } : item);
     if (remove && had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);
     if (this.topicId) this.patchItem(this.topicId, { documentCount: this.documentsTotal });
-    const openDoc = this._container ? this.reader.doc : null;
-    const readerOpen = openDoc?.id === id;
-    if (openDoc && readerOpen) {
-      if (!updated) this.reader.close();
-      else this.reader.doc = { ...openDoc, ...updated, topicTitle };
-    }
-    if (updated && ((had && this.docsHeadReady) || readerOpen)) {
+    if (updated && had && this.docsHeadReady) {
       this._noteEcho('document', id, updated.updatedAt);
     }
     this.syncDocPolling();
@@ -606,7 +595,6 @@ export class TopicsService extends Service {
   }
 
   async openTopic(id: string | null): Promise<void> {
-    if (this.topicId !== id) this.reader.close();
     const gen = ++this.topicLoadGen;
     this.docListGen += 1;
     this.topicId = id;
@@ -1083,10 +1071,6 @@ export class TopicsService extends Service {
         await this.load();
         if (!this.syncStopped) {
           await this._reloadMountedTopic(docsAtReset);
-          if (this._container) {
-            const readerId = this.reader.doc?.id;
-            if (readerId) await this.reader.refreshOpenDocument(readerId);
-          }
         }
       } finally {
         this.resetReloading = false;
@@ -1142,7 +1126,6 @@ export class TopicsService extends Service {
   }
 
   private _syncView(): SyncView {
-    const reader = this._container ? this.reader : null;
     return {
       documents: this.docsHeadReady
         ? this.documents.map((doc) => ({ id: doc.id, updatedAt: doc.updatedAt }))
@@ -1153,8 +1136,6 @@ export class TopicsService extends Service {
       topics: this.items.map((item) => ({ id: item.topic.id })),
       openTopicId: this.topicId,
       mapTopicId: this.topic?.id ?? null,
-      readerDocumentId: reader?.doc?.id ?? null,
-      readerActiveCardId: reader?.activeCardId ?? null,
       reviewInSession: false,
       jobs: this.activeJob ? [{ id: this.activeJob.id, updatedAt: this.activeJob.updatedAt }] : [],
       activeJobId: this.activeJob?.id ?? null,
@@ -1329,11 +1310,8 @@ export class TopicsService extends Service {
     );
     if (this.docsHeadReady && page) await this._mergeDocumentWindow(deleteIds);
     else if (this.docsHeadReady && deleteIds.length > 0) this._removeDocuments(deleteIds);
-    this._closeReaderIfDeleted(deleteIds);
     if (this.openInFlight || this.syncStopped) return;
     for (const id of upserts) {
-      const readerId = this._container ? this.reader.doc?.id : null;
-      if (readerId === id) await this.reader.refreshOpenDocument(id);
       if (!this.docsHeadReady || !this.documents.some((item) => item.id === id)) continue;
       const hadPending = this.documents.some((item) => item.status === 'pending');
       await this.refreshOne(id);
@@ -1381,12 +1359,6 @@ export class TopicsService extends Service {
       if (this.topicId) this.patchItem(this.topicId, { documentCount: this.documentsTotal });
     }
     this.syncDocPolling();
-  }
-
-  private _closeReaderIfDeleted(ids: readonly string[]): void {
-    if (!this._container || ids.length === 0) return;
-    const open = this.reader.doc?.id;
-    if (open && ids.includes(open)) this.reader.close();
   }
 
   private _noteTopicsRemoved(ids: readonly string[]): void {

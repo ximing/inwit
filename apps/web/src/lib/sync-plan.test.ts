@@ -52,8 +52,6 @@ function view(overrides: Partial<Omit<SyncView, 'editor'>> & { editor?: SyncView
     topics: [],
     openTopicId: null,
     mapTopicId: null,
-    readerDocumentId: null,
-    readerActiveCardId: null,
     reviewInSession: false,
     jobs: [],
     activeJobId: null,
@@ -209,18 +207,6 @@ describe('planReloads', () => {
     ).toEqual([
       { kind: 'document', id: DOC, op: 'upsert', body: 'apply' },
       { kind: 'documents-page' },
-    ]);
-  });
-
-  it('plans an open reader document that is not in the list', () => {
-    const current = view({
-      documents: [],
-      openDocumentId: null,
-      editor: null,
-      readerDocumentId: DOC,
-    });
-    expect(plan([change({ id: '1' })], [], current)).toEqual([
-      { kind: 'document', id: DOC, op: 'upsert', body: 'apply' },
     ]);
   });
 

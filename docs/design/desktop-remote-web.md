@@ -112,7 +112,7 @@ CI（`.github/workflows/desktop-build.yml`）在 `tauri-action` 上设置 `VITE_
 3. **平台分叉从 API client 里拿走，且不做成策略表。** 检测函数无 I/O。浏览器传输无条件相对路径 + `credentials: 'include'`。原生模块是唯一允许 `import('@tauri-apps/api/...')` 的文件，且 import 发生在检测通过之后。移动端继续用自己的 `apps/mobile/src/api/client.ts`，禁止 `apps/mobile` import `apps/web`。
 4. **`plugin-http` 与 `plugin-store` 从 web 依赖、桌面 npm 依赖、Cargo 和 capability 删除。** 删掉后 `https://*/*` 的 `http:default` 一并消失。`notification` 没有任何调用，Cargo 与 capability 一并删除。`window-state` 和 `global-shortcut` 的 **Cargo 插件保留**：几何恢复发生在 `on_window_ready`，热键由 `GlobalShortcutExt::register` 直接注册。它们的 JS 权限 `window-state:default` 和 `global-shortcut:default` **不**放进 capability。后者会让页面注册系统级热键。
 5. **应用 URL 在 Tauri 2.11.5 里是 `Origin::Local`，capability 保持 `"local": true`。** `get_app_url()` 在 `cfg(dev)` 下返回 `devUrl`，否则在 `frontendDist` 为 URL 时返回该 URL。`url` 2.5.8 的 `make_relative` 对同 scheme、同 host、同端口的任意路径返回 `Some`，于是 `http://localhost:5190/...` 与 `https://inwit.aimo.plus/...` 都是 local。`remote.urls` 只附加 `ExecutionContext::Remote`，授权不了这两个源上的 `setTheme`、`setBackgroundColor`、`listen`。因此 **删除 `remote` 块**，而不是把生产源写进 `remote.urls`。`withGlobalTauri` 维持 false。`__TAURI_INTERNALS__` 每个 webview 都会注入，与 `local` 无关。
-6. **`on_navigation` 只拒绝 Tauri 协议源，不按主机过滤 `http:` / `https:`。** 回调是 `Fn(&Url) -> bool`。wry 0.55.1 对每个 frame 都调用它，而且没有主框架标志（macOS `decidePolicyForNavigationAction`、Windows `NavigationStarting`、Linux `decide-policy`）。`ReaderOverlay` 用 `<iframe src={pdfUrl}>` 打开预签名的 `https://s3.aimo.plus/...`。按主机拒绝并 `open::that` 会取消这个 iframe，还会把带 query 的预签名 URL 丢给系统浏览器。因此：`tauri:` 与 host `tauri.localhost` 返回 false，且不打开任何外部程序；`about:blank` 以及其它 `http:` / `https:`（含应用源和 `s3.aimo.plus`）返回 true。`open::that` 只留在 `on_new_window`。主框架被导航到其它 https 主机是接受的残留：那个页面不是 `get_app_url()`，没有 IPC，host-only cookie 也不会带上。`reload_main` 发现当前 URL 不在应用源时，改为加载配置中的应用 URL。
+6. **`on_navigation` 只拒绝 Tauri 协议源，不按主机过滤 `http:` / `https:`。** 回调是 `Fn(&Url) -> bool`。wry 0.55.1 对每个 frame 都调用它，而且没有主框架标志（macOS `decidePolicyForNavigationAction`、Windows `NavigationStarting`、Linux `decide-policy`）。Web 文档的 PDF 由 `@embedpdf` 通过 `fetch` 读取预签名 URL，不产生导航；web 里也没有 PDF iframe。策略仍不按主机拒绝：回调分不出主框架和子框架，按主机拒绝会取消任何子框架导航；若再在这个回调里 `open::that`，就会把带 query 的 URL 交给系统浏览器。因此：`tauri:` 与 host `tauri.localhost` 返回 false，且不打开任何外部程序；`about:blank` 以及其它 `http:` / `https:`（含应用源）返回 true。`open::that` 只留在 `on_new_window`。主框架被导航到其它 https 主机是接受的残留：那个页面不是 `get_app_url()`，没有 IPC，host-only cookie 也不会带上。`reload_main` 发现当前 URL 不在应用源时，改为加载配置中的应用 URL。
 7. **非生产源只通过改 `frontendDist` 再编译，不提供运行时开关，也不改 capability。** 新的 URL 会变成 `get_app_url()`，因此仍是 local，IPC 不用 `remote.urls`。`cfg(dev)` 只决定 `tauri dev` 的应用源是 `devUrl`（`reload_main` 的回首页，以及 Tauri 自己的 `get_app_url`），不用它去放行或拒绝某台 http 主机。不把这个改动提交。不恢复桌面 job 的 `VITE_TAURI_API_URL`。顶层 `INWIT_API_URL` 对 `secrets.VITE_TAURI_API_URL` / `vars.VITE_TAURI_API_URL` 的回退留给 Android，见 Rollout。
 8. **先部署 web，再发布新壳。** 旧壳继续用包内旧 UI 和 Bearer，不请求新的线上 JS。新壳一启动就请求当时线上的 JS。线上 JS 若仍是会调用 `tauriBaseUrl()` 的版本，生产壳会在启动时抛错。
 9. **IPC 名字是壳与 web 之间的稳定契约，版本号不是。** 设置页展示的是 `apps/web/package.json` 打进的 `__APP_VERSION__`（`apps/web/src/lib/app-version.ts`）。关于本机安装包的版本是 CI 写进 `tauri.conf.json` / `Cargo.toml` 的壳版本。二者允许不一致。不允许为了追版本去改命令名或事件名。
@@ -335,8 +335,9 @@ fn document_allowed(config: &tauri::Config, url: &url::Url) -> bool {
     })
 }
 
-/// wry 0.55.1 对子框架同样调用这个回调，且没有 is_main_frame。
-/// 不能在这里按主机拒绝 https，否则 ReaderOverlay 的 PDF iframe 会被取消。
+/// wry 对子框架同样调用这个回调，且没有 is_main_frame。
+/// 不按主机拒绝 http/https：分不出主框架时，按主机拒绝会一并取消子框架。
+/// Web 的 PDF 由 @embedpdf fetch 预签名 URL，不是 iframe 导航。
 fn navigation_allowed(url: &url::Url) -> bool {
     if url.scheme() == "tauri" || url.host_str() == Some("tauri.localhost") {
         return false;
@@ -348,15 +349,15 @@ fn navigation_allowed(url: &url::Url) -> bool {
 }
 ```
 
-`on_navigation` 只返回 `navigation_allowed`。**不要在这个回调里调用 `open::that`。** 它看见的是每一次导航，包括 iframe。`apps/web/src/components/reader/ReaderOverlay.tsx` 在 PDF 时渲染 `<iframe src={service.pdfUrl}>`；`ReaderService.syncPdf` 把 `pdfUrl` 设为 `getDocumentFile` 返回的预签名 URL，生产上是 `https://s3.aimo.plus/...`，不是应用源。拒绝该主机再交给系统打开，会取消 iframe，并把带 query 的预签名 URL 暴露到浏览器。文档页里的 `@embedpdf` 走的是 `fetch`，不是导航，不受这个回调影响。
+`on_navigation` 只返回 `navigation_allowed`。**不要在这个回调里调用 `open::that`。** 它看见的是每一次导航，包括子框架。Web 没有用 iframe 打开 PDF。文档页的 PDF 窗格用 `@embedpdf`，wasm 和文件都是 `fetch` 预签名 URL，不是导航。按主机拒绝 `https` 仍会误伤子框架。
 
 因此：
 
 - `tauri:` 与 host `tauri.localhost` 返回 false，不打开外部程序。它们是 `Origin::Local`，`"local": true` 排除不了，只能拒绝加载。
-- `about:blank`（以及其它 `about:`，例如 `about:srcdoc`）、应用源、以及任何其它 `http:` / `https:` 都返回 true，这样阅读器 iframe 可以加载 S3。
+- `about:blank`（以及其它 `about:`，例如 `about:srcdoc`）、应用源、以及任何其它 `http:` / `https:` 都返回 true。放行不是为了让 PDF iframe 去拉 S3。
 - `file:`、`javascript:`、`data:` 返回 false，同样不调用 `open`。
 
-残留，写进威胁模型：主框架导航到另一个 https 主机也会被放行，因为回调分不出主框架和 iframe。那个页面不是 `get_app_url()`，没有 `remote.urls`，所以没有插件 IPC；自定义命令对 remote 源要 ACL，本仓库又不发 app manifest，按钮上的截图命令也不会成功。cookie 是 host-only，不会送到那个主机。
+残留，写进威胁模型：主框架导航到另一个 https 主机也会被放行，因为回调分不出主框架和子框架。那个页面不是 `get_app_url()`，没有 `remote.urls`，所以没有插件 IPC；自定义命令对 remote 源要 ACL，本仓库又不发 app manifest，按钮上的截图命令也不会成功。cookie 是 host-only，不会送到那个主机。
 
 `on_new_window` 仍是另一条回调：一律 `open::that` 后返回 `NewWindowResponse::Deny`。不创建第二个带 cookie jar 的 WebView。`DocView` 里 `window.open(href, '_blank', 'noopener,noreferrer')` 的外部链接到系统浏览器；内部链接的 `target=_blank` 同样离开壳。壳内路由仍走 `react-router` 的 `navigate`。系统浏览器没有壳的 cookie。`open` crate 只在这里用，不注册 JS 命令。
 
@@ -538,17 +539,17 @@ Web 客户端删除这些导出：`bootAuth`、`refreshSession`、`persistAuth`�
 | 把 `global-shortcut:default` 留在 capability 里 | 高 | 页面可以注册系统级热键。不授予。合同测试要求权限列表里没有它 |
 | 把 `core:default` 留在 capability 里 | 高 | 页面可以改菜单、托盘、开 devtools、解析路径。不授予 |
 | 新建残缺的 app ACL manifest | 中 | `has_app_acl_manifest` 变为真后，local 旁路关闭，两个截图命令在未列入 capability 时失败。不要单独加 manifest。若将来必须生成，同一改动里包含 `capture_region` 和 `clipboard_image` |
-| 主框架被导航到其它 https 主机，用户在壳里输入密码 | 中 | 接受的残留。`on_navigation` 分不出 iframe，不能按主机拒绝，否则 `ReaderOverlay` 的 `s3.aimo.plus` PDF 打不开。该页没有 IPC。cookie 是 host-only，不会附带。`window.open` 仍进系统浏览器，不创建子 WebView。菜单「重新加载」在当前源不是应用源时回到 `devUrl` 或 `frontendDist` |
+| 主框架被导航到其它 https 主机，用户在壳里输入密码 | 中 | 接受的残留。`on_navigation` 分不出主框架和子框架，因此不按主机拒绝 https。该页没有 IPC。cookie 是 host-only，不会附带。`window.open` 仍进系统浏览器，不创建子 WebView。菜单「重新加载」在当前源不是应用源时回到 `devUrl` 或 `frontendDist`。Web PDF 走 `@embedpdf` 的 fetch，不经过这个回调 |
 | 重新加入 `remote.urls` 或 `http:default` 的 `https://*/*` | 高 | 合同测试要求没有 `remote`，也没有 `http:default`。`remote.urls` 授权不了应用 URL，只会把插件命令开放给别的源 |
 | 客户端再带上 `Authorization`，Bearer 优先把有效 cookie 打成 401 | 中 | `browserFetch` 见到该头就抛错。行为单测覆盖请求头；源码扫描允许 `transport.ts` 里的 `headers.has('Authorization')`，禁止 `headers.set('Authorization'` |
 | `WEB_ORIGIN` 与页面源差一个斜杠 | 中 | 登录 JSON 出现 token，客户端不存，随后 `getMe` 401。部署检查三者相等。不在客户端做模糊匹配 |
 | 旧 `inwit-auth.json` 残留 | 低 | 无读取方。不写迁移命令，避免把文件内容重新变成会话 |
-| 站点把主框架转到别的 https 主机 | 中 | 无运行时 URL 设置，应用源仍由编译进二进制的 `frontendDist` / `devUrl` 决定。转到别处没有 IPC，也带不走 cookie。不在 `on_navigation` 里用 `open::that` 把预签名 iframe URL 交给系统浏览器。用户用「重新加载」回到应用源 |
+| 站点把主框架转到别的 https 主机 | 中 | 无运行时 URL 设置，应用源仍由编译进二进制的 `frontendDist` / `devUrl` 决定。转到别处没有 IPC，也带不走 cookie。不在 `on_navigation` 里调用 `open::that`。用户用「重新加载」回到应用源 |
 | HttpOnly cookie 被页面读出 | 不适用 | `document.cookie` 看不到这两枚。签名用服务器 `COOKIE_SECRET`，不进客户端 |
 
 不要为了「以后也许要通知」留下 `notification:default`。不要用 `core:default` 代替上面的四条权限。
 
-隐私：壳不新增遥测，不把 cookie 或截图 base64 写日志。截图 base64 只在 IPC payload 和随后的内存 `Blob` 里，现有实现已经如此。`open::that` 只收到 `window.open` 的 URL，不收到 iframe 导航，也不收到 cookie。预签名 query 不因为阅读 PDF 离开 WebView。
+隐私：壳不新增遥测，不把 cookie 或截图 base64 写日志。截图 base64 只在 IPC payload 和随后的内存 `Blob` 里，现有实现已经如此。`open::that` 只收到 `window.open` 的 URL，不收到子框架导航，也不收到 cookie。阅读 PDF 是 `fetch`，预签名 query 不会因此离开 WebView。
 
 ## Observability
 
@@ -560,7 +561,7 @@ Web 客户端删除这些导出：`bootAuth`、`refreshSession`、`persistAuth`�
 - 会话失效：401 `INVALID_TOKEN`，用户回到未登录态。没有客户端 refresh 失败日志，因为不再有那次请求。服务端转 cookie 成功时就是普通 200，多两个 `Set-Cookie`。
 - 截图 IPC 或 S3 PUT 失败：`ScreenshotService.error`，文案沿用 `errorMessage`。
 
-看不见的信号：壳在文档加载完成前就失败（DNS、TLS、离线）。这时 web 代码还没运行，服务器没有这次「打开应用」的请求。不为此加电话回家。`on_navigation` 会放行 `https://s3.aimo.plus` 的 iframe，不要把预签名 URL 记成一次被拒绝的导航。若 debug 构建要记录被拒绝的 `tauri:` 导航，只打印 scheme 和 host，不打印 query。release 不打印。
+看不见的信号：壳在文档加载完成前就失败（DNS、TLS、离线）。这时 web 代码还没运行，服务器没有这次「打开应用」的请求。不为此加电话回家。`on_navigation` 会放行任意 `https:` 导航。当前 PDF 不经过这个回调，不要把预签名 URL 记成一次被拒绝的导航。若 debug 构建要记录被拒绝的 `tauri:` 导航，只打印 scheme 和 host，不打印 query。release 不打印。
 
 告警：无新告警。桌面发布失败仍看 `desktop-build.yml`。站点是否已是 cookie 客户端，靠部署后的浏览器登录，不靠新探针。
 
@@ -610,7 +611,7 @@ PR1 单独上线对现有用户是无操作变化：浏览器本来就是 cookie
 1. 生产 `WEB_ORIGIN` 精确等于 `https://inwit.aimo.plus`（示例文件已经是这个值）。
 2. 浏览器登录响应含 `Set-Cookie`（`inwit_at`、`inwit_rt`），body 没有 `tokens`。
 3. 桶 CORS 已允许 `https://inwit.aimo.plus` 和 `http://localhost:5190` 的 PUT。README 已要求允许前端源。旧桌面生产上传不经过浏览器 CORS（`plugin-http` 无 Origin）；改完之后桌面与浏览器共用这条 CORS。仓库里没有桶配置，上线前要在桶上确认，而不是在客户端再接回 `plugin-http`。
-4. `pnpm --filter @inwit/desktop dev`：登录、设置页主题带动系统标题栏、区域截图和剪贴板图片、阅读器 PDF iframe 留在壳内（不弹出系统浏览器）、Cmd/Ctrl+R 在应用源上重新加载、macOS 红灯隐藏。
+4. `pnpm --filter @inwit/desktop dev`：登录、设置页主题带动系统标题栏、区域截图和剪贴板图片、文档 PDF 留在壳内（`@embedpdf` 的 fetch，不弹出系统浏览器）、Cmd/Ctrl+R 在应用源上重新加载、macOS 红灯隐藏。
 5. `tauri build` 的产物里不再出现 `apps/web/dist` 的 `index.html`。窗口打开的是远程 URL。
 
 ### 非生产源
@@ -711,4 +712,4 @@ Web（Vitest）：
   - `apps/desktop/__tests__/tauri.contract.test.mjs`
   - `.github/workflows/desktop-build.yml`
   - `README.md`（桌面 dev 描述、生产段里桌面不再烘焙 `VITE_TAURI_API_URL`；Android 那段保留）
-- 说明：`frontendDist` 改为 `https://inwit.aimo.plus`，删除 `beforeBuildCommand`。capability 保持 `"local": true`，删除 `remote`，权限只留 listen、unlisten、set-theme、set-background-color。不生成 app ACL manifest。删除 http / store / notification 插件。Cargo 里保留 window-state（减去 `VISIBLE`）和 global-shortcut，但不把它们的 JS 权限放进 capability。`on_navigation` 放行 `http:` / `https:`（含 `s3.aimo.plus` 的 PDF iframe），只拒绝 `tauri:` 与 `tauri.localhost`，且不调用 `open::that`。`open::that` 只在 `on_new_window`。`reload_main` 在离开应用源时回到 `cfg(dev)` 下的 `devUrl` 或发布构建的 `frontendDist`，不用 `debug_assertions` 判定应用源。桌面 job 不再设置 `VITE_TAURI_API_URL`；顶层 env 对旧的 `VITE_TAURI_API_URL` secret / var 的回退保留给 Android。改 `pnpm-lock.yaml` 会让 `docker-build.yml` 推一张 GHCR 镜像，但不会自动部署。不改 server 鉴权，不改 mobile。
+- 说明：`frontendDist` 改为 `https://inwit.aimo.plus`，删除 `beforeBuildCommand`。capability 保持 `"local": true`，删除 `remote`，权限只留 listen、unlisten、set-theme、set-background-color。不生成 app ACL manifest。删除 http / store / notification 插件。Cargo 里保留 window-state（减去 `VISIBLE`）和 global-shortcut，但不把它们的 JS 权限放进 capability。`on_navigation` 放行 `http:` / `https:`，只拒绝 `tauri:` 与 `tauri.localhost`，且不调用 `open::that`。Web PDF 不走 iframe。`open::that` 只在 `on_new_window`。`reload_main` 在离开应用源时回到 `cfg(dev)` 下的 `devUrl` 或发布构建的 `frontendDist`，不用 `debug_assertions` 判定应用源。桌面 job 不再设置 `VITE_TAURI_API_URL`；顶层 env 对旧的 `VITE_TAURI_API_URL` secret / var 的回退保留给 Android。改 `pnpm-lock.yaml` 会让 `docker-build.yml` 推一张 GHCR 镜像，但不会自动部署。不改 server 鉴权，不改 mobile。

@@ -4,7 +4,7 @@ import { FileText, Layers, MessageSquareQuote, type LucideIcon } from 'lucide-re
 import { useEffect } from 'react';
 import { Link } from 'react-router';
 import { prefetchDocument } from '@/lib/document-prefetch';
-import { docAnchorPath, docAnnotationPath, docsPath } from '@/routes';
+import { docsPath, topicDocPath } from '@/routes';
 import { SearchService } from './search.service';
 
 export type SearchHitItem = {
@@ -28,12 +28,14 @@ function annotationHitTitle(quote: string, note: string): string {
   return firstLine(quote) || quote;
 }
 
-export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
+export function flattenSearchHits(results: SearchResult, topicId?: string | null): SearchHitItem[] {
+  const docHref = (docId: string, opts?: { anchor?: string; annotation?: string }) =>
+    topicId ? topicDocPath(topicId, docId, opts) : docsPath(docId, opts);
   const docs: SearchHitItem[] = results.documents.map((doc) => ({
     kind: 'document',
     id: doc.id,
     documentId: doc.id,
-    href: docsPath(doc.id),
+    href: docHref(doc.id),
     title: docDisplayTitle(doc),
     meta: doc.topicTitle,
   }));
@@ -41,7 +43,7 @@ export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
     kind: 'card',
     id: card.id,
     documentId: card.documentId,
-    href: card.documentId ? docAnchorPath(card.documentId, card.id) : null,
+    href: card.documentId ? docHref(card.documentId, { anchor: card.id }) : null,
     title: card.concept,
     meta: card.documentTitle,
   }));
@@ -49,7 +51,7 @@ export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
     kind: 'annotation',
     id: annotation.id,
     documentId: annotation.documentId,
-    href: docAnnotationPath(annotation.documentId, annotation.id),
+    href: docHref(annotation.documentId, { annotation: annotation.id }),
     title: annotationHitTitle(annotation.quote, annotation.note),
     meta: annotation.documentTitle,
   }));
@@ -172,7 +174,7 @@ export const SearchResults = observer(function SearchResults({
     return null;
   }
 
-  const hits = flattenSearchHits(results);
+  const hits = flattenSearchHits(results, search.topicId);
   if (hits.length === 0) return null;
 
   const docs = hits.filter((hit) => hit.kind === 'document');

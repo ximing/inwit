@@ -5,6 +5,7 @@ import {
   BrainCircuit,
   FileText,
   MessageCircle,
+  MessagesSquare,
   Library,
   ScanText,
   StickyNote,
@@ -47,6 +48,7 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
   ocr: ScanText,
   annotation_resurface: StickyNote,
   memory_organize: Library,
+  conversation: MessagesSquare,
 };
 
 const STATUS_CHIPS: Array<{ value: JobStatus | ''; label: string }> = [

@@ -362,3 +362,55 @@ html.is-resizing-card-rail * {
 @media (prefers-reduced-motion: reduce) {
   .card-rail.is-overlay { animation: none; }
 }
+
+.card-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.card-links-title {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+.card-link-group { display: flex; flex-direction: column; gap: 6px; }
+.card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+.card-link:hover { border-color: var(--accent-line); }
+.card-link.is-static { cursor: default; }
+.card-link.is-static:hover { border-color: var(--line-soft); }
+.card-link-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.card-link-rel.is-conf { color: var(--gold); }
+.card-link-rel.is-pre { color: var(--green); }
+.card-link-rel.is-rel,
+.card-link-rel.is-same { color: var(--ink-3); }
+.card-link-ext { margin-left: auto; color: var(--ink-3); }
+.card-link b {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.card-link-reason {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.card-links .hint { padding: 2px 0; }
