@@ -1,6 +1,6 @@
 import { Node } from 'prosemirror-model';
 import { getHeadlessSchema } from './schema/headless.js';
-import { mathPlainText } from './schema/math-html.js';
+import { mathPlainText } from './schema/math-plain.js';
 import type { PmJson } from './types.js';
 
 const SKIP_TEXT_NODES = new Set(['image', 'video', 'pageBreak']);

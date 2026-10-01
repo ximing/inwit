@@ -1,8 +1,10 @@
 /**
  * Body preview and auto-title. Kept out of document.ts so list titles
  * (docDisplayTitle) do not pull mathml-to-latex or the headless editor schema.
+ * `mathPlainText` lives on `@inwit/doc-schema/math-plain` for the same reason:
+ * `math-html` statically imports the MathML converter.
  */
-import { mathPlainText } from '@inwit/doc-schema/math-html';
+import { mathPlainText } from '@inwit/doc-schema/math-plain';
 import {
   BLANK_DOCUMENT_LABEL,
   DOCUMENT_TITLE_MAX,

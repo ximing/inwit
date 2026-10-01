@@ -29,6 +29,7 @@ import { dayGreeting, formatRelativeTime, formatTodayLong } from '@/lib/format';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { ROUTES, docPath, topicPath } from '@/routes';
 import { TodayService } from './today.service';
+import { prefetchDocument } from '@/lib/document-prefetch';
 import { estimateReviewMinutes } from '@/lib/review-eta';
 
 const JOB_ICONS: Record<JobType, LucideIcon> = {
@@ -417,7 +418,13 @@ const TodayPageContent = observer(function TodayPageContent() {
       {service.recentDocuments.map((doc) => {
         const tag = docTag(doc);
         return (
-          <Link className="recent-row" key={doc.id} to={docPath(doc.id)}>
+          <Link
+            className="recent-row"
+            key={doc.id}
+            to={docPath(doc.id)}
+            onPointerEnter={() => prefetchDocument(doc.id)}
+            onFocus={() => prefetchDocument(doc.id)}
+          >
             <span className="recent-title">{docDisplayTitle(doc)}</span>
             <span className="recent-meta">
               {tag ? <Tag tone={tag.tone}>{tag.label}</Tag> : null}

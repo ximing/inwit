@@ -5,9 +5,15 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { DocRow } from '@/components/doc-row';
 import { prefetchReaderOverlay } from '@/components/reader/load-reader';
+import { prefetchDocument } from '@/lib/document-prefetch';
 import { ReaderService } from '@/components/reader/reader.service';
 import { formatRelativeTime } from '@/lib/format';
 import { chapterMeta, TopicsService } from './topics.service';
+
+function warmTopicDoc(id: string | null): void {
+  prefetchReaderOverlay();
+  if (id) prefetchDocument(id);
+}
 
 type MapLane = {
   id: string;
@@ -258,8 +264,8 @@ export const FeedTab = observer(function FeedTab() {
               <DocRow
                 doc={doc}
                 hanging={service.hangingTitle(doc)}
-                onPointerEnter={() => prefetchReaderOverlay()}
-                onFocus={() => prefetchReaderOverlay()}
+                onPointerEnter={() => warmTopicDoc(doc.id)}
+                onFocus={() => warmTopicDoc(doc.id)}
                 onOpen={(id) => {
                   const to = service.readerNavForDoc(id);
                   if (to) navigate(to);
@@ -348,8 +354,8 @@ export const NodeDrawer = observer(function NodeDrawer() {
                 <button
                   type="button"
                   className="related-card related-card-link"
-                  onPointerEnter={() => prefetchReaderOverlay()}
-                  onFocus={() => prefetchReaderOverlay()}
+                  onPointerEnter={() => warmTopicDoc(card.documentId)}
+                  onFocus={() => warmTopicDoc(card.documentId)}
                   onClick={() => {
                     const to = service.readerNavForCard(card.id, card.documentId);
                     if (to) navigate(to);
@@ -375,8 +381,8 @@ export const NodeDrawer = observer(function NodeDrawer() {
               <li key={doc.id}>
                 <button
                   type="button"
-                  onPointerEnter={() => prefetchReaderOverlay()}
-                  onFocus={() => prefetchReaderOverlay()}
+                  onPointerEnter={() => warmTopicDoc(doc.id)}
+                  onFocus={() => warmTopicDoc(doc.id)}
                   onClick={() => {
                     const to = service.readerNavForDoc(doc.id);
                     if (to) navigate(to);

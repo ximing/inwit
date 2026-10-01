@@ -9,6 +9,7 @@ import { SearchPalette, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
 import { formatRelativeTime } from '@/lib/format';
+import { prefetchDocument } from '@/lib/document-prefetch';
 import { isPdfMime } from '@/lib/mime';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { docsPath } from '@/routes';
@@ -17,6 +18,11 @@ import { DocListResizer } from './doc-list-resizer';
 import { DocsService } from './docs.service';
 import { prefetchPdfPane } from './pdf-pane-loader';
 import { TopicPicker } from './topic-picker';
+
+function warmDocument(doc: DocumentListItem): void {
+  prefetchDocument(doc.id);
+  if (isPdfMime(doc.fileMime)) prefetchPdfPane();
+}
 
 function transferHasFiles(event: DragEvent): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files');
@@ -74,12 +80,8 @@ const DocStreamRow = observer(function DocStreamRow({
         to={docsPath(doc.id)}
         className="ws-doc-row-link"
         aria-label={docCardLabel(face)}
-        onPointerEnter={() => {
-          if (isPdfMime(doc.fileMime)) prefetchPdfPane();
-        }}
-        onFocus={() => {
-          if (isPdfMime(doc.fileMime)) prefetchPdfPane();
-        }}
+        onPointerEnter={() => warmDocument(doc)}
+        onFocus={() => warmDocument(doc)}
       >
         {face.title ? (
           <div className="row-title">

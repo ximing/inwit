@@ -79,6 +79,7 @@ export class TodayService extends Service {
   pollTimer: ReturnType<typeof setInterval> | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
   loadGen = 0;
+  private topicsGen = 0;
   private reviewGen = 0;
   private jobsGen = 0;
   private reportGen = 0;
@@ -168,20 +169,28 @@ export class TodayService extends Service {
 
   async load(): Promise<void> {
     this.error = null;
+    await Promise.all([
+      this.loadTopics(),
+      this.loadDocuments(),
+      this.loadSuggestions(),
+      this.loadResurface(),
+      this.loadWeeklyReport(),
+      this.loadReview(),
+      this.loadJobs(),
+    ]);
+  }
+
+  async loadTopics(): Promise<void> {
+    const gen = ++this.topicsGen;
     try {
-      this.topics = await listTopics('active');
-      if (this.topicId && !this.topics.some((topic) => topic.id === this.topicId)) {
+      const topics = await listTopics('active');
+      if (gen !== this.topicsGen) return;
+      this.topics = topics;
+      if (this.topicId && !topics.some((topic) => topic.id === this.topicId)) {
         this.topicId = null;
       }
-      await Promise.all([
-        this.loadDocuments(),
-        this.loadSuggestions(),
-        this.loadResurface(),
-        this.loadWeeklyReport(),
-        this.loadReview(),
-        this.loadJobs(),
-      ]);
     } catch (err) {
+      if (gen !== this.topicsGen) return;
       this.error = errorMessage(err, '加载失败');
     }
   }

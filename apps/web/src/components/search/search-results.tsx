@@ -3,12 +3,15 @@ import { observer, useService } from '@rabjs/react';
 import { FileText, Layers, MessageSquareQuote, type LucideIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link } from 'react-router';
+import { prefetchDocument } from '@/lib/document-prefetch';
 import { docAnchorPath, docAnnotationPath, docsPath } from '@/routes';
 import { SearchService } from './search.service';
 
 export type SearchHitItem = {
   kind: 'document' | 'card' | 'annotation';
   id: string;
+  /** Document opened when the hit is chosen. Cards and notes without one stay null. */
+  documentId: string | null;
   href: string | null;
   title: string;
   meta: string | null;
@@ -29,6 +32,7 @@ export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
   const docs: SearchHitItem[] = results.documents.map((doc) => ({
     kind: 'document',
     id: doc.id,
+    documentId: doc.id,
     href: docsPath(doc.id),
     title: docDisplayTitle(doc),
     meta: doc.topicTitle,
@@ -36,6 +40,7 @@ export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
   const cards: SearchHitItem[] = results.cards.map((card) => ({
     kind: 'card',
     id: card.id,
+    documentId: card.documentId,
     href: card.documentId ? docAnchorPath(card.documentId, card.id) : null,
     title: card.concept,
     meta: card.documentTitle,
@@ -43,6 +48,7 @@ export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
   const annotations: SearchHitItem[] = (results.annotations ?? []).map((annotation) => ({
     kind: 'annotation',
     id: annotation.id,
+    documentId: annotation.documentId,
     href: docAnnotationPath(annotation.documentId, annotation.id),
     title: annotationHitTitle(annotation.quote, annotation.note),
     meta: annotation.documentTitle,
@@ -52,6 +58,11 @@ export function flattenSearchHits(results: SearchResult): SearchHitItem[] {
 
 function hitKey(hit: SearchHitItem): string {
   return `${hit.kind}-${hit.id}`;
+}
+
+function warmHit(hit: SearchHitItem): void {
+  if (!hit.href || !hit.documentId) return;
+  prefetchDocument(hit.documentId);
 }
 
 export function SearchHitRow({
@@ -81,8 +92,9 @@ export function SearchHitRow({
 
   useEffect(() => {
     if (!active) return;
+    warmHit(hit);
     document.getElementById(hitId)?.scrollIntoView({ block: 'nearest' });
-  }, [active, hitId]);
+  }, [active, hitId, hit.documentId, hit.href]);
 
   if (!hit.href) {
     return (
@@ -107,7 +119,11 @@ export function SearchHitRow({
       aria-selected={active ?? false}
       data-hit={index}
       to={hit.href}
-      onMouseEnter={() => onHover?.(index)}
+      onMouseEnter={() => {
+        warmHit(hit);
+        onHover?.(index);
+      }}
+      onFocus={() => warmHit(hit)}
     >
       {body}
     </Link>

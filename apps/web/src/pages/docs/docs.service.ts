@@ -81,6 +81,7 @@ import {
 } from '@/lib/multipart-logic';
 import { type PresignedUrlEntry } from '@/lib/presign-cache-logic';
 import { isLostTextEntity, type DocEditorHost } from '@/lib/entity-marks';
+import { dropPrefetchedDocument, prefetchedDocument } from '@/lib/document-prefetch';
 import { asPmJson, jsonEqual, textToPmDoc } from '@/lib/pm-doc';
 import {
   classifyRemoteDetail,
@@ -886,7 +887,7 @@ export class DocsService extends Service {
     if (this.goneNotifiedId === id) this.goneNotifiedId = null;
     try {
       const [detail, notes, canvas] = await Promise.all([
-        getDocument(id),
+        prefetchedDocument(id) ?? getDocument(id),
         listDocumentAnnotations(id).catch(() => [] as Annotation[]),
         listCanvasNodes(id).catch(() => (this.doc?.id === id ? this.canvasNodes : [])),
       ]);
@@ -2052,6 +2053,7 @@ export class DocsService extends Service {
   }
 
   private forgetDocument(id: string): void {
+    dropPrefetchedDocument(id);
     const had = this.documents.some((item) => item.id === id);
     this.documents = this.documents.filter((item) => item.id !== id);
     if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);

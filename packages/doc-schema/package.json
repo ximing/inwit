@@ -20,6 +20,11 @@
       "types": "./src/schema/math-html.ts",
       "import": "./dist/schema/math-html.js",
       "default": "./dist/schema/math-html.js"
+    },
+    "./math-plain": {
+      "types": "./src/schema/math-plain.ts",
+      "import": "./dist/schema/math-plain.js",
+      "default": "./dist/schema/math-plain.js"
     }
   },
   "scripts": {

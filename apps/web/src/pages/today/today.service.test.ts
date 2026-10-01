@@ -1,4 +1,4 @@
-import type { Document, DocumentListItem, ReviewStats, SyncChange } from '@inwit/dto';
+import type { Document, DocumentListItem, ReviewStats, SyncChange, Topic } from '@inwit/dto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDocument, getDocument, listDocuments } from '@/api/documents';
 import { getAnnotationResurface } from '@/api/annotations';
@@ -418,5 +418,68 @@ describe('TodayService sync', () => {
     expect(service.error).toBeNull();
     expect(service.documents.map((doc) => doc.id)).toEqual(['a']);
     expect(service.documentTotal).toBe(3);
+  });
+
+  function stubHomeFeeds(): void {
+    vi.mocked(listDocuments).mockResolvedValue({ items: [row('a')], total: 1, limit: 4, offset: 0 });
+    vi.mocked(listTopicSuggestions).mockResolvedValue([]);
+    vi.mocked(getAnnotationResurface).mockResolvedValue({ resurface: null });
+    vi.mocked(getLatestWeeklyReport).mockResolvedValue({ report: null });
+    vi.mocked(getReviewToday).mockResolvedValue({ items: [], reviewedToday: 0, total: 0, truncated: 0 });
+    vi.mocked(getReviewStats).mockResolvedValue({
+      streak: { current: 0, longest: 0 },
+      totalCards: 0,
+      overdueCount: 0,
+    } as ReviewStats);
+    vi.mocked(listJobs).mockResolvedValue({ items: [], total: 0, limit: 5, offset: 0 });
+  }
+
+  it('loads the rest of the home page without waiting for topics', async () => {
+    service = new TodayService();
+    service.topicId = 'gone';
+    let releaseTopics!: (topics: Topic[]) => void;
+    vi.mocked(listTopics).mockReturnValue(
+      new Promise((resolve) => {
+        releaseTopics = resolve;
+      }),
+    );
+    stubHomeFeeds();
+    const pending = service.load();
+    await vi.waitFor(() => expect(listDocuments).toHaveBeenCalled());
+    expect(service.topicId).toBe('gone');
+    releaseTopics([]);
+    await pending;
+    expect(service.topicId).toBeNull();
+    expect(service.documents.map((doc) => doc.id)).toEqual(['a']);
+  });
+
+  it('keeps a topic that is still active', async () => {
+    service = new TodayService();
+    service.topicId = 't1';
+    vi.mocked(listTopics).mockResolvedValue([{ id: 't1', title: '题' } as Topic]);
+    stubHomeFeeds();
+    await service.load();
+    expect(service.topicId).toBe('t1');
+  });
+
+  it('ignores a stale topic list', async () => {
+    service = new TodayService();
+    let releaseOld!: (topics: Topic[]) => void;
+    vi.mocked(listTopics)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseOld = resolve;
+        }),
+      )
+      .mockResolvedValueOnce([{ id: 'new', title: '新' } as Topic]);
+    stubHomeFeeds();
+    const first = service.load();
+    const second = service.load();
+    await second;
+    expect(service.topics.map((topic) => topic.id)).toEqual(['new']);
+    releaseOld([{ id: 'old', title: '旧' } as Topic]);
+    await first;
+    expect(service.topics.map((topic) => topic.id)).toEqual(['new']);
+    expect(service.topicId).toBeNull();
   });
 });

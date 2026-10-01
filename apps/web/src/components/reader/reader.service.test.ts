@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCardLinks } from '@/api/cards';
 import { ApiError } from '@/api/client';
 import { getDocument, getDocumentFile } from '@/api/documents';
+import { clearDocumentPrefetch, prefetchDocument } from '@/lib/document-prefetch';
 import { ReaderService } from './reader.service';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 
@@ -248,5 +249,27 @@ describe('reader remote document upsert', () => {
 
     expect(service.loading).toBe(false);
     expect(service.doc?.id).toBe('doc-1');
+  });
+
+  it('reuses a hovered document read', async () => {
+    let release!: (doc: DocumentDetail) => void;
+    vi.mocked(getDocument).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    prefetchDocument('doc-1');
+    const service = new ReaderService();
+    try {
+      const opening = service.openDoc('doc-1');
+      expect(getDocument).toHaveBeenCalledTimes(1);
+      release(detail('doc-1'));
+      await opening;
+      expect(service.doc?.id).toBe('doc-1');
+      expect(service.error).toBeNull();
+    } finally {
+      clearDocumentPrefetch();
+      service.close();
+    }
   });
 });

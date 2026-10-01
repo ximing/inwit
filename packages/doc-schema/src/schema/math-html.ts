@@ -50,12 +50,7 @@ export function isLikelyMath(latex: string): boolean {
   return MATH_SIGNAL.test(trimmed);
 }
 
-export function mathPlainText(type: string, latex: string): string | null {
-  if (type !== 'inlineMath' && type !== 'blockMath') return null;
-  const trimmed = latex.trim();
-  if (!trimmed) return '';
-  return type === 'blockMath' ? `$$\n${trimmed}\n$$` : `$${trimmed}$`;
-}
+export { mathPlainText } from './math-plain.js';
 
 /** User-typed LaTeX from the formula dialog. Empty means delete. */
 export function stripMathDelimiters(raw: string): string {

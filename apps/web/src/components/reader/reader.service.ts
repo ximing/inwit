@@ -4,6 +4,7 @@ import { Service } from '@rabjs/react';
 import { getCardLinks } from '@/api/cards';
 import { ApiError, errorMessage } from '@/api/client';
 import { getDocument, getDocumentFile } from '@/api/documents';
+import { prefetchedDocument } from '@/lib/document-prefetch';
 import { isPdfMime } from '@/lib/mime';
 import { prefetchReaderOverlay } from './load-reader';
 
@@ -57,7 +58,7 @@ export class ReaderService extends Service {
     this.cardTrail = [];
     this.pendingScrollTop = true;
     try {
-      const detail = await getDocument(docId);
+      const detail = await (prefetchedDocument(docId) ?? getDocument(docId));
       if (gen !== this.loadGen) {
         if (this.loadingGen === gen) this.loading = false;
         return;
@@ -180,7 +181,7 @@ export class ReaderService extends Service {
     this.loadingGen = gen;
     this.error = null;
     try {
-      const detail = await getDocument(docId);
+      const detail = await (prefetchedDocument(docId) ?? getDocument(docId));
       if (gen !== this.loadGen) {
         if (this.loadingGen === gen) this.loading = false;
         return;

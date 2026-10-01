@@ -4,10 +4,10 @@ import { BlockMath, InlineMath } from '@tiptap/extension-mathematics';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { Plugin, type EditorState } from '@tiptap/pm/state';
 import { collectDisplayFences } from './math-fold.js';
+import { mathPlainText } from './math-plain.js';
 import {
   classifyLatexInput,
   findMathInText,
-  mathPlainText,
   normalizeMathHtml,
   stripMathDelimiters,
   type MathSpan,

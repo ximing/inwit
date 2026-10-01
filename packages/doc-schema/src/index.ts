@@ -11,11 +11,8 @@ export {
   insertMathLatex,
   updateMathLatex,
 } from './schema/math.js';
-export {
-  classifyLatexInput,
-  mathPlainText,
-  normalizeMathHtml,
-} from './schema/math-html.js';
+export { mathPlainText } from './schema/math-plain.js';
+export { classifyLatexInput, normalizeMathHtml } from './schema/math-html.js';
 export {
   CODE_LANGUAGES,
   codeLanguageChoices,

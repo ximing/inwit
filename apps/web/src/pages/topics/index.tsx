@@ -15,6 +15,7 @@ import { ReaderService } from '@/components/reader/reader.service';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
+import { prefetchDocument } from '@/lib/document-prefetch';
 import { formatRelativeTime } from '@/lib/format';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { ROUTES, topicPath } from '@/routes';
@@ -26,6 +27,11 @@ import { TopicsService, type TopicListItem } from './topics.service';
 const ReaderOverlay = lazy(() =>
   loadReaderOverlay().then((mod) => ({ default: mod.ReaderOverlay })),
 );
+
+function warmTopicDoc(id: string): void {
+  prefetchDocument(id);
+  prefetchReaderOverlay();
+}
 
 function ReaderFallback() {
   return (
@@ -591,8 +597,8 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
       className={`topic-doc-card${face.title ? '' : ' is-untitled'}`}
       aria-label={docCardLabel(face)}
       {...menu}
-      onPointerEnter={() => prefetchReaderOverlay()}
-      onFocus={() => prefetchReaderOverlay()}
+      onPointerEnter={() => warmTopicDoc(doc.id)}
+      onFocus={() => warmTopicDoc(doc.id)}
       onClick={() => {
         const to = service.readerNavForDoc(doc.id);
         if (to) navigate(to);
