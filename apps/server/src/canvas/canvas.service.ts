@@ -302,7 +302,7 @@ export async function deleteCanvasNode(
 }
 
 /**
- * 卡片或批注离开可见树之前调用。直接子节点升到它的父节点下。
+ * 卡片或批注离开可见树之前调用。直接子节点各自成为一棵树。
  * 这一行自己的 parent 留着，恢复后还能挂回去。
  */
 export async function detachCanvasMember(

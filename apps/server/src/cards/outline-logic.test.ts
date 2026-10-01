@@ -72,7 +72,7 @@ describe('planOutlineMove', () => {
 });
 
 describe('planOutlineDetach', () => {
-  it('lifts children onto the grandparent, after the siblings that stay', () => {
+  it('turns each child into its own tree and keeps the grandchildren attached', () => {
     const nodes: OutlineNode[] = [
       { id: 'a', parentId: null, position: 0 },
       { id: 'b', parentId: 'a', position: 0 },
@@ -81,10 +81,10 @@ describe('planOutlineDetach', () => {
       { id: 'e', parentId: 'b', position: 2 },
     ];
     expect(planOutlineDetach(nodes, 'b')).toEqual({
-      nextParent: 'a',
+      nextParent: null,
       moves: [
-        { id: 'd', parentId: 'a', position: 2 },
-        { id: 'e', parentId: 'a', position: 3 },
+        { id: 'd', parentId: null, position: 1 },
+        { id: 'e', parentId: null, position: 2 },
       ],
     });
   });

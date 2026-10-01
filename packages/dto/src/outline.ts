@@ -126,8 +126,8 @@ export function planOutlineMove(
 }
 
 /**
- * 一张卡离开可见树（归档、拒绝）时，它的直接子卡升到它的父卡下，
- * 排在原有兄弟的后面，相对顺序不变。
+ * 一个节点离开可见树（归档、拒绝、删除）时，直接子节点各自成为一棵树，
+ * 排在已有的根后面，相对顺序不变。再下面的节点仍挂在原来的子节点上。
  */
 export function planOutlineDetach(
   nodes: readonly OutlineNode[],
@@ -139,18 +139,13 @@ export function planOutlineDetach(
   const forest = normalize(nodes);
   const removed = forest.find((node) => node.id === removedId);
   if (!removed) return { nextParent: null, moves: [] };
-  const parentOf = parentMap(forest);
   const direct = childrenOf(forest).get(removedId) ?? [];
-  let nextParent = removed.parentId;
-  if (nextParent && (nextParent === removedId || reaches(nextParent, removedId, parentOf))) {
-    nextParent = null;
-  }
-  const start = nextPosition(forest, nextParent, removedId);
+  const start = nextPosition(forest, null, removedId);
   return {
-    nextParent,
+    nextParent: null,
     moves: direct.map((child, index) => ({
       id: child.id,
-      parentId: nextParent,
+      parentId: null,
       position: start + index,
     })),
   };

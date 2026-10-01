@@ -12,6 +12,7 @@ import {
 } from '@/api/annotations';
 import { getCardImage } from '@/api/cards';
 import { errorMessage } from '@/api/client';
+import { DialogService } from '@/services/dialog.service';
 import {
   isPresignedStale,
   livePresignedUrl,
@@ -87,6 +88,11 @@ export class DocsAnnotationsService extends Service {
   }
 
   async removeAnnotation(id: string): Promise<void> {
+    const ok = await this.resolve(DialogService).confirm(
+      this.docs.nodeDeleteMessage(id, '移入回收站，之后可以在设置里恢复'),
+      { title: '删除这条批注', ok: '删除', danger: true },
+    );
+    if (!ok) return;
     try {
       await deleteAnnotation(id);
       this.docs.bumpCardWriteGen();

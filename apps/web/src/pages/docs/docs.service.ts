@@ -405,7 +405,7 @@ export class DocsService extends Service {
     return forestOf(this.doc?.cards ?? [], this.annotations, this.canvasNodes);
   }
 
-  /** 一个节点离开可见树时，子节点升上去。卡片和批注的画布行留着，恢复后还能挂回。 */
+  /** 一个节点离开可见树时，直接子节点各自成为一棵树。卡片和批注的画布行留着，恢复后还能挂回。 */
   detachCanvasLocal(removedId: string): void {
     if (!this.doc) return;
     const forest = forestOf(this.doc.cards, this.annotations, this.canvasNodes);
@@ -1374,11 +1374,10 @@ export class DocsService extends Service {
     if (!this.doc) return;
     const node = this.canvasNodes.find((item) => item.id === id);
     if (!node || (node.kind !== 'text' && node.kind !== 'image')) return;
-    const ok = await this.resolve(DialogService).confirm('下面的节点会升到上一层。', {
-      title: '删除这个节点',
-      ok: '删除',
-      danger: true,
-    });
+    const ok = await this.resolve(DialogService).confirm(
+      this.nodeDeleteMessage(id, '这个节点会从画布上拿掉'),
+      { title: '删除这个节点', ok: '删除', danger: true },
+    );
     if (!ok || !this.doc) return;
     const documentId = this.doc.id;
     const nodeSnapshot = this.canvasNodes;
@@ -1413,9 +1412,22 @@ export class DocsService extends Service {
     }
   }
 
+  /** 删除前的说明。有子节点时告诉用户它们会留下，各自成为一棵树。 */
+  nodeDeleteMessage(id: string, lead: string): string {
+    const hasChild = this.canvasForest.some((node) => node.parentId === id);
+    if (!hasChild) return lead;
+    const base = lead.endsWith('。') ? lead : `${lead}。`;
+    return `${base}挂在下面的节点会各自成为一棵树，不会一起删掉。`;
+  }
+
   /** Soft delete: the card moves to 回收站 and can be restored from settings. */
   async archiveDocCard(id: string): Promise<void> {
     if (this.acceptingProposed) return;
+    const ok = await this.resolve(DialogService).confirm(
+      this.nodeDeleteMessage(id, '移入回收站，之后可以在设置里恢复'),
+      { title: '移入回收站', ok: '移入回收站', danger: true },
+    );
+    if (!ok) return;
     try {
       await archiveCard(id);
       if (this.doc) {

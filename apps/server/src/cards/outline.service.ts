@@ -10,8 +10,8 @@ import { toPublicCardBase } from './card.mapper.js';
 type OutlineDb = Pick<Database, 'select' | 'update'>;
 
 /**
- * 一张卡离开可见树时，子卡升到它的父卡下。
- * 拒绝掉的卡不参与排版，但若正挂在被移走的卡下面，也一起改挂，避免以后重新出现时还指着它。
+ * 一张卡离开可见树时，直接子卡各自成为一棵树。
+ * 拒绝掉的卡不参与排版，但若正挂在被移走的卡下面，也改成独立的根，避免以后重新出现时还指着它。
  */
 export async function applyOutlineDetach(db: OutlineDb, userId: string, cardId: string): Promise<void> {
   const [card] = await db
