@@ -22,6 +22,21 @@ export function displayedPmJson(doc: { contentJson: unknown; answer?: string | n
   return clonePmJson(doc.contentJson);
 }
 
+/**
+ * Document handed to the engine. A draft wins so leaving 脑图 restores unsaved
+ * text and the anchor that lives in it. Blank docs stay unmounted until editing.
+ */
+export function enginePmJson(
+  draft: PmDocJson | null,
+  doc: { contentJson: unknown; answer?: string | null },
+  editing: boolean,
+): PmDocJson | null {
+  const shown = draft ? clonePmJson(draft) : displayedPmJson(doc);
+  if (!isBlankPmDoc(shown)) return shown;
+  if (editing) return shown;
+  return null;
+}
+
 /** Patch with only the fields that actually changed. Null title clears it. */
 export function buildDocumentPatch(input: {
   draftTitle: string;

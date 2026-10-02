@@ -16,14 +16,15 @@ import {
 } from './protocol';
 import { applyTheme } from './theme';
 import { AnchorHighlight } from './vendor/anchor-highlight';
-import { cardIdsFromAnchor, docEntities, type EntityMeta } from './vendor/anchors';
+import { annotationIdsFromAnchor, cardIdsFromAnchor, docEntities, type EntityMeta } from './vendor/anchors';
 import {
   ensureEntityMarksOnEditor,
   selectionAnchorFromEditor,
 } from './vendor/entity-marks';
 import { createDocExtensions } from './vendor/extensions';
 
-const ANCHOR_FLASH_SELECTOR = '[data-card-ids], [data-card-id], .anchor, .anchor-note';
+const ANCHOR_FLASH_SELECTOR =
+  '[data-card-ids], [data-card-id], [data-annotation-id], [data-annotation-ids], .anchor, .anchor-note';
 
 function mountMathDialog(): {
   open: (latex: string, onSubmit: (value: string | null) => void) => void;
@@ -424,8 +425,8 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
 
   const focusCard = (cardId: string): void => {
     const root = editor.view.dom;
-    const hit = [...root.querySelectorAll(ANCHOR_FLASH_SELECTOR)].find((el) =>
-      cardIdsFromAnchor(el).includes(cardId),
+    const hit = [...root.querySelectorAll(ANCHOR_FLASH_SELECTOR)].find(
+      (el) => cardIdsFromAnchor(el).includes(cardId) || annotationIdsFromAnchor(el).includes(cardId),
     );
     if (!(hit instanceof HTMLElement)) return;
     if (flashTimer !== undefined) window.clearTimeout(flashTimer);

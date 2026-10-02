@@ -34,6 +34,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CaptureBox } from '@/components/capture-box';
 import { dayGreeting, formatRelativeTime, formatTodayLong } from '@/lib/format';
 import { ROUTES } from '@/routes';
+import { resurfacePrompt } from './resurface-logic';
 import { useTheme, type ThemeTokens } from '@/theme';
 import { TodayService } from './today.service';
 
@@ -143,8 +144,20 @@ const TodayContent = observer(function TodayContent() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.date}>{formatTodayLong(now)}</Text>
-          <Text style={styles.hi}>{dayGreeting(now)}</Text>
+          <View style={styles.topRow}>
+            <View style={styles.flex}>
+              <Text style={styles.date}>{formatTodayLong(now)}</Text>
+              <Text style={styles.hi}>{dayGreeting(now)}</Text>
+            </View>
+            <Pressable
+              accessibilityLabel="对话栏"
+              onPress={() => router.push(ROUTES.chat)}
+              style={styles.chatBtn}
+            >
+              <MessagesSquare color={theme.colors.accentDeep} size={18} strokeWidth={1.75} />
+              <Text style={styles.chatBtnText}>对话</Text>
+            </Pressable>
+          </View>
 
           <CaptureBox
             draft={service.draft}
@@ -198,6 +211,40 @@ const TodayContent = observer(function TodayContent() {
                 >
                   <Text style={styles.ghostText}>
                     {service.$model.dismissSuggestion.loading ? '忽略中…' : '忽略'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+
+          {resurfacePrompt(service.resurface).visible && service.resurface ? (
+            <View style={styles.banner}>
+              <Text style={styles.bannerIco}>📝</Text>
+              <View style={styles.bannerBody}>
+                <Text style={styles.bannerTitle}>批注回顾</Text>
+                <Text style={styles.bannerSub}>{resurfacePrompt(service.resurface).subtitle}</Text>
+              </View>
+              <View style={styles.bannerActions}>
+                <Pressable
+                  disabled={
+                    service.$model.acceptResurface.loading || service.$model.dismissResurface.loading
+                  }
+                  onPress={() => void service.acceptResurface()}
+                  style={styles.primaryBtn}
+                >
+                  <Text style={styles.primaryText}>
+                    {service.$model.acceptResurface.loading ? '转换中…' : '转成卡片'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={
+                    service.$model.acceptResurface.loading || service.$model.dismissResurface.loading
+                  }
+                  onPress={() => void service.dismissResurface()}
+                  style={styles.ghostBtn}
+                >
+                  <Text style={styles.ghostText}>
+                    {service.$model.dismissResurface.loading ? '忽略中…' : '忽略'}
                   </Text>
                 </Pressable>
               </View>
@@ -366,6 +413,12 @@ function makeStyles(theme: ThemeTokens) {
     flex: { flex: 1 },
     screen: { flex: 1, backgroundColor: theme.colors.bg },
     scroll: { paddingHorizontal: theme.spacing[5], paddingTop: theme.spacing[3], paddingBottom: 40 },
+    topRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 12,
+      marginBottom: theme.spacing[4],
+    },
     date: { fontSize: 13, color: theme.colors.ink3 },
     hi: {
       fontFamily: theme.typography.serif,
@@ -373,8 +426,17 @@ function makeStyles(theme: ThemeTokens) {
       fontWeight: '700',
       color: theme.colors.ink,
       marginTop: 4,
-      marginBottom: theme.spacing[4],
     },
+    chatBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      minHeight: 36,
+      paddingHorizontal: 10,
+      borderRadius: 8,
+      backgroundColor: theme.colors.surface2,
+    },
+    chatBtnText: { color: theme.colors.accentDeep, fontSize: 14, fontWeight: '700' },
     capture: {
       backgroundColor: theme.colors.surface,
       borderColor: theme.colors.line,

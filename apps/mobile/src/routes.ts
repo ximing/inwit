@@ -17,4 +17,9 @@ export const ROUTES = {
   meMemory: '/me/memory',
   meArchive: '/me/archive',
   search: '/search',
+  chat: '/chat',
 } as const;
+
+export function docPath(id: string): string {
+  return `/docs/${id}`;
+}

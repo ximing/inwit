@@ -8,10 +8,16 @@ import {
   type DocumentListItem,
   type Job,
   type ReviewStats,
+  type AnnotationResurface,
   type Topic,
   type TopicSuggestion,
   type WeeklyReportLatest,
 } from '@inwit/dto';
+import {
+  acceptAnnotationResurface,
+  dismissAnnotationResurface,
+  getAnnotationResurface,
+} from '@/api/annotations';
 import { ApiError, errorMessage } from '@/api/client';
 import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
 import { listJobs } from '@/api/jobs';
@@ -28,6 +34,11 @@ import {
   listTopics,
 } from '@/api/topics';
 import { LayoutService } from '@/services/layout.service';
+import {
+  resurfaceAfterAccept,
+  resurfaceAfterDismiss,
+  resurfaceAfterLoad,
+} from './resurface-logic';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
 
@@ -68,6 +79,7 @@ export class TodayService extends Service {
   draft = '';
   error: string | null = null;
   suggestion: TopicSuggestion | null = null;
+  resurface: AnnotationResurface | null = null;
   weeklyReport: WeeklyReportLatest | null = null;
   dueCount = 0;
   streak = 0;
@@ -90,6 +102,7 @@ export class TodayService extends Service {
   private reviewGen = 0;
   private suggestGen = 0;
   private reportGen = 0;
+  private resurfaceGen = 0;
 
   constructor() {
     super();
@@ -164,6 +177,7 @@ export class TodayService extends Service {
       await Promise.all([
         this.loadDocuments(),
         this.loadSuggestions(),
+        this.loadResurface(),
         this.loadWeeklyReport(),
         this.loadReview(),
         this.loadJobs(),
@@ -304,6 +318,42 @@ export class TodayService extends Service {
       this.weeklyReport = result.report;
     } catch {
       // Card is optional; keep the last snapshot.
+    }
+  }
+
+  async loadResurface(): Promise<void> {
+    const gen = ++this.resurfaceGen;
+    try {
+      const result = await getAnnotationResurface();
+      if (gen !== this.resurfaceGen) return;
+      this.resurface = resurfaceAfterLoad(result.resurface);
+    } catch {
+      // Banner is optional; keep the last snapshot.
+    }
+  }
+
+  async acceptResurface(): Promise<void> {
+    const current = this.resurface;
+    const first = current?.annotations[0];
+    if (!current || !first) return;
+    this.error = null;
+    try {
+      const result = await acceptAnnotationResurface(current.key, first.id);
+      this.resurface = resurfaceAfterAccept(result.resurface);
+      this.showToast('已转成卡片，进入复习队列');
+    } catch (err) {
+      this.error = errorMessage(err, '转卡片失败');
+    }
+  }
+
+  async dismissResurface(): Promise<void> {
+    if (!this.resurface) return;
+    this.error = null;
+    try {
+      await dismissAnnotationResurface(this.resurface.key);
+      this.resurface = resurfaceAfterDismiss();
+    } catch (err) {
+      this.error = errorMessage(err, '忽略失败');
     }
   }
 
@@ -512,6 +562,7 @@ export class TodayService extends Service {
     if (intents.some((intent) => intent.kind === 'review')) await this.loadReview();
     if (intents.some((intent) => intent.kind === 'report')) await this.loadWeeklyReport();
     if (intents.some((intent) => intent.kind === 'suggest')) await this.loadSuggestions();
+    if (intents.some((intent) => intent.kind === 'resurface')) await this.loadResurface();
   }
 
   private async reloadListMerging(deleteIds: readonly string[]): Promise<void> {

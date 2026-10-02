@@ -8,6 +8,7 @@ import { Pressable, Text, View } from 'react-native';
 import { ToastHost } from '@/components/toast';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { AuthService } from '@/services/auth.service';
+import { EditorPresenceService } from '@/services/editor-presence.service';
 import { LayoutService } from '@/services/layout.service';
 import { SyncService } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
@@ -19,12 +20,14 @@ register(SyncService);
 register(LayoutService);
 register(ToastService);
 register(AssetUrlsService);
+register(EditorPresenceService);
 resolve(ThemeService);
 resolve(AuthService);
 resolve(SyncService);
 resolve(LayoutService);
 resolve(ToastService);
 resolve(AssetUrlsService);
+resolve(EditorPresenceService);
 
 const SyncBridge = observer(function SyncBridge() {
   const auth = useService(AuthService);
@@ -130,6 +133,10 @@ const RootNavigation = observer(function RootNavigation() {
           <Stack.Screen
             name="search"
             options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+          />
+          <Stack.Screen
+            name="chat"
+            options={{ animation: 'slide_from_right', gestureEnabled: true }}
           />
           <Stack.Screen
             name="topics/[id]"

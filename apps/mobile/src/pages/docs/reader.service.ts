@@ -2,7 +2,10 @@ import { Service } from '@rabjs/react';
 import {
   ASSET_IMAGE_MAX_BYTES,
   ASSET_IMAGE_MIMES,
+  EXCERPT_MAX_BYTES,
+  IMAGE_EXCERPT_QUOTE,
   type Annotation,
+  type CanvasNode,
   type CardDetail,
   type CardLinksResponse,
   type DocumentCard,
@@ -20,6 +23,12 @@ import {
   updateAnnotation,
 } from '@/api/annotations';
 import { presignAsset } from '@/api/assets';
+import {
+  createCanvasNode,
+  deleteCanvasNode,
+  listCanvasNodes,
+  updateCanvasNode,
+} from '@/api/canvas';
 import {
   acceptCard,
   archiveCard,
@@ -39,6 +48,7 @@ import {
   enqueueSelectionCards,
   getDocument,
   getDocumentFile,
+  requestExcerptUpload,
   retryDocument,
   updateDocument,
 } from '@/api/documents';
@@ -68,8 +78,29 @@ import { AssetUrlsService } from '@/services/asset-urls.service';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
 import * as FileSystem from 'expo-file-system/legacy';
+import {
+  documentForest,
+  forestRows,
+  imageKeyFromAssetSrc,
+  nodesAfterMemberLeaves,
+  planForestOpen,
+  planReparent,
+  type ForestRow,
+} from './canvas-logic';
+import {
+  geometryFromQuads,
+  PDF_EXCERPT_COLOR,
+  PDF_HIGHLIGHT_COLOR,
+  type PdfViewerEvent,
+} from './pdf-logic';
 import type { FormatState, TextSelectionAnchor } from '../../../../../packages/doc-engine/src/protocol';
-import { buildDocumentPatch, displayedPmJson, SAVE_DEBOUNCE_MS, titlesDiffer } from './editor-session';
+import {
+  buildDocumentPatch,
+  displayedPmJson,
+  enginePmJson,
+  SAVE_DEBOUNCE_MS,
+  titlesDiffer,
+} from './editor-session';
 
 const IMAGE_MIMES = new Set<string>(ASSET_IMAGE_MIMES);
 
@@ -89,6 +120,13 @@ function imageMime(uri: string, mimeType?: string | null): string | null {
 
 function clipReason(reason: string): string {
   return clipChars(reason.replaceAll('\0', ''), 500);
+}
+
+function reparentError(reason: string): string {
+  if (reason === 'cycle') return '不能挂到自己下面的节点';
+  if (reason === 'depth') return '这一层太深了';
+  if (reason === 'self') return '不能挂到自己下面';
+  return '没法移动';
 }
 
 function decisionError(err: unknown, action: 'accept' | 'reject'): string {
@@ -114,7 +152,10 @@ export type ReaderSheet =
   | { kind: 'card'; cardId: string; fromCards?: string[] }
   | { kind: 'reject'; cardId: string; fromCards?: string[] }
   | { kind: 'annotations'; annotationIds: string[] }
-  | { kind: 'annotate'; anchor: TextSelectionAnchor; pdfPageIndex?: number }
+  | { kind: 'annotate'; anchor: TextSelectionAnchor; pdfPageIndex?: number; pdfQuads?: number[][] }
+  | { kind: 'canvas-actions'; nodeId: string }
+  | { kind: 'canvas-parent'; nodeId: string }
+  | { kind: 'canvas-text'; mode: 'create' | 'edit'; nodeId: string | null; parentId: string | null }
   | { kind: 'card-form'; anchor: TextSelectionAnchor }
   | { kind: 'card-edit'; cardId: string; fromCards?: string[] }
   | { kind: 'topic' }
@@ -139,7 +180,12 @@ export class ReaderService extends Service {
   engineError: string | null = null;
   pdfUrl: string | null = null;
   pdfError: string | null = null;
-  pdfSelection: { text: string; pageIndex: number } | null = null;
+  pdfSelection: { text: string; pageIndex: number; quads: number[][] } | null = null;
+  pdfMarquee = false;
+  pdfJump: { pageIndex: number; token: number } | null = null;
+  canvasNodes: CanvasNode[] = [];
+  viewMode: 'body' | 'map' = 'body';
+  canvasText = '';
   engineReady = false;
   contentGen = 0;
   /** Bumped when cards change without a new document body. contentGen also reloads the doc. */
@@ -150,6 +196,7 @@ export class ReaderService extends Service {
   linksCache: Record<string, CardLinksResponse> = {};
   cardImageUrls: Record<string, PresignedUrlEntry> = {};
   annotationImageUrls: Record<string, string | null> = {};
+  canvasImageUrls: Record<string, string | null> = {};
   noteDraft = '';
   cardQuestion = '';
   cardAnswer = '';
@@ -167,6 +214,10 @@ export class ReaderService extends Service {
   loadGen = 0;
   appliedAnchor: string | null = null;
   pendingAnchor: string | null = null;
+  pendingAnnotationId: string | null = null;
+  /** Route deep links open the card sheet when the engine catches up. A map open does not. */
+  private anchorOpensSheet = false;
+  private appliedAnnotationId: string | null = null;
   editing = false;
   draftTitle = '';
   lastSavedTitle = '';
@@ -198,6 +249,7 @@ export class ReaderService extends Service {
   private syncChain: Promise<void> = Promise.resolve();
   private echoes: EchoStamp[] = [];
   private cardWriteGen = 0;
+  private canvasGen = 0;
   private linksGen = 0;
   private saveFloors = new Map<string, number>();
   private detailWrites = 0;
@@ -251,10 +303,7 @@ export class ReaderService extends Service {
 
   get engineDoc() {
     if (!this.doc) return null;
-    const shown = displayedPmJson(this.doc);
-    if (!isBlankPmDoc(shown)) return shown;
-    if (this.editing) return shown;
-    return null;
+    return enginePmJson(this.draftJson, this.doc, this.editing);
   }
 
   get bodyDirty(): boolean {
@@ -376,6 +425,9 @@ export class ReaderService extends Service {
   }
 
   closeSheet(): void {
+    if (this.sheet?.kind === 'card' && this.sheet.cardId === this.pendingAnchor) {
+      this.anchorOpensSheet = false;
+    }
     this.sheet = null;
     this.noteDraft = '';
     this.cardQuestion = '';
@@ -386,6 +438,7 @@ export class ReaderService extends Service {
     this.linkDraft = '';
     this.editingLink = false;
     this.mathDraft = '';
+    this.canvasText = '';
   }
 
   get proposedCount(): number {
@@ -401,6 +454,7 @@ export class ReaderService extends Service {
     this.engineError = null;
     this.pendingAnchor = anchor ?? null;
     this.appliedAnchor = null;
+    this.anchorOpensSheet = Boolean(anchor);
     if (this.doc?.id !== id) {
       this.trashed = false;
       this.remoteGone = false;
@@ -414,6 +468,15 @@ export class ReaderService extends Service {
       this.pdfUrl = null;
       this.pdfError = null;
       this.pdfSelection = null;
+      this.pdfMarquee = false;
+      this.pdfJump = null;
+      this.canvasNodes = [];
+      this.canvasImageUrls = {};
+      this.viewMode = 'body';
+      this.canvasText = '';
+      this.pendingAnnotationId = null;
+      this.appliedAnnotationId = null;
+      this.canvasGen += 1;
       this.loadGen += 1;
     }
     const gen = this.loadGen;
@@ -483,6 +546,7 @@ export class ReaderService extends Service {
     this.contentGen += 1;
     this.syncPolling();
     void this.prefetchMedia();
+    void this.loadCanvas();
     if (detail.fileMime === PDF_MIME) void this.loadPdf(detail.id, gen);
     else {
       this.pdfUrl = null;
@@ -491,15 +555,28 @@ export class ReaderService extends Service {
     }
   }
 
-  consumePendingAnchor(): string | null {
+  consumePendingAnchor(): { id: string; openSheet: boolean } | null {
     const cardId = this.pendingAnchor;
     if (!cardId || !this.doc) return null;
     const key = `${this.doc.id}:${cardId}`;
     if (this.appliedAnchor === key) return null;
     if (!this.doc.cards.some((card) => card.id === cardId)) return null;
+    const openSheet = this.anchorOpensSheet;
     this.appliedAnchor = key;
     this.pendingAnchor = null;
-    return cardId;
+    this.anchorOpensSheet = false;
+    return { id: cardId, openSheet };
+  }
+
+  consumePendingAnnotation(): string | null {
+    const id = this.pendingAnnotationId;
+    if (!id || !this.doc) return null;
+    const key = `${this.doc.id}:${id}`;
+    if (this.appliedAnnotationId === key) return null;
+    if (!this.annotations.some((item) => item.id === id)) return null;
+    this.appliedAnnotationId = key;
+    this.pendingAnnotationId = null;
+    return id;
   }
 
   openAnchors(cardIds: string[]): void {
@@ -551,13 +628,13 @@ export class ReaderService extends Service {
     this.pdfError = message;
   }
 
-  setPdfSelection(text: string, pageIndex: number): void {
+  setPdfSelection(text: string, pageIndex: number, quads: number[][] = []): void {
     const quote = text.trim();
     if (!quote) {
       this.pdfSelection = null;
       return;
     }
-    this.pdfSelection = { text: quote, pageIndex };
+    this.pdfSelection = { text: quote, pageIndex, quads };
   }
 
   clearPdfSelection(): void {
@@ -573,6 +650,7 @@ export class ReaderService extends Service {
       kind: 'annotate',
       anchor: { text: selection.text, blockIndex: 0, from: 0, to: selection.text.length },
       pdfPageIndex: selection.pageIndex,
+      pdfQuads: selection.quads,
     };
   }
 
@@ -586,6 +664,358 @@ export class ReaderService extends Service {
       from: 0,
       to: selection.text.length,
     });
+  }
+
+  togglePdfMarquee(): void {
+    this.pdfMarquee = !this.pdfMarquee;
+    if (this.pdfMarquee) this.pdfSelection = null;
+  }
+
+  revealPdfPage(pageIndex: number): void {
+    if (!Number.isInteger(pageIndex) || pageIndex < 0) return;
+    this.viewMode = 'body';
+    this.pdfJump = { pageIndex, token: Date.now() };
+  }
+
+  jumpToPdfPage(pageIndex: number): void {
+    this.revealPdfPage(pageIndex);
+    this.closeSheet();
+  }
+
+  async savePdfExcerpt(event: Extract<PdfViewerEvent, { type: 'excerpt' }>): Promise<void> {
+    if (!this.doc || this.saving) return;
+    if (event.byteLength > EXCERPT_MAX_BYTES) {
+      this.showToast('截图太大了');
+      return;
+    }
+    const geometry = geometryFromQuads(event.quads, PDF_EXCERPT_COLOR);
+    if (!geometry) {
+      this.showToast('选区太小了');
+      return;
+    }
+    const dir = FileSystem.cacheDirectory;
+    if (!dir) {
+      this.showToast('截图没传上去');
+      return;
+    }
+    const documentId = this.doc.id;
+    const path = `${dir}excerpt-${Date.now()}.png`;
+    this.saving = true;
+    let failed = false;
+    try {
+      await FileSystem.writeAsStringAsync(path, event.base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const presigned = await requestExcerptUpload(documentId, {
+        contentType: event.mime,
+        sizeBytes: event.byteLength,
+      });
+      const put = await FileSystem.uploadAsync(presigned.uploadUrl, path, {
+        httpMethod: 'PUT',
+        headers: { 'Content-Type': event.mime },
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      });
+      if (put.status < 200 || put.status >= 300) {
+        this.showToast('截图没传上去');
+        return;
+      }
+      await this.withDetailWrite(async () => {
+        const created = await createAnnotation({
+          documentId,
+          quote: IMAGE_EXCERPT_QUOTE,
+          note: '',
+          kind: 'pdf',
+          pageIndex: event.pageIndex,
+          geometry,
+          imageKey: presigned.key,
+        });
+        this.cardWriteGen += 1;
+        this.canvasGen += 1;
+        if (this.doc?.id === documentId) {
+          this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+          this.entityGen += 1;
+        }
+        this.echoDocumentRow(created.documentId, created.updatedAt);
+      });
+      void this.prefetchMedia();
+      this.pdfMarquee = false;
+      this.showToast('已摘录');
+    } catch (err) {
+      failed = true;
+      this.showToast(errorMessage(err, '没摘下这块'));
+    } finally {
+      this.saving = false;
+      await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => undefined);
+    }
+    if (failed) return;
+  }
+
+  showBody(): void {
+    this.viewMode = 'body';
+  }
+
+  showMap(): void {
+    this.viewMode = 'map';
+    // The prose engine unmounts with the map. The next ready event must push and focus.
+    this.engineReady = false;
+    void this.loadCanvas();
+    void this.prefetchMedia();
+  }
+
+  openCanvasCards(): void {
+    const ids = this.doc?.cards.filter((card) => card.acceptance !== 'rejected').map((card) => card.id) ?? [];
+    this.openAnchors(ids);
+  }
+
+  get forest() {
+    const cardIds = this.doc?.cards.filter((card) => card.acceptance !== 'rejected').map((card) => card.id) ?? [];
+    const annotationIds = this.annotations.map((item) => item.id);
+    return documentForest(cardIds, annotationIds, this.canvasNodes);
+  }
+
+  get mapRows(): ForestRow[] {
+    return forestRows(this.forest);
+  }
+
+  canvasTitle(id: string): { kicker: string; title: string; imageKey: string | null } {
+    const member = this.forest.find((item) => item.id === id);
+    if (!member) return { kicker: '节点', title: '节点', imageKey: null };
+    if (member.kind === 'card') {
+      const card = this.doc?.cards.find((item) => item.id === id);
+      const title = card?.concept.trim() || card?.anchorText?.trim() || '卡片';
+      return { kicker: '卡片', title, imageKey: null };
+    }
+    if (member.kind === 'annotation') {
+      const note = this.annotations.find((item) => item.id === id);
+      const raw = note?.quote.trim() || '批注';
+      const title = raw === IMAGE_EXCERPT_QUOTE ? '图片摘录' : raw;
+      const kicker = note?.kind === 'pdf' ? `PDF ${(note.pageIndex ?? 0) + 1}` : '批注';
+      return { kicker, title, imageKey: note?.imageKey ?? null };
+    }
+    const node = this.canvasNodes.find((item) => item.id === id);
+    if (member.kind === 'text') return { kicker: '文本', title: node?.text?.trim() || '文本', imageKey: null };
+    return { kicker: '图片', title: '图片', imageKey: node?.imageKey ?? null };
+  }
+
+  canvasImageUrl(imageKey: string | null): string | null {
+    if (!imageKey) return null;
+    return this.canvasImageUrls[imageKey] ?? this.assets.urlFor(asAssetSrc(imageKey));
+  }
+
+  canvasParents(nodeId: string): Array<{ id: string; title: string }> {
+    return this.mapRows
+      .filter((row) => row.id !== nodeId)
+      .map((row) => ({ id: row.id, title: this.canvasTitle(row.id).title }));
+  }
+
+  openForestNode(id: string): void {
+    const member = this.forest.find((item) => item.id === id);
+    if (!member) return;
+    const note =
+      member.kind === 'annotation'
+        ? (this.annotations.find((item) => item.id === id) ?? null)
+        : null;
+    const plan = planForestOpen(
+      member.kind,
+      id,
+      note ? { kind: note.kind, pageIndex: note.pageIndex } : null,
+      this.isPdf,
+    );
+    if (plan.type === 'card') {
+      this.showBody();
+      this.pendingAnnotationId = null;
+      this.pendingAnchor = plan.cardId;
+      this.appliedAnchor = null;
+      this.anchorOpensSheet = plan.reopenSheet;
+      this.openCard(plan.cardId);
+      return;
+    }
+    if (plan.type === 'annotation') {
+      this.showBody();
+      this.pendingAnchor = null;
+      this.anchorOpensSheet = false;
+      this.openAnnotations([plan.annotationId]);
+      if (plan.pageIndex != null) {
+        this.revealPdfPage(plan.pageIndex);
+        return;
+      }
+      this.pendingAnnotationId = plan.annotationId;
+      this.appliedAnnotationId = null;
+      return;
+    }
+    if (plan.type === 'text') {
+      this.beginEditCanvasText(plan.nodeId);
+      return;
+    }
+    this.openCanvasActions(plan.nodeId);
+  }
+
+  openCanvasActions(nodeId: string): void {
+    if (!this.forest.some((item) => item.id === nodeId)) return;
+    this.sheet = { kind: 'canvas-actions', nodeId };
+  }
+
+  openCanvasParent(nodeId: string): void {
+    if (!this.forest.some((item) => item.id === nodeId)) return;
+    this.sheet = { kind: 'canvas-parent', nodeId };
+  }
+
+  beginCanvasText(parentId: string | null): void {
+    this.canvasText = '';
+    this.sheet = { kind: 'canvas-text', mode: 'create', nodeId: null, parentId };
+  }
+
+  beginEditCanvasText(nodeId: string): void {
+    const node = this.canvasNodes.find((item) => item.id === nodeId);
+    this.canvasText = node?.text ?? '';
+    this.sheet = { kind: 'canvas-text', mode: 'edit', nodeId, parentId: node?.parentId ?? null };
+  }
+
+  setCanvasText(value: string): void {
+    this.canvasText = value.slice(0, 4000);
+  }
+
+  async reparentCanvas(nodeId: string, parentId: string | null): Promise<void> {
+    if (!this.doc || this.saving) return;
+    const plan = planReparent(this.forest, nodeId, parentId);
+    if (!plan.ok) {
+      this.showToast(reparentError(plan.reason));
+      return;
+    }
+    if (plan.unchanged) {
+      this.closeSheet();
+      return;
+    }
+    const documentId = this.doc.id;
+    this.saving = true;
+    this.canvasGen += 1;
+    let failed = false;
+    try {
+      await this.withDetailWrite(async () => {
+        const updated = await updateCanvasNode(documentId, nodeId, { parentId: plan.parentId });
+        this.cardWriteGen += 1;
+        this.upsertCanvasNode(updated);
+      });
+      this.showToast(parentId ? '已挂到这个节点下' : '已独立成树');
+      this.closeSheet();
+    } catch (err) {
+      failed = true;
+      this.showToast(errorMessage(err, '没移成'));
+    } finally {
+      this.canvasGen += 1;
+      this.saving = false;
+    }
+    if (failed) void this.loadCanvas();
+  }
+
+  async saveCanvasText(): Promise<boolean> {
+    const sheet = this.sheet;
+    if (!this.doc || sheet?.kind !== 'canvas-text' || this.saving) return false;
+    const text = this.canvasText.trim();
+    if (!text) {
+      this.showToast('写点文字');
+      return false;
+    }
+    const documentId = this.doc.id;
+    this.saving = true;
+    this.canvasGen += 1;
+    try {
+      await this.withDetailWrite(async () => {
+        if (sheet.mode === 'edit' && sheet.nodeId) {
+          const updated = await updateCanvasNode(documentId, sheet.nodeId, { text });
+          this.cardWriteGen += 1;
+          this.upsertCanvasNode(updated);
+          return;
+        }
+        const created = await createCanvasNode(documentId, {
+          kind: 'text',
+          text,
+          ...(sheet.parentId ? { parentId: sheet.parentId } : {}),
+        });
+        this.cardWriteGen += 1;
+        this.upsertCanvasNode(created);
+      });
+      this.showToast(sheet.mode === 'edit' ? '已改好' : '已加上');
+      this.closeSheet();
+      return true;
+    } catch (err) {
+      this.showToast(errorMessage(err, '没写上'));
+      return false;
+    } finally {
+      this.canvasGen += 1;
+      this.saving = false;
+    }
+  }
+
+  async addCanvasImage(
+    asset: { uri: string; mimeType?: string | null; fileSize?: number | null },
+    parentId: string | null,
+  ): Promise<void> {
+    const src = await this.uploadEditorImage(asset);
+    if (!src || !this.doc) return;
+    const imageKey = imageKeyFromAssetSrc(src);
+    if (!imageKey) {
+      this.showToast('图片没加上');
+      return;
+    }
+    const documentId = this.doc.id;
+    this.canvasGen += 1;
+    try {
+      await this.withDetailWrite(async () => {
+        const created = await createCanvasNode(documentId, {
+          kind: 'image',
+          imageKey,
+          ...(parentId ? { parentId } : {}),
+        });
+        this.cardWriteGen += 1;
+        this.upsertCanvasNode(created);
+      });
+      void this.ensureCanvasImages();
+      this.showToast('已加上图片');
+    } catch (err) {
+      this.showToast(errorMessage(err, '图片没加上'));
+    } finally {
+      this.canvasGen += 1;
+    }
+  }
+
+  async removeCanvasNode(nodeId: string): Promise<void> {
+    if (!this.doc || this.saving) return;
+    const member = this.forest.find((item) => item.id === nodeId);
+    if (!member || (member.kind !== 'text' && member.kind !== 'image')) return;
+    const documentId = this.doc.id;
+    this.closeSheet();
+    const ok = await confirmAction('删除这个节点？', '它下面的节点会各自独立成树。', '删除', true);
+    if (!ok || this.doc?.id !== documentId) return;
+    this.canvasGen += 1;
+    this.cardWriteGen += 1;
+    this.canvasNodes = nodesAfterMemberLeaves(this.canvasNodes, this.forest, nodeId, documentId, false);
+    let failed = false;
+    try {
+      await this.withDetailWrite(async () => {
+        await deleteCanvasNode(documentId, nodeId);
+      });
+    } catch (err) {
+      failed = true;
+      this.showToast(errorMessage(err, '没删掉'));
+    } finally {
+      this.canvasGen += 1;
+    }
+    if (failed) void this.loadCanvas();
+  }
+
+  async loadCanvas(): Promise<void> {
+    const id = this.doc?.id;
+    if (!id) return;
+    const ticket = ++this.canvasGen;
+    try {
+      const nodes = await listCanvasNodes(id);
+      if (ticket !== this.canvasGen || this.doc?.id !== id || this.detailWrites > 0) return;
+      this.canvasNodes = nodes;
+      void this.ensureCanvasImages();
+    } catch {
+      // Keep the forest already on screen.
+    }
   }
 
   beginAnnotate(anchor: TextSelectionAnchor): void {
@@ -764,8 +1194,40 @@ export class ReaderService extends Service {
     };
   }
 
+  private detachCanvasMember(id: string, keepRow: boolean): void {
+    if (!this.doc) return;
+    this.canvasGen += 1;
+    this.canvasNodes = nodesAfterMemberLeaves(this.canvasNodes, this.forest, id, this.doc.id, keepRow);
+  }
+
+  private upsertCanvasNode(node: CanvasNode): void {
+    const index = this.canvasNodes.findIndex((item) => item.id === node.id);
+    if (index < 0) {
+      this.canvasNodes = [...this.canvasNodes, node];
+      return;
+    }
+    const next = this.canvasNodes.slice();
+    next[index] = node;
+    this.canvasNodes = next;
+  }
+
+  private async ensureCanvasImages(): Promise<void> {
+    const keys = [
+      ...new Set(
+        this.canvasNodes.map((node) => node.imageKey).filter((key): key is string => Boolean(key)),
+      ),
+    ];
+    if (keys.length === 0) return;
+    await this.assets.ensure(keys.map(asAssetSrc));
+    if (this.closed) return;
+    const next = { ...this.canvasImageUrls };
+    for (const key of keys) next[key] = this.assets.urlFor(asAssetSrc(key));
+    this.canvasImageUrls = next;
+  }
+
   private removeCard(id: string): void {
     if (!this.doc) return;
+    this.detachCanvasMember(id, true);
     this.doc = { ...this.doc, cards: this.doc.cards.filter((card) => card.id !== id) };
     this.entityGen += 1;
     if (this.activeCardId === id) this.activeCardId = null;
@@ -887,6 +1349,12 @@ export class ReaderService extends Service {
     const quote = clipChars(this.sheet.anchor.text.trim(), 20_000);
     if (!quote) return false;
     const pdfPageIndex = this.sheet.pdfPageIndex;
+    const pdfGeometry =
+      pdfPageIndex != null ? geometryFromQuads(this.sheet.pdfQuads ?? [], PDF_HIGHLIGHT_COLOR) : null;
+    if (pdfPageIndex != null && !pdfGeometry) {
+      this.showToast('选区没有位置，没法高亮');
+      return false;
+    }
     const blockIndex = this.sheet.anchor.blockIndex;
     const documentId = this.doc.id;
     const note = this.noteDraft.trim();
@@ -897,8 +1365,8 @@ export class ReaderService extends Service {
           documentId,
           quote,
           note,
-          ...(pdfPageIndex != null
-            ? { kind: 'pdf' as const, pageIndex: pdfPageIndex, geometry: { quads: [] } }
+          ...(pdfGeometry
+            ? { kind: 'pdf' as const, pageIndex: pdfPageIndex, geometry: pdfGeometry }
             : blockIndex > 0
               ? { anchorBlockIndex: blockIndex }
               : {}),
@@ -1401,6 +1869,7 @@ export class ReaderService extends Service {
       await this.withDetailWrite(async () => {
         await deleteAnnotation(id);
         this.cardWriteGen += 1;
+        this.detachCanvasMember(id, true);
         this.annotations = this.annotations.filter((item) => item.id !== id);
       });
       if (this.sheet?.kind === 'annotations') {
@@ -1487,6 +1956,7 @@ export class ReaderService extends Service {
       this.entityGen += 1;
     }
     void this.prefetchMedia();
+    void this.loadCanvas();
   }
 
   private touchSave(): void {
@@ -1735,6 +2205,10 @@ export class ReaderService extends Service {
     if (this.doc?.id === id || this.doc === null) {
       this.doc = null;
       this.annotations = [];
+      this.canvasNodes = [];
+      this.canvasImageUrls = {};
+      this.viewMode = 'body';
+      this.canvasGen += 1;
       this.linksGen += 1;
       this.links = null;
       this.linksCache = {};

@@ -1,7 +1,13 @@
 import { EMPTY_PM_DOC } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 import { jsonEqual } from '@/lib/pm-doc';
-import { buildDocumentPatch, displayedPmJson, normalizedTitle, titlesDiffer } from './editor-session';
+import {
+  buildDocumentPatch,
+  displayedPmJson,
+  enginePmJson,
+  normalizedTitle,
+  titlesDiffer,
+} from './editor-session';
 
 describe('editor session patch', () => {
   it('sends only a cleared title or only the body', () => {
@@ -58,5 +64,25 @@ describe('editor session patch', () => {
     ).toMatchObject({
       content: [{ type: 'paragraph', content: [{ type: 'text', text: '正文' }] }],
     });
+  });
+
+  it('restores the unsaved draft instead of the saved body', () => {
+    const saved = {
+      type: 'doc' as const,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: '已保存' }] }],
+    };
+    const draft = {
+      type: 'doc' as const,
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: '草稿里的锚点' }] }],
+    };
+    const shown = enginePmJson(draft, { contentJson: saved }, false);
+    expect(shown).toEqual(draft);
+    if (shown) shown.content = [];
+    expect(draft.content).toHaveLength(1);
+    expect(enginePmJson(null, { contentJson: EMPTY_PM_DOC, answer: '回答' }, false)).toMatchObject({
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: '回答' }] }],
+    });
+    expect(enginePmJson(EMPTY_PM_DOC, { contentJson: EMPTY_PM_DOC }, false)).toBeNull();
+    expect(enginePmJson(EMPTY_PM_DOC, { contentJson: EMPTY_PM_DOC }, true)).toEqual(EMPTY_PM_DOC);
   });
 });

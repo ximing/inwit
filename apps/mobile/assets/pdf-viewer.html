@@ -109,6 +109,31 @@
       user-select: none;
     }
     .textLayer.selecting .endOfContent { top: 0; }
+    .marks {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+    .mark { position: absolute; pointer-events: none; }
+    .mark.highlight { background: rgba(245, 197, 66, 0.38); }
+    .mark.excerpt {
+      background: rgba(196, 92, 38, 0.22);
+      outline: 1px solid #c45c26;
+    }
+    html.marquee .textLayer {
+      pointer-events: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    html.marquee .page { touch-action: none; }
+    #marquee {
+      position: fixed;
+      z-index: 4;
+      border: 1.5px solid #c45c26;
+      background: rgba(196, 92, 38, 0.18);
+      pointer-events: none;
+    }
     .hiddenCanvasElement {
       position: absolute;
       top: 0;
@@ -162,6 +187,10 @@
     let selectionWasNonEmpty = false;
     let lastWidth = 0;
     let resizeTimer = 0;
+    let marks = [];
+    let marqueeOn = false;
+    let marqueeDrag = null;
+    let pendingPage = null;
 
     function post(message) {
       const raw = JSON.stringify(message);
@@ -248,6 +277,7 @@
       slots = [];
       renderQueue = [];
       scroller.replaceChildren();
+      clearMarqueeBox();
       postedPage = -1;
       currentPageIndex = 0;
       const task = loadingTask;
@@ -400,32 +430,218 @@
       }, 100);
     }
 
+    function pageOfNode(node) {
+      const el = node && node.nodeType === 1 ? node : node && node.parentElement;
+      const page = el && el.closest ? el.closest('[data-page-index]') : null;
+      if (!page) return null;
+      const parsed = Number(page.getAttribute('data-page-index'));
+      if (!Number.isInteger(parsed) || parsed < 0) return null;
+      return page;
+    }
+
+    function selectionQuads(selection, pageEl) {
+      const slot = pageEl && pageEl._slot;
+      const viewport = slot && slot.viewport;
+      if (!selection || selection.rangeCount < 1 || !pageEl || !viewport || typeof viewport.convertToPdfPoint !== 'function') {
+        return [];
+      }
+      const pageRect = pageEl.getBoundingClientRect();
+      const rects = selection.getRangeAt(0).getClientRects();
+      const quads = [];
+      for (let i = 0; i < rects.length; i += 1) {
+        const rect = rects[i];
+        const left = Math.max(rect.left, pageRect.left);
+        const right = Math.min(rect.right, pageRect.right);
+        const top = Math.max(rect.top, pageRect.top);
+        const bottom = Math.min(rect.bottom, pageRect.bottom);
+        if (right - left < 0.5 || bottom - top < 0.5) continue;
+        const x1 = left - pageRect.left;
+        const y1 = top - pageRect.top;
+        const x2 = right - pageRect.left;
+        const y2 = bottom - pageRect.top;
+        const a = viewport.convertToPdfPoint(x1, y1);
+        const b = viewport.convertToPdfPoint(x2, y1);
+        const c = viewport.convertToPdfPoint(x2, y2);
+        const d = viewport.convertToPdfPoint(x1, y2);
+        quads.push([a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1]]);
+      }
+      return quads;
+    }
+
+    function quadViewportRect(viewport, quad) {
+      if (!viewport || typeof viewport.convertToViewportPoint !== 'function' || !Array.isArray(quad)) return null;
+      const points = [];
+      if (quad.length >= 8) {
+        for (let i = 0; i + 1 < 8; i += 2) points.push(viewport.convertToViewportPoint(quad[i], quad[i + 1]));
+      } else if (quad.length === 4) {
+        const x = quad[0];
+        const y = quad[1];
+        const w = quad[2];
+        const h = quad[3];
+        points.push(viewport.convertToViewportPoint(x, y));
+        points.push(viewport.convertToViewportPoint(x + w, y));
+        points.push(viewport.convertToViewportPoint(x + w, y + h));
+        points.push(viewport.convertToViewportPoint(x, y + h));
+      } else return null;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (let i = 0; i < points.length; i += 1) {
+        const point = points[i];
+        if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null;
+        if (point[0] < minX) minX = point[0];
+        if (point[1] < minY) minY = point[1];
+        if (point[0] > maxX) maxX = point[0];
+        if (point[1] > maxY) maxY = point[1];
+      }
+      if (!(maxX > minX) || !(maxY > minY)) return null;
+      return { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+    }
+
+    function paintMarks() {
+      for (let i = 0; i < slots.length; i += 1) {
+        const slot = slots[i];
+        const layer = slot.el.querySelector('.marks');
+        if (!layer) continue;
+        layer.replaceChildren();
+        const pageIndex = Number(slot.el.dataset.pageIndex);
+        for (let m = 0; m < marks.length; m += 1) {
+          const mark = marks[m];
+          if (!mark || mark.pageIndex !== pageIndex || !Array.isArray(mark.quads)) continue;
+          for (let q = 0; q < mark.quads.length; q += 1) {
+            const rect = quadViewportRect(slot.viewport, mark.quads[q]);
+            if (!rect) continue;
+            const box = document.createElement('div');
+            box.className = 'mark ' + (mark.kind === 'excerpt' ? 'excerpt' : 'highlight');
+            box.style.left = rect.left + 'px';
+            box.style.top = rect.top + 'px';
+            box.style.width = rect.width + 'px';
+            box.style.height = rect.height + 'px';
+            layer.append(box);
+          }
+        }
+      }
+    }
+
+    function paint(next) {
+      marks = Array.isArray(next) ? next : [];
+      paintMarks();
+    }
+
+    function goToPage(index) {
+      if (!Number.isInteger(index) || index < 0) return;
+      pendingPage = index;
+      const slot = slots[index];
+      if (!slot) return;
+      slot.el.scrollIntoView({ block: 'start' });
+      pendingPage = null;
+    }
+
+    function clearMarqueeBox() {
+      marqueeDrag = null;
+      const box = document.getElementById('marquee');
+      if (box) box.remove();
+    }
+
+    function setMarquee(on) {
+      marqueeOn = on === true;
+      document.documentElement.classList.toggle('marquee', marqueeOn);
+      if (!marqueeOn) clearMarqueeBox();
+    }
+
+    function marqueeBox() {
+      let box = document.getElementById('marquee');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'marquee';
+        document.body.append(box);
+      }
+      return box;
+    }
+
+    function base64Bytes(value) {
+      const trimmed = String(value || '').replace(/\s/g, '');
+      if (!trimmed || trimmed.length % 4 !== 0) return 0;
+      const pad = trimmed.endsWith('==') ? 2 : trimmed.endsWith('=') ? 1 : 0;
+      return (trimmed.length / 4) * 3 - pad;
+    }
+
+    function finishMarquee(event) {
+      const drag = marqueeDrag;
+      clearMarqueeBox();
+      if (!drag || !marqueeOn) return;
+      const page = drag.page;
+      const slot = page && page._slot;
+      const viewport = slot && slot.viewport;
+      if (!page || !viewport || typeof viewport.convertToPdfPoint !== 'function') return;
+      const pageRect = page.getBoundingClientRect();
+      const x1 = event.clientX - pageRect.left;
+      const y1 = event.clientY - pageRect.top;
+      const left = Math.min(drag.left, x1);
+      const top = Math.min(drag.top, y1);
+      const width = Math.abs(x1 - drag.left);
+      const height = Math.abs(y1 - drag.top);
+      const scale = Number(viewport.scale) || 1;
+      if (!(Math.max(width, height) * scale > 5)) return;
+      const source = page.querySelector('.canvasHost canvas');
+      if (!source || source.width < 1 || source.height < 1) {
+        post({ type: 'error', message: '这一页还没画出来' });
+        return;
+      }
+      const sx = source.width / Math.max(pageRect.width, 1);
+      const sy = source.height / Math.max(pageRect.height, 1);
+      const crop = document.createElement('canvas');
+      crop.width = Math.max(1, Math.round(width * sx));
+      crop.height = Math.max(1, Math.round(height * sy));
+      const ctx = crop.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(source, left * sx, top * sy, width * sx, height * sy, 0, 0, crop.width, crop.height);
+      const dataUrl = crop.toDataURL('image/png');
+      const base64 = dataUrl.indexOf(',') >= 0 ? dataUrl.slice(dataUrl.indexOf(',') + 1) : '';
+      const byteLength = base64Bytes(base64);
+      if (!base64 || byteLength < 1) return;
+      const a = viewport.convertToPdfPoint(left, top);
+      const b = viewport.convertToPdfPoint(left + width, top);
+      const c = viewport.convertToPdfPoint(left + width, top + height);
+      const d = viewport.convertToPdfPoint(left, top + height);
+      const pageIndex = Number(page.dataset.pageIndex);
+      post({
+        type: 'excerpt',
+        pageIndex: Number.isInteger(pageIndex) ? pageIndex : 0,
+        quads: [[a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1]]],
+        mime: 'image/png',
+        base64: base64,
+        byteLength: byteLength,
+      });
+    }
+
     function emitSelection() {
       const selection = document.getSelection();
       let text = selection ? selection.toString().replace(/\u0000/g, '') : '';
       text = text.trim();
       let pageIndex = currentPageIndex;
+      let pageEl = null;
       if (text && selection && selection.anchorNode) {
-        const node = selection.anchorNode;
-        const el = node.nodeType === 1 ? node : node.parentElement;
-        const page = el && el.closest ? el.closest('[data-page-index]') : null;
-        if (page) {
-          const parsed = Number(page.getAttribute('data-page-index'));
+        pageEl = pageOfNode(selection.anchorNode);
+        if (pageEl) {
+          const parsed = Number(pageEl.getAttribute('data-page-index'));
           if (Number.isInteger(parsed) && parsed >= 0) pageIndex = parsed;
         }
       }
+      const quads = text && pageEl ? selectionQuads(selection, pageEl) : [];
       if (!text) {
         if (!selectionWasNonEmpty) return;
         selectionWasNonEmpty = false;
         lastSelectionKey = '';
-        post({ type: 'selection', text: '', pageIndex: pageIndex });
+        post({ type: 'selection', text: '', pageIndex: pageIndex, quads: [] });
         return;
       }
-      const key = String(pageIndex) + '\n' + text;
+      const key = String(pageIndex) + '\n' + text + '\n' + JSON.stringify(quads);
       if (key === lastSelectionKey) return;
       lastSelectionKey = key;
       selectionWasNonEmpty = true;
-      post({ type: 'selection', text: text, pageIndex: pageIndex });
+      post({ type: 'selection', text: text, pageIndex: pageIndex, quads: quads });
     }
 
     function ensureObserver() {
@@ -466,7 +682,10 @@
         el.style.setProperty('--scale-factor', String(viewport.scale));
         const canvasHost = document.createElement('div');
         canvasHost.className = 'canvasHost';
+        const marksLayer = document.createElement('div');
+        marksLayer.className = 'marks';
         el.append(canvasHost);
+        el.append(marksLayer);
         const slot = {
           el: el,
           page: page,
@@ -485,7 +704,11 @@
         watchSlot(slot);
         if (number === 1) hideStatus();
       }
-      if (token === loadToken) schedulePage();
+      if (token === loadToken) {
+        paintMarks();
+        if (pendingPage != null) goToPage(pendingPage);
+        schedulePage();
+      }
     }
 
     function relayout() {
@@ -507,6 +730,7 @@
         slot.el.style.setProperty('--scale-factor', String(slot.viewport.scale));
         watchSlot(slot);
       }
+      paintMarks();
       schedulePage();
     }
 
@@ -575,6 +799,9 @@
     window.__pdfViewer = {
       open: requestOpen,
       setTheme: applyTheme,
+      paint: paint,
+      goToPage: goToPage,
+      setMarquee: setMarquee,
     };
     window.addEventListener('message', onHostMessage);
     document.addEventListener('message', onHostMessage);
@@ -587,12 +814,48 @@
       event.preventDefault();
     });
     document.addEventListener('pointerdown', function (event) {
+      if (marqueeOn) {
+        const page = event.target && event.target.closest ? event.target.closest('.page') : null;
+        if (!page) return;
+        event.preventDefault();
+        const rect = page.getBoundingClientRect();
+        marqueeDrag = {
+          page: page,
+          left: event.clientX - rect.left,
+          top: event.clientY - rect.top,
+        };
+        const box = marqueeBox();
+        box.style.left = event.clientX + 'px';
+        box.style.top = event.clientY + 'px';
+        box.style.width = '0px';
+        box.style.height = '0px';
+        return;
+      }
       const layer = event.target && event.target.closest ? event.target.closest('.textLayer') : null;
       if (layer) layer.classList.add('selecting');
     });
-    document.addEventListener('pointerup', function () {
+    document.addEventListener('pointermove', function (event) {
+      if (!marqueeDrag) return;
+      const box = marqueeBox();
+      const drag = marqueeDrag;
+      const pageRect = drag.page.getBoundingClientRect();
+      const x0 = pageRect.left + drag.left;
+      const y0 = pageRect.top + drag.top;
+      box.style.left = Math.min(x0, event.clientX) + 'px';
+      box.style.top = Math.min(y0, event.clientY) + 'px';
+      box.style.width = Math.abs(event.clientX - x0) + 'px';
+      box.style.height = Math.abs(event.clientY - y0) + 'px';
+    });
+    document.addEventListener('pointerup', function (event) {
+      if (marqueeDrag) {
+        finishMarquee(event);
+        return;
+      }
       const nodes = document.querySelectorAll('.textLayer.selecting');
       for (let i = 0; i < nodes.length; i += 1) nodes[i].classList.remove('selecting');
+    });
+    document.addEventListener('pointercancel', function () {
+      if (marqueeDrag) clearMarqueeBox();
     });
     window.addEventListener('resize', function () {
       clearTimeout(resizeTimer);

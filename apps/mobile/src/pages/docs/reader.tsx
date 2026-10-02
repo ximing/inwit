@@ -12,6 +12,7 @@ import {
   Keyboard,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -25,8 +26,10 @@ import { useDocEngineAssets } from '@/doc-engine/useDocEngineAssets';
 import { groupCardLinks } from '@/lib/card-copy';
 import { mapAppHref } from '@/lib/internal-links';
 import { ROUTES } from '@/routes';
+import { EditorPresenceService } from '@/services/editor-presence.service';
 import { ThemeService, useTheme, type ThemeTokens } from '@/theme';
 import type { FormatName, FormatState, TextSelectionAnchor } from '../../../../../packages/doc-engine/src/protocol';
+import { pdfMarksFromAnnotations } from './pdf-logic';
 import { PdfView } from './pdf-view';
 import { ReaderService } from './reader.service';
 
@@ -69,6 +72,7 @@ function noteEntities(notes: Annotation[]) {
 
 const ReaderContent = observer(function ReaderContent() {
   const service = useService(ReaderService);
+  const presence = useService(EditorPresenceService);
   const themeService = useService(ThemeService);
   const theme = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -103,6 +107,14 @@ const ReaderContent = observer(function ReaderContent() {
     };
   }, [service, id, anchorParam, editParam]);
 
+  useEffect(() => {
+    presence.set(service.doc?.id ?? null, service.bodyDirty);
+  }, [presence, service.doc?.id, service.bodyDirty]);
+
+  useEffect(() => {
+    return () => presence.set(null, false);
+  }, [presence]);
+
   const pushToEngine = useCallback(() => {
     const engine = engineRef.current;
     const doc = service.engineDoc;
@@ -112,10 +124,21 @@ const ReaderContent = observer(function ReaderContent() {
       cards: cardEntities(service.doc.cards),
       annotations: noteEntities(service.annotations),
     });
-    const focusId = service.consumePendingAnchor();
-    if (focusId) {
-      engine.focusCard(focusId);
-      service.openCard(focusId);
+    // setEditable(true) moves the caret to the end. Apply it before the anchor scroll.
+    const editable = service.editing;
+    if (appliedEditable.current !== editable) {
+      appliedEditable.current = editable;
+      engine.setEditable(editable);
+    }
+    const focus = service.consumePendingAnchor();
+    if (focus) {
+      engine.focusCard(focus.id);
+      if (focus.openSheet) service.openCard(focus.id);
+    }
+    const noteId = service.consumePendingAnnotation();
+    if (noteId) {
+      engine.setActiveEntity({ kind: 'annotation', id: noteId });
+      engine.focusCard(noteId);
     }
   }, [service]);
 
@@ -237,6 +260,31 @@ const ReaderContent = observer(function ReaderContent() {
     })();
   };
 
+  const pickCanvasImage = (parentId: string | null) => {
+    service.closeSheet();
+    void (async () => {
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.85,
+        });
+        if (result.canceled) return;
+        const asset = result.assets[0];
+        if (!asset) return;
+        await service.addCanvasImage(
+          {
+            uri: asset.uri,
+            mimeType: asset.mimeType ?? null,
+            fileSize: asset.fileSize ?? null,
+          },
+          parentId,
+        );
+      } catch {
+        service.showToast('图片没加上');
+      }
+    })();
+  };
+
   const pickEditorImage = () => {
     service.closeSheet();
     void (async () => {
@@ -285,7 +333,11 @@ const ReaderContent = observer(function ReaderContent() {
 
   const doc = service.doc;
   const title = doc ? docDisplayTitle(doc) : '文档';
-  const showEngine = Boolean(doc && !service.isPdf && !service.docError && (!service.isBlank || service.editing));
+  const showMap = service.viewMode === 'map' && Boolean(doc) && !service.docError;
+  const showEngine = Boolean(
+    doc && !showMap && !service.isPdf && !service.docError && (!service.isBlank || service.editing),
+  );
+  const pdfMarks = useMemo(() => pdfMarksFromAnnotations(service.annotations), [service.annotations]);
 
   useEffect(() => {
     if (!service.engineReady) return;
@@ -345,24 +397,71 @@ const ReaderContent = observer(function ReaderContent() {
             <View style={styles.segment}>
               <Pressable
                 accessibilityRole="tab"
-                accessibilityState={{ selected: !service.editing }}
-                onPress={leaveEdit}
-                style={[styles.segmentBtn, !service.editing && styles.segmentOn]}
+                accessibilityState={{ selected: service.viewMode === 'body' && !service.editing }}
+                onPress={() => {
+                  leaveEdit();
+                  service.showBody();
+                }}
+                style={[styles.segmentBtn, service.viewMode === 'body' && !service.editing && styles.segmentOn]}
               >
-                <Text style={[styles.segmentText, !service.editing && styles.segmentTextOn]}>阅读</Text>
+                <Text style={[styles.segmentText, service.viewMode === 'body' && !service.editing && styles.segmentTextOn]}>
+                  阅读
+                </Text>
               </Pressable>
               <Pressable
                 accessibilityRole="tab"
-                accessibilityState={{ selected: service.editing }}
-                onPress={enterEdit}
-                style={[styles.segmentBtn, service.editing && styles.segmentOn]}
+                accessibilityState={{ selected: service.viewMode === 'body' && service.editing }}
+                onPress={() => {
+                  service.showBody();
+                  enterEdit();
+                }}
+                style={[styles.segmentBtn, service.viewMode === 'body' && service.editing && styles.segmentOn]}
               >
-                <Text style={[styles.segmentText, service.editing && styles.segmentTextOn]}>编辑</Text>
+                <Text style={[styles.segmentText, service.viewMode === 'body' && service.editing && styles.segmentTextOn]}>
+                  编辑
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: service.viewMode === 'map' }}
+                onPress={() => {
+                  void captureBody().then(() => service.showMap());
+                }}
+                style={[styles.segmentBtn, service.viewMode === 'map' && styles.segmentOn]}
+              >
+                <Text style={[styles.segmentText, service.viewMode === 'map' && styles.segmentTextOn]}>脑图</Text>
               </Pressable>
             </View>
+            <Pressable onPress={() => service.openCanvasCards()} accessibilityLabel="卡片" style={styles.segmentBtn}>
+              <Text style={styles.segmentText}>卡片</Text>
+            </Pressable>
             <Text style={styles.saveLabel} numberOfLines={2}>
               {service.saveLabel}
             </Text>
+          </View>
+        ) : doc ? (
+          <View style={styles.modeRow}>
+            <View style={styles.segment}>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: service.viewMode === 'body' }}
+                onPress={() => service.showBody()}
+                style={[styles.segmentBtn, service.viewMode === 'body' && styles.segmentOn]}
+              >
+                <Text style={[styles.segmentText, service.viewMode === 'body' && styles.segmentTextOn]}>正文</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: service.viewMode === 'map' }}
+                onPress={() => service.showMap()}
+                style={[styles.segmentBtn, service.viewMode === 'map' && styles.segmentOn]}
+              >
+                <Text style={[styles.segmentText, service.viewMode === 'map' && styles.segmentTextOn]}>脑图</Text>
+              </Pressable>
+            </View>
+            <Pressable onPress={() => service.openCanvasCards()} accessibilityLabel="卡片" style={styles.segmentBtn}>
+              <Text style={styles.segmentText}>卡片</Text>
+            </Pressable>
           </View>
         ) : null}
       </View>
@@ -385,7 +484,9 @@ const ReaderContent = observer(function ReaderContent() {
         </View>
       ) : null}
 
-      {showEngine ? (
+      {showMap ? (
+        <MindMap onPickImage={pickCanvasImage} />
+      ) : showEngine ? (
         <DocEngineView
           ref={engineRef}
           style={styles.engine}
@@ -424,33 +525,50 @@ const ReaderContent = observer(function ReaderContent() {
             <PdfView
               url={service.pdfUrl}
               theme={themeService.resolved}
-              onSelection={(payload) => service.setPdfSelection(payload.text, payload.pageIndex)}
+              marks={pdfMarks}
+              jump={service.pdfJump}
+              marquee={service.pdfMarquee}
+              onSelection={(payload) => service.setPdfSelection(payload.text, payload.pageIndex, payload.quads)}
+              onExcerpt={(event) => void service.savePdfExcerpt(event)}
               onError={(message) => service.setPdfError(message)}
             />
           )}
-          {service.pdfSelection && service.sheet == null ? (
+          {service.sheet == null ? (
             <View style={styles.formatBar}>
-              <Pressable onPress={() => service.beginPdfAnnotate()} style={styles.formatBtn}>
-                <Text style={styles.formatLabel}>批注</Text>
-              </Pressable>
-              <Pressable onPress={() => service.beginPdfCard()} style={styles.formatBtn}>
-                <Text style={styles.formatLabel}>写卡</Text>
-              </Pressable>
+              {service.pdfSelection ? (
+                <>
+                  <Pressable onPress={() => service.beginPdfAnnotate()} style={styles.formatBtn}>
+                    <Text style={styles.formatLabel}>批注</Text>
+                  </Pressable>
+                  <Pressable onPress={() => service.beginPdfCard()} style={styles.formatBtn}>
+                    <Text style={styles.formatLabel}>写卡</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      const text = service.pdfSelection?.text;
+                      if (!text) return;
+                      void Clipboard.setStringAsync(text).then(() => {
+                        service.clearPdfSelection();
+                        service.showToast('已复制');
+                      });
+                    }}
+                    style={styles.formatBtn}
+                  >
+                    <Text style={styles.formatLabel}>复制</Text>
+                  </Pressable>
+                  <Pressable onPress={() => service.clearPdfSelection()} style={styles.formatBtn}>
+                    <Text style={styles.formatLabel}>取消</Text>
+                  </Pressable>
+                </>
+              ) : null}
               <Pressable
-                onPress={() => {
-                  const text = service.pdfSelection?.text;
-                  if (!text) return;
-                  void Clipboard.setStringAsync(text).then(() => {
-                    service.clearPdfSelection();
-                    service.showToast('已复制');
-                  });
-                }}
+                onPress={() => service.togglePdfMarquee()}
+                accessibilityLabel="框选摘录"
                 style={styles.formatBtn}
               >
-                <Text style={styles.formatLabel}>复制</Text>
-              </Pressable>
-              <Pressable onPress={() => service.clearPdfSelection()} style={styles.formatBtn}>
-                <Text style={styles.formatLabel}>取消</Text>
+                <Text style={[styles.formatLabel, service.pdfMarquee && styles.formatLabelOn]}>
+                  {service.pdfMarquee ? '结束框选' : '框选摘录'}
+                </Text>
               </Pressable>
             </View>
           ) : null}
@@ -483,6 +601,9 @@ const ReaderContent = observer(function ReaderContent() {
       <FormatMenu onFormat={(name) => engineRef.current?.format({ name })} onPickImage={pickEditorImage} />
       <MathSheet onConfirm={confirmMath} />
       <LinkSheet onConfirm={confirmLink} onRemove={removeLink} />
+      <CanvasActionsSheet onPickImage={pickCanvasImage} />
+      <CanvasParentSheet />
+      <CanvasTextSheet />
     </SafeAreaView>
   );
 });
@@ -761,6 +882,11 @@ const AnnotationsSheet = observer(function AnnotationsSheet() {
                     <Pressable onPress={() => void service.deleteAnnotationNote(item.id)}>
                       <Text style={{ color: theme.colors.ink2, fontWeight: '600' }}>删除</Text>
                     </Pressable>
+                    {item.kind === 'pdf' && item.pageIndex != null ? (
+                      <Pressable onPress={() => service.jumpToPdfPage(item.pageIndex ?? 0)}>
+                        <Text style={{ color: theme.colors.accentDeep, fontWeight: '700' }}>跳到这一页</Text>
+                      </Pressable>
+                    ) : null}
                   </>
                 )}
               </View>
@@ -1204,6 +1330,170 @@ const CardEditSheet = observer(function CardEditSheet() {
   );
 });
 
+const MindMap = observer(function MindMap({
+  onPickImage,
+}: {
+  onPickImage: (parentId: string | null) => void;
+}) {
+  const service = useService(ReaderService);
+  const theme = useTheme();
+  const styles = useMemo(() => makeStyles(theme), [theme]);
+  const rows = service.mapRows;
+  return (
+    <ScrollView style={styles.engine} contentContainerStyle={styles.mapBody}>
+      <View style={styles.mapTools}>
+        <Pressable onPress={() => service.beginCanvasText(null)} style={styles.mapTool}>
+          <Text style={styles.mapToolText}>加文本</Text>
+        </Pressable>
+        <Pressable onPress={() => onPickImage(null)} style={styles.mapTool}>
+          <Text style={styles.mapToolText}>加图片</Text>
+        </Pressable>
+      </View>
+      {rows.length === 0 ? (
+        <Text style={styles.placeholderText}>还没有可以展开的卡片、批注或节点。</Text>
+      ) : (
+        rows.map((row) => {
+          const label = service.canvasTitle(row.id);
+          const url = label.imageKey ? service.canvasImageUrl(label.imageKey) : null;
+          return (
+            <View key={row.id} style={[styles.mapRow, { paddingLeft: 12 + row.depth * 16 }]}>
+              <Pressable style={styles.mapMain} onPress={() => service.openForestNode(row.id)}>
+                <Text style={styles.mapKicker}>{label.kicker}</Text>
+                <Text style={styles.mapTitle}>{label.title}</Text>
+                {url ? <Image source={{ uri: url }} style={styles.mapImage} contentFit="contain" /> : null}
+              </Pressable>
+              <Pressable
+                onPress={() => service.openCanvasActions(row.id)}
+                hitSlop={8}
+                accessibilityLabel="调整节点"
+                style={styles.mapAdjust}
+              >
+                <Text style={styles.mapToolText}>调整</Text>
+              </Pressable>
+            </View>
+          );
+        })
+      )}
+    </ScrollView>
+  );
+});
+
+function CanvasAction({
+  label,
+  onPress,
+  danger = false,
+}: {
+  label: string;
+  onPress: () => void;
+  danger?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <Pressable onPress={onPress} style={{ minHeight: 44, justifyContent: 'center' }}>
+      <Text style={{ color: danger ? theme.colors.accentDeep : theme.colors.ink, fontSize: 16 }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const CanvasActionsSheet = observer(function CanvasActionsSheet({
+  onPickImage,
+}: {
+  onPickImage: (parentId: string | null) => void;
+}) {
+  const service = useService(ReaderService);
+  const sheet = service.sheet?.kind === 'canvas-actions' ? service.sheet : null;
+  const member = sheet ? service.forest.find((item) => item.id === sheet.nodeId) : null;
+  return (
+    <BottomSheet visible={sheet != null} title="调整节点" onClose={() => service.closeSheet()}>
+      {sheet && member ? (
+        <View>
+          <CanvasAction label="挂到其他节点" onPress={() => service.openCanvasParent(sheet.nodeId)} />
+          <CanvasAction label="独立成树" onPress={() => void service.reparentCanvas(sheet.nodeId, null)} />
+          {member.kind === 'text' ? (
+            <CanvasAction label="编辑文字" onPress={() => service.beginEditCanvasText(sheet.nodeId)} />
+          ) : null}
+          <CanvasAction label="在下面加文本" onPress={() => service.beginCanvasText(sheet.nodeId)} />
+          <CanvasAction label="在下面加图片" onPress={() => onPickImage(sheet.nodeId)} />
+          {member.kind === 'text' || member.kind === 'image' ? (
+            <CanvasAction label="删除" danger onPress={() => void service.removeCanvasNode(sheet.nodeId)} />
+          ) : null}
+        </View>
+      ) : null}
+    </BottomSheet>
+  );
+});
+
+const CanvasParentSheet = observer(function CanvasParentSheet() {
+  const service = useService(ReaderService);
+  const theme = useTheme();
+  const sheet = service.sheet?.kind === 'canvas-parent' ? service.sheet : null;
+  const choices = sheet ? service.canvasParents(sheet.nodeId) : [];
+  return (
+    <BottomSheet visible={sheet != null} title="挂到这个节点下" onClose={() => service.closeSheet()}>
+      {choices.length === 0 ? (
+        <Text style={{ color: theme.colors.ink3 }}>没有可以挂上去的节点。</Text>
+      ) : (
+        choices.map((choice) => (
+          <Pressable
+            key={choice.id}
+            onPress={() => void service.reparentCanvas(sheet?.nodeId ?? '', choice.id)}
+            style={{ minHeight: 44, justifyContent: 'center' }}
+          >
+            <Text style={{ color: theme.colors.ink, fontSize: 16 }} numberOfLines={2}>
+              {choice.title}
+            </Text>
+          </Pressable>
+        ))
+      )}
+    </BottomSheet>
+  );
+});
+
+const CanvasTextSheet = observer(function CanvasTextSheet() {
+  const service = useService(ReaderService);
+  const theme = useTheme();
+  const sheet = service.sheet?.kind === 'canvas-text' ? service.sheet : null;
+  return (
+    <BottomSheet
+      visible={sheet != null}
+      title={sheet?.mode === 'edit' ? '编辑文字' : '加文本'}
+      onClose={() => service.closeSheet()}
+      footer={
+        <>
+          <Pressable onPress={() => service.closeSheet()}>
+            <Text style={{ color: theme.colors.ink2 }}>取消</Text>
+          </Pressable>
+          <Pressable onPress={() => void service.saveCanvasText()}>
+            <Text style={{ color: theme.colors.accentDeep, fontWeight: '600' }}>
+              {service.saving ? '保存中…' : '记下'}
+            </Text>
+          </Pressable>
+        </>
+      }
+    >
+      <TextInput
+        value={service.canvasText}
+        onChangeText={(value) => service.setCanvasText(value)}
+        placeholder="写一句"
+        placeholderTextColor={theme.colors.ink4}
+        multiline
+        maxLength={4000}
+        style={{
+          minHeight: 88,
+          borderWidth: 1,
+          borderColor: theme.colors.line,
+          borderRadius: 8,
+          padding: 10,
+          color: theme.colors.ink,
+          backgroundColor: theme.colors.surface2,
+        }}
+      />
+    </BottomSheet>
+  );
+});
+
 function makeStyles(theme: ThemeTokens) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: theme.colors.bg },
@@ -1306,6 +1596,29 @@ function makeStyles(theme: ThemeTokens) {
       justifyContent: 'center',
     },
     primaryText: { color: theme.colors.onAccent, fontSize: 13.5, fontWeight: '500' },
+    mapBody: { paddingBottom: 28, gap: 8 },
+    mapTools: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 12 },
+    mapTool: {
+      minHeight: 36,
+      paddingHorizontal: 12,
+      borderRadius: theme.radius.sm,
+      backgroundColor: theme.colors.surface2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    mapToolText: { color: theme.colors.accentDeep, fontSize: 13, fontWeight: '700' },
+    mapRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      paddingRight: 8,
+      paddingVertical: 8,
+    },
+    mapMain: { flex: 1, gap: 2 },
+    mapKicker: { color: theme.colors.ink3, fontSize: 12, fontWeight: '600' },
+    mapTitle: { color: theme.colors.ink, fontSize: 15, lineHeight: 22 },
+    mapImage: { width: '100%', height: 120, marginTop: 6, borderRadius: 8, backgroundColor: theme.colors.surface2 },
+    mapAdjust: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   });
 }
 

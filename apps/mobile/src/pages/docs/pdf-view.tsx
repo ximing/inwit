@@ -6,9 +6,14 @@ import { useTheme } from '@/theme';
 import {
   clipPdfQuote,
   parsePdfViewerEvent,
+  pdfGoToInjection,
+  pdfMarqueeInjection,
   pdfOpenInjection,
   pdfPageLabel,
+  pdfPaintInjection,
   pdfThemeInjection,
+  type PdfMark,
+  type PdfViewerEvent,
 } from './pdf-logic';
 
 // src/pages/docs → apps/mobile/assets. Doc engine uses ../../assets from src/doc-engine.
@@ -17,7 +22,11 @@ const viewerHtml = require('../../../assets/pdf-viewer.html') as number;
 export type PdfViewProps = {
   url: string | null;
   theme: 'light' | 'dark';
-  onSelection?: (payload: { text: string; pageIndex: number }) => void;
+  marks?: readonly PdfMark[];
+  jump?: { pageIndex: number; token: number } | null;
+  marquee?: boolean;
+  onSelection?: (payload: { text: string; pageIndex: number; quads: number[][] }) => void;
+  onExcerpt?: (event: Extract<PdfViewerEvent, { type: 'excerpt' }>) => void;
   onError?: (message: string) => void;
   onLoaded?: (pageCount: number) => void;
 };
@@ -25,7 +34,11 @@ export type PdfViewProps = {
 export const PdfView = observer(function PdfView({
   url,
   theme,
+  marks = [],
+  jump = null,
+  marquee = false,
   onSelection,
+  onExcerpt,
   onError,
   onLoaded,
 }: PdfViewProps) {
@@ -34,13 +47,19 @@ export const PdfView = observer(function PdfView({
   const readyRef = useRef(false);
   const urlRef = useRef(url);
   const themeRef = useRef(theme);
-  const callbacks = useRef({ onSelection, onError, onLoaded });
+  const marksRef = useRef(marks);
+  const jumpRef = useRef(jump);
+  const marqueeRef = useRef(marquee);
+  const callbacks = useRef({ onSelection, onExcerpt, onError, onLoaded });
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCount, setPageCount] = useState(0);
 
   urlRef.current = url;
   themeRef.current = theme;
-  callbacks.current = { onSelection, onError, onLoaded };
+  marksRef.current = marks;
+  jumpRef.current = jump;
+  marqueeRef.current = marquee;
+  callbacks.current = { onSelection, onExcerpt, onError, onLoaded };
 
   const inject = useCallback((script: string) => {
     webRef.current?.injectJavaScript(script);
@@ -48,6 +67,10 @@ export const PdfView = observer(function PdfView({
 
   const flushPending = useCallback(() => {
     inject(pdfThemeInjection(themeRef.current));
+    inject(pdfPaintInjection(marksRef.current));
+    inject(pdfMarqueeInjection(marqueeRef.current));
+    const pendingJump = jumpRef.current;
+    if (pendingJump) inject(pdfGoToInjection(pendingJump.pageIndex));
     const next = urlRef.current;
     if (next) inject(pdfOpenInjection(next));
   }, [inject]);
@@ -68,6 +91,21 @@ export const PdfView = observer(function PdfView({
     inject(pdfThemeInjection(theme));
   }, [theme, inject]);
 
+  useEffect(() => {
+    if (!readyRef.current) return;
+    inject(pdfPaintInjection(marks));
+  }, [marks, inject]);
+
+  useEffect(() => {
+    if (!readyRef.current || !jump) return;
+    inject(pdfGoToInjection(jump.pageIndex));
+  }, [jump, inject]);
+
+  useEffect(() => {
+    if (!readyRef.current) return;
+    inject(pdfMarqueeInjection(marquee));
+  }, [marquee, inject]);
+
   const onMessage = useCallback(
     (event: WebViewMessageEvent) => {
       const parsed = parsePdfViewerEvent(event.nativeEvent.data);
@@ -85,6 +123,9 @@ export const PdfView = observer(function PdfView({
           setPageCount(message.pageCount);
           setPageIndex(0);
           callbacks.current.onLoaded?.(message.pageCount);
+          inject(pdfPaintInjection(marksRef.current));
+          if (jumpRef.current) inject(pdfGoToInjection(jumpRef.current.pageIndex));
+          inject(pdfMarqueeInjection(marqueeRef.current));
           break;
         case 'page':
           setPageIndex(message.pageIndex);
@@ -93,7 +134,11 @@ export const PdfView = observer(function PdfView({
           callbacks.current.onSelection?.({
             text: clipPdfQuote(message.text),
             pageIndex: message.pageIndex,
+            quads: message.quads,
           });
+          break;
+        case 'excerpt':
+          callbacks.current.onExcerpt?.(message);
           break;
         case 'error':
           callbacks.current.onError?.(message.message);

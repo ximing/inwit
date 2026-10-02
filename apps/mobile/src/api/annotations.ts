@@ -1,6 +1,8 @@
 import type {
+  AcceptAnnotationResurfaceResponse,
   Annotation,
   AnnotationImageResponse,
+  AnnotationResurfaceResponse,
   ArchivedAnnotationsResponse,
   CreateAnnotationInput,
   UpdateAnnotationInput,
@@ -47,5 +49,26 @@ export function listArchivedAnnotations(query: {
 }): Promise<ArchivedAnnotationsResponse> {
   return request<ArchivedAnnotationsResponse>(
     `/api/annotations/archived?page=${query.page}&limit=${query.limit}`,
+  );
+}
+
+export function getAnnotationResurface(): Promise<AnnotationResurfaceResponse> {
+  return request<AnnotationResurfaceResponse>('/api/annotation-resurface');
+}
+
+export function dismissAnnotationResurface(key: string): Promise<AnnotationResurfaceResponse> {
+  return request<AnnotationResurfaceResponse>(
+    `/api/annotation-resurface/${encodeURIComponent(key)}/dismiss`,
+    { method: 'POST' },
+  );
+}
+
+export function acceptAnnotationResurface(
+  key: string,
+  annotationId: string,
+): Promise<AcceptAnnotationResurfaceResponse> {
+  return request<AcceptAnnotationResurfaceResponse>(
+    `/api/annotation-resurface/${encodeURIComponent(key)}/accept`,
+    { method: 'POST', body: JSON.stringify({ annotationId }) },
   );
 }
