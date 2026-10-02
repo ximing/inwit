@@ -56,6 +56,18 @@
   width: min(var(--assistant-width, 360px), 100vw);
   box-shadow: var(--shadow-3);
 }
+/* 主题文档的「返回主题」栏高 44px，底边 1px。助手跟着下移，头行才和卡片栏对齐。 */
+.shell:has(.topic-doc-exit) .assistant-dock:not(.is-overlay) {
+  padding-top: 45px;
+}
+.shell:has(.topic-doc-exit) .assistant-dock:not(.is-overlay)::before {
+  content: '';
+  position: absolute;
+  top: 44px;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--line-soft);
+}
 .assistant-resizer {
   position: absolute;
   top: 0;
@@ -79,11 +91,15 @@
   background: var(--accent-line);
 }
 
+/* 与 .card-rail 的 16px 顶距、30px 头行、14px 下间距同一条线。border-box 下 45px 含 14px 底距和 1px 底边。 */
 .assistant-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 12px 10px 16px;
+  flex: none;
+  height: 45px;
+  margin: 16px 12px 0;
+  padding: 0 0 14px;
   border-bottom: 1px solid var(--line-soft);
 }
 .assistant-title {
@@ -93,6 +109,7 @@
   font-family: var(--serif);
   font-size: 16px;
   font-weight: 600;
+  line-height: 30px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -102,8 +119,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 28px;
+  min-width: 24px;
+  height: 24px;
   padding: 0 6px;
   border-radius: var(--r-sm);
   color: var(--ink-3);
@@ -373,8 +390,40 @@
   font-size: 12px;
 }
 .assistant-mention-empty { padding: 8px; }
-.assistant-compose-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.assistant-hint { color: var(--ink-4); font-size: 12px; }
+.assistant-compose-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.assistant-hint {
+  flex: 1 1 8rem;
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--ink-4);
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.assistant-send { display: flex; flex: none; align-items: center; gap: 8px; }
+.assistant-model {
+  width: 9.5rem;
+  max-width: 9.5rem;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+.assistant-model:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+.assistant-model:disabled { color: var(--ink-3); }
 
 @media (prefers-reduced-motion: reduce) {
   .assistant-dock { transition: none; }

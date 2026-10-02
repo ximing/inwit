@@ -2,7 +2,7 @@ import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent
 import type { AgentExecutionStep, AgentExecutionTurn, AgentTurnPhase, AgentType } from '@inwit/dto';
 import type { JobRow } from '../db/schema.js';
 import { heartbeatJob, isJobRunning } from '../jobs/heartbeat.js';
-import { modelResponseError, resolveModelFor } from '../llm/pi.js';
+import { LlmConfigUnavailableError, modelResponseError, resolveModelFor } from '../llm/pi.js';
 import { logLlmUsage } from '../llm/usage.js';
 import { logger } from '../utils/logger.js';
 import { finishExecution, measureValue, saveExecutionSteps, saveExecutionTurns, startExecution, summarizeValue } from './executions.js';
@@ -59,6 +59,8 @@ export interface AgentJobRun {
    * partial text and thinking.
    */
   onEvent?: (event: AgentEvent) => void;
+  /** Saved llm config for this turn. Omitted uses the user's default. */
+  llmConfigId?: string;
 }
 
 /**
@@ -94,7 +96,13 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
           return;
         }
 
-        const resolved = await resolveModelFor(job.userId);
+        let resolved;
+        try {
+          resolved = await resolveModelFor(job.userId, run.llmConfigId);
+        } catch (err) {
+          if (err instanceof LlmConfigUnavailableError) throw new AgentTerminalError(err.message);
+          throw err;
+        }
         const maxTokens = typeof resolved.model.maxTokens === 'number' ? resolved.model.maxTokens : null;
         const toolStarted = new Map<string, { name: string; args: unknown; t: number }>();
         const maxTurns = run.maxTurns ?? DEFAULT_MAX_TURNS;

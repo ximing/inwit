@@ -78,6 +78,7 @@ export const conversationJobPayloadSchema = z.object({
   assistantMessageId: z.string().uuid(),
   dirtyDocumentIds: z.array(z.string().uuid()).default([]),
   text: z.string().optional(),
+  llmConfigId: z.string().uuid().optional(),
 });
 export type ConversationJobPayload = z.infer<typeof conversationJobPayloadSchema>;
 

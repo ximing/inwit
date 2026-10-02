@@ -21,6 +21,7 @@ import {
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { clipReason, conversationTitle, normalizeDocumentIds } from '../agent/conversation-logic.js';
+import { assertOwnedLlmConfig } from '../llm/llm.service.js';
 
 const MESSAGE_CAP = 200;
 
@@ -169,6 +170,7 @@ export async function sendConversationMessage(
   const documentIds = await keepOwned(userId, normalizeDocumentIds(input.documentIds));
   const dirtyDocumentIds = normalizeDocumentIds(input.dirtyDocumentIds, 8);
   const text = input.text.trim();
+  if (input.llmConfigId) await assertOwnedLlmConfig(userId, input.llmConfigId);
   const now = new Date();
 
   const id = await getDb().transaction(async (tx) => {
@@ -241,6 +243,7 @@ export async function sendConversationMessage(
         assistantMessageId: assistant.id,
         dirtyDocumentIds,
         text,
+        ...(input.llmConfigId ? { llmConfigId: input.llmConfigId } : {}),
       },
     });
     await tx
@@ -265,6 +268,7 @@ export async function retryConversationMessage(
 ): Promise<ConversationDetail> {
   await ownedConversation(userId, conversationId);
   await assertNoPending(conversationId, userId);
+  if (input.llmConfigId) await assertOwnedLlmConfig(userId, input.llmConfigId);
   const [message] = await getDb()
     .select()
     .from(agentMessages)
@@ -309,6 +313,7 @@ export async function retryConversationMessage(
         assistantMessageId: message.id,
         dirtyDocumentIds: normalizeDocumentIds(input.dirtyDocumentIds, 8),
         text: userMessage?.content ?? '',
+        ...(input.llmConfigId ? { llmConfigId: input.llmConfigId } : {}),
       },
     });
     await tx

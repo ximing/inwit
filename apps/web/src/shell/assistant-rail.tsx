@@ -2,6 +2,8 @@ import { docDisplayTitle, type ConversationAction, type DocumentListItem } from 
 import { observer, useService } from '@rabjs/react';
 import { Loader2, MessageSquare, PanelRightClose, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import type { LlmConfig } from '@inwit/dto';
+import { listLlmConfigs } from '@/api/llm';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { listDocuments } from '@/api/documents';
 import { searchQuery } from '@/api/search';
@@ -16,6 +18,13 @@ import {
   assistantWidthFromKey,
 } from '@/services/ui-prefs-logic';
 import { AssistantMarkdown } from './assistant-markdown-view';
+import {
+  ASSISTANT_SYSTEM_MODEL_LABEL,
+  assistantModelOptionLabel,
+  readAssistantModelId,
+  resolveAssistantModelId,
+  writeAssistantModelId,
+} from './assistant-model';
 import { AssistantService } from './assistant.service';
 
 const MENTION_CAP = 5;
@@ -66,6 +75,9 @@ export const AssistantRail = observer(function AssistantRail() {
   const hrefFor = (id: string) => (topicId ? topicDocPath(topicId, id) : docsPath(id));
   const [viewport, setViewport] = useState(() => window.innerWidth);
   const [draft, setDraft] = useState('');
+  const [models, setModels] = useState<LlmConfig[]>([]);
+  const [modelsReady, setModelsReady] = useState(false);
+  const [modelId, setModelId] = useState<string | null>(readAssistantModelId);
   const [mentions, setMentions] = useState<Mention[]>([]);
   const [query, setQuery] = useState<string | null>(null);
   const [results, setResults] = useState<DocumentListItem[]>([]);
@@ -77,6 +89,28 @@ export const AssistantRail = observer(function AssistantRail() {
   useEffect(() => {
     service.setContext(docId);
   }, [service, docId]);
+
+  useEffect(() => {
+    if (prefs.assistantCollapsed) return;
+    let cancel = false;
+    void listLlmConfigs()
+      .then((items) => {
+        if (cancel) return;
+        setModels(items);
+        setModelId((current) => {
+          const next = resolveAssistantModelId(current, items);
+          writeAssistantModelId(next);
+          return next;
+        });
+        setModelsReady(true);
+      })
+      .catch(() => {
+        if (!cancel) setModelsReady(true);
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [prefs.assistantCollapsed]);
 
   useEffect(() => {
     const onResize = () => setViewport(window.innerWidth);
@@ -160,6 +194,7 @@ export const AssistantRail = observer(function AssistantRail() {
     const ok = await service.send(
       draft,
       mentions.map((item) => item.id),
+      modelId,
     );
     if (!ok) return;
     setDraft('');
@@ -316,7 +351,7 @@ export const AssistantRail = observer(function AssistantRail() {
                     <div className="assistant-failed">
                       <p>{message.failReason ?? '这次没有完成。'}</p>
                       {last?.id === message.id ? (
-                        <button type="button" className="btn btn-ghost" onClick={() => void service.retry(message.id)}>
+                        <button type="button" className="btn btn-ghost" onClick={() => void service.retry(message.id, modelId)}>
                           重试
                         </button>
                       ) : null}
@@ -424,9 +459,38 @@ export const AssistantRail = observer(function AssistantRail() {
           </div>
           <div className="assistant-compose-bar">
             <span className="assistant-hint">Enter 发送，Shift+Enter 换行</span>
-            <button type="submit" className="btn btn-primary" disabled={service.busy || draft.trim().length === 0}>
-              发送
-            </button>
+            <div className="assistant-send">
+              <select
+                className="assistant-model"
+                aria-label="选择模型"
+                value={modelId ?? ''}
+                disabled={!modelsReady || models.length === 0}
+                title={
+                  models.find((item) => item.id === modelId)
+                    ? assistantModelOptionLabel(
+                        models.find((item) => item.id === modelId)!,
+                        models,
+                      )
+                    : ASSISTANT_SYSTEM_MODEL_LABEL
+                }
+                onChange={(event) => {
+                  const next = event.target.value || null;
+                  setModelId(next);
+                  writeAssistantModelId(next);
+                }}
+              >
+                {!modelsReady ? <option value={modelId ?? ''}>模型</option> : null}
+                {modelsReady && models.length === 0 ? <option value="">{ASSISTANT_SYSTEM_MODEL_LABEL}</option> : null}
+                {models.map((config) => (
+                  <option key={config.id} value={config.id}>
+                    {assistantModelOptionLabel(config, models)}
+                  </option>
+                ))}
+              </select>
+              <button type="submit" className="btn btn-primary" disabled={service.busy || draft.trim().length === 0}>
+                发送
+              </button>
+            </div>
           </div>
         </form>
       </aside>

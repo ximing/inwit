@@ -101,7 +101,7 @@ export const CONVERSATION_SYSTEM_PROMPT = `你是 Inwit 的对话助手。用户
 export async function processConversation(job: JobRow): Promise<void> {
   const parsed = conversationJobPayloadSchema.safeParse(job.payload);
   if (!parsed.success) throw new Error('conversation job payload invalid');
-  const { conversationId, assistantMessageId, dirtyDocumentIds } = parsed.data;
+  const { conversationId, assistantMessageId, dirtyDocumentIds, llmConfigId } = parsed.data;
   const run = await loadConversationRun(job.userId, conversationId, assistantMessageId);
   if (!run) {
     logger.info('conversation.skip', { jobId: job.id, conversationId, assistantMessageId });
@@ -157,5 +157,6 @@ export async function processConversation(job: JobRow): Promise<void> {
       return `actions=${String(session.actions.length)}`;
     },
     nudgePrompt: '请用中文直接告诉用户结果。如果已经改过文档，说明改了哪一篇。',
+    ...(llmConfigId ? { llmConfigId } : {}),
   });
 }

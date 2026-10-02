@@ -126,7 +126,7 @@ export class AssistantService extends Service {
     }
   }
 
-  async send(text: string, documentIds: string[]): Promise<boolean> {
+  async send(text: string, documentIds: string[], llmConfigId: string | null = null): Promise<boolean> {
     const trimmed = text.trim();
     if (!trimmed || this.busy) return false;
     this.error = null;
@@ -137,6 +137,7 @@ export class AssistantService extends Service {
       text: trimmed,
       documentIds: ids.slice(0, CONVERSATION_MENTION_MAX),
       dirtyDocumentIds: this.dirtyIds(),
+      ...(llmConfigId ? { llmConfigId } : {}),
     };
     try {
       const detail = this.current
@@ -154,12 +155,13 @@ export class AssistantService extends Service {
     }
   }
 
-  async retry(messageId: string): Promise<void> {
+  async retry(messageId: string, llmConfigId: string | null = null): Promise<void> {
     if (!this.current || this.busy) return;
     this.error = null;
     try {
       const detail = await retryConversationMessage(this.current.id, messageId, {
         dirtyDocumentIds: this.dirtyIds(),
+        ...(llmConfigId ? { llmConfigId } : {}),
       });
       if (this.current?.id !== detail.id) return;
       this.current = detail;

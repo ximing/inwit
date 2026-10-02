@@ -22,6 +22,10 @@ function toPublic(row: LlmConfigRow): LlmConfig {
   };
 }
 
+export async function assertOwnedLlmConfig(userId: string, id: string): Promise<void> {
+  await getOwned(userId, id);
+}
+
 async function getOwned(userId: string, id: string): Promise<LlmConfigRow> {
   const [row] = await getDb()
     .select()

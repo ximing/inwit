@@ -153,8 +153,30 @@ export function systemDashscopeModel(): ResolvedModel {
   );
 }
 
-/** User default llm_config, or system DashScope (qwen-plus, OpenAI-compatible). */
-export async function resolveModelFor(userId: string): Promise<ResolvedModel> {
+/** The chosen config is gone or its key cannot be decrypted. Terminal for a conversation turn. */
+export class LlmConfigUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'LlmConfigUnavailableError';
+  }
+}
+
+/**
+ * A specific user llm_config, else the default, else system DashScope (qwen-plus).
+ * An explicit id that is missing does not fall back to another model.
+ */
+export async function resolveModelFor(userId: string, configId?: string | null): Promise<ResolvedModel> {
+  if (configId) {
+    const [chosen] = await getDb()
+      .select()
+      .from(llmConfigs)
+      .where(and(eq(llmConfigs.id, configId), eq(llmConfigs.userId, userId)))
+      .limit(1);
+    if (!chosen) throw new LlmConfigUnavailableError('模型配置不存在');
+    const chosenKey = decryptSecret(chosen.apiKeyEncrypted);
+    if (!chosenKey) throw new LlmConfigUnavailableError('模型密钥无法使用');
+    return resolvedFromRow(chosen, chosenKey);
+  }
   const [row] = await getDb()
     .select()
     .from(llmConfigs)

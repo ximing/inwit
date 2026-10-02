@@ -84,10 +84,13 @@ export const sendConversationInputSchema = z.object({
   text: z.string().trim().min(1).max(CONVERSATION_TEXT_MAX),
   documentIds: z.array(z.string().uuid()).max(CONVERSATION_MENTION_MAX).default([]),
   dirtyDocumentIds: z.array(z.string().uuid()).max(8).default([]),
+  /** Use this saved model for the turn. Omitted means the user's default. */
+  llmConfigId: z.string().uuid().optional(),
 });
 export type SendConversationInput = z.infer<typeof sendConversationInputSchema>;
 
 export const retryConversationInputSchema = z.object({
   dirtyDocumentIds: z.array(z.string().uuid()).max(8).default([]),
+  llmConfigId: z.string().uuid().optional(),
 });
 export type RetryConversationInput = z.infer<typeof retryConversationInputSchema>;
