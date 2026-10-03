@@ -1,18 +1,25 @@
 .doc-canvas {
-  position: relative;
+  display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
   border-radius: var(--r-md);
+  background: var(--bg-sunken);
+}
+.doc-canvas-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   background-color: var(--bg-sunken);
   background-image: radial-gradient(circle, var(--line) 1px, transparent 1px);
   cursor: grab;
   touch-action: none;
   user-select: none;
 }
-.doc-canvas:active { cursor: grabbing; }
-.doc-canvas:focus { outline: none; }
-.doc-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.doc-canvas-stage:active { cursor: grabbing; }
+.doc-canvas-stage:focus { outline: none; }
+.doc-canvas-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .doc-canvas-world {
   position: absolute;
   top: 0;
@@ -51,6 +58,33 @@
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-line);
 }
+/* 底栏始终留出操作位，选中时卡片高度不变，脑图不因此重排。 */
+.doc-canvas-card .mini-card .mini-foot {
+  min-height: 24px;
+  padding-right: 84px;
+}
+/* 确认行挂在卡片下，不计入节点高度。脉络不在节点里。 */
+.doc-canvas-card:has(.mini-extra):not(.is-dragging) { z-index: 3; }
+.doc-canvas-card .mini-extra {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 3;
+}
+/* 脉络栏宽度固定，选中卡片只换内容，画布尺寸不变，图不重排。 */
+.doc-canvas-links {
+  flex: none;
+  width: 200px;
+  max-width: 42%;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+  padding: 10px 10px 12px;
+  user-select: text;
+}
+.doc-canvas-links .hint { margin: 0; padding: 2px; }
+.doc-canvas-links .card-links { margin-top: 0; }
 .doc-canvas-insert {
   position: absolute;
   z-index: 4;

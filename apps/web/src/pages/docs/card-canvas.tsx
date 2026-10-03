@@ -1,6 +1,7 @@
 /**
  * 文档脑图。平移、缩放的世界坐标里自动布局，节点不记住坐标。
- * 单击选中；再点卡片或 Enter 才展开。拖到上下沿插入，拖到节点上成为子节点，拖到空白处独立成树。
+ * 单击选中，卡片和批注同时把左侧正文滚到锚点；双击或 Enter 才编辑。
+ * 拖到上下沿插入，拖到节点上成为子节点，拖到空白处独立成树。
  */
 import {
   outlineChildSlots,
@@ -24,6 +25,7 @@ import {
 } from 'react';
 import { DialogService } from '@/services/dialog.service';
 import { CanvasFreeNode, CanvasNoteNode } from './canvas-nodes';
+import { CardLinks } from './card-link-list';
 import { DocsService } from './docs.service';
 import {
   childPlace,
@@ -37,6 +39,7 @@ import {
   siblingInsert,
 } from './mindmap-edit';
 import { loadFolds, saveFolds } from './mindmap-fold';
+import { decideMindGesture, type MindIntent } from './mindmap-gesture';
 import { hitMindDrop, type MindDrop } from './mindmap-hit';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
 
@@ -78,6 +81,7 @@ function SizedNode({
   onPointerMove,
   onPointerUp,
   onClickCapture,
+  onDoubleClick,
   children,
 }: {
   id: string;
@@ -88,6 +92,7 @@ function SizedNode({
   onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onClickCapture: (event: MouseEvent<HTMLDivElement>) => void;
+  onDoubleClick: (event: MouseEvent<HTMLDivElement>) => void;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -112,6 +117,7 @@ function SizedNode({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onClickCapture={onClickCapture}
+      onDoubleClick={onDoubleClick}
       onDragStart={(event) => event.preventDefault()}
     >
       {children}
@@ -136,7 +142,7 @@ const KEY_CONTROLS = '.doc-canvas-tools, .canvas-add, .canvas-fold, .canvas-node
 export const CardCanvas = observer(function CardCanvas({
   renderCard,
 }: {
-  renderCard: (card: DocumentCard) => ReactNode;
+  renderCard: (card: DocumentCard, selected: boolean) => ReactNode;
 }) {
   const service = useService(DocsService);
   const dialog = useService(DialogService);
@@ -421,13 +427,41 @@ export const CardCanvas = observer(function CardCanvas({
       ? boxById.get(drag.drop.siblingId)
       : null;
 
+  const applyMind = (id: string, intent: MindIntent) => {
+    if (intent.type === 'ignore') return;
+    if (intent.type === 'cancel-draft') {
+      setEditingId(null);
+      return;
+    }
+    if (intent.type === 'clear') {
+      setSelectedId(null);
+      setEditingId(null);
+      return;
+    }
+    selectedRef.current = id;
+    setSelectedId(id);
+    if (intent.type === 'select') {
+      setEditingId(null);
+      if (intent.reveal) service.selectCanvasNode(id);
+      viewportRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (intent.editor === 'inline-text' || intent.editor === 'inline-note') {
+      setEditingId(id);
+      return;
+    }
+    if (intent.editor === 'card-dialog') {
+      setEditingId(null);
+      service.openCardEdit(id);
+    }
+  };
+
   const onViewportPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('.doc-canvas-card, .doc-canvas-tools')) return;
-    setSelectedId(null);
-    setEditingId(null);
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .doc-canvas-links')) return;
+    applyMind('', decideMindGesture({ action: 'empty' }));
     panGesture.current = {
       pointerId: event.pointerId,
       originX: event.clientX,
@@ -510,7 +544,7 @@ export const CardCanvas = observer(function CardCanvas({
       setDrag(null);
       return;
     }
-    suppressClick.current = true;
+    if (decideMindGesture({ action: 'drag' }).type === 'ignore') suppressClick.current = true;
     const world = worldPoint(event.clientX, event.clientY);
     const drop = hitMindDrop(layout.boxes, world.x, world.y, gesture.id);
     const place = placeFromDrop(forest, gesture.id, drop);
@@ -579,8 +613,7 @@ export const CardCanvas = observer(function CardCanvas({
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      setSelectedId(null);
-      setEditingId(null);
+      applyMind(selectedId, decideMindGesture({ action: 'escape', editing: editingId !== null }));
       return;
     }
     const member = forest.find((item) => item.id === selectedId);
@@ -588,8 +621,7 @@ export const CardCanvas = observer(function CardCanvas({
     if (event.key === 'Enter') {
       event.preventDefault();
       event.stopPropagation();
-      if (member.kind === 'text') setEditingId(selectedId);
-      else service.openCanvasNode(selectedId);
+      applyMind(selectedId, decideMindGesture({ action: 'enter', kind: member.kind }));
       return;
     }
     if (event.key === 'Tab') {
@@ -627,7 +659,8 @@ export const CardCanvas = observer(function CardCanvas({
       const action = navigateMind(forest, selectedId, event.key, folded);
       if (action.type === 'fold' || action.type === 'unfold') toggleFold(selectedId);
       else if (action.type === 'select') {
-        setSelectedId(action.id);
+        const next = forest.find((item) => item.id === action.id);
+        if (next) applyMind(action.id, decideMindGesture({ action: 'arrow', kind: next.kind }));
         ensureVisible(action.id);
       }
     }
@@ -645,22 +678,30 @@ export const CardCanvas = observer(function CardCanvas({
   };
 
   return (
-    <div
-      ref={viewportRef}
-      className="doc-canvas"
-      role="application"
-      tabIndex={0}
-      aria-label="脑图"
-      style={{
-        backgroundSize: `${22 * view.zoom}px ${22 * view.zoom}px`,
-        backgroundPosition: `${view.panX}px ${view.panY}px`,
-      }}
-      onPointerDown={onViewportPointerDown}
-      onPointerMove={onViewportPointerMove}
-      onPointerUp={endPan}
-      onPointerCancel={endPan}
-      onKeyDown={onKeyDown}
-    >
+    <div className="doc-canvas">
+      <aside className="doc-canvas-links" aria-label="脉络">
+        {selectedId && cardById.has(selectedId) ? (
+          <CardLinks cardId={selectedId} documentId={docId} />
+        ) : (
+          <p className="hint">选中一张卡片，脉络显示在这里。</p>
+        )}
+      </aside>
+      <div
+        ref={viewportRef}
+        className="doc-canvas-stage"
+        role="application"
+        tabIndex={0}
+        aria-label="脑图"
+        style={{
+          backgroundSize: `${22 * view.zoom}px ${22 * view.zoom}px`,
+          backgroundPosition: `${view.panX}px ${view.panY}px`,
+        }}
+        onPointerDown={onViewportPointerDown}
+        onPointerMove={onViewportPointerMove}
+        onPointerUp={endPan}
+        onPointerCancel={endPan}
+        onKeyDown={onKeyDown}
+      >
       <div
         className="doc-canvas-world"
         style={{
@@ -726,17 +767,33 @@ export const CardCanvas = observer(function CardCanvas({
                 }
                 const target = event.target;
                 if (target instanceof Element && target.closest(NODE_CONTROLS)) return;
-                if (selectedRef.current === member.id) return;
-                selectedRef.current = member.id;
-                setSelectedId(member.id);
-                setEditingId(null);
-                viewportRef.current?.focus({ preventScroll: true });
+                applyMind(
+                  member.id,
+                  decideMindGesture({
+                    action: 'click',
+                    kind: member.kind,
+                    repeat: selectedRef.current === member.id,
+                  }),
+                );
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onDoubleClick={(event) => {
+                const target = event.target;
+                if (target instanceof Element && target.closest(NODE_CONTROLS)) return;
+                applyMind(member.id, decideMindGesture({ action: 'double-click', kind: member.kind }));
                 event.preventDefault();
                 event.stopPropagation();
               }}
             >
-              {card ? renderCard(card) : null}
-              {note ? <CanvasNoteNode item={note} /> : null}
+              {card ? renderCard(card, selected) : null}
+              {note ? (
+                <CanvasNoteNode
+                  item={note}
+                  editing={editingId === member.id}
+                  onCloseEdit={() => setEditingId((current) => (current === member.id ? null : current))}
+                />
+              ) : null}
               {member.kind === 'text' || member.kind === 'image' ? (
                 <CanvasFreeNode
                   id={member.id}
@@ -744,9 +801,6 @@ export const CardCanvas = observer(function CardCanvas({
                   text={stored?.text ?? ''}
                   imageKey={stored?.imageKey ?? null}
                   editing={editingId === member.id}
-                  onEdit={() => {
-                    if (selectedRef.current === member.id) setEditingId(member.id);
-                  }}
                   onCloseEdit={() => setEditingId((current) => (current === member.id ? null : current))}
                 />
               ) : null}
@@ -871,6 +925,7 @@ export const CardCanvas = observer(function CardCanvas({
         >
           适配
         </button>
+      </div>
       </div>
     </div>
   );

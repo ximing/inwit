@@ -244,6 +244,9 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
   const jump = pdf.jump;
   const activeCardId = docs.activeCardId;
   const activeAnnotationId = docs.activeAnnotationId;
+  const revealSeq = docs.documentRevealSeq;
+  const jumpedCardSeq = useRef(0);
+  const jumpedNoteSeq = useRef(0);
 
   useEffect(() => {
     const api = annotation.provides;
@@ -347,14 +350,24 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
   useEffect(() => {
     if (!activeAnnotationId) return;
     const item = docs.annotations.find((note) => note.id === activeAnnotationId);
-    if (item) pdf.requestJumpFromAnnotation(item);
-  }, [activeAnnotationId, docs.annotations, pdf]);
+    if (!item) return;
+    if (revealSeq !== jumpedNoteSeq.current) {
+      jumpedNoteSeq.current = revealSeq;
+      pdf.clearJumpKey();
+    }
+    pdf.requestJumpFromAnnotation(item);
+  }, [activeAnnotationId, docs.annotations, pdf, revealSeq, docs]);
 
   useEffect(() => {
     if (!activeCardId) return;
     const card = docs.doc?.cards.find((item) => item.id === activeCardId);
-    if (card) pdf.requestJumpFromCard(card);
-  }, [activeCardId, docs.doc, pdf]);
+    if (!card) return;
+    if (revealSeq !== jumpedCardSeq.current) {
+      jumpedCardSeq.current = revealSeq;
+      pdf.clearJumpKey();
+    }
+    pdf.requestJumpFromCard(card);
+  }, [activeCardId, docs.doc, pdf, revealSeq, docs]);
 
   useEffect(() => {
     if (!jump) return;

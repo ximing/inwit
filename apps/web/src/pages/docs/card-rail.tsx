@@ -29,6 +29,7 @@ import { CardCanvas } from './card-canvas';
 import { cardRailCanDock, cardRailMode } from './card-rail-mode';
 import { CardLinks } from './card-link-list';
 import { DocsService } from './docs.service';
+import { mindCardActions } from './mindmap-gesture';
 
 const AnnotationThumb = observer(function AnnotationThumb({
   annotationId,
@@ -175,19 +176,28 @@ const DocCardThumb = observer(function DocCardThumb({ cardId }: { cardId: string
 const DocCardButton = observer(function DocCardButton({
   card,
   digested,
+  canvasSelected = false,
+  embedLinks = true,
 }: {
   card: DocumentCard;
   digested: boolean;
+  /** 脑图选中。不代替列表的展开。 */
+  canvasSelected?: boolean;
+  /** 脑图把脉络画在节点外，避免它参与节点尺寸。 */
+  embedLinks?: boolean;
 }) {
   const service = useService(DocsService);
   const dialog = useService(DialogService);
   const open = service.expandedCardIds.includes(card.id);
+  const actions = mindCardActions({ expanded: open, canvasSelected });
   const active = service.activeCardId === card.id;
   const lost = service.isCardAnchorLost(card);
   const suspended = card.review?.suspendedAt != null;
   const proposed = card.acceptance === 'proposed';
   const canDecide = proposed && digested;
   const busy = service.cardDecisionBusy || dialog.current !== null;
+  const showDecision = actions.confirm && actions.problem && canDecide;
+  const showLinks = actions.links && embedLinks;
   const reject = async () => {
     const reason = await dialog.prompt('可以不填', '', {
       title: '这张卡有什么问题',
@@ -198,7 +208,7 @@ const DocCardButton = observer(function DocCardButton({
     await service.rejectDocCard(card.id, reason);
   };
   return (
-    <div className="mini-wrap">
+    <div className={`mini-wrap${canvasSelected && !open ? ' is-canvas-ops' : ''}`}>
       <div className="mini-card-stack">
         <MiniCard
           card={card}
@@ -209,7 +219,7 @@ const DocCardButton = observer(function DocCardButton({
           onClick={() => service.toggleCard(card.id)}
           thumb={card.hasImage ? <DocCardThumb cardId={card.id} /> : null}
         />
-        {open ? (
+        {actions.archive ? (
           <div className="note-item-ops mini-ops">
             <button
               type="button"
@@ -220,7 +230,7 @@ const DocCardButton = observer(function DocCardButton({
             >
               <Pencil width={13} height={13} strokeWidth={1.8} />
             </button>
-            {proposed ? null : (
+            {actions.suspend && !proposed ? (
               <button
                 type="button"
                 className={`note-op${suspended ? ' is-on' : ''}`}
@@ -235,7 +245,7 @@ const DocCardButton = observer(function DocCardButton({
                   <Pause width={13} height={13} strokeWidth={1.8} />
                 )}
               </button>
-            )}
+            ) : null}
             <button
               type="button"
               className="note-op"
@@ -249,22 +259,26 @@ const DocCardButton = observer(function DocCardButton({
           </div>
         ) : null}
       </div>
-      {open && canDecide ? (
-        <div className="mini-decision">
-          <button
-            type="button"
-            className="is-primary"
-            disabled={busy}
-            onClick={() => void service.acceptDocCard(card.id)}
-          >
-            确认
-          </button>
-          <button type="button" className="is-quiet" disabled={busy} onClick={() => void reject()}>
-            有问题
-          </button>
+      {showDecision || showLinks ? (
+        <div className="mini-extra">
+          {showDecision ? (
+            <div className="mini-decision">
+              <button
+                type="button"
+                className="is-primary"
+                disabled={busy}
+                onClick={() => void service.acceptDocCard(card.id)}
+              >
+                确认
+              </button>
+              <button type="button" className="is-quiet" disabled={busy} onClick={() => void reject()}>
+                有问题
+              </button>
+            </div>
+          ) : null}
+          {showLinks ? <CardLinks cardId={card.id} documentId={service.doc?.id ?? null} /> : null}
         </div>
       ) : null}
-      {open ? <CardLinks cardId={card.id} documentId={service.doc?.id ?? null} /> : null}
     </div>
   );
 });
@@ -512,7 +526,16 @@ export const CardRail = observer(function CardRail() {
               </div>
             </div>
             {prefs.cardLayout === 'map' ? (
-              <CardCanvas renderCard={(card) => <DocCardButton card={card} digested={digested} />} />
+              <CardCanvas
+                renderCard={(card, selected) => (
+                  <DocCardButton
+                    card={card}
+                    digested={digested}
+                    canvasSelected={selected}
+                    embedLinks={false}
+                  />
+                )}
+              />
             ) : cards.length === 0 ? (
               <p className="hint">
                 {pending ? '处理完成后卡片会出现在这里。' : '这篇还没有卡片。'}

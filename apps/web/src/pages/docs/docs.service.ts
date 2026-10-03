@@ -308,6 +308,8 @@ export class DocsService extends Service {
   scrollAnnotationId: string | null = null;
   bodyFocusCardId: string | null = null;
   bodyFocusAnnotationId: string | null = null;
+  /** 脑图再次选中同一张卡或批注时，正文滚动和 PDF 跳转靠它再走一次。 */
+  documentRevealSeq = 0;
   appliedUrlAnchor: string | null = null;
   docLoadGen = 0;
   paneWidth = 0;
@@ -1044,27 +1046,31 @@ export class DocsService extends Service {
     this.bodyFocusCardId = id;
   }
 
-  /** 脑图里按 Enter：展开卡片或批注，并回到正文里的位置。 */
-  openCanvasNode(id: string): void {
+  /**
+   * 脑图选中一个节点。卡片和批注点亮正文并请求滚动或跳转，不展开、再点也不取消。
+   * 锚点丢失、文本和图片只停在脑图上，不滚动、不跳转。
+   */
+  selectCanvasNode(id: string): void {
     const member = this.canvasForest.find((item) => item.id === id);
     if (!member) return;
     if (member.kind === 'card') {
-      if (!this.expandedCardIds.includes(id)) {
-        this.toggleCard(id);
-        return;
-      }
+      const card = this.doc?.cards.find((item) => item.id === id);
+      if (!card || this.isCardAnchorLost(card)) return;
       this.activeCardId = id;
       this.activeAnnotationId = null;
-      const card = this.doc?.cards.find((item) => item.id === id);
-      if (card && !this.isCardAnchorLost(card)) this.bodyFocusCardId = id;
+      this.bodyFocusAnnotationId = null;
+      this.bodyFocusCardId = id;
+      this.documentRevealSeq += 1;
       return;
     }
     if (member.kind === 'annotation') {
-      if (this.activeAnnotationId !== id) {
-        this.focusAnnotation(id);
-        return;
-      }
+      const item = this.annotations.find((note) => note.id === id);
+      if (!item || this.isAnnotationAnchorLost(item)) return;
+      this.activeAnnotationId = id;
+      this.activeCardId = null;
+      this.bodyFocusCardId = null;
       this.bodyFocusAnnotationId = id;
+      this.documentRevealSeq += 1;
     }
   }
 

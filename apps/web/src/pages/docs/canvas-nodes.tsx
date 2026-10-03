@@ -6,6 +6,7 @@ import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb'
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { DocsService } from './docs.service';
 import { MIND_NEW_TEXT } from './mindmap-edit';
+import { mindDraftAfter, mindDraftKeyCommand } from './mindmap-gesture';
 
 function noteKicker(item: Annotation): string {
   if (item.kind === 'pdf') return `PDF ${(item.pageIndex ?? 0) + 1}`;
@@ -26,19 +27,72 @@ const NoteThumb = observer(function NoteThumb({ annotationId }: { annotationId: 
   );
 });
 
-export const CanvasNoteNode = observer(function CanvasNoteNode({ item }: { item: Annotation }) {
+export const CanvasNoteNode = observer(function CanvasNoteNode({
+  item,
+  editing,
+  onCloseEdit,
+}: {
+  item: Annotation;
+  editing: boolean;
+  onCloseEdit: () => void;
+}) {
   const service = useService(DocsService);
+  const skipBlur = useRef(false);
+  const [draft, setDraft] = useState(item.note);
   const on = service.activeAnnotationId === item.id;
+
+  useEffect(() => {
+    if (!editing) setDraft(item.note);
+  }, [editing, item.note]);
+
+  const commit = () => {
+    if (skipBlur.current) {
+      skipBlur.current = false;
+      return;
+    }
+    const next = mindDraftAfter(item.note, draft, 'commit');
+    onCloseEdit();
+    if (!next.save) return;
+    void service.saveAnnotationNote(item.id, next.text).then((ok) => {
+      if (!ok) setDraft(item.note);
+    });
+  };
+
   return (
     <div
-      className={`canvas-node is-note${on ? ' is-on' : ''}`}
+      className={`canvas-node is-note${on ? ' is-on' : ''}${editing ? ' is-editing' : ''}`}
       data-annotation-id={item.id}
-      onClick={() => service.focusAnnotation(item.id)}
     >
       <p className="canvas-node-kicker">{noteKicker(item)}</p>
       {item.imageKey ? <NoteThumb annotationId={item.id} /> : null}
       <p className="canvas-node-quote">{item.quote}</p>
-      {item.note.trim() ? <p className="canvas-node-note">{item.note}</p> : null}
+      {editing ? (
+        <textarea
+          rows={3}
+          value={draft}
+          maxLength={20_000}
+          autoFocus
+          aria-label="编辑批注"
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            const command = mindDraftKeyCommand(event.key, event.metaKey || event.ctrlKey);
+            if (!command) return;
+            event.stopPropagation();
+            if (command === 'cancel') {
+              event.preventDefault();
+              skipBlur.current = true;
+              setDraft(mindDraftAfter(item.note, draft, 'cancel').text);
+              onCloseEdit();
+              return;
+            }
+            event.preventDefault();
+            event.currentTarget.blur();
+          }}
+        />
+      ) : item.note.trim() ? (
+        <p className="canvas-node-note">{item.note}</p>
+      ) : null}
     </div>
   );
 });
@@ -59,7 +113,6 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
   text,
   imageKey,
   editing,
-  onEdit,
   onCloseEdit,
 }: {
   id: string;
@@ -67,7 +120,6 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
   text: string;
   imageKey: string | null;
   editing: boolean;
-  onEdit: () => void;
   onCloseEdit: () => void;
 }) {
   const service = useService(DocsService);
@@ -83,9 +135,10 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
       skipBlur.current = false;
       return;
     }
+    const next = mindDraftAfter(text, draft, 'commit');
     onCloseEdit();
-    if (draft.trim() === text) return;
-    void service.saveCanvasText(id, draft).then((ok) => {
+    if (!next.save) return;
+    void service.saveCanvasText(id, next.text).then((ok) => {
       if (!ok) setDraft(text);
     });
   };
@@ -118,28 +171,22 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
-            if (event.key === 'Escape') {
-              event.stopPropagation();
-              skipBlur.current = true;
-              setDraft(text);
-              onCloseEdit();
-            }
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            const command = mindDraftKeyCommand(event.key, event.metaKey || event.ctrlKey);
+            if (!command) return;
+            event.stopPropagation();
+            if (command === 'cancel') {
               event.preventDefault();
-              event.currentTarget.blur();
+              skipBlur.current = true;
+              setDraft(mindDraftAfter(text, draft, 'cancel').text);
+              onCloseEdit();
+              return;
             }
+            event.preventDefault();
+            event.currentTarget.blur();
           }}
         />
       ) : null}
-      {kind === 'text' && !editing ? (
-        <p
-          className="canvas-node-text"
-          onClick={() => onEdit()}
-          onDoubleClick={() => onEdit()}
-        >
-          {text}
-        </p>
-      ) : null}
+      {kind === 'text' && !editing ? <p className="canvas-node-text">{text}</p> : null}
     </div>
   );
 });

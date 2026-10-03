@@ -136,7 +136,7 @@ const DocsPageContent = observer(function DocsPageContent() {
       if (!insideRail && railMode() === 'overlay') dismissRail();
       else if (!insideRail && service.cardRailOverlayOpen) service.closeCardRailOverlay();
       if (service.activeCardId || service.activeAnnotationId) {
-        if (target.closest('.mini-card, .note-item, .search-hit, .card-links')) return;
+        if (target.closest('.mini-card, .note-item, .search-hit, .card-links, .doc-canvas')) return;
         if (target.closest(ANCHOR_HIT_SELECTOR)) return;
         service.closeHighlight();
       }
@@ -253,6 +253,7 @@ const DocsPageContent = observer(function DocsPageContent() {
     service.clearScrollAnnotation();
   }, [service, service.scrollAnnotationId]);
 
+  const revealSeq = service.documentRevealSeq;
   useEffect(() => {
     const cardId = service.bodyFocusCardId;
     const noteId = service.bodyFocusAnnotationId;
@@ -261,7 +262,7 @@ const DocsPageContent = observer(function DocsPageContent() {
     if (cardId) scrollFlashCardAnchor(root, cardId);
     else if (noteId) scrollFlashAnnotationAnchor(root, noteId);
     service.clearBodyFocus();
-  }, [service, service.bodyFocusCardId, service.bodyFocusAnnotationId]);
+  }, [service, service.bodyFocusCardId, service.bodyFocusAnnotationId, revealSeq]);
 
   const composingNew = !docId && service.composingNew;
   const openingDoc = Boolean(docId) && settledDocId !== docId;
