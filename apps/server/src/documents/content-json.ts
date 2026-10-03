@@ -143,14 +143,40 @@ function prependSourceBlockquote(doc: PmJson, sourceUrl: string): PmJson {
  * Open-API HTML ingest: straight HTML→PM conversion via the headless editor
  * schema (no markdown round-trip — videos survive as `video` nodes).
  */
-export function htmlToContentJson(html: string, sourceUrl?: string): PmJson {
+function htmlDocToPm(html: string): PmJson {
   const doc = generateJSON(
     stripNonContentHtml(normalizeMathHtml(html)),
     getHeadlessExtensions(),
   ) as PmJson;
-  const transformed = thematicBreaksToPageBreaks(
-    horizontalRulesToThematicBreaks(sanitizePmMedia(doc)),
-  );
+  return thematicBreaksToPageBreaks(horizontalRulesToThematicBreaks(sanitizePmMedia(doc)));
+}
+
+/**
+ * One EPUB chapter. Empty chapters (and chapters whose only media was dropped)
+ * contribute no nodes, and do not throw.
+ */
+export function htmlFragmentToContentJson(html: string): PmJson[] {
+  if (html.trim().length === 0) return [];
+  const transformed = htmlDocToPm(html);
+  if (isEmptyDoc(transformed)) return [];
+  return transformed.content ?? [];
+}
+
+/** Spine order, with a thematic break between non-empty chapters. */
+export function mergeChapterHtml(chapters: readonly string[]): PmJson {
+  const content: PmJson[] = [];
+  for (const chapter of chapters) {
+    const nodes = htmlFragmentToContentJson(chapter);
+    if (nodes.length === 0) continue;
+    if (content.length > 0) content.push({ type: 'thematicBreak' });
+    content.push(...nodes);
+  }
+  if (content.length === 0) return { type: 'doc', content: [{ type: 'paragraph' }] };
+  return { type: 'doc', content };
+}
+
+export function htmlToContentJson(html: string, sourceUrl?: string): PmJson {
+  const transformed = htmlDocToPm(html);
   if (isEmptyDoc(transformed)) throw AppError.of(400, 'IMPORT_EMPTY');
   return sourceUrl !== undefined ? prependSourceBlockquote(transformed, sourceUrl) : transformed;
 }

@@ -806,6 +806,21 @@ export async function retryDocument(userId: string, id: string): Promise<Job> {
         .orderBy(desc(jobs.createdAt))
         .limit(1);
       payload = ocrPayloadForRetry(id, document.pageCount ?? 0, prev?.payload);
+    } else if (kind === 'extract') {
+      const [prev] = await tx
+        .select({ payload: jobs.payload })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.userId, userId),
+            eq(jobs.type, 'extract'),
+            sql`coalesce(${jobs.payload}->>'documentId', ${jobs.payload}->>'captureId') = ${id}`,
+          ),
+        )
+        .orderBy(desc(jobs.createdAt))
+        .limit(1);
+      const importTitle = prev && typeof prev.payload.importTitle === 'string' ? prev.payload.importTitle : undefined;
+      payload = importTitle !== undefined ? { documentId: id, importTitle } : { documentId: id };
     } else {
       payload = { documentId: id };
     }

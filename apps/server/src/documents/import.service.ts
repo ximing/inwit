@@ -121,7 +121,7 @@ export async function completeImport(
     await enqueueJob(tx, {
       userId,
       type: 'extract',
-      payload: { documentId },
+      payload: { documentId, importTitle: row.title ?? '' },
     });
     return row;
   });

@@ -52,8 +52,11 @@ export const digestJobPayloadSchema = z.object({
 });
 export type DigestJobPayload = z.infer<typeof digestJobPayloadSchema>;
 
-export const extractJobPayloadSchema = digestJobPayloadSchema;
-export type ExtractJobPayload = DigestJobPayload;
+export const extractJobPayloadSchema = digestJobPayloadSchema.extend({
+  /** Filename stem at upload finish, so a later rename is left alone. */
+  importTitle: z.string().optional(),
+});
+export type ExtractJobPayload = z.infer<typeof extractJobPayloadSchema>;
 
 export const ocrJobPayloadSchema = z.object({
   documentId: z.string().uuid(),

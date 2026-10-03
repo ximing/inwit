@@ -1,6 +1,9 @@
 /**
  * 文档脑图。平移、缩放的世界坐标里自动布局，节点不记住坐标。
- * 单击选中，卡片和批注同时把左侧正文滚到锚点；双击或 Enter 才编辑。
+ * 单击选中，卡片和批注同时把左侧正文滚到锚点；空格或双击进入编辑。
+ * Tab 加子节点，Enter 加兄弟节点，⌘] / ⌘[ 缩进提升。
+ * 双击空白新建文本节点。选中卡片时脉络以浮层锚在节点旁，
+ * 本文内的关联画成虚线边；选中后无关节点弱化，小地图帮助定位。
  * 拖到上下沿插入，拖到节点上成为子节点，拖到空白处独立成树。
  */
 import {
@@ -10,7 +13,17 @@ import {
   type OutlinePlacement,
 } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
-import { ImagePlus, Plus, Redo2, Type, Undo2 } from 'lucide-react';
+import {
+  CornerDownRight,
+  ImagePlus,
+  Pencil,
+  Plus,
+  Redo2,
+  Trash2,
+  Type,
+  Undo2,
+  Waypoints,
+} from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -25,7 +38,9 @@ import {
 } from 'react';
 import { DialogService } from '@/services/dialog.service';
 import { CanvasFreeNode, CanvasNoteNode } from './canvas-nodes';
-import { CardLinks } from './card-link-list';
+import { useCardLinks } from './card-link-list';
+import { CanvasLinksPanel, LINKS_PANEL_H, LINKS_PANEL_W } from './canvas-links-panel';
+import { CanvasMinimap } from './canvas-minimap';
 import { DocsService } from './docs.service';
 import {
   childPlace,
@@ -39,6 +54,7 @@ import {
   siblingInsert,
 } from './mindmap-edit';
 import { loadFolds, saveFolds } from './mindmap-fold';
+import { linksPanelAnchor, mindRelated } from './mindmap-focus';
 import { decideMindGesture, type MindIntent } from './mindmap-gesture';
 import { hitMindDrop, type MindDrop } from './mindmap-hit';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
@@ -134,10 +150,20 @@ function edgePath(from: MindBox, to: MindBox): string {
   return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
 }
 
+/** 脉络虚线边：中心对中心，方向任意，画在节点底下。 */
+function ghostPath(from: MindBox, to: MindBox): string {
+  const x1 = from.x + from.width / 2;
+  const y1 = from.y + from.height / 2;
+  const x2 = to.x + to.width / 2;
+  const y2 = to.y + to.height / 2;
+  const bend = Math.max(32, Math.min(140, Math.abs(x2 - x1) / 2)) * (x2 >= x1 ? 1 : -1);
+  return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
+}
+
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
 /** 这些控件自己处理点击，不拿来拖节点、也不抢选中。卡片本身是按钮，不在这里。 */
-const NODE_CONTROLS = '.note-op, .canvas-node-op, .canvas-add, .canvas-fold, .mini-decision, .card-links, a, input, textarea';
-const KEY_CONTROLS = '.doc-canvas-tools, .canvas-add, .canvas-fold, .canvas-node-op, .note-op, textarea, input';
+const NODE_CONTROLS = '.note-op, .canvas-node-op, .canvas-fold, .canvas-node-bar, .mini-decision, .card-links, a, input, textarea';
+const KEY_CONTROLS = '.doc-canvas-tools, .canvas-fold, .canvas-node-op, .canvas-node-bar, .note-op, textarea, input';
 
 export const CardCanvas = observer(function CardCanvas({
   renderCard,
@@ -170,8 +196,52 @@ export const CardCanvas = observer(function CardCanvas({
   const [drag, setDrag] = useState<Drag | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** 脉络浮层被手动关掉的卡片；再选回这张卡时不自动重开，工具条可以开。 */
+  const [linksOff, setLinksOff] = useState<string | null>(null);
+  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const animRef = useRef<number | null>(null);
+  const reduceMotion = useRef(
+    typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+
+  const stopViewAnim = useCallback(() => {
+    if (animRef.current !== null) cancelAnimationFrame(animRef.current);
+    animRef.current = null;
+  }, []);
+
+  /** 视口变化统一走这里：带缓动，减少动画偏好下瞬移。 */
+  const animateView = useCallback(
+    (next: { panX: number; panY: number; zoom: number }, ms = 180) => {
+      stopViewAnim();
+      const from = viewRef.current;
+      if (from.panX === next.panX && from.panY === next.panY && from.zoom === next.zoom) return;
+      if (reduceMotion.current || ms <= 0) {
+        setView(next);
+        return;
+      }
+      const t0 = performance.now();
+      const step = (t: number) => {
+        const k = Math.min(1, (t - t0) / ms);
+        const ease = 1 - Math.pow(1 - k, 3);
+        setView({
+          zoom: from.zoom + (next.zoom - from.zoom) * ease,
+          panX: from.panX + (next.panX - from.panX) * ease,
+          panY: from.panY + (next.panY - from.panY) * ease,
+        });
+        animRef.current = k < 1 ? requestAnimationFrame(step) : null;
+      };
+      animRef.current = requestAnimationFrame(step);
+    },
+    [stopViewAnim],
+  );
+
+  useEffect(() => stopViewAnim, [stopViewAnim]);
 
   const docId = service.doc?.id ?? null;
   const [foldDoc, setFoldDoc] = useState(docId);
@@ -181,6 +251,7 @@ export const CardCanvas = observer(function CardCanvas({
     setFolded(new Set(docId ? loadFolds(docId) : []));
     setSelectedId(null);
     setEditingId(null);
+    setLinksOff(null);
   }
 
   const onSize = useCallback((id: string, w: number, h: number) => {
@@ -232,6 +303,30 @@ export const CardCanvas = observer(function CardCanvas({
   );
   const boxById = useMemo(() => new Map(layout.boxes.map((box) => [box.id, box])), [layout.boxes]);
 
+  /** 选中节点的祖先链加子树；其余节点与连线弱化。 */
+  const related = useMemo(
+    () => (selectedId ? mindRelated(forest, selectedId) : null),
+    [forest, selectedId],
+  );
+  /** 选中卡片且没被手动关掉时，脉络浮层开着。 */
+  const linksCardId =
+    selectedId && cardById.has(selectedId) && linksOff !== selectedId ? selectedId : null;
+  const { links: selectedLinks } = useCardLinks(linksCardId);
+  /** 本文内、且在画布上的关联卡片，画虚线边。 */
+  const ghostTargets = useMemo(() => {
+    if (!linksCardId || !selectedLinks) return [];
+    const seen = new Set<string>();
+    const targets: string[] = [];
+    for (const item of [...selectedLinks.outgoing, ...selectedLinks.incoming]) {
+      const id = item.card.id;
+      if (id === linksCardId || seen.has(id) || !boxById.has(id)) continue;
+      if (item.card.documentId == null || item.card.documentId !== docId) continue;
+      seen.add(id);
+      targets.push(id);
+    }
+    return targets;
+  }, [linksCardId, selectedLinks, boxById, docId]);
+
   useEffect(() => {
     if (!docId) return;
     saveFolds(docId, [...folded]);
@@ -275,13 +370,13 @@ export const CardCanvas = observer(function CardCanvas({
       if (!el) return;
       const vw = el.clientWidth;
       const vh = el.clientHeight;
-      setView({
+      animateView({
         zoom,
         panX: (vw - layout.width * zoom) / 2,
         panY: Math.max(36, (vh - layout.height * zoom) / 2),
       });
     },
-    [layout.width, layout.height],
+    [animateView, layout.width, layout.height],
   );
 
   const fit = useCallback(() => {
@@ -303,9 +398,11 @@ export const CardCanvas = observer(function CardCanvas({
     const el = viewportRef.current;
     if (!el) return;
     const observer = new ResizeObserver(() => {
+      setStageSize({ width: el.clientWidth, height: el.clientHeight });
       if (!userMoved.current) fit();
     });
     observer.observe(el);
+    setStageSize({ width: el.clientWidth, height: el.clientHeight });
     return () => observer.disconnect();
   }, [fit]);
 
@@ -314,6 +411,7 @@ export const CardCanvas = observer(function CardCanvas({
     if (!el) return;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      stopViewAnim();
       userMoved.current = true;
       const rect = el.getBoundingClientRect();
       const anchorX = event.clientX - rect.left;
@@ -335,7 +433,7 @@ export const CardCanvas = observer(function CardCanvas({
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [stopViewAnim]);
 
   const revealFolded = (id: string): boolean => {
     const hiding = foldsHiding(forest, id, folded);
@@ -361,13 +459,13 @@ export const CardCanvas = observer(function CardCanvas({
     if (!box || !el) return;
     userMoved.current = true;
     setSelectedId(id);
-    setView((prev) => ({
-      ...prev,
-      panX: el.clientWidth / 2 - (box.x + box.width / 2) * prev.zoom,
-      panY: el.clientHeight / 2 - (box.y + box.height / 2) * prev.zoom,
-    }));
+    animateView({
+      zoom: viewRef.current.zoom,
+      panX: el.clientWidth / 2 - (box.x + box.width / 2) * viewRef.current.zoom,
+      panY: el.clientHeight / 2 - (box.y + box.height / 2) * viewRef.current.zoom,
+    });
     service.clearScrollCard();
-  }, [service, service.scrollCardId, boxById, forest, folded]);
+  }, [service, service.scrollCardId, boxById, forest, folded, animateView]);
 
   useEffect(() => {
     const id = service.scrollAnnotationId;
@@ -382,13 +480,13 @@ export const CardCanvas = observer(function CardCanvas({
     if (!box || !el) return;
     userMoved.current = true;
     setSelectedId(id);
-    setView((prev) => ({
-      ...prev,
-      panX: el.clientWidth / 2 - (box.x + box.width / 2) * prev.zoom,
-      panY: el.clientHeight / 2 - (box.y + box.height / 2) * prev.zoom,
-    }));
+    animateView({
+      zoom: viewRef.current.zoom,
+      panX: el.clientWidth / 2 - (box.x + box.width / 2) * viewRef.current.zoom,
+      panY: el.clientHeight / 2 - (box.y + box.height / 2) * viewRef.current.zoom,
+    });
     service.clearScrollAnnotation();
-  }, [service, service.scrollAnnotationId, boxById, forest, folded]);
+  }, [service, service.scrollAnnotationId, boxById, forest, folded, animateView]);
 
   const reveal = (id: string) => {
     setFolded((prev) => {
@@ -460,7 +558,8 @@ export const CardCanvas = observer(function CardCanvas({
     if (event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .doc-canvas-links')) return;
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-links-panel, .canvas-node-bar, .doc-canvas-minimap')) return;
+    stopViewAnim();
     applyMind('', decideMindGesture({ action: 'empty' }));
     panGesture.current = {
       pointerId: event.pointerId,
@@ -561,33 +660,31 @@ export const CardCanvas = observer(function CardCanvas({
     userMoved.current = true;
     const anchorX = el.clientWidth / 2;
     const anchorY = el.clientHeight / 2;
-    setView((prev) => {
-      const zoom = Math.min(1.75, Math.max(0.35, prev.zoom * factor));
-      const worldX = (anchorX - prev.panX) / prev.zoom;
-      const worldY = (anchorY - prev.panY) / prev.zoom;
-      return { zoom, panX: anchorX - worldX * zoom, panY: anchorY - worldY * zoom };
-    });
+    const prev = viewRef.current;
+    const zoom = Math.min(1.75, Math.max(0.35, prev.zoom * factor));
+    const worldX = (anchorX - prev.panX) / prev.zoom;
+    const worldY = (anchorY - prev.panY) / prev.zoom;
+    animateView({ zoom, panX: anchorX - worldX * zoom, panY: anchorY - worldY * zoom }, 140);
   };
 
   const ensureVisible = (id: string) => {
     const box = boxById.get(id);
     const el = viewportRef.current;
     if (!box || !el) return;
-    setView((prev) => {
-      const left = box.x * prev.zoom + prev.panX;
-      const top = box.y * prev.zoom + prev.panY;
-      const right = left + box.width * prev.zoom;
-      const bottom = top + box.height * prev.zoom;
-      let panX = prev.panX;
-      let panY = prev.panY;
-      if (left < 24) panX += 24 - left;
-      else if (right > el.clientWidth - 24) panX -= right - (el.clientWidth - 24);
-      if (top < 24) panY += 24 - top;
-      else if (bottom > el.clientHeight - 24) panY -= bottom - (el.clientHeight - 24);
-      if (panX === prev.panX && panY === prev.panY) return prev;
-      userMoved.current = true;
-      return { ...prev, panX, panY };
-    });
+    const prev = viewRef.current;
+    const left = box.x * prev.zoom + prev.panX;
+    const top = box.y * prev.zoom + prev.panY;
+    const right = left + box.width * prev.zoom;
+    const bottom = top + box.height * prev.zoom;
+    let panX = prev.panX;
+    let panY = prev.panY;
+    if (left < 24) panX += 24 - left;
+    else if (right > el.clientWidth - 24) panX -= right - (el.clientWidth - 24);
+    if (top < 24) panY += 24 - top;
+    else if (bottom > el.clientHeight - 24) panY -= bottom - (el.clientHeight - 24);
+    if (panX === prev.panX && panY === prev.panY) return;
+    userMoved.current = true;
+    animateView({ zoom: prev.zoom, panX, panY }, 140);
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -608,6 +705,19 @@ export const CardCanvas = observer(function CardCanvas({
       void service.redoCanvas();
       return;
     }
+    if (meta && (event.key === '0' || event.key === '=' || event.key === '+' || event.key === '-')) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === '0') {
+        const zoom = zoomFor('all');
+        if (zoom == null) return;
+        userMoved.current = true;
+        placeView(zoom);
+      } else {
+        zoomBy(event.key === '-' ? 1 / 1.2 : 1.2);
+      }
+      return;
+    }
     if (target.closest(KEY_CONTROLS)) return;
     if (!selectedId) return;
     if (event.key === 'Escape') {
@@ -621,13 +731,31 @@ export const CardCanvas = observer(function CardCanvas({
     if (event.key === 'Enter') {
       event.preventDefault();
       event.stopPropagation();
+      onAddSibling(selectedId);
+      return;
+    }
+    if (event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
       applyMind(selectedId, decideMindGesture({ action: 'enter', kind: member.kind }));
       return;
     }
     if (event.key === 'Tab') {
       event.preventDefault();
       event.stopPropagation();
-      const place = event.shiftKey ? outdentPlace(forest, selectedId) : indentPlace(forest, selectedId);
+      if (event.shiftKey) {
+        const place = outdentPlace(forest, selectedId);
+        if (place) void service.placeOnCanvas(selectedId, place.parentId, place.index);
+      } else {
+        onAddChild(selectedId);
+      }
+      return;
+    }
+    if (meta && (event.key === ']' || event.key === '[')) {
+      event.preventDefault();
+      event.stopPropagation();
+      const place =
+        event.key === ']' ? indentPlace(forest, selectedId) : outdentPlace(forest, selectedId);
       if (place) {
         if (place.parentId) reveal(place.parentId);
         void service.placeOnCanvas(selectedId, place.parentId, place.index);
@@ -677,15 +805,23 @@ export const CardCanvas = observer(function CardCanvas({
     if (place) void addText(place.parentId, place.index);
   };
 
+  /** 双击空白：新文本节点独立成树，进编辑态；cardKey 变化触发自动适配。 */
+  const onStageDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-links-panel, .doc-canvas-minimap')) return;
+    event.preventDefault();
+    void addText(null, outlineChildSlots(forest, null).length);
+  };
+
+  const showMinimap =
+    stageSize.width > 0 &&
+    visible.length > 1 &&
+    (layout.width * view.zoom > stageSize.width + 80 ||
+      layout.height * view.zoom > stageSize.height + 80);
+
   return (
     <div className="doc-canvas">
-      <aside className="doc-canvas-links" aria-label="脉络">
-        {selectedId && cardById.has(selectedId) ? (
-          <CardLinks cardId={selectedId} documentId={docId} />
-        ) : (
-          <p className="hint">选中一张卡片，脉络显示在这里。</p>
-        )}
-      </aside>
       <div
         ref={viewportRef}
         className="doc-canvas-stage"
@@ -701,6 +837,7 @@ export const CardCanvas = observer(function CardCanvas({
         onPointerUp={endPan}
         onPointerCancel={endPan}
         onKeyDown={onKeyDown}
+        onDoubleClick={onStageDoubleClick}
       >
       <div
         className="doc-canvas-world"
@@ -720,8 +857,18 @@ export const CardCanvas = observer(function CardCanvas({
             const from = boxById.get(edge.from);
             const to = boxById.get(edge.to);
             if (!from || !to) return null;
-            return <path key={`${edge.from}-${edge.to}`} d={edgePath(from, to)} />;
+            const hot = related !== null && related.has(edge.from) && related.has(edge.to);
+            const cls = hot ? 'is-hot' : related ? 'is-dimmed' : undefined;
+            return <path key={`${edge.from}-${edge.to}`} className={cls} d={edgePath(from, to)} />;
           })}
+          {linksCardId
+            ? ghostTargets.map((id) => {
+                const from = boxById.get(linksCardId);
+                const to = boxById.get(id);
+                if (!from || !to) return null;
+                return <path key={`ghost-${id}`} className="is-ghost" d={ghostPath(from, to)} />;
+              })
+            : null}
         </svg>
         {insertAt && drag ? (
           <div
@@ -743,11 +890,12 @@ export const CardCanvas = observer(function CardCanvas({
           const stored = nodeById.get(member.id);
           const count = childCount.get(member.id) ?? 0;
           const selected = selectedId === member.id;
+          const dimmed = related !== null && !related.has(member.id) && !dragging;
           return (
             <SizedNode
               key={member.id}
               id={member.id}
-              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}`}
+              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}`}
               style={{
                 left: box.x,
                 top: box.y,
@@ -819,112 +967,208 @@ export const CardCanvas = observer(function CardCanvas({
                   {folded.has(member.id) ? count : '–'}
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="canvas-add is-child"
-                aria-label="加子节点"
-                title="加子节点"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onAddChild(member.id);
-                }}
-              >
-                <Plus width={12} height={12} strokeWidth={1.8} />
-              </button>
-              <button
-                type="button"
-                className="canvas-add is-sibling"
-                aria-label="加兄弟节点"
-                title="加兄弟节点"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onAddSibling(member.id);
-                }}
-              >
-                <Plus width={12} height={12} strokeWidth={1.8} />
-              </button>
+              {selected && !dragging ? (
+                <div
+                  className="canvas-node-bar"
+                  role="toolbar"
+                  aria-label="节点操作"
+                  style={{ transform: `scale(${1 / view.zoom})` }}
+                >
+                  {member.kind !== 'image' ? (
+                    <button
+                      type="button"
+                      aria-label="编辑"
+                      title="编辑（空格）"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (member.kind === 'card') service.openCardEdit(member.id);
+                        else setEditingId(member.id);
+                      }}
+                    >
+                      <Pencil width={12} height={12} strokeWidth={1.8} />
+                    </button>
+                  ) : null}
+                  {member.kind === 'card' ? (
+                    <button
+                      type="button"
+                      className={linksCardId === member.id ? 'is-on' : undefined}
+                      aria-label="脉络"
+                      title="脉络"
+                      aria-pressed={linksCardId === member.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setLinksOff((current) => (current === member.id ? null : member.id));
+                      }}
+                    >
+                      <Waypoints width={12} height={12} strokeWidth={1.8} />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    aria-label="加子节点"
+                    title="加子节点（Tab）"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAddChild(member.id);
+                    }}
+                  >
+                    <Plus width={12} height={12} strokeWidth={1.8} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="加兄弟节点"
+                    title="加兄弟节点（Enter）"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAddSibling(member.id);
+                    }}
+                  >
+                    <CornerDownRight width={12} height={12} strokeWidth={1.8} />
+                  </button>
+                  {member.kind !== 'annotation' ? (
+                    <button
+                      type="button"
+                      aria-label="删除"
+                      title="删除"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (member.kind === 'card') void service.archiveDocCard(member.id);
+                        else void service.removeCanvasNode(member.id);
+                      }}
+                    >
+                      <Trash2 width={12} height={12} strokeWidth={1.8} />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </SizedNode>
           );
         })}
       </div>
+      {linksCardId && stageSize.width > 0
+        ? (() => {
+            const box = boxById.get(linksCardId);
+            if (!box) return null;
+            return (
+              <CanvasLinksPanel
+                cardId={linksCardId}
+                documentId={docId}
+                anchor={linksPanelAnchor(box, view, stageSize, {
+                  width: LINKS_PANEL_W,
+                  height: LINKS_PANEL_H,
+                })}
+                onClose={() => setLinksOff(linksCardId)}
+              />
+            );
+          })()
+        : null}
+      {showMinimap ? (
+        <CanvasMinimap
+          layout={layout}
+          view={view}
+          stage={stageSize}
+          selectedId={selectedId}
+          onJump={(pan) => {
+            userMoved.current = true;
+            animateView({ ...pan, zoom: viewRef.current.zoom }, 140);
+          }}
+        />
+      ) : null}
       {hint?.text ? (
         <div className="doc-canvas-hint" style={{ left: drag?.x ?? 0, top: drag?.y ?? 0 }} role="status">
           {hint.text}
         </div>
       ) : null}
       <div className="doc-canvas-tools">
-        <button
-          type="button"
-          aria-label="撤销"
-          disabled={service.canvasUndo === 0}
-          onClick={() => void service.undoCanvas()}
-        >
-          <Undo2 width={13} height={13} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          aria-label="重做"
-          disabled={service.canvasRedo === 0}
-          onClick={() => void service.redoCanvas()}
-        >
-          <Redo2 width={13} height={13} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          aria-label="文本节点"
-          onClick={() => {
-            const parent = selectedRef.current;
-            if (parent && forest.some((member) => member.id === parent)) {
-              onAddChild(parent);
-              return;
-            }
-            void addText(null, outlineChildSlots(forest, null).length);
-          }}
-        >
-          <Type width={13} height={13} strokeWidth={1.8} />
-          文本
-        </button>
-        <button
-          type="button"
-          aria-label="图片节点"
-          disabled={service.canvasUploading}
-          onClick={() => fileRef.current?.click()}
-        >
-          <ImagePlus width={13} height={13} strokeWidth={1.8} />
-          图片
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept={IMAGE_ACCEPT}
-          hidden
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (!file) return;
-            const parent = selectedRef.current;
-            if (parent) reveal(parent);
-            void service.addCanvasImage(file, parent);
-          }}
-        />
-        <button type="button" aria-label="缩小" onClick={() => zoomBy(1 / 1.12)}>
-          －
-        </button>
-        <button type="button" aria-label="放大" onClick={() => zoomBy(1.12)}>
-          ＋
-        </button>
-        <button
-          type="button"
-          aria-label="适配"
-          onClick={() => {
-            const zoom = zoomFor('all');
-            if (zoom == null) return;
-            userMoved.current = true;
-            placeView(zoom);
-          }}
-        >
-          适配
-        </button>
+        <div className="doc-canvas-tools-group">
+          <button
+            type="button"
+            aria-label="撤销"
+            disabled={service.canvasUndo === 0}
+            onClick={() => void service.undoCanvas()}
+          >
+            <Undo2 width={13} height={13} strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            aria-label="重做"
+            disabled={service.canvasRedo === 0}
+            onClick={() => void service.redoCanvas()}
+          >
+            <Redo2 width={13} height={13} strokeWidth={1.8} />
+          </button>
+        </div>
+        <div className="doc-canvas-tools-group">
+          <button
+            type="button"
+            aria-label="文本节点"
+            className="is-wide"
+            onClick={() => {
+              const parent = selectedRef.current;
+              if (parent && forest.some((member) => member.id === parent)) {
+                onAddChild(parent);
+                return;
+              }
+              void addText(null, outlineChildSlots(forest, null).length);
+            }}
+          >
+            <Type width={13} height={13} strokeWidth={1.8} />
+            文本
+          </button>
+          <button
+            type="button"
+            aria-label="图片节点"
+            className="is-wide"
+            disabled={service.canvasUploading}
+            onClick={() => fileRef.current?.click()}
+          >
+            <ImagePlus width={13} height={13} strokeWidth={1.8} />
+            图片
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept={IMAGE_ACCEPT}
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (!file) return;
+              const parent = selectedRef.current;
+              if (parent) reveal(parent);
+              void service.addCanvasImage(file, parent);
+            }}
+          />
+        </div>
+        <div className="doc-canvas-tools-group">
+          <button type="button" aria-label="缩小" onClick={() => zoomBy(1 / 1.12)}>
+            －
+          </button>
+          <button
+            type="button"
+            className="is-zoom"
+            aria-label="回到 100%"
+            title="回到 100%"
+            onClick={() => zoomBy(1 / viewRef.current.zoom)}
+          >
+            {Math.round(view.zoom * 100)}%
+          </button>
+          <button type="button" aria-label="放大" onClick={() => zoomBy(1.12)}>
+            ＋
+          </button>
+          <button
+            type="button"
+            aria-label="适配"
+            onClick={() => {
+              const zoom = zoomFor('all');
+              if (zoom == null) return;
+              userMoved.current = true;
+              placeView(zoom);
+            }}
+          >
+            适配
+          </button>
+        </div>
       </div>
       </div>
     </div>

@@ -16,7 +16,7 @@ import { markdownToContentJson } from './content-json.js';
 import { findOwnedDocument } from './document.service.js';
 import { isBlankDocumentContent } from './document-logic.js';
 import { extractImported } from './extract.js';
-import { followUpAfterExtract } from './extract-logic.js';
+import { followUpAfterExtract, resolveExtractedTitle } from './extract-logic.js';
 import { detectImportFormat, formatFromSourceKey, titleFromFilename } from './import-logic.js';
 
 function formatForDocument(doc: DocumentRow): ImportFormat {
@@ -58,20 +58,23 @@ export async function processExtract(job: JobRow): Promise<void> {
     await getObjectToFile(document.fileKey, dest);
     await heartbeatJob(job.id);
     const buffer = await readFile(dest);
-    const { markdown, pageCount } = await extractImported(buffer, format);
-    const contentJson = markdownToContentJson(markdown);
+    const extracted = await extractImported(buffer, format);
+    const contentJson = extracted.contentJson ?? markdownToContentJson(extracted.markdown);
     const followUp = followUpAfterExtract(contentJson, format);
-    const title =
-      document.title && document.title.trim().length > 0
-        ? document.title
-        : titleFromFilename(`source.${format}`);
+    const importTitle = typeof job.payload.importTitle === 'string' ? job.payload.importTitle : null;
+    const title = resolveExtractedTitle({
+      current: document.title ?? '',
+      filenameStem: importTitle,
+      suggested: extracted.suggestedTitle ?? null,
+      fallback: titleFromFilename(`source.${format}`),
+    });
 
     await getDb().transaction(async (tx) => {
       const [updated] = await tx
         .update(documents)
         .set({
           contentJson,
-          pageCount,
+          pageCount: extracted.pageCount,
           title,
           status: followUp === 'none' ? 'digested' : 'pending',
           failReason: null,
@@ -90,7 +93,7 @@ export async function processExtract(job: JobRow): Promise<void> {
         await enqueueJob(tx, {
           userId: job.userId,
           type: 'ocr',
-          payload: toOcrJobPayload(initialOcrProgress(documentId, pageCount ?? 0)),
+          payload: toOcrJobPayload(initialOcrProgress(documentId, extracted.pageCount ?? 0)),
         });
       }
     });
@@ -108,7 +111,7 @@ export async function processExtract(job: JobRow): Promise<void> {
     await finishExecution({
       executionId,
       status: 'done',
-      resultSummary: `format=${format} pages=${String(pageCount ?? 0)} follow_up=${followUp}`,
+      resultSummary: `format=${format} pages=${String(extracted.pageCount ?? 0)} follow_up=${followUp}${extracted.textEncoding ? ` encoding=${extracted.textEncoding}` : ''}`,
     });
   } catch (err) {
     // The queue decides retry vs. final failure and marks the document only

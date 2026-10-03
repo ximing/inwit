@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EMPTY_PM_DOC } from './content-json.js';
-import { followUpAfterExtract, retryJobKindForDocument } from './extract-logic.js';
+import { followUpAfterExtract, resolveExtractedTitle, retryJobKindForDocument } from './extract-logic.js';
 
 const FILE_KEY = 'docs/u/d/source.pdf';
 
@@ -13,6 +13,41 @@ function para(text: string) {
     content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
   };
 }
+
+describe('resolveExtractedTitle', () => {
+  it('uses the book title while the stored title is still the filename', () => {
+    expect(
+      resolveExtractedTitle({
+        current: 'book',
+        filenameStem: 'book',
+        suggested: '石头记',
+        fallback: 'source',
+      }),
+    ).toBe('石头记');
+  });
+
+  it('keeps a title the user already changed', () => {
+    expect(
+      resolveExtractedTitle({
+        current: '我的笔记',
+        filenameStem: 'book',
+        suggested: '石头记',
+        fallback: 'source',
+      }),
+    ).toBe('我的笔记');
+  });
+
+  it('leaves the stored title when the upload snapshot is missing', () => {
+    expect(
+      resolveExtractedTitle({
+        current: 'book',
+        filenameStem: null,
+        suggested: '石头记',
+        fallback: 'source',
+      }),
+    ).toBe('book');
+  });
+});
 
 describe('followUpAfterExtract', () => {
   it('enqueues digest when text is present', () => {

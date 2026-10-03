@@ -5,24 +5,24 @@ import { getCardLinks } from '@/api/cards';
 import { docAnchorPath, fromTopicOf, topicDocPath, topicHostId } from '@/routes';
 import { groupedCardLinks, LINK_META } from './card-links-logic';
 
+/** 从主题打开时，关联仍留在主题页。 */
+
 /**
- * 展开卡片后懒加载知识关联。从主题打开时，关联仍留在主题页。
+ * 展开卡片后懒加载知识关联。脑图的画外虚线边也用这份数据。
  */
-export function CardLinks({
-  cardId,
-  documentId,
-}: {
-  cardId: string;
-  documentId: string | null;
-}) {
-  const location = useLocation();
-  const [params] = useSearchParams();
-  const hostTopic = topicHostId(location.pathname, params);
-  const fromTopic = fromTopicOf(params);
+export function useCardLinks(cardId: string | null): {
+  links: CardLinksResponse | null;
+  failed: boolean;
+} {
   const [links, setLinks] = useState<CardLinksResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!cardId) {
+      setLinks(null);
+      setFailed(false);
+      return;
+    }
     let cancelled = false;
     setLinks(null);
     setFailed(false);
@@ -38,6 +38,22 @@ export function CardLinks({
       cancelled = true;
     };
   }, [cardId]);
+
+  return { links, failed };
+}
+
+export function CardLinks({
+  cardId,
+  documentId,
+}: {
+  cardId: string;
+  documentId: string | null;
+}) {
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const hostTopic = topicHostId(location.pathname, params);
+  const fromTopic = fromTopicOf(params);
+  const { links, failed } = useCardLinks(cardId);
 
   const groups = links ? groupedCardLinks(links) : [];
 
