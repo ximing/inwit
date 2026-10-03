@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 卡片栏头部重设计</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  /* ===== 设计稿脚手架（非产物） ===== */
+  body { padding: 0 0 120px; }
+  .draft-head { max-width: 1180px; margin: 0 auto; padding: 48px 40px 8px; }
+  .draft-head h1 { font-family: var(--serif); font-size: 26px; font-weight: 700; }
+  .draft-head p { font-size: 13.5px; color: var(--ink-3); line-height: 1.8; margin-top: 8px; max-width: 720px; }
+  .draft-head code { font-family: var(--mono); font-size: 12px; background: var(--bg-sunken); padding: 1px 5px; border-radius: 4px; }
+
+  .opt { max-width: 1180px; margin: 44px auto 0; padding: 0 40px; }
+  .opt-head {
+    display: flex; align-items: baseline; gap: 12px;
+    font-family: var(--serif); font-size: 18px; font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .opt-head .badge {
+    font-family: var(--sans); font-size: 11px; font-weight: 600;
+    color: var(--accent-deep); background: var(--accent-soft);
+    border: 1px solid var(--accent-line);
+    padding: 2px 8px; border-radius: 999px; letter-spacing: 0.04em;
+  }
+  .opt-sub { font-size: 12.5px; color: var(--ink-3); margin-bottom: 14px; line-height: 1.7; max-width: 720px; }
+  .frame {
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    background: var(--bg);
+    overflow: hidden;
+    box-shadow: var(--shadow-2);
+  }
+  .opt-notes { margin: 12px 0 0; padding: 0 0 0 18px; font-size: 12.5px; color: var(--ink-3); line-height: 1.9; }
+  .opt-notes b { color: var(--ink-2); font-weight: 600; }
+  .opt-notes .new { color: var(--accent-deep); font-weight: 600; }
+  .measure { font-family: var(--mono); font-size: 11px; color: var(--gold); }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .pair .cell-label { font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3); margin: 0 2px 8px; }
+
+  /* ===== 模拟页架：左正文 + 右卡片栏 ===== */
+  .mock { display: flex; min-height: 460px; }
+  .mock-doc {
+    flex: 1; min-width: 0; padding: 20px 32px;
+    background: var(--bg);
+  }
+  .mock-doc .paper {
+    max-width: 560px; margin: 0 auto;
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-xl); box-shadow: var(--shadow-1);
+    padding: 24px 28px 32px;
+  }
+  .mock-doc h4 { font-family: var(--serif); font-size: 21px; font-weight: 700; margin: 0 0 12px; }
+  .mock-doc .ln { height: 10px; border-radius: 5px; background: var(--line-soft); margin-bottom: 9px; }
+  .mock-doc .ln.w60 { width: 60%; } .mock-doc .ln.w85 { width: 85%; } .mock-doc .ln.w40 { width: 40%; }
+  .mock-doc .hl { background: var(--hl); border-radius: 3px; height: 14px; width: 45%; margin-bottom: 12px; }
+
+  /* ============================================================
+     现状还原（before）
+     ============================================================ */
+  .rail0 {
+    width: 300px; flex: none; border-left: 1px solid var(--line-soft);
+    padding: 16px 12px 28px; background: var(--bg);
+  }
+  .rail0-head {
+    display: flex; align-items: center; gap: 8px;
+    height: 30px; margin-bottom: 14px;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--ink-3);
+  }
+  .rail0-head .go { margin-left: auto; font-size: 12.5px; color: var(--accent-deep); font-weight: 600; letter-spacing: 0; white-space: nowrap; }
+  .seg0 {
+    display: inline-flex; gap: 2px; padding: 2px;
+    border-radius: 8px; background: var(--bg-sunken);
+  }
+  .seg0 span {
+    height: 22px; display: inline-flex; align-items: center; padding: 0 7px;
+    border-radius: 6px; font-size: 11.5px; color: var(--ink-3);
+  }
+  .seg0 span.is-on { background: var(--surface); color: var(--accent-deep); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
+  .rail0-icon {
+    width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px; color: var(--ink-3);
+  }
+  .rail0-sec-title { font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em; color: var(--ink-3); margin: 0 0 10px; }
+  .rail0-sec-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .rail0-sec-head .rail0-sec-title { margin: 0; }
+  .rail0 .divider { margin: 18px 0 14px; border-top: 1px solid var(--line-soft); }
+  .mark-waste { position: relative; }
+  .mark-waste::after {
+    content: ""; position: absolute; inset: -2px;
+    border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+    border-radius: 6px; pointer-events: none;
+  }
+
+  /* ============================================================
+     方案 A / B 共用的面板部件（产物样式，迁移时入 card-rail.css）
+     ============================================================ */
+  .rail {
+    flex: none; display: flex; flex-direction: column; min-height: 0;
+    border-left: 1px solid var(--line-soft);
+    background: var(--bg);
+    padding: 12px 12px 28px;
+  }
+  .rail.is-narrow { width: 300px; }
+  .rail.is-wide { flex: 1; min-width: 0; }
+
+  /* —— 统一工具栏：两种布局、两种模式共用同一行 —— */
+  .rail-bar {
+    display: flex; align-items: center; gap: 10px;
+    height: 32px; flex: none;
+  }
+  .rail-bar + .rail-body { margin-top: 12px; }
+
+  /* 视图切换 = 面板身份，提到最左 */
+  .rail-view {
+    display: inline-flex; flex: none; gap: 2px; padding: 2px;
+    border-radius: 8px; background: var(--bg-sunken);
+  }
+  .rail-view button {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 24px; padding: 0 9px;
+    border: 0; border-radius: 6px; background: transparent;
+    font-size: 12px; color: var(--ink-3); cursor: pointer;
+    font-family: var(--sans);
+  }
+  .rail-view button svg { opacity: 0.8; }
+  .rail-view button.is-on {
+    background: var(--surface); color: var(--accent-deep); font-weight: 600;
+    box-shadow: 0 0 0 1px var(--line);
+  }
+
+  /* 计数：替代原「脑图 · 2」「本文卡片 · 2」两行标题 */
+  .rail-count {
+    font-size: 11.5px; color: var(--ink-3); letter-spacing: 0.02em;
+    white-space: nowrap; flex: none;
+  }
+  .rail-count b { color: var(--ink-2); font-weight: 600; }
+
+  .rail-bar .spring { flex: 1; min-width: 4px; }
+
+  /* 右侧动作区 */
+  .rail-act {
+    border: 0; background: none; padding: 0 2px;
+    font-size: 12.5px; font-weight: 600; color: var(--accent-deep);
+    white-space: nowrap; cursor: pointer; font-family: var(--sans);
+  }
+  .rail-act.go { letter-spacing: 0; }
+  .rail-act.go:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+  /* 摆放切换：图标化 segmented */
+  .rail-dock {
+    display: inline-flex; flex: none; gap: 2px; padding: 2px;
+    border-radius: 8px; background: var(--bg-sunken);
+  }
+  .rail-dock button {
+    width: 26px; height: 24px; display: inline-flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 6px; background: transparent; color: var(--ink-3); cursor: pointer;
+  }
+  .rail-dock button.is-on {
+    background: var(--surface); color: var(--accent-deep);
+    box-shadow: 0 0 0 1px var(--line);
+  }
+  .rail-iconbtn {
+    width: 26px; height: 26px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 6px; background: transparent; color: var(--ink-3); cursor: pointer;
+  }
+  .rail-iconbtn:hover { background: var(--bg-sunken); color: var(--ink-2); }
+
+  /* —— 批注折叠条 —— */
+  .rail-notes-toggle {
+    display: flex; align-items: center; gap: 6px;
+    width: 100%; border: 0; background: none; padding: 4px 2px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em;
+    color: var(--ink-3); cursor: pointer; font-family: var(--sans);
+    text-align: left;
+  }
+  .rail-notes-toggle:hover { color: var(--ink-2); }
+  .rail-notes-toggle .chev { transition: transform 0.15s; }
+  .rail-notes-toggle[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+  .rail-notes-toggle .fold-hint { margin-left: auto; font-weight: 400; letter-spacing: 0; font-size: 11px; color: var(--ink-4); }
+
+  /* 内容占位 */
+  .note-card {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-left: 2px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+    border-radius: var(--r-md); padding: 10px 12px; margin-top: 8px;
+  }
+  .note-card .q { font-size: 12.5px; color: var(--ink-2); line-height: 1.6; }
+  .note-card .n { font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+  .mini-card {
+    background: var(--surface); border: 1px solid var(--line-soft);
+    border-radius: var(--r-md); padding: 10px 12px; box-shadow: var(--shadow-1);
+  }
+  .mini-card + .mini-card { margin-top: 8px; }
+  .mini-card .t { font-size: 13px; font-weight: 600; color: var(--ink); }
+  .mini-card .d { font-size: 12px; color: var(--ink-3); margin-top: 4px; line-height: 1.6; }
+
+  /* —— 脑图画布占位 —— */
+  .canvas {
+    position: relative; flex: 1; min-height: 360px; margin-top: 12px;
+    border-radius: var(--r-md);
+    background-color: var(--surface-2);
+    background-image: radial-gradient(color-mix(in srgb, var(--ink-4) 55%, transparent) 1px, transparent 1px);
+    background-size: 18px 18px;
+    border: 1px solid var(--line-soft);
+    overflow: hidden;
+  }
+  .canvas .node {
+    position: absolute; width: 210px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r-md); box-shadow: var(--shadow-1);
+    padding: 10px 12px;
+  }
+  .canvas .node .t { font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.5; }
+  .canvas .node .d { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+  .canvas-tools {
+    position: absolute; right: 12px; bottom: 12px;
+    display: flex; align-items: center; gap: 2px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 999px; box-shadow: var(--shadow-2);
+    padding: 4px 6px; font-size: 11.5px; color: var(--ink-3);
+  }
+  .canvas-tools span { padding: 3px 7px; border-radius: 999px; }
+  .canvas-tools .sep { width: 1px; height: 14px; background: var(--line-soft); padding: 0; margin: 0 3px; }
+
+  /* —— 方案 B：摆放弹出菜单 —— */
+  .dock-menu-wrap { position: relative; flex: none; }
+  .dock-menu {
+    position: absolute; top: 32px; right: 0; z-index: 5;
+    min-width: 132px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r-md); box-shadow: var(--shadow-2);
+    padding: 4px;
+  }
+  .dock-menu button {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    height: 30px; padding: 0 10px;
+    border: 0; border-radius: 7px; background: transparent;
+    font-size: 12.5px; color: var(--ink-2); cursor: pointer; font-family: var(--sans);
+    text-align: left;
+  }
+  .dock-menu button:hover { background: var(--bg-sunken); }
+  .dock-menu button .tick { margin-left: auto; color: var(--accent-deep); font-size: 12px; }
+  .dock-menu .menu-sep { height: 1px; background: var(--line-soft); margin: 4px 6px; }
+  .dock-menu button.is-danger { color: var(--ink-3); }
+
+  /* 批注 chip（方案 B 的窄栏头部备选） */
+  .rail-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 22px; padding: 0 8px; flex: none;
+    border-radius: 999px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink-3);
+    font-size: 11.5px; cursor: pointer; font-family: var(--sans);
+  }
+  .rail-chip:hover { color: var(--ink-2); border-color: var(--ink-4); }
+
+  /* 规格表 */
+  .spec { max-width: 1180px; margin: 48px auto 0; padding: 0 40px; }
+  .spec table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12.5px; color: var(--ink-2);
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r-md); overflow: hidden;
+  }
+  .spec th, .spec td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; line-height: 1.7; }
+  .spec th { font-size: 11.5px; letter-spacing: 0.08em; color: var(--ink-3); font-weight: 600; background: var(--surface-2); }
+  .spec td:first-child { white-space: nowrap; font-weight: 600; }
+  .spec code { font-family: var(--mono); font-size: 11.5px; background: var(--bg-sunken); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<header class="draft-head">
+  <h1>文档页右侧卡片栏 · 头部重设计</h1>
+  <p>
+    现状问题：头部两行半利用率低——第一行 <code>本文 | 去复习 → | 并排/浮层 | 收起</code>，「本文」不携带信息；
+    第二行 <code>脑图 · 2 | 列表/脑图</code> 又是一组 segmented。两组分段控件分散在两行、样式雷同，职责不清；
+    脑图宽画布模式下右上一长条全是空白。
+  </p>
+  <p>
+    设计方向：<b>一行统一工具栏</b>，列表 / 脑图两种布局、窄栏 / 宽画布两种宽度共用同一结构——
+    左边是「我是谁」（视图切换 + 计数），右边是「我能做什么」（复习动作 + 摆放 + 收起）。批注区改为可折叠条。
+  </p>
+</header>
+
+<!-- ================= 现状 ================= -->
+<section class="opt">
+  <div class="opt-head">现状还原 <span class="badge" style="color:var(--ink-3);background:var(--bg-sunken);border-color:var(--line);">before</span></div>
+  <p class="opt-sub">虚线框标出的是浪费掉的空间：两个 segmented 长得像但一个管「面板怎么摆」、一个管「内容怎么看」，「本文」二字没有信息量。</p>
+  <div class="frame">
+    <div class="mock">
+      <div class="mock-doc">
+        <div class="paper">
+          <h4>排版居中备注</h4>
+          <div class="hl"></div>
+          <div class="ln w85"></div><div class="ln w60"></div><div class="ln w85"></div><div class="ln w40"></div>
+        </div>
+      </div>
+      <aside class="rail0">
+        <div class="rail0-head">
+          <span class="mark-waste">本文</span>
+          <span class="go mark-waste">去复习 →</span>
+          <span class="seg0 mark-waste"><span class="is-on">并排</span><span>浮层</span></span>
+          <span class="rail0-icon">⤫</span>
+        </div>
+        <h3 class="rail0-sec-title">批注 · 0</h3>
+        <div class="divider"></div>
+        <div class="rail0-sec-head">
+          <h3 class="rail0-sec-title mark-waste">本文卡片 · 2</h3>
+          <span class="seg0 mark-waste"><span class="is-on">列表</span><span>脑图</span></span>
+        </div>
+        <div class="mini-card"><div class="t">对比：居中对齐和两端对齐有什么区别？</div><div class="d">今天再问</div></div>
+        <div class="mini-card"><div class="t">填空：排版指令「这一段应该居中」中的「居中」…</div><div class="d">今天再问</div></div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 方案 A ================= -->
+<section class="opt">
+  <div class="opt-head">方案 A · 统一工具栏 <span class="badge">推荐</span></div>
+  <p class="opt-sub">
+    头部只剩一行 32px：<b>视图切换（列表｜脑图）+ 计数</b> 在左，<b>全部确认 / 去复习 → / 摆放 / 收起</b> 在右。
+    「并排｜浮层」图标化，与「列表｜脑图」拉开层级；「全部确认」只在有待确认卡片时出现。
+    批注区头改为可点折叠条，默认展开。
+  </p>
+
+  <div class="pair">
+    <!-- A · 列表窄栏 -->
+    <div>
+      <p class="cell-label">列表 · 窄栏 300px</p>
+      <div class="frame">
+        <div class="mock">
+          <aside class="rail is-narrow" style="border-left:0;">
+            <div class="rail-bar">
+              <span class="rail-view">
+                <button class="is-on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>列表</button>
+                <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="6" r="2.2"/><circle cx="19" cy="6" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M7 7.5 10.3 16M17 7.5 13.7 16M7.2 6h9.6"/></svg>脑图</button>
+              </span>
+              <span class="rail-count"><b>2</b> 卡 · <b>1</b> 批注</span>
+              <span class="spring"></span>
+              <button class="rail-act go">去复习 →</button>
+              <span class="rail-dock">
+                <button class="is-on" title="并排"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg></button>
+                <button title="浮层"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="11" y="11" width="9" height="6" rx="1" fill="currentColor" stroke="none" opacity="0.35"/></svg></button>
+              </span>
+              <button class="rail-iconbtn" title="收起"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="18" y1="9" x2="20.5" y2="12"/><line x1="20.5" y1="12" x2="18" y2="15"/></svg></button>
+            </div>
+            <div class="rail-body">
+              <button class="rail-notes-toggle" aria-expanded="true">
+                <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+                批注 · 1
+              </button>
+              <div class="note-card">
+                <div class="q">「这一段应该居中」</div>
+                <div class="n">排版指令的默认值要确认。</div>
+              </div>
+              <div style="height:14px;"></div>
+              <div class="mini-card"><div class="t">对比：居中对齐和两端对齐有什么区别？</div><div class="d">今天再问</div></div>
+              <div class="mini-card"><div class="t">填空：排版指令「这一段应该居中」中的「居中」…</div><div class="d">今天再问</div></div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
+    <!-- A · 列表窄栏（有待确认卡片） -->
+    <div>
+      <p class="cell-label">列表 · 窄栏（有待确认卡片时）</p>
+      <div class="frame">
+        <div class="mock">
+          <aside class="rail is-narrow" style="border-left:0;">
+            <div class="rail-bar">
+              <span class="rail-view">
+                <button class="is-on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>列表</button>
+                <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="6" r="2.2"/><circle cx="19" cy="6" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M7 7.5 10.3 16M17 7.5 13.7 16M7.2 6h9.6"/></svg>脑图</button>
+              </span>
+              <span class="rail-count"><b>4</b> 卡 · <b>2</b> 待确认</span>
+              <span class="spring"></span>
+              <button class="rail-act">全部确认</button>
+              <button class="rail-iconbtn" title="收起"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="18" y1="9" x2="20.5" y2="12"/><line x1="20.5" y1="12" x2="18" y2="15"/></svg></button>
+            </div>
+            <div class="rail-body">
+              <div class="mini-card"><div class="t">对比：居中对齐和两端对齐有什么区别？</div><div class="d" style="color:var(--gold);">待确认 · 确认 / 有问题</div></div>
+              <div class="mini-card"><div class="t">填空：排版指令「这一段应该居中」…</div><div class="d" style="color:var(--gold);">待确认 · 确认 / 有问题</div></div>
+            </div>
+          </aside>
+        </div>
+      </div>
+      <ul class="opt-notes">
+        <li>有待确认卡片时，<span class="new">「全部确认」替换「去复习 →」</span>（同一槽位，避免头部抖动；复习入口此时意义不大——卡还没进复习）。摆放切换在窄栏 + 待确认场景下让位省略：此时面板只能 dock，本就没得切。</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- A · 脑图宽画布 -->
+  <div style="margin-top:20px;">
+    <p class="cell-label">脑图 · 宽画布（同一行工具栏，原样拉伸）</p>
+    <div class="frame">
+      <div class="mock">
+        <div class="mock-doc" style="max-width:340px;">
+          <div class="paper">
+            <h4>排版居中备注</h4>
+            <div class="hl"></div>
+            <div class="ln w85"></div><div class="ln w60"></div><div class="ln w40"></div>
+          </div>
+        </div>
+        <aside class="rail is-wide">
+          <div class="rail-bar">
+            <span class="rail-view">
+              <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>列表</button>
+              <button class="is-on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="6" r="2.2"/><circle cx="19" cy="6" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M7 7.5 10.3 16M17 7.5 13.7 16M7.2 6h9.6"/></svg>脑图</button>
+            </span>
+            <span class="rail-count"><b>2</b> 卡 · <b>1</b> 批注</span>
+            <span class="spring"></span>
+            <button class="rail-act go">去复习 →</button>
+            <span class="rail-dock">
+              <button class="is-on" title="并排"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg></button>
+              <button title="浮层"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="11" y="11" width="9" height="6" rx="1" fill="currentColor" stroke="none" opacity="0.35"/></svg></button>
+            </span>
+            <button class="rail-iconbtn" title="收起"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="18" y1="9" x2="20.5" y2="12"/><line x1="18" y1="12" x2="20.5" y2="12"/></svg></button>
+          </div>
+          <div class="canvas">
+            <div class="node" style="left:36%;top:22%;">
+              <div class="t">对比：居中对齐和两端对齐有什么区别？</div>
+              <div class="d">今天再问</div>
+            </div>
+            <div class="node" style="left:36%;top:56%;">
+              <div class="t">填空：排版指令「这一段应该居中」中的「居中」…</div>
+              <div class="d">今天再问</div>
+            </div>
+            <div class="canvas-tools">
+              <span>↩</span><span>↪</span><span class="sep"></span>
+              <span>T 文本</span><span>🖼 图片</span><span class="sep"></span>
+              <span>－</span><span>100%</span><span>＋</span><span>适配</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <ul class="opt-notes">
+    <li><b>视图切换带图标</b>，它就是面板标题——原来的「本文」「脑图 · 2 / 本文卡片 · 2」两行标题全部删掉，信息并入计数 <span class="new">「2 卡 · 1 批注」</span>。</li>
+    <li><b>「并排｜浮层」图标化</b>（PanelRight / PictureInPicture 类图标 + tooltip），尺寸 26×24，与文字 segmented 视觉分级，不再两组胶囊傻傻分不清。</li>
+    <li><b>宽画布模式头部原样拉伸</b>，不额外加东西；底部悬浮工具丸（撤销/文本/缩放）保持现状，它是画布上下文工具，不属于面板 chrome。</li>
+    <li><b>批注折叠条</b>：chevron + 「批注 · N」，点击收起/展开；脑图模式下批注区仍然隐藏（现状如此，不变）。</li>
+    <li>窄栏空间吃紧时的降级顺序：<span class="measure">计数换行省略批注 → 「去复习 →」缩为「复习 →」</span>（300px 默认宽度下实测放得下全部元素）。</li>
+  </ul>
+</section>
+
+<!-- ================= 方案 B ================= -->
+<section class="opt">
+  <div class="opt-head">方案 B · 摆放收进菜单</div>
+  <p class="opt-sub">
+    如果你觉得头部右侧还是挤：把「并排 / 浮层 / 收起」三个低频操作收进一个图标按钮的弹出菜单，
+    头部右侧只剩 <b>去复习 → + 一个图标</b>。最干净，代价是切换摆放多一次点击。
+  </p>
+  <div class="frame">
+    <div class="mock">
+      <div class="mock-doc">
+        <div class="paper">
+          <h4>排版居中备注</h4>
+          <div class="hl"></div>
+          <div class="ln w85"></div><div class="ln w60"></div><div class="ln w85"></div><div class="ln w40"></div>
+        </div>
+      </div>
+      <aside class="rail is-narrow">
+        <div class="rail-bar">
+          <span class="rail-view">
+            <button class="is-on"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>列表</button>
+            <button><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="6" r="2.2"/><circle cx="19" cy="6" r="2.2"/><circle cx="12" cy="18" r="2.2"/><path d="M7 7.5 10.3 16M17 7.5 13.7 16M7.2 6h9.6"/></svg>脑图</button>
+          </span>
+          <span class="rail-count"><b>2</b> 卡 · <b>1</b> 批注</span>
+          <span class="spring"></span>
+          <button class="rail-act go">去复习 →</button>
+          <span class="dock-menu-wrap">
+            <button class="rail-iconbtn" title="摆放" style="background:var(--bg-sunken);">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/><polyline points="9.5 10.5 11 12 9.5 13.5"/></svg>
+            </button>
+            <span class="dock-menu" role="menu">
+              <button role="menuitem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>并排<span class="tick">✓</span></button>
+              <button role="menuitem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="11" y="11" width="9" height="6" rx="1" fill="currentColor" stroke="none" opacity="0.35"/></svg>浮层</button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" class="is-danger"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>收起面板</button>
+            </span>
+          </span>
+        </div>
+        <div class="rail-body">
+          <button class="rail-notes-toggle" aria-expanded="true">
+            <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+            批注 · 1
+          </button>
+          <div class="note-card">
+            <div class="q">「这一段应该居中」</div>
+            <div class="n">排版指令的默认值要确认。</div>
+          </div>
+          <div style="height:14px;"></div>
+          <div class="mini-card"><div class="t">对比：居中对齐和两端对齐有什么区别？</div><div class="d">今天再问</div></div>
+          <div class="mini-card"><div class="t">填空：排版指令「这一段应该居中」中的「居中」…</div><div class="d">今天再问</div></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <ul class="opt-notes">
+    <li>菜单项 = 现有三个动作的平移，行为不变；当前摆放带 ✓。</li>
+    <li>窄窗口下「并排」disabled（沿用现有 <code>canDock</code> 判断），菜单里同样置灰。</li>
+  </ul>
+</section>
+
+<!-- ================= 规格 ================= -->
+<section class="spec">
+  <div class="opt-head">落地规格（两方案共用部分）</div>
+  <table>
+    <tr><th>元素</th><th>规格</th><th>对应现有代码</th></tr>
+    <tr>
+      <td>统一工具栏 <code>.rail-bar</code></td>
+      <td>高 32px，gap 10px；替换 <code>.card-rail-head</code> 与 <code>.card-rail-sec-head</code> 两行。与正文顶行（30px toprow）基本对齐。</td>
+      <td><code>card-rail.tsx</code> 的 <code>card-rail-head</code> + <code>card-rail-sec-head</code> 合并为一行</td>
+    </tr>
+    <tr>
+      <td>视图切换 <code>.rail-view</code></td>
+      <td>列表｜脑图，图标 + 文字，24px 高；状态仍存 <code>UiPrefsService.cardLayout</code>，行为不变。</td>
+      <td><code>card-layout-seg</code> 改名/上移到头部，补 lucide 图标（List / Waypoints 或 Network）</td>
+    </tr>
+    <tr>
+      <td>计数 <code>.rail-count</code></td>
+      <td>11.5px ink-3；列表模式「N 卡 · M 批注」，有待确认时「N 卡 · K 待确认」。点击批注计数滚动定位到批注区（可选增强）。</td>
+      <td>数据已有：<code>cards.length</code> / <code>notes.length</code> / proposed 数</td>
+    </tr>
+    <tr>
+      <td>「全部确认」</td>
+      <td>仅在 <code>canAcceptAll</code> 时出现，占据「去复习 →」槽位（互斥），避免头部宽度抖动。</td>
+      <td>逻辑不变，挪槽位</td>
+    </tr>
+    <tr>
+      <td>摆放切换</td>
+      <td>方案 A：图标 segmented 26×24（PanelRight / PictureInPicture2 / 收起 PanelRightClose·X）。方案 B：单个图标按钮 + 弹出菜单。overlay 态的「关闭」沿用 X。</td>
+      <td><code>card-rail-mode</code> 图标化；文案进 <code>title</code></td>
+    </tr>
+    <tr>
+      <td>批注折叠条</td>
+      <td>整行可点，chevron 旋转 90°；折叠状态不进 prefs（会话内状态即可），默认展开。脑图模式仍隐藏批注区。</td>
+      <td><code>is-notes</code> 区块头改为 button；样式留 <code>card-rail.css</code></td>
+    </tr>
+    <tr>
+      <td>不动的部分</td>
+      <td>底部画布工具丸、 minimap、脉络面板、宽度拖拽手柄、收起后的右侧把手（card-rail-handle）全部保持现状。</td>
+      <td>—</td>
+    </tr>
+  </table>
+</section>
+
+</body>
+</html>

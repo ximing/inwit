@@ -6,8 +6,9 @@
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
-  /* 顶部与 .pane-inner 对齐，头部行与 .doc-toprow 同高（30px），保证顶行一条线 */
-  padding: 16px 12px 28px;
+  container: card-rail / inline-size;
+  /* 顶部与 .pane-inner 对齐：上 padding 挪到 .card-rail-head 里（sticky 需要），保证顶行一条线 */
+  padding: 0 12px 28px;
   border-left: 1px solid var(--line-soft);
   background: var(--bg);
 }
@@ -64,17 +65,115 @@ html.is-resizing-card-rail * {
 }
 .card-rail .mini-grid { grid-template-columns: 1fr; }
 .card-rail-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 30px;
-  margin-bottom: 14px;
+  gap: 10px;
+  flex: none;
+  /* 含 rail 的原顶部 padding；横向出血盖住 rail 侧 padding，吸顶时是一条完整背景。
+     几何对齐 .doc-toprow：控件中心 y=30（toprow min-height 30 + pane padding 16），内容起点 y=58 */
+  margin: 0 -12px 6px;
+  padding: 16px 12px 8px;
+  background-color: inherit;
+  transition: box-shadow 0.15s;
+}
+/* 只在吸顶（有滚动）时浮现分界，静止时保持干净 */
+.card-rail.is-scrolled .card-rail-head {
+  box-shadow:
+    0 1px 0 var(--line-soft),
+    0 8px 16px -12px rgba(60, 48, 30, 0.18);
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-rail-head { transition: none; }
+}
+/* 视图切换就是面板标题：列表｜脑图 */
+.card-rail-view {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.card-rail-view button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
   font-size: 12px;
+  cursor: pointer;
+}
+.card-rail-view button.is-on {
+  background: var(--surface);
+  color: var(--accent-deep);
   font-weight: 600;
-  letter-spacing: 0.04em;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.card-rail-view button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.card-rail-count {
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
   color: var(--ink-3);
 }
-.card-rail-title { min-width: 0; }
+.card-rail-count b { color: var(--ink-2); font-weight: 600; }
+.card-rail-count-short { display: none; }
+.card-rail-spring { flex: 1; min-width: 4px; }
+/* 复习入口：有待复习时是 accent 药丸（图标 + 复习 + 数量），没有时退化为幽灵图标钮 */
+.card-rail-go {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-line);
+  color: var(--accent-deep);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.card-rail-go:hover { background: color-mix(in srgb, var(--accent-soft) 55%, var(--accent-line)); }
+.card-rail-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.card-rail-go-num { font-variant-numeric: tabular-nums; }
+.card-rail-go:not(.has-due) {
+  width: 26px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-3);
+}
+.card-rail-go:not(.has-due):hover { background: var(--bg-sunken); color: var(--ink-2); }
+/* 中窄栏：药丸先省掉「复习」二字；再窄：视图切换也图标化，计数收缩省略 */
+@container card-rail (max-width: 430px) {
+  .card-rail-go-label { display: none; }
+  .card-rail-go.has-due { padding: 0 8px; }
+}
+@container card-rail (max-width: 340px) {
+  .card-rail-head { gap: 6px; }
+  .card-rail-count-full { display: none; }
+  .card-rail-count-short { display: inline; }
+  .card-rail-view button { width: 26px; padding: 0; justify-content: center; }
+  .card-rail-view-label { display: none; }
+}
+/* 摆放切换：图标化，与文字 segmented 拉开层级 */
 .card-rail-mode {
   display: inline-flex;
   flex: none;
@@ -84,19 +183,21 @@ html.is-resizing-card-rail * {
   background: var(--bg-sunken);
 }
 .card-rail-mode button {
-  height: 22px;
-  padding: 0 7px;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--ink-3);
-  font-size: 11.5px;
   cursor: pointer;
 }
 .card-rail-mode button.is-on {
   background: var(--surface);
   color: var(--accent-deep);
-  font-weight: 600;
   box-shadow: 0 0 0 1px var(--line);
 }
 .card-rail-mode button:disabled {
@@ -106,17 +207,6 @@ html.is-resizing-card-rail * {
 .card-rail-mode button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-}
-.card-rail-head .go {
-  margin-left: auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: 12.5px;
-  color: var(--accent-deep);
-  font-weight: 600;
-  letter-spacing: 0;
-  white-space: nowrap;
 }
 .card-rail-accept-all {
   flex: none;
@@ -160,18 +250,34 @@ html.is-resizing-card-rail * {
   flex: none;
 }
 .card-rail .hint { padding: 8px 2px; font-size: 12.5px; }
+.card-rail-notes-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  text-align: left;
+  cursor: pointer;
+}
+.card-rail-notes-toggle:hover { color: var(--ink-2); }
+.card-rail-notes-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 4px; }
+.card-rail-notes-toggle .chev { transition: transform 0.15s; }
+.card-rail-notes-toggle[aria-expanded='false'] .chev { transform: rotate(-90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .card-rail-notes-toggle .chev { transition: none; }
+}
 .card-rail-sec { margin-top: 4px; }
 .card-rail-sec + .card-rail-sec {
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--line-soft);
-}
-.card-rail-sec-title {
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--ink-3);
-  margin: 0 0 10px;
 }
 .note-list { display: flex; flex-direction: column; gap: 8px; }
 .note-item {

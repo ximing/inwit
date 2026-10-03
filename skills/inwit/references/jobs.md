@@ -2,7 +2,7 @@
 
 # 任务与周报
 
-Generated 2026-10-01T02:48:23.237Z. 11 endpoints.
+Generated 2026-10-03T13:52:33.918Z. 11 endpoints.
 
 ### POST `/api/evolve/analyze`
 
@@ -54,7 +54,8 @@ auth=bearer
         "extract",
         "ocr",
         "annotation_resurface",
-        "memory_organize"
+        "memory_organize",
+        "conversation"
       ],
       "optional": true
     }

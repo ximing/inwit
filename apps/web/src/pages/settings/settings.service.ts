@@ -64,7 +64,7 @@ export const PROVIDER_MODELS: Record<LlmProvider, string> = {
 
 export const PROVIDERS = LLM_PROVIDERS;
 
-export type SettingsSection = 'profile' | 'appearance' | 'models' | 'ocr' | 'token' | 'archive';
+export type SettingsSection = 'profile' | 'appearance' | 'models' | 'ocr' | 'token' | 'archive' | 'files';
 export type TokenPane = 'list' | 'logs';
 
 export { ACCESS_TOKEN_MAX_PER_USER, ACCESS_TOKEN_NAME_MAX };
@@ -152,7 +152,8 @@ export class SettingsService extends Service {
       hash === 'profile' ||
       hash === 'ocr' ||
       hash === 'token' ||
-      hash === 'archive'
+      hash === 'archive' ||
+      hash === 'files'
     ) {
       this.section = hash;
       if (hash === 'token') this.tokenPane = 'list';

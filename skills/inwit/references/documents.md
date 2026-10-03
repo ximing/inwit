@@ -2,7 +2,7 @@
 
 # 文档与问答
 
-Generated 2026-10-01T02:48:23.237Z. 26 endpoints.
+Generated 2026-10-03T13:52:33.918Z. 26 endpoints.
 
 ### POST `/api/chat`
 
@@ -313,6 +313,11 @@ auth=bearer · 201
           "format": "uuid",
           "optional": true,
           "nullable": true
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "optional": true
         }
       },
       "required": [
@@ -335,6 +340,9 @@ auth=bearer · 201
         "parentId": {
           "optional": true,
           "nullable": true
+        },
+        "index": {
+          "optional": true
         }
       },
       "required": [
@@ -343,7 +351,8 @@ auth=bearer · 201
       ],
       "additionalProperties": false
     }
-  ]
+  ],
+  "refined": true
 }
 ```
 
@@ -413,6 +422,11 @@ auth=bearer
       "format": "uuid",
       "optional": true,
       "nullable": true
+    },
+    "index": {
+      "type": "integer",
+      "minimum": 0,
+      "optional": true
     },
     "text": {
       "type": "string",

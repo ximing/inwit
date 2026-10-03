@@ -14,6 +14,8 @@ function clipArchiveText(text: string, max = 60): string {
 }
 import { DialogService } from '@/services/dialog.service';
 import { THEME_OPTIONS, ThemeService, type ThemePreference } from '@/services/theme.service';
+import { FilesSection } from './files-section';
+import { FilesService } from './files.service';
 import {
   ACCESS_TOKEN_MAX_PER_USER,
   ACCESS_TOKEN_NAME_MAX,
@@ -36,6 +38,7 @@ const NAV: Array<{ id: SettingsSection; href: string; label: string }> = [
   { id: 'ocr', href: '#ocr', label: '文档解析' },
   { id: 'token', href: '#token', label: '接口令牌' },
   { id: 'archive', href: '#archive', label: '回收站' },
+  { id: 'files', href: '#files', label: '文件' },
 ];
 
 const SettingsPageContent = observer(function SettingsPageContent() {
@@ -858,6 +861,8 @@ const SettingsPageContent = observer(function SettingsPageContent() {
           </div>
         </div>
 
+        <FilesSection />
+
         <p className="settings-version">版本 {APP_VERSION}</p>
       </div>
       {service.toast ? (
@@ -869,4 +874,4 @@ const SettingsPageContent = observer(function SettingsPageContent() {
   );
 });
 
-export const SettingsPage = bindServices(SettingsPageContent, [SettingsService]);
+export const SettingsPage = bindServices(SettingsPageContent, [SettingsService, FilesService]);

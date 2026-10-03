@@ -2,7 +2,7 @@
 
 # 账号与设置
 
-Generated 2026-10-01T02:48:23.237Z. 22 endpoints.
+Generated 2026-10-03T13:52:33.918Z. 23 endpoints.
 
 ### POST `/api/auth/login`
 
@@ -406,6 +406,67 @@ auth=bearer
     "contentType",
     "sizeBytes"
   ],
+  "additionalProperties": false
+}
+```
+
+### GET `/api/me/files`
+
+auth=bearer
+
+当前账号对象存储里的文件，只读。
+
+- **query** `storageFilesQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "all",
+        "source",
+        "media",
+        "excerpt",
+        "avatar"
+      ],
+      "optional": true,
+      "default": "all"
+    },
+    "unused": {
+      "type": "string",
+      "enum": [
+        "0",
+        "1"
+      ],
+      "optional": true,
+      "default": "0"
+    },
+    "sort": {
+      "type": "string",
+      "enum": [
+        "modified",
+        "size"
+      ],
+      "optional": true,
+      "default": "modified"
+    },
+    "limit": {
+      "type": "integer",
+      "coerced": true,
+      "minimum": 1,
+      "maximum": 100,
+      "optional": true,
+      "default": 24
+    },
+    "offset": {
+      "type": "integer",
+      "coerced": true,
+      "minimum": 0,
+      "optional": true,
+      "default": 0
+    }
+  },
   "additionalProperties": false
 }
 ```

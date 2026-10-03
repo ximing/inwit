@@ -2,7 +2,7 @@
 
 # 开放文档（PAT）
 
-Generated 2026-10-01T02:48:23.237Z. 2 endpoints.
+Generated 2026-10-03T13:52:33.918Z. 2 endpoints.
 
 ### POST `/api/open/documents`
 

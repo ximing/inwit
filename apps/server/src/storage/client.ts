@@ -229,6 +229,54 @@ export async function listMultipartUploads(
   return out;
 }
 
+export type ListedObject = {
+  key: string;
+  sizeBytes: number;
+  modifiedAt: Date | null;
+};
+
+const LIST_PAGE = 1000;
+
+/** List object metadata under `prefix`, stopping after `maxObjects` real keys. */
+export async function listPrefix(
+  prefix: string,
+  maxObjects: number,
+): Promise<{ items: ListedObject[]; truncated: boolean }> {
+  if (maxObjects <= 0) return { items: [], truncated: false };
+  const { cfg, client } = getClient();
+  const items: ListedObject[] = [];
+  let token: string | undefined;
+  for (;;) {
+    const listed = await client.send(
+      new ListObjectsV2Command({
+        Bucket: cfg.bucket,
+        Prefix: prefix,
+        MaxKeys: Math.min(LIST_PAGE, maxObjects - items.length),
+        ...(token !== undefined ? { ContinuationToken: token } : {}),
+      }),
+    );
+    const contents = listed.Contents ?? [];
+    for (let i = 0; i < contents.length; i += 1) {
+      const obj = contents[i];
+      if (!obj?.Key || obj.Key.endsWith('/')) continue;
+      const size = typeof obj.Size === 'number' && obj.Size > 0 ? obj.Size : 0;
+      items.push({
+        key: obj.Key,
+        sizeBytes: size,
+        modifiedAt: obj.LastModified ?? null,
+      });
+      if (items.length >= maxObjects) {
+        const moreInPage = contents.slice(i + 1).some((entry) => entry.Key && !entry.Key.endsWith('/'));
+        return { items, truncated: moreInPage || listed.IsTruncated === true };
+      }
+    }
+    if (!listed.IsTruncated) return { items, truncated: false };
+    const next = listed.NextContinuationToken;
+    if (!next || next === token) return { items, truncated: true };
+    token = next;
+  }
+}
+
 export async function getObjectToFile(key: string, destPath: string): Promise<void> {
   const { cfg, client } = getClient();
   const res = await client.send(

@@ -2,7 +2,7 @@
 
 # API 模块索引
 
-Generated 2026-10-01T02:48:23.237Z.
+Generated 2026-10-03T13:52:33.918Z.
 
 按意图只读其中一个文件。不要一次打开多个模块，也不要读 `api.json`。
 
@@ -18,6 +18,7 @@ Generated 2026-10-01T02:48:23.237Z.
 | 记忆 | [memory.md](./memory.md) | 2 |
 | 批注 | [annotations.md](./annotations.md) | 10 |
 | 媒体资源 | [assets.md](./assets.md) | 6 |
-| 账号与设置 | [account.md](./account.md) | 22 |
+| 账号与设置 | [account.md](./account.md) | 23 |
 | 管理 | [admin.md](./admin.md) | 5 |
 | 内容同步 | [sync.md](./sync.md) | 1 |
+| other | [other.md](./other.md) | 6 |

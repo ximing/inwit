@@ -6,6 +6,7 @@ import {
   Library,
   LogOut,
   Moon,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Repeat,
@@ -138,26 +139,33 @@ const LayoutContent = observer(function LayoutContent() {
                 <span className="rail-email">{label}</span>
               </span>
             </NavLink>
-            <div className="rail-tools">
+            <button
+              type="button"
+              className="rail-more"
+              aria-label="账户菜单"
+              aria-haspopup="menu"
+              title="账户菜单"
+            >
+              <MoreHorizontal strokeWidth={1.8} />
+            </button>
+            <div className="rail-menu" role="menu">
               <button
                 type="button"
-                className="rail-icon-btn"
+                role="menuitem"
+                className="rail-menu-btn"
                 onClick={() => theme.toggleLightDark()}
-                aria-label={dark ? '切换到浅色' : '切换到深色'}
-                title={dark ? '浅色' : '深色'}
               >
                 {dark ? <Sun strokeWidth={1.8} /> : <Moon strokeWidth={1.8} />}
-                <span className="rail-tool-label">{dark ? '浅色' : '深色'}</span>
+                <span>{dark ? '切换为浅色' : '切换为深色'}</span>
               </button>
               <button
                 type="button"
-                className="rail-icon-btn"
+                role="menuitem"
+                className="rail-menu-btn"
                 onClick={() => void auth.logout()}
-                aria-label="退出"
-                title="退出"
               >
                 <LogOut strokeWidth={1.8} />
-                <span className="rail-tool-label">退出</span>
+                <span>退出登录</span>
               </button>
             </div>
           </div>

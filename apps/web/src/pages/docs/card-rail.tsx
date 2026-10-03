@@ -1,13 +1,18 @@
 import type { Annotation, DocumentCard } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import {
+  ChevronDown,
+  List,
   PanelRight,
   PanelRightClose,
   Pause,
   Pencil,
+  PictureInPicture2,
   Play,
+  Repeat,
   SquarePlus,
   Trash2,
+  Waypoints,
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
@@ -16,6 +21,7 @@ import { cardsForRail, MiniCard } from '@/components/reader/mini-card';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
 import { ROUTES, topicHostId } from '@/routes';
 import { DialogService } from '@/services/dialog.service';
+import { LayoutService } from '@/shell/layout.service';
 import {
   CANVAS_PANE_WIDTH_DEFAULT,
   CARD_RAIL_WIDTH_DEFAULT,
@@ -287,6 +293,8 @@ export const CardRail = observer(function CardRail() {
   const service = useService(DocsService);
   const dialog = useService(DialogService);
   const prefs = useService(UiPrefsService);
+  const layout = useService(LayoutService);
+  const dueCount = layout.dueCount;
   const cards = cardsForRail(service.doc?.cards ?? []);
   const digested = service.doc?.status === 'digested';
   const canAcceptAll = digested && cards.some((card) => card.acceptance === 'proposed');
@@ -342,6 +350,9 @@ export const CardRail = observer(function CardRail() {
     service.closeCardRailOverlay();
   };
   const pending = service.doc?.status === 'pending';
+  const proposedCount = cards.filter((card) => card.acceptance === 'proposed').length;
+  const [notesFolded, setNotesFolded] = useState(false);
+  const [railScrolled, setRailScrolled] = useState(false);
   const badge = cards.length + notes.length;
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -396,9 +407,13 @@ export const CardRail = observer(function CardRail() {
       ) : null}
       {visible ? (
         <aside
-          className={`card-rail${showOverlay ? ' is-overlay' : ''}${stack ? ' is-zen-stack' : ''}${prefs.cardLayout === 'map' ? ' is-map' : ''}`}
+          className={`card-rail${showOverlay ? ' is-overlay' : ''}${stack ? ' is-zen-stack' : ''}${prefs.cardLayout === 'map' ? ' is-map' : ''}${railScrolled ? ' is-scrolled' : ''}`}
           aria-label="批注与卡片"
           style={stack ? undefined : { width: shownWidth }}
+          onScroll={(event) => {
+            const scrolled = event.currentTarget.scrollTop > 0;
+            if (scrolled !== railScrolled) setRailScrolled(scrolled);
+          }}
         >
           {stack ? null : (
           <div
@@ -418,7 +433,45 @@ export const CardRail = observer(function CardRail() {
           />
           )}
           <div className="card-rail-head">
-            <span className="card-rail-title">本文</span>
+            <div className="card-rail-view" role="radiogroup" aria-label="卡片布局">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={prefs.cardLayout === 'list'}
+                className={prefs.cardLayout === 'list' ? 'is-on' : undefined}
+                onClick={() => prefs.setCardLayout('list')}
+              >
+                <List width={12} height={12} strokeWidth={1.8} />
+                <span className="card-rail-view-label">列表</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={prefs.cardLayout === 'map'}
+                className={prefs.cardLayout === 'map' ? 'is-on' : undefined}
+                onClick={() => prefs.setCardLayout('map')}
+              >
+                <Waypoints width={12} height={12} strokeWidth={1.8} />
+                <span className="card-rail-view-label">脑图</span>
+              </button>
+            </div>
+            <span className="card-rail-count">
+              <span className="card-rail-count-full">
+                {canAcceptAll ? (
+                  <>
+                    <b>{cards.length}</b> 卡 · <b>{proposedCount}</b> 待确认
+                  </>
+                ) : (
+                  <>
+                    <b>{cards.length}</b> 卡 · <b>{notes.length}</b> 批注
+                  </>
+                )}
+              </span>
+              <span className="card-rail-count-short">
+                <b>{cards.length}</b> 卡
+              </span>
+            </span>
+            <span className="card-rail-spring" />
             {canAcceptAll ? (
               <button
                 type="button"
@@ -429,32 +482,42 @@ export const CardRail = observer(function CardRail() {
               >
                 {service.acceptingProposed ? '确认中…' : '全部确认'}
               </button>
-            ) : null}
-            <Link className="go" to={ROUTES.review}>
-              去复习 →
-            </Link>
+            ) : (
+              <Link
+                className={`card-rail-go${dueCount > 0 ? ' has-due' : ''}`}
+                to={ROUTES.review}
+                title="去复习"
+                aria-label={dueCount > 0 ? `去复习，${dueCount} 张待复习` : '去复习'}
+              >
+                <Repeat width={12} height={12} strokeWidth={1.8} />
+                {dueCount > 0 ? <span className="card-rail-go-label">复习</span> : null}
+                {dueCount > 0 ? <span className="card-rail-go-num">{dueCount}</span> : null}
+              </Link>
+            )}
             {stack ? null : (
               <div className="card-rail-mode" role="radiogroup" aria-label="卡片栏摆放">
                 <button
                   type="button"
                   role="radio"
                   aria-checked={docked}
+                  aria-label="并排"
                   className={docked ? 'is-on' : undefined}
                   disabled={!canDock}
                   title={canDock ? '并排' : '窗口较窄，放不下并排'}
                   onClick={dockRail}
                 >
-                  并排
+                  <PanelRight width={13} height={13} strokeWidth={1.8} />
                 </button>
                 <button
                   type="button"
                   role="radio"
                   aria-checked={showOverlay}
+                  aria-label="浮层"
                   className={showOverlay ? 'is-on' : undefined}
                   title="浮层"
                   onClick={floatRail}
                 >
-                  浮层
+                  <PictureInPicture2 width={13} height={13} strokeWidth={1.8} />
                 </button>
               </div>
             )}
@@ -482,8 +545,16 @@ export const CardRail = observer(function CardRail() {
           </div>
 
           <section className="card-rail-sec is-notes" aria-label="批注">
-            <h3 className="card-rail-sec-title">批注 · {notes.length}</h3>
-            {notes.length === 0 ? (
+            <button
+              type="button"
+              className="card-rail-notes-toggle"
+              aria-expanded={!notesFolded}
+              onClick={() => setNotesFolded((folded) => !folded)}
+            >
+              <ChevronDown className="chev" width={10} height={10} strokeWidth={2.4} />
+              批注 · {notes.length}
+            </button>
+            {notesFolded ? null : notes.length === 0 ? (
               <p className="hint">划过的句子会出现在这里。</p>
             ) : (
               <div className="note-list">
@@ -498,33 +569,6 @@ export const CardRail = observer(function CardRail() {
             className="card-rail-sec is-cards"
             aria-label={prefs.cardLayout === 'map' ? '脑图' : '本文卡片'}
           >
-            <div className="card-rail-sec-head">
-              <h3 className="card-rail-sec-title">
-                {prefs.cardLayout === 'map'
-                  ? `脑图 · ${service.canvasForest.length}`
-                  : `本文卡片 · ${cards.length}`}
-              </h3>
-              <div className="card-layout-seg" role="radiogroup" aria-label="卡片布局">
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={prefs.cardLayout === 'list'}
-                  className={prefs.cardLayout === 'list' ? 'is-on' : undefined}
-                  onClick={() => prefs.setCardLayout('list')}
-                >
-                  列表
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={prefs.cardLayout === 'map'}
-                  className={prefs.cardLayout === 'map' ? 'is-on' : undefined}
-                  onClick={() => prefs.setCardLayout('map')}
-                >
-                  脑图
-                </button>
-              </div>
-            </div>
             {prefs.cardLayout === 'map' ? (
               <CardCanvas
                 renderCard={(card, selected) => (

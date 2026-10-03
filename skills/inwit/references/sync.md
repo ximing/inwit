@@ -2,7 +2,7 @@
 
 # 内容同步
 
-Generated 2026-10-01T02:48:23.237Z. 1 endpoints.
+Generated 2026-10-03T13:52:33.918Z. 1 endpoints.
 
 ### GET `/api/sync`
 

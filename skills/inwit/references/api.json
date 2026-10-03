@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-01T02:48:23.237Z",
+  "generatedAt": "2026-10-03T13:52:33.918Z",
   "modules": [
     {
       "id": "open",
@@ -54,7 +54,7 @@
     {
       "id": "account",
       "title": "账号与设置",
-      "count": 22
+      "count": 23
     },
     {
       "id": "admin",
@@ -65,6 +65,11 @@
       "id": "sync",
       "title": "内容同步",
       "count": 1
+    },
+    {
+      "id": "other",
+      "title": "other",
+      "count": 6
     }
   ],
   "endpoints": [
@@ -106,7 +111,8 @@
                 "selection",
                 "extract",
                 "ocr",
-                "memory_organize"
+                "memory_organize",
+                "conversation"
               ],
               "optional": true
             },
@@ -199,7 +205,8 @@
                 "extract",
                 "ocr",
                 "annotation_resurface",
-                "memory_organize"
+                "memory_organize",
+                "conversation"
               ],
               "optional": true
             }
@@ -1548,6 +1555,260 @@
     },
     {
       "method": "GET",
+      "path": "/api/conversations",
+      "module": "other",
+      "auth": "bearer",
+      "status": [],
+      "query": {
+        "name": "listConversationsQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 50,
+              "optional": true,
+              "default": 30
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations",
+      "module": "other",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "body": {
+        "name": "sendConversationInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20000
+            },
+            "documentIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 5,
+              "optional": true,
+              "default": []
+            },
+            "dirtyDocumentIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 8,
+              "optional": true,
+              "default": []
+            },
+            "llmConfigId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/conversations/:id",
+      "module": "other",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/conversations/:id",
+      "module": "other",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations/:id/messages",
+      "module": "other",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "sendConversationInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 20000
+            },
+            "documentIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 5,
+              "optional": true,
+              "default": []
+            },
+            "dirtyDocumentIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 8,
+              "optional": true,
+              "default": []
+            },
+            "llmConfigId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/conversations/:id/messages/:messageId/retry",
+      "module": "other",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "messageParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "messageId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id",
+            "messageId"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({\n  id: z.string().uuid(),\n  messageId: z.string().uuid(),\n})"
+      },
+      "body": {
+        "name": "retryConversationInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "dirtyDocumentIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "maxItems": 8,
+              "optional": true,
+              "default": []
+            },
+            "llmConfigId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
       "path": "/api/documents",
       "module": "documents",
       "auth": "bearer",
@@ -1861,6 +2122,11 @@
                   "format": "uuid",
                   "optional": true,
                   "nullable": true
+                },
+                "index": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "optional": true
                 }
               },
               "required": [
@@ -1883,6 +2149,9 @@
                 "parentId": {
                   "optional": true,
                   "nullable": true
+                },
+                "index": {
+                  "optional": true
                 }
               },
               "required": [
@@ -1891,7 +2160,8 @@
               ],
               "additionalProperties": false
             }
-          ]
+          ],
+          "refined": true
         }
       }
     },
@@ -1969,6 +2239,11 @@
               "format": "uuid",
               "optional": true,
               "nullable": true
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "optional": true
             },
             "text": {
               "type": "string",
@@ -2634,7 +2909,8 @@
                 "extract",
                 "ocr",
                 "annotation_resurface",
-                "memory_organize"
+                "memory_organize",
+                "conversation"
               ],
               "optional": true
             }
@@ -3268,6 +3544,69 @@
             "contentType",
             "sizeBytes"
           ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/me/files",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "comment": "当前账号对象存储里的文件，只读。",
+      "query": {
+        "name": "storageFilesQuerySchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "all",
+                "source",
+                "media",
+                "excerpt",
+                "avatar"
+              ],
+              "optional": true,
+              "default": "all"
+            },
+            "unused": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1"
+              ],
+              "optional": true,
+              "default": "0"
+            },
+            "sort": {
+              "type": "string",
+              "enum": [
+                "modified",
+                "size"
+              ],
+              "optional": true,
+              "default": "modified"
+            },
+            "limit": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 1,
+              "maximum": 100,
+              "optional": true,
+              "default": 24
+            },
+            "offset": {
+              "type": "integer",
+              "coerced": true,
+              "minimum": 0,
+              "optional": true,
+              "default": 0
+            }
+          },
           "additionalProperties": false
         }
       }

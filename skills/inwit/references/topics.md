@@ -2,7 +2,7 @@
 
 # 主题与知识地图
 
-Generated 2026-10-01T02:48:23.237Z. 19 endpoints.
+Generated 2026-10-03T13:52:33.918Z. 19 endpoints.
 
 ### DELETE `/api/map-nodes/:id`
 

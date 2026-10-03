@@ -22,6 +22,7 @@ import { registerMapRoutes } from './maps/map.routes.js';
 import { registerMemoryRoutes } from './memory/memory.routes.js';
 import { registerErrorHandler } from './plugins/error-handler.js';
 import { registerWebStatic } from './web-static.js';
+import { registerFileRoutes } from './files/files.routes.js';
 import { registerEvolveRoutes } from './agent/evolve.routes.js';
 import { registerWeeklyRoutes } from './agent/weekly.routes.js';
 import { registerReviewRoutes } from './review/review.routes.js';
@@ -68,6 +69,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   registerAuthRoutes(app);
   registerUserRoutes(app);
+  registerFileRoutes(app);
   registerLlmRoutes(app);
   registerOcrRoutes(app);
   registerDocumentRoutes(app);
