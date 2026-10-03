@@ -11,6 +11,8 @@
   user-select: none;
 }
 .doc-canvas:active { cursor: grabbing; }
+.doc-canvas:focus { outline: none; }
+.doc-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .doc-canvas-world {
   position: absolute;
   top: 0;
@@ -43,10 +45,56 @@
 }
 .doc-canvas-card .mini-card:hover { transform: none; }
 .doc-canvas-card.is-drop .mini-card,
-.doc-canvas-card.is-drop .canvas-node {
+.doc-canvas-card.is-drop .canvas-node,
+.doc-canvas-card.is-selected .mini-card,
+.doc-canvas-card.is-selected .canvas-node {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-line);
 }
+.doc-canvas-insert {
+  position: absolute;
+  z-index: 4;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.canvas-fold,
+.canvas-add {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.canvas-fold {
+  right: -11px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.canvas-fold.is-folded {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.canvas-add { opacity: 0; pointer-events: none; }
+.canvas-add.is-child { top: -8px; right: -8px; }
+.canvas-add.is-sibling { left: 50%; bottom: -10px; transform: translateX(-50%); }
+.doc-canvas-card:hover .canvas-add,
+.doc-canvas-card.is-selected .canvas-add { opacity: 1; pointer-events: auto; }
+.canvas-add:hover,
+.canvas-fold:hover { color: var(--accent); border-color: var(--accent-line); }
+.canvas-fold.is-folded:hover { color: var(--bg); }
 .canvas-node {
   position: relative;
   box-sizing: border-box;
@@ -153,15 +201,6 @@
   font-size: 12px;
   line-height: 1.4;
   white-space: nowrap;
-}
-.doc-canvas-tip {
-  position: absolute;
-  top: 8px;
-  left: 10px;
-  margin: 0;
-  font-size: 12px;
-  color: var(--ink-4);
-  pointer-events: none;
 }
 .doc-canvas-tools {
   position: absolute;

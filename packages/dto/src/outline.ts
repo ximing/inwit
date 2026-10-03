@@ -125,6 +125,104 @@ export function planOutlineMove(
   };
 }
 
+export type OutlineShift = { id: string; parentId: string | null; position: number };
+
+export type OutlinePlacement =
+  | {
+      ok: true;
+      parentId: string | null;
+      /** 移走自己之后，在目标兄弟列表里的下标。 */
+      index: number;
+      unchanged: boolean;
+      moves: OutlineShift[];
+    }
+  | { ok: false; reason: 'missing' | 'self' | 'cycle' | 'depth' };
+
+function orderedSiblings(
+  nodes: readonly OutlineNode[],
+  parentId: string | null,
+  exceptId?: string,
+): OutlineNode[] {
+  return nodes
+    .filter((node) => node.parentId === parentId && node.id !== exceptId)
+    .sort(compareNode);
+}
+
+/** 节点在兄弟里的下标。父节点按规范化之后的树计算。 */
+export function outlineSlot(
+  nodes: readonly OutlineNode[],
+  id: string,
+): { parentId: string | null; index: number } | null {
+  const forest = normalize(nodes);
+  const node = forest.find((item) => item.id === id);
+  if (!node) return null;
+  const index = orderedSiblings(forest, node.parentId).findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  return { parentId: node.parentId, index };
+}
+
+/** 直接子节点，按现在的顺序编号。 */
+export function outlineChildSlots(
+  nodes: readonly OutlineNode[],
+  parentId: string | null,
+): Array<{ id: string; index: number }> {
+  return orderedSiblings(normalize(nodes), parentId).map((node, index) => ({ id: node.id, index }));
+}
+
+/**
+ * 把节点放到 parentId 下面的第 index 个位置。
+ * index 是「先把这个节点从原处拿掉」之后的下标，超出则接到末尾。
+ * 同一父节点下会重新排成 0、1、2…；原来的父节点如果换了，也排紧，避免出现插不进的空隙。
+ */
+export function planOutlinePlace(
+  nodes: readonly OutlineNode[],
+  nodeId: string,
+  parentId: string | null,
+  index: number,
+): OutlinePlacement {
+  const forest = normalize(nodes);
+  const card = forest.find((node) => node.id === nodeId);
+  if (!card) return { ok: false, reason: 'missing' };
+  if (parentId === nodeId) return { ok: false, reason: 'self' };
+  if (parentId !== null && !forest.some((node) => node.id === parentId)) {
+    return { ok: false, reason: 'missing' };
+  }
+  const parentOf = parentMap(forest);
+  const kids = childrenOf(forest);
+  if (parentId !== null) {
+    if (reaches(parentId, nodeId, parentOf)) return { ok: false, reason: 'cycle' };
+    const nextDepth = depthOf(parentId, parentOf) + 1 + extraDepth(nodeId, kids);
+    if (nextDepth > CARD_OUTLINE_MAX_DEPTH) return { ok: false, reason: 'depth' };
+  }
+
+  const currentIndex = orderedSiblings(forest, card.parentId).findIndex((node) => node.id === nodeId);
+  const dest = orderedSiblings(forest, parentId, nodeId);
+  const raw = Number.isFinite(index) ? Math.floor(index) : dest.length;
+  const clamped = Math.max(0, Math.min(raw, dest.length));
+  if (card.parentId === parentId && currentIndex === clamped) {
+    return { ok: true, parentId, index: clamped, unchanged: true, moves: [] };
+  }
+
+  const placed = dest.map((node) => ({ id: node.id, parentId: node.parentId }));
+  placed.splice(clamped, 0, { id: nodeId, parentId });
+  const moves: OutlineShift[] = [];
+  placed.forEach((node, position) => {
+    const prev = forest.find((item) => item.id === node.id);
+    if (!prev) return;
+    if (prev.parentId !== node.parentId || prev.position !== position) {
+      moves.push({ id: node.id, parentId: node.parentId, position });
+    }
+  });
+  if (card.parentId !== parentId) {
+    orderedSiblings(forest, card.parentId, nodeId).forEach((node, position) => {
+      if (node.position !== position) {
+        moves.push({ id: node.id, parentId: node.parentId, position });
+      }
+    });
+  }
+  return { ok: true, parentId, index: clamped, unchanged: false, moves };
+}
+
 /**
  * 一个节点离开可见树（归档、拒绝、删除）时，直接子节点各自成为一棵树，
  * 排在已有的根后面，相对顺序不变。再下面的节点仍挂在原来的子节点上。

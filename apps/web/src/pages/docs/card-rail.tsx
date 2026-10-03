@@ -3,7 +3,6 @@ import { observer, useService } from '@rabjs/react';
 import {
   PanelRight,
   PanelRightClose,
-  PanelRightOpen,
   Pause,
   Pencil,
   Play,
@@ -27,6 +26,7 @@ import {
 } from '@/services/ui-prefs-logic';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { CardCanvas } from './card-canvas';
+import { cardRailCanDock, cardRailMode } from './card-rail-mode';
 import { CardLinks } from './card-link-list';
 import { DocsService } from './docs.service';
 
@@ -296,16 +296,37 @@ export const CardRail = observer(function CardRail() {
     service.paneWidth,
     wide,
   );
-  const stack = prefs.zenMode && service.cardRailNarrow;
-  // 主题里打开的文档：列表和脑图跟正文并排，不改成浮层。锚点只负责展开卡片。
-  const hostedDocked =
-    hosted && !stack && (!prefs.cardRailCollapsed || service.cardRailOverlayOpen || prefs.zenMode);
-  const docked =
-    hostedDocked ||
-    (!hosted && !stack && !service.cardRailNarrow && (!prefs.cardRailCollapsed || prefs.zenMode));
-  const showOverlay =
-    !hosted && !stack && !docked && (service.cardRailOverlayOpen || prefs.zenMode);
-  const visible = docked || showOverlay || stack;
+  const mode = cardRailMode({
+    hosted,
+    zen: prefs.zenMode,
+    narrow: service.cardRailNarrow,
+    collapsed: prefs.cardRailCollapsed,
+    float: prefs.cardRailFloat,
+    peek: service.cardRailOverlayOpen,
+  });
+  const docked = mode === 'dock';
+  const showOverlay = mode === 'overlay';
+  const stack = mode === 'stack';
+  const visible = mode !== 'hidden';
+  const canDock = cardRailCanDock({ hosted, narrow: service.cardRailNarrow });
+  const dismissRail = () => {
+    prefs.setCardRailCollapsed(true);
+    service.closeCardRailOverlay();
+  };
+  const openRail = () => {
+    prefs.setCardRailCollapsed(false);
+    service.closeCardRailOverlay();
+  };
+  const dockRail = () => {
+    prefs.setCardRailFloat(false);
+    prefs.setCardRailCollapsed(false);
+    service.closeCardRailOverlay();
+  };
+  const floatRail = () => {
+    prefs.setCardRailFloat(true);
+    prefs.setCardRailCollapsed(false);
+    service.closeCardRailOverlay();
+  };
   const pending = service.doc?.status === 'pending';
   const badge = cards.length + notes.length;
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -357,11 +378,7 @@ export const CardRail = observer(function CardRail() {
   return (
     <>
       {showOverlay && !prefs.zenMode ? (
-        <div
-          className="card-rail-scrim"
-          aria-hidden
-          onClick={() => service.closeCardRailOverlay()}
-        />
+        <div className="card-rail-scrim" aria-hidden onClick={dismissRail} />
       ) : null}
       {visible ? (
         <aside
@@ -402,45 +419,52 @@ export const CardRail = observer(function CardRail() {
             <Link className="go" to={ROUTES.review}>
               去复习 →
             </Link>
+            {stack ? null : (
+              <div className="card-rail-mode" role="radiogroup" aria-label="卡片栏摆放">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={docked}
+                  className={docked ? 'is-on' : undefined}
+                  disabled={!canDock}
+                  title={canDock ? '并排' : '窗口较窄，放不下并排'}
+                  onClick={dockRail}
+                >
+                  并排
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={showOverlay}
+                  className={showOverlay ? 'is-on' : undefined}
+                  title="浮层"
+                  onClick={floatRail}
+                >
+                  浮层
+                </button>
+              </div>
+            )}
             {docked ? (
               <button
                 type="button"
                 className="btn btn-ghost card-rail-icon"
                 aria-label="收起卡片栏"
                 title="收起"
-                onClick={() => {
-                  prefs.setCardRailCollapsed(true);
-                  service.closeCardRailOverlay();
-                }}
+                onClick={dismissRail}
               >
                 <PanelRightClose width={14} height={14} strokeWidth={1.8} />
               </button>
-            ) : prefs.zenMode ? null : (
-              <>
-                {!service.cardRailNarrow ? (
-                  <button
-                    type="button"
-                    className="btn btn-ghost card-rail-icon"
-                    aria-label="固定卡片栏"
-                    title="固定"
-                    onClick={() => {
-                      prefs.setCardRailCollapsed(false);
-                      service.closeCardRailOverlay();
-                    }}
-                  >
-                    <PanelRightOpen width={14} height={14} strokeWidth={1.8} />
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="btn btn-ghost card-rail-icon"
-                  aria-label="关闭卡片栏"
-                  onClick={() => service.closeCardRailOverlay()}
-                >
-                  <X width={14} height={14} strokeWidth={1.8} />
-                </button>
-              </>
-            )}
+            ) : showOverlay ? (
+              <button
+                type="button"
+                className="btn btn-ghost card-rail-icon"
+                aria-label="关闭卡片栏"
+                title="关闭"
+                onClick={dismissRail}
+              >
+                <X width={14} height={14} strokeWidth={1.8} />
+              </button>
+            ) : null}
           </div>
 
           <section className="card-rail-sec is-notes" aria-label="批注">
@@ -503,18 +527,12 @@ export const CardRail = observer(function CardRail() {
           </section>
         </aside>
       ) : null}
-      {!docked && !stack ? (
+      {mode === 'hidden' ? (
         <button
           type="button"
           className="card-rail-handle"
           aria-label={`打开卡片栏，${cards.length} 张卡，${notes.length} 条批注`}
-          onClick={() => {
-            if (hosted) {
-              prefs.setCardRailCollapsed(false);
-              return;
-            }
-            service.openCardRailOverlay();
-          }}
+          onClick={openRail}
         >
           <PanelRight width={16} height={16} strokeWidth={1.8} />
           {badge > 0 ? <span className="card-rail-badge">{badge}</span> : null}

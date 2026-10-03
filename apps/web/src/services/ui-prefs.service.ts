@@ -17,6 +17,7 @@ export type CardLayout = 'list' | 'map';
 
 export const DOC_MODE_STORAGE_KEY = 'inwit-doc-mode';
 export const CARD_RAIL_COLLAPSED_KEY = 'inwit-card-rail-collapsed';
+export const CARD_RAIL_FLOAT_KEY = 'inwit-card-rail-float';
 export const CARD_RAIL_WIDTH_KEY = 'inwit-card-rail-width';
 export const CANVAS_PANE_WIDTH_KEY = 'inwit-canvas-pane-width';
 export const CARD_LAYOUT_KEY = 'inwit-card-layout';
@@ -26,7 +27,7 @@ export const NAV_RAIL_COLLAPSED_KEY = 'inwit-nav-rail-collapsed';
 export const ASSISTANT_COLLAPSED_KEY = 'inwit-assistant-collapsed';
 export const ASSISTANT_WIDTH_KEY = 'inwit-assistant-width';
 
-/** Pane narrower than this docks the card rail as an overlay instead of a column. */
+/** Pane narrower than this cannot keep the card rail beside the document. */
 export const CARD_RAIL_NARROW_PX = 880;
 
 function readDocMode(): DocMode {
@@ -79,6 +80,8 @@ function writeStorage(key: string, value: string): void {
 export class UiPrefsService extends Service {
   docMode: DocMode = 'edit';
   cardRailCollapsed = false;
+  /** 上次打开卡片栏时选的是浮层。收起后再打开沿用这个选择。 */
+  cardRailFloat = false;
   cardRailWidth = CARD_RAIL_WIDTH_DEFAULT;
   canvasPaneWidth = CANVAS_PANE_WIDTH_DEFAULT;
   cardLayout: CardLayout = 'list';
@@ -93,6 +96,7 @@ export class UiPrefsService extends Service {
     this.docMode = readDocMode();
     this.cardLayout = readCardLayout();
     this.cardRailCollapsed = readFlag(CARD_RAIL_COLLAPSED_KEY);
+    this.cardRailFloat = readFlag(CARD_RAIL_FLOAT_KEY);
     this.navRailCollapsed = readFlag(NAV_RAIL_COLLAPSED_KEY);
     this.assistantCollapsed = readCollapsed(ASSISTANT_COLLAPSED_KEY, true);
     this.zenMode = readFlag(ZEN_MODE_KEY);
@@ -127,6 +131,12 @@ export class UiPrefsService extends Service {
     if (this.cardRailCollapsed === collapsed) return;
     this.cardRailCollapsed = collapsed;
     writeStorage(CARD_RAIL_COLLAPSED_KEY, collapsed ? '1' : '0');
+  }
+
+  setCardRailFloat(float: boolean): void {
+    if (this.cardRailFloat === float) return;
+    this.cardRailFloat = float;
+    writeStorage(CARD_RAIL_FLOAT_KEY, float ? '1' : '0');
   }
 
   setCardRailWidth(width: number, paneWidth = 0): void {

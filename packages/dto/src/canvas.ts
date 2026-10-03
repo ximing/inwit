@@ -27,27 +27,39 @@ export const canvasNodeListSchema = z.object({
 export type CanvasNodeList = z.infer<typeof canvasNodeListSchema>;
 
 const parentIdField = z.string().uuid().nullable().optional();
+const indexField = z.number().int().nonnegative().optional();
 
-export const createCanvasNodeInputSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('text'),
-    text: z.string().trim().min(1).max(4000),
-    parentId: parentIdField,
-  }),
-  z.object({
-    kind: z.literal('image'),
-    imageKey: z.string().trim().min(1).max(512),
-    parentId: parentIdField,
-  }),
-]);
+export const createCanvasNodeInputSchema = z
+  .discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('text'),
+      text: z.string().trim().min(1).max(4000),
+      parentId: parentIdField,
+      /** 挂到 parentId 下面的第几个。不传则接到末尾。 */
+      index: indexField,
+    }),
+    z.object({
+      kind: z.literal('image'),
+      imageKey: z.string().trim().min(1).max(512),
+      parentId: parentIdField,
+      index: indexField,
+    }),
+  ])
+  .refine((value) => value.index === undefined || value.parentId !== undefined);
 export type CreateCanvasNodeInput = z.infer<typeof createCanvasNodeInputSchema>;
 
 export const setCanvasNodeInputSchema = z
   .object({
     parentId: z.string().uuid().nullable().optional(),
+    /** 与 parentId 一起给出时，插到这个下标，而不是接到末尾。 */
+    index: z.number().int().nonnegative().optional(),
     text: z.string().trim().min(1).max(4000).optional(),
   })
-  .refine((value) => value.parentId !== undefined || value.text !== undefined);
+  .refine(
+    (value) =>
+      (value.parentId !== undefined || value.text !== undefined) &&
+      (value.index === undefined || value.parentId !== undefined),
+  );
 export type SetCanvasNodeInput = z.infer<typeof setCanvasNodeInputSchema>;
 
 export type CanvasMember = {

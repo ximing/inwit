@@ -9,6 +9,7 @@ import { docsPath, fromTopicOf, topicDocPath, topicHostId } from '@/routes';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { CardEditDialog } from './card-edit-dialog';
+import { cardRailMode } from './card-rail-mode';
 import { DocsAnnotationsService } from './docs-annotations.service';
 import { DocsImportService } from './docs-import.service';
 import { DocsService } from './docs.service';
@@ -77,16 +78,30 @@ const DocsPageContent = observer(function DocsPageContent() {
 
   useEffect(() => {
     void service.boot();
+    const railMode = () =>
+      cardRailMode({
+        hosted: hostTopic !== null,
+        zen: prefs.zenMode,
+        narrow: service.cardRailNarrow,
+        collapsed: prefs.cardRailCollapsed,
+        float: prefs.cardRailFloat,
+        peek: service.cardRailOverlayOpen,
+      });
+    const dismissRail = () => {
+      prefs.setCardRailCollapsed(true);
+      service.closeCardRailOverlay();
+    };
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       if (service.newTopicOpen) {
         service.closeNewTopic();
         return;
       }
-      if (service.cardRailOverlayOpen) {
-        service.closeCardRailOverlay();
+      if (railMode() === 'overlay') {
+        dismissRail();
         return;
       }
+      if (service.cardRailOverlayOpen) service.closeCardRailOverlay();
       if (search.hasQuery) {
         search.clear();
         return;
@@ -117,12 +132,9 @@ const DocsPageContent = observer(function DocsPageContent() {
       if (service.paneTopicMenuOpen && !target.closest('.ws-pane .topic-pick-wrap')) {
         service.closePaneTopicMenu();
       }
-      if (
-        service.cardRailOverlayOpen &&
-        !target.closest(`.card-rail, .card-rail-handle, ${ANCHOR_HIT_SELECTOR}`)
-      ) {
-        service.closeCardRailOverlay();
-      }
+      const insideRail = target.closest(`.card-rail, .card-rail-handle, ${ANCHOR_HIT_SELECTOR}`);
+      if (!insideRail && railMode() === 'overlay') dismissRail();
+      else if (!insideRail && service.cardRailOverlayOpen) service.closeCardRailOverlay();
       if (service.activeCardId || service.activeAnnotationId) {
         if (target.closest('.mini-card, .note-item, .search-hit, .card-links')) return;
         if (target.closest(ANCHOR_HIT_SELECTOR)) return;
@@ -136,7 +148,7 @@ const DocsPageContent = observer(function DocsPageContent() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('mousedown', onPointer);
     };
-  }, [service, search, prefs]);
+  }, [service, search, prefs, hostTopic]);
 
   useEffect(() => {
     const el = paneRef.current;

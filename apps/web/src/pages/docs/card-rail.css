@@ -75,8 +75,43 @@ html.is-resizing-card-rail * {
   color: var(--ink-3);
 }
 .card-rail-title { min-width: 0; }
+.card-rail-mode {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.card-rail-mode button {
+  height: 22px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.card-rail-mode button.is-on {
+  background: var(--surface);
+  color: var(--accent-deep);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.card-rail-mode button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.card-rail-mode button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
 .card-rail-head .go {
   margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 12.5px;
   color: var(--accent-deep);
   font-weight: 600;
@@ -84,6 +119,7 @@ html.is-resizing-card-rail * {
   white-space: nowrap;
 }
 .card-rail-accept-all {
+  flex: none;
   border: 0;
   background: none;
   padding: 0;

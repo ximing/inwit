@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { DocsService } from './docs.service';
+import { MIND_NEW_TEXT } from './mindmap-edit';
 
 function noteKicker(item: Annotation): string {
   if (item.kind === 'pdf') return `PDF ${(item.pageIndex ?? 0) + 1}`;
@@ -57,15 +58,20 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
   kind,
   text,
   imageKey,
+  editing,
+  onEdit,
+  onCloseEdit,
 }: {
   id: string;
   kind: 'text' | 'image';
   text: string;
   imageKey: string | null;
+  editing: boolean;
+  onEdit: () => void;
+  onCloseEdit: () => void;
 }) {
   const service = useService(DocsService);
   const skipBlur = useRef(false);
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(text);
 
   useEffect(() => {
@@ -77,7 +83,7 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
       skipBlur.current = false;
       return;
     }
-    setEditing(false);
+    onCloseEdit();
     if (draft.trim() === text) return;
     void service.saveCanvasText(id, draft).then((ok) => {
       if (!ok) setDraft(text);
@@ -106,19 +112,31 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
           maxLength={4000}
           autoFocus
           aria-label="编辑文本"
+          onFocus={(event) => {
+            if (text === MIND_NEW_TEXT) event.currentTarget.select();
+          }}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
+              event.stopPropagation();
               skipBlur.current = true;
               setDraft(text);
-              setEditing(false);
+              onCloseEdit();
+            }
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              event.currentTarget.blur();
             }
           }}
         />
       ) : null}
       {kind === 'text' && !editing ? (
-        <p className="canvas-node-text" onClick={() => setEditing(true)}>
+        <p
+          className="canvas-node-text"
+          onClick={() => onEdit()}
+          onDoubleClick={() => onEdit()}
+        >
           {text}
         </p>
       ) : null}

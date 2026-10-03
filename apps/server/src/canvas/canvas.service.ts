@@ -1,5 +1,5 @@
 import type { CanvasMember, CanvasNode, CreateCanvasNodeInput, SetCanvasNodeInput } from '@inwit/dto';
-import { mergeCanvasForest, planOutlineDetach, planOutlineMove } from '@inwit/dto';
+import { mergeCanvasForest, planOutlineDetach, planOutlineMove, planOutlinePlace } from '@inwit/dto';
 import { and, asc, eq, isNull, ne } from 'drizzle-orm';
 import { assertOwnedAssetKey } from '../assets/asset-logic.js';
 import { getDb, type Database } from '../db/index.js';
@@ -151,41 +151,75 @@ async function mirrorCardOutline(
     .where(and(eq(cards.id, cardId), eq(cards.userId, userId)));
 }
 
-async function placeInTx(
+async function writeMove(
   db: CanvasDb,
   userId: string,
   documentId: string,
-  nodeId: string,
-  parentId: string | null,
-): Promise<CanvasNode> {
-  const loaded = await loadVisible(db, userId, documentId);
-  const member = loaded.forest.find((item) => item.id === nodeId);
-  if (!member) throw AppError.of(404, 'NOT_FOUND');
-  const plan = planOutlineMove(loaded.forest, nodeId, parentId);
-  if (!plan.ok) throw AppError.of(400, 'CANVAS_NODE_INVALID');
-  if (plan.unchanged) {
-    const row = loaded.rows.find((item) => item.id === nodeId);
-    return row ? toPublic(row) : virtualNode(documentId, member);
-  }
-  if (plan.parentId) await ensureMemberRow(db, userId, documentId, plan.parentId, loaded);
-  await ensureMemberRow(db, userId, documentId, nodeId, loaded);
-  const now = new Date();
+  loaded: { forest: CanvasMember[]; rows: CanvasNodeRow[] },
+  move: { id: string; parentId: string | null; position: number },
+  now: Date,
+): Promise<CanvasNodeRow> {
+  if (move.parentId) await ensureMemberRow(db, userId, documentId, move.parentId, loaded);
+  await ensureMemberRow(db, userId, documentId, move.id, loaded);
   const [updated] = await db
     .update(canvasNodes)
-    .set({ parentId: plan.parentId, position: plan.position, updatedAt: now })
+    .set({ parentId: move.parentId, position: move.position, updatedAt: now })
     .where(
       and(
-        eq(canvasNodes.id, nodeId),
+        eq(canvasNodes.id, move.id),
         eq(canvasNodes.userId, userId),
         eq(canvasNodes.documentId, documentId),
       ),
     )
     .returning();
   if (!updated) throw AppError.of(500, 'INTERNAL_ERROR');
-  if (member.kind === 'card') {
-    await mirrorCardOutline(db, userId, loaded.forest, nodeId, plan.parentId, plan.position, now);
+  const member = loaded.forest.find((item) => item.id === move.id);
+  if (member?.kind === 'card') {
+    await mirrorCardOutline(db, userId, loaded.forest, move.id, move.parentId, move.position, now);
   }
-  return toPublic(updated);
+  return updated;
+}
+
+async function placeInTx(
+  db: CanvasDb,
+  userId: string,
+  documentId: string,
+  nodeId: string,
+  parentId: string | null,
+  index?: number,
+): Promise<CanvasNode> {
+  const loaded = await loadVisible(db, userId, documentId);
+  const member = loaded.forest.find((item) => item.id === nodeId);
+  if (!member) throw AppError.of(404, 'NOT_FOUND');
+  const existing = () => {
+    const row = loaded.rows.find((item) => item.id === nodeId);
+    return row ? toPublic(row) : virtualNode(documentId, member);
+  };
+  if (index === undefined) {
+    const plan = planOutlineMove(loaded.forest, nodeId, parentId);
+    if (!plan.ok) throw AppError.of(400, 'CANVAS_NODE_INVALID');
+    if (plan.unchanged) return existing();
+    const updated = await writeMove(
+      db,
+      userId,
+      documentId,
+      loaded,
+      { id: nodeId, parentId: plan.parentId, position: plan.position },
+      new Date(),
+    );
+    return toPublic(updated);
+  }
+  const plan = planOutlinePlace(loaded.forest, nodeId, parentId, index);
+  if (!plan.ok) throw AppError.of(400, 'CANVAS_NODE_INVALID');
+  if (plan.unchanged || plan.moves.length === 0) return existing();
+  const now = new Date();
+  let primary: CanvasNodeRow | null = null;
+  for (const move of plan.moves) {
+    const updated = await writeMove(db, userId, documentId, loaded, move, now);
+    if (move.id === nodeId) primary = updated;
+  }
+  if (!primary) throw AppError.of(500, 'INTERNAL_ERROR');
+  return toPublic(primary);
 }
 
 export async function listCanvasNodes(userId: string, documentId: string): Promise<CanvasNode[]> {
@@ -232,8 +266,8 @@ export async function createCanvasNode(
       })
       .returning();
     if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
-    if (input.parentId == null) return toPublic(row);
-    return placeInTx(tx, userId, documentId, row.id, input.parentId);
+    if (input.parentId == null && input.index === undefined) return toPublic(row);
+    return placeInTx(tx, userId, documentId, row.id, input.parentId ?? null, input.index);
   });
 }
 
@@ -262,7 +296,7 @@ export async function updateCanvasNode(
       if (input.parentId === undefined) return toPublic(row);
     }
     if (input.parentId === undefined) throw AppError.of(400, 'VALIDATION_ERROR');
-    return placeInTx(tx, userId, documentId, nodeId, input.parentId);
+    return placeInTx(tx, userId, documentId, nodeId, input.parentId, input.index);
   });
 }
 

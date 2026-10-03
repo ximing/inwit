@@ -1,4 +1,12 @@
-import { CARD_OUTLINE_MAX_DEPTH, planOutlineDetach, planOutlineMove, type OutlineNode } from '@inwit/dto';
+import {
+  CARD_OUTLINE_MAX_DEPTH,
+  outlineChildSlots,
+  outlineSlot,
+  planOutlineDetach,
+  planOutlineMove,
+  planOutlinePlace,
+  type OutlineNode,
+} from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 
 function chain(length: number): OutlineNode[] {
@@ -98,6 +106,52 @@ describe('planOutlineDetach', () => {
     expect(planOutlineDetach(nodes, 'a')).toEqual({
       nextParent: null,
       moves: [{ id: 'c', parentId: null, position: 4 }],
+    });
+  });
+});
+
+describe('planOutlinePlace', () => {
+  const nodes: OutlineNode[] = [
+    { id: 'a', parentId: null, position: 0 },
+    { id: 'b', parentId: null, position: 1 },
+    { id: 'c', parentId: null, position: 2 },
+    { id: 'd', parentId: 'a', position: 0 },
+  ];
+
+  it('inserts a root between siblings and renumbers that row', () => {
+    const plan = planOutlinePlace(nodes, 'c', null, 0);
+    expect(plan).toEqual({
+      ok: true,
+      parentId: null,
+      index: 0,
+      unchanged: false,
+      moves: [
+        { id: 'c', parentId: null, position: 0 },
+        { id: 'a', parentId: null, position: 1 },
+        { id: 'b', parentId: null, position: 2 },
+      ],
+    });
+  });
+
+  it('does nothing when the index is already the current slot', () => {
+    expect(planOutlinePlace(nodes, 'b', null, 1)).toMatchObject({ ok: true, unchanged: true, moves: [] });
+    expect(outlineSlot(nodes, 'b')).toEqual({ parentId: null, index: 1 });
+    expect(outlineChildSlots(nodes, 'a')).toEqual([{ id: 'd', index: 0 }]);
+  });
+
+  it('appends as the last child and refuses a cycle or an extra depth', () => {
+    expect(planOutlinePlace(nodes, 'c', 'a', 9)).toMatchObject({
+      ok: true,
+      parentId: 'a',
+      index: 1,
+      unchanged: false,
+    });
+    expect(planOutlinePlace(nodes, 'a', 'd', 0)).toEqual({ ok: false, reason: 'cycle' });
+    const deep = chain(CARD_OUTLINE_MAX_DEPTH);
+    const leaf = deep[deep.length - 1]?.id ?? '';
+    expect(planOutlinePlace([...deep, { id: 'extra', parentId: null, position: 0 }], 'extra', leaf, 0)).toEqual({
+      ok: false,
+      reason: 'depth',
     });
   });
 });
