@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inwit · 扔进去 · AI 消化等待态设计稿</title>
+<link rel="stylesheet" href="inwit.css" />
+<style>
+  /* ============ 设计稿画板框架（不进入实现） ============ */
+  body { background: var(--bg-sunken); display: flex; flex-direction: column; align-items: center; gap: 56px; padding: 48px 0 96px; }
+  .art-label { font-size: 12px; color: var(--ink-3); letter-spacing: .06em; margin-bottom: -40px; }
+  .art-label b { color: var(--ink); }
+  .board { width: 1120px; background: var(--bg); border-radius: var(--r-lg); box-shadow: var(--shadow-3); position: relative; overflow: hidden; }
+  .board.dark { background: #1c1915; color: #f0e8d8; --bg: #1c1915; --bg-sunken: #15120e; --surface: #26221c; --surface-2: #2e2923;
+    --ink: #f0e8d8; --ink-2: #c9bfae; --ink-3: #9a8f7d; --ink-4: #6e6558; --line: #3f372c; --line-soft: #332c24;
+    --accent: #e06a52; --accent-deep: #f08a74; --accent-soft: #3a2420; --accent-line: #6b3d32;
+    --gold: #d4a44a; --gold-soft: #3a3018; --gold-line: #5c4c24; --green: #6faf84; --green-soft: #1c2c22; --green-line: #2f4a38; }
+  .scene { padding: 40px 48px 48px; }
+  .scene h2 { font-family: var(--serif); font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .scene .cap { font-size: 12.5px; color: var(--ink-3); margin-bottom: 28px; max-width: 680px; }
+  .stack { display: flex; flex-direction: column; gap: 32px; }
+  .rowitem .tag { font-size: 11px; color: var(--ink-4); letter-spacing: .05em; margin-bottom: 10px; }
+  .ctrl { position: absolute; top: 18px; right: 22px; display: flex; gap: 8px; }
+  .ctrl button { height: 30px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); font-size: 12px; color: var(--ink); }
+  .ctrl button:hover { background: var(--surface-2); }
+
+  /* ============ 核心：AI 流光（暖调品牌三色） ============ */
+  /* 实现时这三个变量进 styles.css :root，暗色主题随 accent/gold/green 自动换 */
+  :root { --ai-a: var(--accent); --ai-b: var(--gold); --ai-c: var(--green); }
+
+  @property --ai-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+  @keyframes ai-flow { to { --ai-angle: 360deg; } }
+
+  /* 流光描边壳：包在 capture / 上传条外面 */
+  .ai-shell {
+    position: relative; border-radius: var(--r-md); padding: 1.5px;
+    background: conic-gradient(from var(--ai-angle),
+      var(--ai-a) 0%, var(--ai-b) 22%, var(--ai-c) 42%,
+      var(--ai-a) 58%, var(--ai-b) 78%, var(--ai-c) 92%, var(--ai-a) 100%);
+    animation: ai-flow 3.6s linear infinite;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 7%, transparent),
+                0 0 18px color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  .ai-shell-inner {
+    border-radius: calc(var(--r-md) - 1.5px);
+    background: var(--surface);
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 14px; min-height: 44px;
+  }
+
+  /* ✦ 呼吸 */
+  .spark { color: var(--ai-b); display: inline-flex; animation: spark-breathe 1.8s ease-in-out infinite; flex: none; }
+  @keyframes spark-breathe { 0%,100% { opacity: .55; transform: scale(.92); } 50% { opacity: 1; transform: scale(1.08); } }
+
+  /* shimmer 文案：朱红→金→墨绿 扫光 */
+  .shimmer-text {
+    background: linear-gradient(100deg,
+      var(--ink-3) 20%, var(--ai-a) 38%, var(--ai-b) 50%, var(--ai-c) 60%, var(--ink-3) 80%);
+    background-size: 220% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent; color: transparent;
+    animation: shimmer-slide 2.6s linear infinite;
+  }
+  @keyframes shimmer-slide { from { background-position: 180% 0; } to { background-position: -40% 0; } }
+
+  /* 阶段轮播：淡出上浮 / 淡入 */
+  .stage { transition: opacity .28s ease, transform .28s ease; }
+  .stage.out { opacity: 0; transform: translateY(-3px); }
+  .stage.in { animation: stage-in .32s ease; }
+  @keyframes stage-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .ai-status { display: flex; align-items: center; gap: 8px; padding: 2px 4px 0; margin-top: 8px; font-size: 12px; line-height: 16px; }
+  .ai-status .pct { color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+  /* 降级：减弱动态 → 静态渐变 + 纯文字 */
+  @media (prefers-reduced-motion: reduce) {
+    .ai-shell, .ai-edge { animation: none !important; }
+    .ai-shell { background: linear-gradient(90deg, var(--ai-a), var(--ai-b)); }
+    .ai-edge { background: linear-gradient(180deg, var(--ai-a), var(--ai-b)) !important; }
+    .shimmer-text { animation: none !important; background: none !important; color: var(--ink-3) !important; -webkit-text-fill-color: currentColor; }
+    .spark { animation: none !important; }
+  }
+
+  /* ============ capture 演示底（模拟现有 capture 条） ============ */
+  .mock-capture-inner { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .mock-input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font: inherit; font-size: 14px; color: var(--ink-4); }
+  .mock-btn { height: 28px; padding: 0 12px; border-radius: var(--r-sm); font-size: 12.5px; flex: none; }
+  .mock-btn.primary { background: var(--accent); color: #fffdf8; }
+  .mock-btn.ghost { border: 1px solid var(--line); color: var(--ink-2); background: var(--surface); }
+
+  /* ============ 拖拽悬停：流光虚线区 ============ */
+  .ai-drop {
+    border-radius: var(--r-md); padding: 1.5px;
+    background: conic-gradient(from var(--ai-angle),
+      var(--ai-a) 0%, var(--ai-b) 22%, var(--ai-c) 42%,
+      var(--ai-a) 58%, var(--ai-b) 78%, var(--ai-c) 92%, var(--ai-a) 100%);
+    animation: ai-flow 3.6s linear infinite;
+  }
+  .ai-drop-inner {
+    border-radius: calc(var(--r-md) - 1.5px);
+    border: 1.5px dashed color-mix(in srgb, var(--gold) 45%, transparent);
+    background: color-mix(in srgb, var(--gold-soft) 55%, var(--bg));
+    min-height: 132px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    color: var(--ink-2); font-size: 13px;
+  }
+  .ai-drop-inner small { color: var(--ink-3); font-size: 12px; }
+
+  /* ============ 「消化中」文档行：克制的持续态 ============ */
+  .doc-row-mock {
+    position: relative; display: block; padding: 14px 16px 13px 20px;
+    border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-1);
+    overflow: hidden;
+  }
+  /* 左侧 2px 竖向流光条：长时间不吵，但一眼认出「AI 还在消化」 */
+  .ai-edge {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 2.5px;
+    background: linear-gradient(180deg, var(--ai-a), var(--ai-b), var(--ai-c), var(--ai-a));
+    background-size: 100% 300%;
+    animation: ai-edge-flow 4.8s linear infinite;
+  }
+  @keyframes ai-edge-flow { from { background-position: 0 0; } to { background-position: 0 300%; } }
+  .doc-row-mock h3 { font-family: var(--serif); font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .doc-row-mock .excerpt { font-size: 13px; color: var(--ink-2); margin-top: 4px; line-height: 1.65; }
+  .doc-row-mock .meta { font-size: 12px; color: var(--ink-4); margin-top: 8px; }
+  .digest-chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 12px; font-weight: 400; }
+  .digest-chip .spark { font-size: 10px; }
+
+  /* 完成回落：卡数淡入 */
+  .card-count { display: inline-block; animation: stage-in .45s ease both; color: var(--ink-3); }
+
+  /* ============ today 最近动态行 ============ */
+  .act-mock { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--r-md); }
+  .act-mock .act-ico { width: 28px; height: 28px; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 13px; flex: none; }
+  .act-mock .act-body { flex: 1; font-size: 13.5px; }
+  .act-mock .act-time { font-size: 12px; color: var(--ink-4); }
+
+  /* 慢/失败等静态对照 */
+  .plain-note { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-3); }
+  .spin { width: 13px; height: 13px; border-radius: 50%; flex: none; border: 2px solid var(--accent-line); border-top-color: var(--accent); animation: rot .8s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  .toast-mock { position: static; display: inline-flex; align-items: center; gap: 8px; background: var(--ink); color: var(--bg); border-radius: var(--r-sm); padding: 8px 14px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<!-- ================= 画板 1 ================= -->
+<p class="art-label">画板 1 / 5 · <b>capture 条 · 投入中</b> — 点「扔进去」后整条约 1~3 秒的 AI 等待态，跳转新文档即结束</p>
+<div class="board">
+  <div class="scene">
+    <div class="ctrl"><button onclick="replayAll('b1')">▶ 重播阶段轮播</button></div>
+    <h2>docs 工作台 · capture 条（扔一句话 / 问 AI）</h2>
+    <p class="cap">提交后 capture 外壳进入三色流光（朱红→金→墨绿，3.6s/圈），输入内容置灰锁定，下方阶段文案 shimmer 轮播。这是一次短等待，表演到路由跳走为止。</p>
+    <div class="stack" id="b1">
+      <div class="rowitem">
+        <p class="tag">投入中 · 扔一句话</p>
+        <div class="ai-shell">
+          <div class="ai-shell-inner">
+            <span class="spark">✦</span>
+            <div class="mock-capture-inner">
+              <input class="mock-input" value="SM-2 算法里 EF 的下限为什么是 1.3" readonly />
+            </div>
+            <button class="mock-btn primary" disabled>扔进去</button>
+          </div>
+        </div>
+        <div class="ai-status">
+          <span class="spark" style="animation-delay:.3s">✦</span>
+          <span class="shimmer-text stage" data-stages="正在收下这句话…|落成一篇文档…|排队等 AI 消化…">正在收下这句话…</span>
+        </div>
+      </div>
+
+      <div class="rowitem">
+        <p class="tag">对照 · 静止的 capture 条（现状，未提交时）</p>
+        <div style="border:1px solid var(--line);border-radius:var(--r-md);background:var(--surface);display:flex;align-items:center;gap:10px;padding:0 14px;min-height:44px;box-shadow:var(--shadow-1)">
+          <input class="mock-input" placeholder="扔一句话进来，或以问号结尾问 AI…" readonly />
+          <button class="mock-btn ghost" disabled>问 AI</button>
+          <button class="mock-btn primary" disabled>扔进去</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 画板 2 ================= -->
+<p class="art-label">画板 2 / 5 · <b>导入与拖拽</b> — 拖拽悬停是流光虚线区；上传中用真实百分比，传完切「消化」阶段文案</p>
+<div class="board">
+  <div class="scene">
+    <div class="ctrl"><button onclick="replayAll('b2')">▶ 重播上传流程</button></div>
+    <h2>docs 工作台 · 文件导入 / 拖拽区</h2>
+    <p class="cap">拖文件进列表时，整个列表区出现流光描边 + 虚线落区；开始上传后收口为一条流光进度条——<b>百分比是真实的</b>（分片上传已有进度数据），传满 100% 自动切到「交给 AI 消化」的轮播文案，随后行落入列表。</p>
+    <div class="stack" id="b2">
+      <div class="rowitem">
+        <p class="tag">拖拽悬停 · 列表区变为落区</p>
+        <div class="ai-drop">
+          <div class="ai-drop-inner">
+            <span class="spark" style="font-size:16px">✦</span>
+            松手扔进来
+            <small>PDF · Word · EPUB · TXT · Markdown</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="rowitem">
+        <p class="tag">上传中 · 真实进度（阶段一）</p>
+        <div class="ai-shell">
+          <div class="ai-shell-inner" style="min-height:40px">
+            <span class="spark">✦</span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--ink-2)">认知科学入门.pdf</span>
+            <span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">42%</span>
+          </div>
+        </div>
+        <div class="ai-status">
+          <span class="spark" style="animation-delay:.3s">✦</span>
+          <span class="shimmer-text">正在上传，已传 18 / 43 片…</span>
+        </div>
+      </div>
+
+      <div class="rowitem">
+        <p class="tag">传满 100% · 切到消化预告（阶段二）</p>
+        <div class="ai-shell" style="animation-duration:5.5s">
+          <div class="ai-shell-inner" style="min-height:40px">
+            <span class="spark">✦</span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--ink-2)">认知科学入门.pdf</span>
+          </div>
+        </div>
+        <div class="ai-status">
+          <span class="spark" style="animation-delay:.5s">✦</span>
+          <span class="shimmer-text stage" data-stages="上传完成，交给 AI…|正在读这篇文档…|稍后会提炼成卡片…">上传完成，交给 AI…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 画板 3 ================= -->
+<p class="art-label">画板 3 / 5 · <b>「消化中」文档行</b> — 分钟级后台 job，用克制的持续态：左侧 2.5px 竖向流光 + shimmer 小字，不轮播不打扰</p>
+<div class="board">
+  <div class="scene">
+    <div class="ctrl"><button onclick="replayDone()">▶ 重播完成回落</button></div>
+    <h2>文档行 · 消化中 → 完成回落</h2>
+    <p class="cap">消化是后台 job，用户会离开去做别的。所以不做整壳流光：文档行左侧一条 2.5px 竖向流光（4.8s 一轮，比等待态慢），「消化中」小字 shimmer。完成后流光边收拢，「N 张卡」淡入——这是「AI 消化完了」的收束信号。</p>
+    <div class="stack">
+      <div class="rowitem" id="b3">
+        <p class="tag">消化中</p>
+        <div class="doc-row-mock">
+          <span class="ai-edge"></span>
+          <h3>
+            认知科学入门
+            <span class="digest-chip"><span class="spark">✦</span><span class="shimmer-text">消化中</span></span>
+          </h3>
+          <p class="excerpt">第三章讲间隔效应：把练习分散到几天里，比一次性集中练习的记忆保持率高出一倍以上……</p>
+          <p class="meta">0 张卡 · 2 分钟前 · 学习方法</p>
+        </div>
+      </div>
+
+      <div class="rowitem">
+        <p class="tag">消化完成 · 流光边收拢，卡数淡入</p>
+        <div class="doc-row-mock" id="b3-done">
+          <span class="ai-edge" id="b3-edge" style="opacity:0"></span>
+          <h3>认知科学入门</h3>
+          <p class="excerpt">第三章讲间隔效应：把练习分散到几天里，比一次性集中练习的记忆保持率高出一倍以上……</p>
+          <p class="meta"><span class="card-count" id="b3-count">12 张卡</span> · 3 分钟前 · 学习方法</p>
+        </div>
+      </div>
+
+      <div class="rowitem">
+        <p class="tag">边界 · 消化失败（保持现状的克制红字，不加 AI 皮肤）</p>
+        <div class="doc-row-mock">
+          <h3>扫描版讲义<span style="font-family:var(--sans);font-size:12px;font-weight:400;color:var(--accent);margin-left:8px">失败</span></h3>
+          <p class="meta">这个文件里没有可提取的文字 · 10 分钟前</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 画板 4 ================= -->
+<p class="art-label">画板 4 / 5 · <b>today 页</b> — 最近动态的消化中 job 用 shimmer 阶段轮播；toast 保持现状（它只负责"已收下"）</p>
+<div class="board">
+  <div class="scene">
+    <div class="ctrl"><button onclick="replayAll('b4')">▶ 重播阶段轮播</button></div>
+    <h2>today · 最近动态 + 最近文档</h2>
+    <p class="cap">today 是「扔完就走」的页面：toast 说完「已收下」就退场，消化进度交给「最近动态」里那条 job——消化中的 job 标题用 shimmer 轮播阶段文案，最近文档行的「消化中」与画板 3 同款。</p>
+    <div class="stack" id="b4">
+      <div class="rowitem">
+        <p class="tag">最近动态 · 消化中 job（阶段轮播）</p>
+        <div class="act-mock" style="background:var(--surface);box-shadow:var(--shadow-1)">
+          <span class="act-ico">✦</span>
+          <div class="act-body">
+            <b>认知科学入门</b>
+            <span> · </span>
+            <span class="shimmer-text stage" data-stages="消化中，正在通读…|提炼要点…|写成卡片…">消化中，正在通读…</span>
+          </div>
+          <span class="act-time">刚刚</span>
+        </div>
+        <div class="act-mock">
+          <span class="act-ico" style="background:var(--green-soft);color:var(--green)">✓</span>
+          <div class="act-body"><b>间隔重复笔记</b> · 消化完成，写出 8 张卡</div>
+          <span class="act-time">12 分钟前</span>
+        </div>
+      </div>
+
+      <div class="rowitem">
+        <p class="tag">toast · 保持现状（只负责确认"已收下"）</p>
+        <span class="toast-mock">已收下，消化中</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 画板 5 ================= -->
+<p class="art-label">画板 5 / 5 · <b>暗色主题与降级</b> — 流光取主题变量，暗色自动换成亮朱砂/亮金/亮绿；减弱动态时全部静止</p>
+<div class="board dark">
+  <div class="scene">
+    <h2>暗色主题 · capture 投入中 + 消化中行</h2>
+    <p class="cap">三个流光色直接引用 --accent / --gold / --green，暗色主题下自动变为亮色调，无需额外覆盖。</p>
+    <div class="stack">
+      <div class="rowitem">
+        <div class="ai-shell">
+          <div class="ai-shell-inner">
+            <span class="spark">✦</span>
+            <div class="mock-capture-inner">
+              <input class="mock-input" value="把今天的读书笔记整理一下" readonly />
+            </div>
+            <button class="mock-btn primary" disabled>扔进去</button>
+          </div>
+        </div>
+        <div class="ai-status">
+          <span class="spark" style="animation-delay:.3s">✦</span>
+          <span class="shimmer-text stage" data-stages="正在收下这句话…|落成一篇文档…|排队等 AI 消化…">正在收下这句话…</span>
+        </div>
+      </div>
+      <div class="rowitem">
+        <div class="doc-row-mock">
+          <span class="ai-edge"></span>
+          <h3>认知科学入门
+            <span class="digest-chip"><span class="spark">✦</span><span class="shimmer-text">消化中</span></span>
+          </h3>
+          <p class="meta">0 张卡 · 2 分钟前 · 学习方法</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="board" style="box-shadow:var(--shadow-1)">
+  <div class="scene" style="padding:28px 48px">
+    <h2 style="font-size:14px">prefers-reduced-motion 降级规则（实现说明）</h2>
+    <p class="cap" style="margin-bottom:0">系统开启减弱动态时：流光描边 → 静态朱红→金渐变；竖向流光边 → 静态渐变；shimmer → 纯灰文字；✦ 停止呼吸。所有动画规则集中在 <code>@media (prefers-reduced-motion: reduce)</code> 一处覆写。</p>
+  </div>
+</div>
+
+<script>
+  const INTERVAL = 1300;
+  function wireStage(stage) {
+    const stages = stage.dataset.stages.split('|');
+    let i = 0, timer = null;
+    return function play() {
+      clearInterval(timer);
+      i = 0;
+      stage.textContent = stages[0];
+      stage.classList.remove('out'); stage.classList.add('in');
+      timer = setInterval(() => {
+        stage.classList.remove('in'); stage.classList.add('out');
+        setTimeout(() => {
+          i = (i + 1) % stages.length;
+          stage.textContent = stages[i];
+          stage.classList.remove('out'); stage.classList.add('in');
+        }, 280);
+      }, INTERVAL);
+    };
+  }
+  const players = {};
+  document.querySelectorAll('.stage').forEach((s) => {
+    const board = s.closest('.stack').id || 'b5';
+    (players[board] ||= []).push(wireStage(s));
+  });
+  function replayAll(id) { (players[id] || []).forEach((p) => p()); }
+  // 自动播：各画板错开
+  let offset = 0;
+  Object.keys(players).forEach((id) => {
+    setTimeout(() => replayAll(id), offset);
+    offset += 600;
+  });
+  // 完成回落演示：流光边淡出 → 卡数重新淡入
+  function replayDone() {
+    const edge = document.getElementById('b3-edge');
+    const count = document.getElementById('b3-count');
+    edge.style.transition = 'none'; edge.style.opacity = '1';
+    count.style.animation = 'none';
+    requestAnimationFrame(() => {
+      edge.style.transition = 'opacity .5s ease';
+      edge.style.opacity = '0';
+      count.style.animation = '';
+    });
+  }
+</script>
+</body>
+</html>

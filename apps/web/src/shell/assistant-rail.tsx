@@ -3,6 +3,7 @@ import { observer, useService } from '@rabjs/react';
 import { Loader2, MessageSquare, PanelRightClose, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { LlmConfig } from '@inwit/dto';
+import { Select } from '@/components/select';
 import { Tip } from '@/components/tip';
 import { listLlmConfigs } from '@/api/llm';
 import { Link, useLocation, useSearchParams } from 'react-router';
@@ -470,25 +471,24 @@ export const AssistantRail = observer(function AssistantRail() {
             <span className="assistant-hint">Enter 发送，Shift+Enter 换行</span>
             <div className="assistant-send">
               <Tip content={modelTip}>
-              <select
-                className="assistant-model"
-                aria-label="选择模型"
-                value={modelId ?? ''}
-                disabled={!modelsReady || models.length === 0}
-                onChange={(event) => {
-                  const next = event.target.value || null;
-                  setModelId(next);
-                  writeAssistantModelId(next);
-                }}
-              >
-                {!modelsReady ? <option value={modelId ?? ''}>模型</option> : null}
-                {modelsReady && models.length === 0 ? <option value="">{ASSISTANT_SYSTEM_MODEL_LABEL}</option> : null}
-                {models.map((config) => (
-                  <option key={config.id} value={config.id}>
-                    {assistantModelOptionLabel(config, models)}
-                  </option>
-                ))}
-              </select>
+                <Select
+                  className="assistant-model"
+                  ariaLabel="选择模型"
+                  placement="top"
+                  align="end"
+                  value={modelId ?? ''}
+                  disabled={!modelsReady || models.length === 0}
+                  placeholder={!modelsReady ? '模型' : ASSISTANT_SYSTEM_MODEL_LABEL}
+                  options={models.map((config) => ({
+                    value: config.id,
+                    label: assistantModelOptionLabel(config, models),
+                  }))}
+                  onChange={(next) => {
+                    const id = next.length > 0 ? next : null;
+                    setModelId(id);
+                    writeAssistantModelId(id);
+                  }}
+                />
               </Tip>
               <button type="submit" className="btn btn-primary" disabled={service.busy || draft.trim().length === 0}>
                 发送

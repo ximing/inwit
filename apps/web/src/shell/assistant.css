@@ -407,23 +407,7 @@
   text-overflow: ellipsis;
 }
 .assistant-send { display: flex; flex: none; align-items: center; gap: 8px; }
-.assistant-model {
-  width: 9.5rem;
-  max-width: 9.5rem;
-  height: 32px;
-  padding: 0 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--surface);
-  color: var(--ink-2);
-  font-size: 12.5px;
-}
-.assistant-model:focus {
-  outline: none;
-  border-color: var(--accent-line);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
-}
-.assistant-model:disabled { color: var(--ink-3); }
+.assistant-model { width: 9.5rem; max-width: 9.5rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .assistant-dock { transition: none; }
