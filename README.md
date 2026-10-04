@@ -309,11 +309,14 @@ codex plugin add inwit@inwit
 
 ### Grok Build CLI
 
+从 [ximing/grok-plugins](https://github.com/ximing/grok-plugins) 安装。`skills/**` 或插件清单有变更时，GitHub Actions 会把这份 skill 同步过去：
+
 ```bash
-cp -r skills/inwit ~/.grok/skills/
+grok plugin marketplace add ximing/grok-plugins
+grok plugin install inwit --trust
 ```
 
-若正在本仓库里工作，也可把 skill 放到当前项目能扫到的 skills 目录。调用：`/inwit`。
+或手动：`cp -r skills/inwit ~/.grok/skills/`。调用：`/inwit`。
 
 ### Kimi Code
 
