@@ -70,9 +70,13 @@ const DocsPageContent = observer(function DocsPageContent() {
     editor.onCreated = (created) => service.ingestCreated(created);
     editor.onSaved = (saved) =>
       service.noteEditorSaved(saved.id, saved.title, saved.contentJson, saved.updatedAt);
+    editor.onLocalWriteStart = () => service.bumpCardWriteGen();
+    editor.onLocalWriteEnd = () => service.kickReplay();
     return () => {
       editor.onCreated = null;
       editor.onSaved = null;
+      editor.onLocalWriteStart = null;
+      editor.onLocalWriteEnd = null;
     };
   }, [editor, service]);
 

@@ -345,7 +345,8 @@ export class DocsService extends Service {
   private selectionTickInflight = false;
   loadGen = 0;
 
-  private sync: SyncService | null = null;
+  private _sync: SyncService | null = null;
+  private _syncResolved = false;
   private unsubscribeSync: (() => void) | null = null;
   private syncChain: Promise<void> = Promise.resolve();
   private echoes: EchoStamp[] = [];
@@ -360,22 +361,21 @@ export class DocsService extends Service {
   /** Topic PUT still in flight. Dropped GETs wait until its floor is stored. */
   private topicWrites = 0;
 
-  constructor() {
-    super();
-    // Unit tests call `new DocsService()` with no container.
-    try {
-      this.sync = this.resolve(SyncService);
-      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
-    } catch {
-      this.sync = null;
+  /**
+   * 惰性解析 SyncService：Service 之间互相依赖时一律在使用点 resolve，
+   * 不在构造器里解析（嵌套实例化顺序敏感，且让构造保持轻量可测）。
+   * Unit tests call `new DocsService()` with no container.
+   */
+  private get sync(): SyncService | null {
+    if (!this._syncResolved) {
+      this._syncResolved = true;
+      try {
+        this._sync = this.resolve(SyncService);
+      } catch {
+        this._sync = null;
+      }
     }
-    try {
-      const editor = this.resolve(EditorService);
-      editor.onLocalWriteStart = () => this.bumpCardWriteGen();
-      editor.onLocalWriteEnd = () => this.kickReplay();
-    } catch {
-      // Same unattached instance.
-    }
+    return this._sync;
   }
 
   get importService(): DocsImportService {
@@ -732,6 +732,9 @@ export class DocsService extends Service {
 
   async boot(): Promise<void> {
     this.error = null;
+    if (this.sync && !this.unsubscribeSync) {
+      this.unsubscribeSync = this.sync.subscribe((event) => this.onSyncEvent(event));
+    }
     this.importService.hydrateCheckpoints();
     try {
       this.topics = await listTopics('active');
@@ -1992,7 +1995,7 @@ export class DocsService extends Service {
   override destroy(): void {
     this.unsubscribeSync?.();
     this.unsubscribeSync = null;
-    this.sync = null;
+    this._sync = null;
     try {
       const editor = this.resolve(EditorService);
       editor.onLocalWriteStart = null;
@@ -2404,7 +2407,7 @@ export class DocsService extends Service {
     }
   }
 
-  private kickReplay(): void {
+  kickReplay(): void {
     if (this.recoveryInflight || this.isWriteInflight()) return;
     const next = this.replayQueue.find(
       (item) => !this.inflightReads.some((read) => read.id === item.id && read.gen === this.cardWriteGen),

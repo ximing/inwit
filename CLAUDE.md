@@ -59,6 +59,7 @@ pnpm --filter @inwit/server migrate            # 执行
 ## 前端架构
 
 - 每页一个 `*.service.ts`（`Service` 子类，参考 `pages/today/today.service.ts`），组件用 `bindServices` + `observer` + `useService` 消费；不要引入其它状态管理
+- Service 依赖其它 Service 时，在使用点 `this.resolve(X)`（getter 或方法内），不在构造器里 resolve；跨 Service 的回调 wiring 放页面 effect
 - `src/routes.ts` 的 `ROUTES` 是路径唯一来源，导航/守卫一律用它
 - `src/api/` 是薄 fetch 封装（带 cookie），不直接在组件里 fetch
 - 编辑器是 tiptap（`pages/editor/paper-editor.tsx`）；图标用 lucide-react

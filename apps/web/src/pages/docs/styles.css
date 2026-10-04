@@ -384,19 +384,9 @@ html.is-resizing-doc-list * {
   gap: 2px;
   padding: 2px;
   flex: none;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-}
-.doc-fab:hover {
-  background: var(--surface);
-  border-color: var(--line);
-  box-shadow: var(--shadow-1);
 }
 .doc-fab .divider { width: 1px; height: 14px; background: var(--line); margin: 0 3px; flex: none; }
 .doc-fab .save-state { font-size: 11px; padding: 0 4px 0 2px; white-space: nowrap; }
-.doc-fab .mode-seg { border: 0; background: none; padding: 0; gap: 2px; }
-.doc-fab .mode-seg-btn { height: 24px; padding: 0 9px; font-size: 11.5px; }
 .doc-fab-close,
 .doc-fab-zen {
   display: inline-flex;
@@ -416,37 +406,32 @@ html.is-resizing-doc-list * {
 .doc-fab-close:focus-visible,
 .doc-fab-zen:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .doc-fab-zen.is-on { color: var(--accent-deep); background: var(--accent-soft); }
-.doc-fab:has(.doc-fab-zen.is-on) {
-  background: var(--surface);
-  border-color: var(--line);
-}
 
+/* 编辑/预览切换：与卡片栏「列表/脑图」同一族沉底 segmented */
 .mode-seg {
   display: inline-flex;
   flex: none;
-  gap: 4px;
-  padding: 3px;
-  border: 1.5px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
 }
 .mode-seg-btn {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 7px;
-  font-size: 12.5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--ink-3);
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
 }
-.mode-seg-btn:hover { color: var(--ink); background: var(--bg-sunken); }
+.mode-seg-btn:hover { color: var(--ink); }
 .mode-seg-btn.is-on {
   color: var(--accent-deep);
-  background: var(--accent-soft);
-  box-shadow: 0 0 0 1px var(--accent-line);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
   font-weight: 600;
 }
-.doc-fab .mode-seg-btn.is-on { box-shadow: none; }
 .pane-title,
 .title-input {
   font-family: var(--serif);

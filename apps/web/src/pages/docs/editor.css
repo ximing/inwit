@@ -2,10 +2,6 @@
 .paper {
   /* Hang past the reading column so inner text aligns with the title / edit body. */
   --paper-hang: 32px;
-  background: var(--surface);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--r-xl);
-  box-shadow: var(--shadow-1);
   padding: var(--write-gap, 28px) var(--paper-hang) 40px;
   margin-inline: calc((var(--paper-hang) + 1px) * -1);
 }
