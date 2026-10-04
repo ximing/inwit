@@ -72,6 +72,25 @@
   border-style: dashed;
 }
 .doc-canvas-card.is-suspended .mini-card { opacity: 0.62; }
+/* 默写模式：遮住内容，只留节点轮廓、层级和类型标识。 */
+.doc-canvas-card.is-masked { cursor: pointer; }
+.doc-canvas-card.is-masked .mini-q,
+.doc-canvas-card.is-masked .mini-a,
+.doc-canvas-card.is-masked .canvas-node-quote,
+.doc-canvas-card.is-masked .canvas-node-text,
+.doc-canvas-card.is-masked .canvas-node-note,
+.doc-canvas-card.is-masked .canvas-note-thumb,
+.doc-canvas-card.is-masked .canvas-node.is-image img {
+  filter: blur(6px);
+  user-select: none;
+}
+/* 遮住内容时卡内操作钮一并收起，只留节点本身的点击。 */
+.doc-canvas-card.is-masked .mini-decision,
+.doc-canvas-card.is-masked .mini-card button,
+.doc-canvas-card.is-masked .canvas-node-op {
+  pointer-events: none;
+  opacity: 0;
+}
 /* 待办圆点：待确认 accent、待复习 gold，不参与节点尺寸。 */
 .canvas-todo {
   position: absolute;

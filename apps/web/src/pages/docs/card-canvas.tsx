@@ -238,6 +238,11 @@ export const CardCanvas = observer(function CardCanvas({
   const [searchIndex, setSearchIndex] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; id: string | null } | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  /** 默写模式：自动折叠全部子树、遮住节点内容，单击偷看一张。 */
+  const [recall, setRecall] = useState(false);
+  const [peekId, setPeekId] = useState<string | null>(null);
+  const [revealAll, setRevealAll] = useState(false);
+  const recallFolds = useRef<Set<string> | null>(null);
   /** Shift+拖空白的框选矩形（舞台坐标）。 */
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const marqueeGesture = useRef<{
@@ -301,6 +306,10 @@ export const CardCanvas = observer(function CardCanvas({
     setTodoOnly(false);
     setSearchOpen(false);
     setMenu(null);
+    setRecall(false);
+    setPeekId(null);
+    setRevealAll(false);
+    recallFolds.current = null;
   }
 
   const onSize = useCallback((id: string, w: number, h: number) => {
@@ -329,6 +338,25 @@ export const CardCanvas = observer(function CardCanvas({
     () => new Map((service.doc?.cards ?? []).map((card) => [card.id, card])),
     [service.doc],
   );
+
+  /** 进入默写：记住折叠现场并收起全部子树；退出时还原。 */
+  const toggleRecall = () => {
+    if (recall) {
+      setRecall(false);
+      setPeekId(null);
+      setRevealAll(false);
+      if (recallFolds.current) setFolded(recallFolds.current);
+      recallFolds.current = null;
+      return;
+    }
+    recallFolds.current = new Set(folded);
+    setFolded(new Set([...folded, ...childCount.keys()]));
+    setRecall(true);
+    setPeekId(null);
+    setRevealAll(false);
+    setEditingId(null);
+    setMenu(null);
+  };
   const noteById = useMemo(
     () => new Map(service.annotations.map((item) => [item.id, item])),
     [service.annotations],
@@ -357,9 +385,11 @@ export const CardCanvas = observer(function CardCanvas({
     () => (selectedId ? mindRelated(forest, selectedId) : null),
     [forest, selectedId],
   );
-  /** 选中卡片且没被手动关掉时，脉络浮层开着。 */
+  /** 选中卡片且没被手动关掉时，脉络浮层开着。默写模式下不看脉络。 */
   const linksCardId =
-    selectedId && cardById.has(selectedId) && linksOff !== selectedId ? selectedId : null;
+    !recall && selectedId && cardById.has(selectedId) && linksOff !== selectedId
+      ? selectedId
+      : null;
   const { links: selectedLinks } = useCardLinks(linksCardId);
   /** 本文内、且在画布上的关联卡片，画虚线边。 */
   const ghostTargets = useMemo(() => {
@@ -413,9 +443,10 @@ export const CardCanvas = observer(function CardCanvas({
   );
 
   useEffect(() => {
-    if (!docId) return;
+    // 默写模式的整体折叠是临时的，退出时还原，不持久化。
+    if (!docId || recall) return;
     saveFolds(docId, [...folded]);
-  }, [docId, folded]);
+  }, [docId, folded, recall]);
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -597,6 +628,7 @@ export const CardCanvas = observer(function CardCanvas({
   };
 
   const addText = async (parentId: string | null, index: number) => {
+    if (recall) return;
     if (parentId) reveal(parentId);
     const id = await service.addCanvasTextAt(parentId, index);
     if (!id) return;
@@ -636,11 +668,17 @@ export const CardCanvas = observer(function CardCanvas({
     if (intent.type === 'clear') {
       setSelectedId(null);
       setEditingId(null);
+      setPeekId(null);
       return;
     }
+    // 默写模式下不进入编辑，单击只是选中（和偷看）。
+    if (recall && intent.type === 'edit') return;
+    const previous = selectedRef.current;
     selectedRef.current = id;
     setSelectedId(id);
     if (intent.type === 'select') {
+      // 选中别的节点时，先前偷看的那张重新盖上（点击偷看在 applyMind 之后单独设置）。
+      if (recall && previous !== id) setPeekId(null);
       setEditingId(null);
       if (intent.reveal) service.selectCanvasNode(id);
       viewportRef.current?.focus({ preventScroll: true });
@@ -747,6 +785,8 @@ export const CardCanvas = observer(function CardCanvas({
       return;
     }
     event.stopPropagation();
+    // 默写模式下不拖节点，点击仍走 onClickCapture 的选中/偷看。
+    if (recall) return;
     dragGesture.current = {
       id: cardId,
       pointerId: event.pointerId,
@@ -941,6 +981,12 @@ export const CardCanvas = observer(function CardCanvas({
       setHelpOpen(true);
       return;
     }
+    if (!meta && (event.key === 'm' || event.key === 'M')) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleRecall();
+      return;
+    }
     if (target.closest(KEY_CONTROLS)) return;
     if (!selectedId) return;
     if (event.key === 'Escape') {
@@ -951,6 +997,26 @@ export const CardCanvas = observer(function CardCanvas({
     }
     const member = forest.find((item) => item.id === selectedId);
     if (!member) return;
+    if (recall) {
+      // 默写模式只保留方向键导航和折叠展开。
+      if (
+        event.key === 'ArrowLeft' ||
+        event.key === 'ArrowRight' ||
+        event.key === 'ArrowUp' ||
+        event.key === 'ArrowDown'
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        const action = navigateMind(forest, selectedId, event.key, folded);
+        if (action.type === 'fold' || action.type === 'unfold') toggleFold(selectedId);
+        else if (action.type === 'select') {
+          const next = forest.find((item) => item.id === action.id);
+          if (next) applyMind(action.id, decideMindGesture({ action: 'arrow', kind: next.kind }));
+          ensureVisible(action.id);
+        }
+      }
+      return;
+    }
     if (event.key === 'Enter') {
       event.preventDefault();
       event.stopPropagation();
@@ -1093,11 +1159,15 @@ export const CardCanvas = observer(function CardCanvas({
     if (!menu) return [];
     if (!menu.id) {
       return [
-        {
-          key: 'text',
-          label: '新建文本节点',
-          onSelect: () => void addText(null, outlineChildSlots(forest, null).length),
-        },
+        ...(recall
+          ? []
+          : [
+              {
+                key: 'text',
+                label: '新建文本节点',
+                onSelect: () => void addText(null, outlineChildSlots(forest, null).length),
+              },
+            ]),
         {
           key: 'todo',
           label: todoOnly ? '显示全部节点' : '只看待办',
@@ -1120,6 +1190,30 @@ export const CardCanvas = observer(function CardCanvas({
     const member = forest.find((item) => item.id === id);
     if (!member) return [];
     const items: CanvasMenuItem[] = [];
+    // 默写模式下只留查看类操作，不动结构、不进编辑。
+    if (recall) {
+      if (member.kind === 'card' || member.kind === 'annotation') {
+        items.push({
+          key: 'locate',
+          label: '在正文定位',
+          onSelect: () => service.selectCanvasNode(id),
+        });
+      }
+      const maskedCopy =
+        member.kind === 'card'
+          ? (cardById.get(id)?.concept ?? '')
+          : member.kind === 'annotation'
+            ? `${noteById.get(id)?.quote ?? ''}\n${noteById.get(id)?.note ?? ''}`.trim()
+            : (nodeById.get(id)?.text ?? '');
+      if (maskedCopy) {
+        items.push({
+          key: 'copy',
+          label: '复制文本',
+          onSelect: () => void navigator.clipboard?.writeText(maskedCopy),
+        });
+      }
+      return items;
+    }
     if (member.kind !== 'image') {
       items.push({
         key: 'edit',
@@ -1268,11 +1362,12 @@ export const CardCanvas = observer(function CardCanvas({
           const suspended = card?.review?.suspendedAt != null;
           const todo = card ? cardTodos.get(member.id) : undefined;
           const subtreeTodo = todoCounts.get(member.id) ?? 0;
+          const masked = recall && !revealAll && peekId !== member.id;
           return (
             <SizedNode
               key={member.id}
               id={member.id}
-              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${ghosting ? ' is-ghosting' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}`}
+              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${ghosting ? ' is-ghosting' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}${masked ? ' is-masked' : ''}`}
               style={{
                 left: box.x,
                 top: box.y,
@@ -1311,6 +1406,10 @@ export const CardCanvas = observer(function CardCanvas({
                     repeat: selectedRef.current === member.id,
                   }),
                 );
+                // 默写模式：点遮住的节点偷看它，再点重新盖上。
+                if (recall && !revealAll) {
+                  setPeekId((current) => (current === member.id ? null : member.id));
+                }
                 event.preventDefault();
                 event.stopPropagation();
               }}
@@ -1368,7 +1467,7 @@ export const CardCanvas = observer(function CardCanvas({
                   <span className={`canvas-todo is-${todo}`} aria-hidden />
                 </Tip>
               ) : null}
-              {selectedId === member.id && !dragging ? (
+              {selectedId === member.id && !dragging && !recall ? (
                 <div
                   className="canvas-node-bar"
                   role="toolbar"
@@ -1506,7 +1605,7 @@ export const CardCanvas = observer(function CardCanvas({
           {hint.text}
         </div>
       ) : null}
-      {selectedIds.size > 1 ? (
+      {selectedIds.size > 1 && !recall ? (
         <CanvasMultiBar
           count={selectedIds.size}
           confirming={selectedCards.some((card) => card.acceptance === 'proposed')}
@@ -1564,6 +1663,32 @@ export const CardCanvas = observer(function CardCanvas({
             待办
           </button>
           </Tip>
+          <Tip content="默写：遮住内容，只看结构（M）">
+          <button
+            type="button"
+            className={`is-wide${recall ? ' is-on' : ''}`}
+            aria-label="默写"
+            aria-pressed={recall}
+            onClick={toggleRecall}
+          >
+            默写
+          </button>
+          </Tip>
+          {recall ? (
+            <Tip content={revealAll ? '全部盖上' : '全部翻开，核对内容'}>
+            <button
+              type="button"
+              className="is-wide"
+              aria-label={revealAll ? '全部盖上' : '全部翻开'}
+              onClick={() => {
+                setRevealAll((value) => !value);
+                setPeekId(null);
+              }}
+            >
+              {revealAll ? '盖上' : '翻开'}
+            </button>
+            </Tip>
+          ) : null}
           <Tip content="快捷键（?）">
           <button type="button" aria-label="快捷键" onClick={() => setHelpOpen(true)}>
             ?
@@ -1575,6 +1700,7 @@ export const CardCanvas = observer(function CardCanvas({
             type="button"
             aria-label="文本节点"
             className="is-wide"
+            disabled={recall}
             onClick={() => {
               const parent = selectedRef.current;
               if (parent && forest.some((member) => member.id === parent)) {
@@ -1591,7 +1717,7 @@ export const CardCanvas = observer(function CardCanvas({
             type="button"
             aria-label="图片节点"
             className="is-wide"
-            disabled={service.canvasUploading}
+            disabled={service.canvasUploading || recall}
             onClick={() => fileRef.current?.click()}
           >
             <ImagePlus width={13} height={13} strokeWidth={1.8} />

@@ -818,6 +818,11 @@ button.related-card {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-1);
 }
+/* 默写模式：遮住题面，只留轮廓和来源标识。 */
+.topic-canvas-card.is-masked .topic-canvas-concept {
+  filter: blur(6px);
+  user-select: none;
+}
 .topic-canvas-kicker {
   display: block;
   margin-bottom: 3px;

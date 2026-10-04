@@ -55,6 +55,10 @@ export const TopicCanvas = observer(function TopicCanvas() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchIndex, setSearchIndex] = useState(0);
+  /** 默写模式：遮住卡片题面，只看结构；单击偷看一张。 */
+  const [recall, setRecall] = useState(false);
+  const [peekId, setPeekId] = useState<string | null>(null);
+  const [revealAll, setRevealAll] = useState(false);
   const panGesture = useRef<{
     pointerId: number;
     originX: number;
@@ -318,6 +322,17 @@ export const TopicCanvas = observer(function TopicCanvas() {
             } else {
               setSelectedId(null);
             }
+            return;
+          }
+          if (!meta && (event.key === 'm' || event.key === 'M')) {
+            event.preventDefault();
+            setRecall((value) => {
+              if (value) {
+                setPeekId(null);
+                setRevealAll(false);
+              }
+              return !value;
+            });
           }
         }}
       >
@@ -363,10 +378,11 @@ export const TopicCanvas = observer(function TopicCanvas() {
             if (!box || !card) return null;
             const todo = todos.get(member.id);
             const selected = selectedId === member.id;
+            const masked = recall && !revealAll && peekId !== member.id;
             return (
               <div
                 key={member.id}
-                className={`doc-canvas-card topic-canvas-card${selected ? ' is-selected' : ''}`}
+                className={`doc-canvas-card topic-canvas-card${selected ? ' is-selected' : ''}${masked ? ' is-masked' : ''}`}
                 style={{ left: box.x, top: box.y, width: box.width }}
               >
                 <button
@@ -375,6 +391,10 @@ export const TopicCanvas = observer(function TopicCanvas() {
                   onClick={(event) => {
                     event.stopPropagation();
                     setSelectedId(member.id);
+                    // 默写模式：点遮住的节点偷看它，再点重新盖上。
+                    if (recall && !revealAll) {
+                      setPeekId((current) => (current === member.id ? null : member.id));
+                    }
                     viewportRef.current?.focus({ preventScroll: true });
                   }}
                   onDoubleClick={(event) => {
@@ -413,7 +433,7 @@ export const TopicCanvas = observer(function TopicCanvas() {
             }}
           />
         ) : null}
-        {selectedId && stageSize.width > 0
+        {selectedId && !recall && stageSize.width > 0
           ? (() => {
               const box = boxById.get(selectedId);
               const card = cardById.get(selectedId);
@@ -452,6 +472,37 @@ export const TopicCanvas = observer(function TopicCanvas() {
           ))}
         </div>
         <div className="doc-canvas-tools topic-canvas-tools">
+          <div className="doc-canvas-tools-group">
+            <button
+              type="button"
+              className={recall ? 'is-on' : undefined}
+              aria-label="默写"
+              aria-pressed={recall}
+              onClick={() => {
+                setRecall((value) => {
+                  if (value) {
+                    setPeekId(null);
+                    setRevealAll(false);
+                  }
+                  return !value;
+                });
+              }}
+            >
+              默写
+            </button>
+            {recall ? (
+              <button
+                type="button"
+                aria-label={revealAll ? '全部盖上' : '全部翻开'}
+                onClick={() => {
+                  setRevealAll((value) => !value);
+                  setPeekId(null);
+                }}
+              >
+                {revealAll ? '盖上' : '翻开'}
+              </button>
+            ) : null}
+          </div>
           <div className="doc-canvas-tools-group">
             <button
               type="button"
