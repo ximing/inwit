@@ -70,8 +70,6 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
                 {metaDoc ? (
                   <DocPaneMeta
                     docId={metaDoc.id}
-                    updatedAt={metaDoc.updatedAt}
-                    cardCount={metaDoc.cards.length}
                     status={metaDoc.status}
                     source={metaDoc.source}
                   />

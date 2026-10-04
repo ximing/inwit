@@ -325,10 +325,11 @@ html.is-resizing-doc-list * {
 }
 .pane-inner {
   --write-gap: 24px;
+  --pane-pad-x: 40px;
   width: 100%;
   max-width: min(100%, 90rem);
   margin: 0 auto;
-  padding: 16px 40px 100px;
+  padding: 16px var(--pane-pad-x) 100px;
 }
 .pane-empty {
   flex: 1;
@@ -361,20 +362,49 @@ html.is-resizing-doc-list * {
   line-height: 1.55;
 }
 
-/* 题区顶行：主题 kicker 在左、弱视觉工具丸在右；inline 形态位于 .pane-inner 内与正文列对齐 */
+/* 题区顶行：主题 kicker 在左、弱视觉工具丸在右；inline 形态位于 .pane-inner 内与正文列对齐，滚动时吸顶（底色盖住滚过的正文，下间距用 padding 保持遮盖连续） */
 .doc-toprow {
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 30px;
-  margin-bottom: 14px;
+  margin-bottom: 0;
+  padding-bottom: 14px;
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  background: var(--bg);
 }
 .doc-toprow .spacer { flex: 1; min-width: 8px; }
 .doc-toprow .topic-pick-wrap { min-width: 0; }
 .doc-toprow.is-bar {
   padding: 8px 20px 0;
-  margin-bottom: 0;
+  position: static;
+  background: none;
   flex: none;
+}
+
+/* 预览态页头：顶行 + 标题（+ 状态行）作为整体吸顶。底色向两侧出血一个 pane 内距，
+   盖住 hang 出正文列的纸张边缘（.paper 负外边距区），滚过的内容不会从两边漏出来 */
+.pane-head {
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  background: var(--bg);
+  margin-inline: calc(var(--pane-pad-x) * -1);
+  padding-inline: var(--pane-pad-x);
+  padding-bottom: 8px;
+}
+.pane-head .doc-toprow {
+  position: static;
+  background: none;
+}
+.pane-head .pane-title {
+  margin-bottom: 0;
+}
+.pane-head .pane-meta {
+  margin-top: 8px;
+  margin-bottom: 0;
 }
 
 /* 工具丸：默认隐形（无底色/边框/阴影），hover 才浮现胶囊底 */
@@ -387,6 +417,8 @@ html.is-resizing-doc-list * {
 }
 .doc-fab .divider { width: 1px; height: 14px; background: var(--line); margin: 0 3px; flex: none; }
 .doc-fab .save-state { font-size: 11px; padding: 0 4px 0 2px; white-space: nowrap; }
+/* 预览态工具丸里的更新时间，与保存状态同款弱样式 */
+.doc-fab .doc-toprow-time { font-size: 11px; color: var(--ink-4); padding: 0 4px 0 2px; white-space: nowrap; }
 .doc-fab-close,
 .doc-fab-zen {
   display: inline-flex;
@@ -459,15 +491,14 @@ html.is-resizing-doc-list * {
   .pane-title,
   .title-input { font-size: 20px; }
 }
+/* 状态行：只在消化中 / 失败 / 可重试时出现；不带分割线，与编辑态一致 */
 .pane-meta {
   font-size: 12.5px;
   color: var(--ink-4);
   display: flex;
   align-items: center;
   gap: 0;
-  padding-bottom: 14px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 14px;
   flex-wrap: wrap;
   line-height: 1.4;
 }
@@ -498,10 +529,10 @@ html.is-resizing-doc-list * {
 .doc-cards-head .go { margin-left: auto; font-size: 12.5px; color: var(--accent-deep); font-weight: 600; letter-spacing: 0; }
 
 @container (min-width: 960px) {
-  .pane-inner { padding-inline: 48px; }
+  .pane-inner { --pane-pad-x: 48px; }
 }
 @container (min-width: 1200px) {
-  .pane-inner { --write-gap: 28px; padding: 16px 56px 120px; }
+  .pane-inner { --write-gap: 28px; --pane-pad-x: 56px; padding: 16px var(--pane-pad-x) 120px; }
 }
 
 @media (max-width: 1080px) {
@@ -512,7 +543,8 @@ html.is-resizing-doc-list * {
 
 @media (max-width: 760px) {
   .pane-inner {
-    padding: 12px 20px 80px;
+    --pane-pad-x: 20px;
+    padding: 12px var(--pane-pad-x) 80px;
   }
   .ws { grid-template-columns: 1fr; }
   .ws-list {
@@ -522,10 +554,14 @@ html.is-resizing-doc-list * {
   }
   .doc-list-resizer { display: none; }
   .pane-inner { --write-gap: 22px; }
-  /* 工具条不跟主题挤在同一行，避免主题名被压成一字一行 */
+  /* 工具条不跟主题挤在同一行，避免主题名被压成一字一行；窄屏顶行会折成两行，高度不定，页头整体不吸顶 */
   .doc-toprow {
     flex-wrap: wrap;
     row-gap: 4px;
+    position: static;
+  }
+  .pane-head {
+    position: static;
   }
   .doc-toprow .spacer { display: none; }
   .doc-toprow .topic-pick-wrap {

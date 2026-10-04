@@ -104,19 +104,19 @@ export const PaneRead = observer(function PaneRead() {
             </Suspense>
           ) : (
             <div className="pane-inner">
-              <DocTopRow editing={false} docId={doc.id} />
-              <h1 className="pane-title">
-                {docDisplayTitle(doc)}
-                {isReport ? <Tag tone="ai">AI 复盘</Tag> : null}
-              </h1>
-              <DocPaneMeta
-                docId={doc.id}
-                updatedAt={doc.updatedAt}
-                cardCount={doc.cards.length}
-                status={doc.status}
-                source={doc.source}
-                contentJson={doc.contentJson}
-              />
+              <div className="pane-head">
+                <DocTopRow editing={false} docId={doc.id} />
+                <h1 className="pane-title">
+                  {docDisplayTitle(doc)}
+                  {isReport ? <Tag tone="ai">AI 复盘</Tag> : null}
+                </h1>
+                <DocPaneMeta
+                  docId={doc.id}
+                  status={doc.status}
+                  source={doc.source}
+                  contentJson={doc.contentJson}
+                />
+              </div>
 
               <article className="paper">
                 {doc.linkHint ? <aside className="doc-link-hint">{doc.linkHint}</aside> : null}

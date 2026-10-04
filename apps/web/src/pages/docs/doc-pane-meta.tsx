@@ -1,19 +1,18 @@
 import { listBodyPreview, type DocumentListItem } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
-import { formatRelativeTime } from '@/lib/format';
 import { DocsService } from './docs.service';
 
+/**
+ * 状态行：只在消化中 / 失败 / 可重试 / 可取消时出现，平时不渲染。
+ * 时间挪到了顶行工具丸，卡数由右侧卡片栏展示，这里不再重复。
+ */
 export const DocPaneMeta = observer(function DocPaneMeta({
   docId,
-  updatedAt,
-  cardCount,
   status,
   source,
   contentJson,
 }: {
   docId: string;
-  updatedAt: string;
-  cardCount: number;
   status: DocumentListItem['status'];
   source: DocumentListItem['source'];
   contentJson?: unknown;
@@ -25,20 +24,16 @@ export const DocPaneMeta = observer(function DocPaneMeta({
     source,
     preview: contentJson === undefined ? null : listBodyPreview(contentJson),
   });
+  const stageLabel =
+    stage.kind !== 'idle' && stage.kind !== 'failed' && stage.label ? stage.label : null;
+  const failed = status === 'failed';
+  if (!stageLabel && !failed && !stage.canRetry && !stage.canCancel) return null;
   return (
     <div className="pane-meta">
-      <span>{formatRelativeTime(updatedAt)}</span>
-      <span className="sep">·</span>
-      <span>{cardCount} 张卡</span>
-      {stage.kind !== 'idle' && stage.kind !== 'failed' && stage.label ? (
+      {stageLabel ? <span>{stageLabel}</span> : null}
+      {failed ? (
         <>
-          <span className="sep">·</span>
-          <span>{stage.label}</span>
-        </>
-      ) : null}
-      {status === 'failed' ? (
-        <>
-          <span className="sep">·</span>
+          {stageLabel ? <span className="sep">·</span> : null}
           <span>失败</span>
         </>
       ) : null}

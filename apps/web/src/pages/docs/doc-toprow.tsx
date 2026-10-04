@@ -2,6 +2,7 @@ import { observer, useService } from '@rabjs/react';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { Tip } from '@/components/tip';
+import { formatRelativeTime } from '@/lib/format';
 import { documentReturnTarget } from '@/routes';
 import { UiPrefsService, type DocMode } from '@/services/ui-prefs.service';
 import { DocsService } from './docs.service';
@@ -66,6 +67,8 @@ export const DocTopRow = observer(function DocTopRow({
 
   const showSave = editing && Boolean(editor.saveLabel);
   const showMode = !hideModeSwitch;
+  // 预览态把更新时间放在工具丸里（原标题下 meta 的位置）；编辑态这个位置是保存状态
+  const timeDoc = !editing && service.doc && service.doc.id === docId ? service.doc : null;
 
   return (
     <div className={`doc-toprow${layout === 'bar' ? ' is-bar' : ''}`}>
@@ -90,6 +93,12 @@ export const DocTopRow = observer(function DocTopRow({
               {editor.saveState === 'saved' ? <span className="ok">●</span> : null}
               {editor.saveLabel}
             </span>
+            {showMode ? <span className="divider" /> : null}
+          </>
+        ) : null}
+        {timeDoc ? (
+          <>
+            <span className="doc-toprow-time">{formatRelativeTime(timeDoc.updatedAt)}</span>
             {showMode ? <span className="divider" /> : null}
           </>
         ) : null}
