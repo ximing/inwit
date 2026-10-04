@@ -13,16 +13,18 @@ const GAP = 18;
 /**
  * 节点上沿、下沿是插入线，中间是收成子节点。
  * 节点之间的缝也算插入线，避免掉进缝里被当成拖到空白。
+ * except 是被拖的节点（单个 id 或整组 id），它们不是合法落点。
  */
 export function hitMindDrop(
   boxes: readonly MindBox[],
   x: number,
   y: number,
-  exceptId: string,
+  except: string | ReadonlySet<string>,
 ): MindDrop {
+  const excluded = typeof except === 'string' ? new Set([except]) : except;
   let inside: MindBox | null = null;
   for (const box of boxes) {
-    if (box.id === exceptId) continue;
+    if (excluded.has(box.id)) continue;
     if (x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height) inside = box;
   }
   if (inside) {
@@ -35,7 +37,7 @@ export function hitMindDrop(
 
   let best: { kind: 'before' | 'after'; id: string; dist: number } | null = null;
   for (const box of boxes) {
-    if (box.id === exceptId) continue;
+    if (excluded.has(box.id)) continue;
     if (x < box.x || x > box.x + box.width) continue;
     if (y < box.y && box.y - y <= GAP) {
       const dist = box.y - y;

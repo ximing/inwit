@@ -9,6 +9,8 @@ import {
   nudgePlace,
   outdentPlace,
   placeFromDrop,
+  placeGroupFromDrop,
+  planGroupPlace,
   siblingInsert,
 } from './mindmap-edit';
 
@@ -59,5 +61,74 @@ describe('mind map edits', () => {
     expect(foldsHiding(nodes, 'd', new Set(['a']))).toEqual(['a']);
     expect(foldsHiding(nodes, 'd', new Set())).toEqual([]);
     expect(foldsHiding(nodes, 'b', new Set(['a']))).toEqual([]);
+  });
+});
+
+describe('group drag', () => {
+  // a ── d        b        c
+  const groupNodes: OutlineNode[] = [
+    { id: 'a', parentId: null, position: 0 },
+    { id: 'b', parentId: null, position: 1 },
+    { id: 'c', parentId: null, position: 2 },
+    { id: 'd', parentId: 'a', position: 0 },
+  ];
+
+  it('counts the sibling index with the whole group removed', () => {
+    expect(placeGroupFromDrop(groupNodes, ['a', 'b'], { kind: 'before', siblingId: 'c' })).toEqual({
+      parentId: null,
+      index: 0,
+    });
+    expect(placeGroupFromDrop(groupNodes, ['a', 'b'], { kind: 'after', siblingId: 'c' })).toEqual({
+      parentId: null,
+      index: 1,
+    });
+  });
+
+  it('appends to the child list and refuses a drop inside the group', () => {
+    expect(placeGroupFromDrop(groupNodes, ['b', 'c'], { kind: 'child', parentId: 'a' })).toEqual({
+      parentId: 'a',
+      index: 1,
+    });
+    expect(placeGroupFromDrop(groupNodes, ['a', 'b'], { kind: 'child', parentId: 'a' })).toBeNull();
+    expect(placeGroupFromDrop(groupNodes, ['a', 'b'], { kind: 'after', siblingId: 'a' })).toBeNull();
+  });
+
+  it('appends to the roots on empty space, unless everything is already a root', () => {
+    expect(placeGroupFromDrop(groupNodes, ['a', 'b'], { kind: 'root' })).toBeNull();
+    expect(placeGroupFromDrop(groupNodes, ['b', 'd'], { kind: 'root' })).toEqual({
+      parentId: null,
+      index: 2,
+    });
+  });
+
+  it('verifies each topmost node and reports an unchanged drop', () => {
+    expect(planGroupPlace(groupNodes, ['a', 'b'], { parentId: null, index: 0 })).toEqual({
+      ok: true,
+      unchanged: true,
+    });
+    const moved = planGroupPlace(groupNodes, ['b', 'c'], { parentId: 'a', index: 1 });
+    expect(moved).toEqual({ ok: true, unchanged: false });
+  });
+
+  it('cancels the whole group when one node would go too deep', () => {
+    const deep: OutlineNode[] = [
+      { id: 'n1', parentId: null, position: 0 },
+      { id: 'n2', parentId: 'n1', position: 0 },
+      { id: 'n3', parentId: 'n2', position: 0 },
+      { id: 'n4', parentId: 'n3', position: 0 },
+      { id: 'n5', parentId: 'n4', position: 0 },
+      { id: 'n6', parentId: 'n5', position: 0 },
+      { id: 'n7', parentId: 'n6', position: 0 },
+      { id: 'n8', parentId: 'n7', position: 0 },
+      { id: 'free', parentId: null, position: 1 },
+    ];
+    expect(planGroupPlace(deep, ['free'], { parentId: 'n8', index: 0 })).toEqual({
+      ok: false,
+      reason: 'depth',
+    });
+    expect(planGroupPlace(deep, ['n2'], { parentId: 'n3', index: 0 })).toEqual({
+      ok: false,
+      reason: 'cycle',
+    });
   });
 });

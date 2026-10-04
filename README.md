@@ -16,13 +16,13 @@
   ·
   <a href="#产品理念">理念</a>
   ·
-  <a href="#agent--ai-first-的两条路径">AI First</a>
+  <a href="#产品长什么样">截图</a>
+  ·
+  <a href="#agent-替你做什么">Agent</a>
   ·
   <a href="#快速开始">快速开始</a>
   ·
   <a href="#编码-agent">编码 Agent</a>
-  ·
-  <a href="#架构">架构</a>
   ·
   <a href="#贡献">贡献</a>
 </p>
@@ -59,57 +59,6 @@ Inwit 是 **AI First**，同时追求 **纸上学习**。打开后先看到今�
 | 编码 Agent 自己记笔记 | 再做一个第二大脑 | 只负责投喂，消化和复习仍在 Inwit |
 
 主题不是文件夹。资料按时间流入主题或未归属池；Agent 维护一张概念大纲树。空白节点可以让 AI 补——这是复习之外的第二个学习驱动。
-
-## Agent · AI First 的两条路径
-
-Inwit 把 Agent 当成产品的一部分，而不是外挂聊天窗。
-
-1. **对内**：worker 里的后台 Agent 消化资料、回答问题、整理地图、根据复习反馈进化，并按周写复盘。
-2. **对外**：仓库里的 [skills/inwit](skills/inwit/SKILL.md) 让其他 Agent 用个人访问令牌调用同一套 HTTP API。
-
-<p align="center">
-  <img src="docs/diagrams/ai-first-paths.zh.svg#gh-light-mode-only" alt="对内 Inwit Agent 与对外 skill 汇入同一份数据" width="880" />
-  <img src="docs/diagrams/ai-first-paths.zh-dark.svg#gh-dark-mode-only" alt="对内 Inwit Agent 与对外 skill 汇入同一份数据" width="880" />
-</p>
-
-### 对内：Agent 怎么工作
-
-配置好模型（设置 → 模型配置，用户 BYOK；系统可走百炼兜底）之后，独立 worker 轮询 `jobs` 表。状态不在进程内存里：领取、超时回收、失败重试都落在 PostgreSQL，进程重启也能接着跑。所有查询按 `userId` 隔离。没有 worker，文档会停在「消化中…」。
-
-| 能力 | 做什么 | 何时跑 |
-|---|---|---|
-| 消化 `digest` | 把长内容切成原子卡片（概念 + 例子 + 易混点），出题，挂到知识地图 | 资料入库后入队 |
-| 问答 `chat` | 直接提问，中文回答落成文档，并自动转卡片 | 以问号结尾发送 |
-| 主题 `topic` | 整理 / 补全知识地图，未归属资料聚成一类时提议开题 | 用户点「整理地图」，或后台建议 |
-| 进化 `evolve` | 反复忘的换讲法、拆小、出混淆对比 | 复习反馈触发 |
-| 周报 `weekly_report` | 回忆成功率、建议重学的概念 | 按周自动入队 |
-| 提取 / 识别 `extract` `ocr` | 从原件抽文本，识别扫描页 | 导入 PDF 等 |
-
-切卡会直接写入，开题要你点头。三档反馈（忘了 / 模糊 / 想起来了）才改间隔。任务页能看见 Agent 在跑什么、失败了什么、用了多少 token。
-
-<p align="center">
-  <img src="docs/screenshots/readme/07-jobs.png" alt="任务队列：消化、问答、进化与用量" width="920" />
-</p>
-
-### 对外：Skill 让其他 Agent 接入
-
-仓库自带可安装的 skill：[skills/inwit/SKILL.md](skills/inwit/SKILL.md)。Claude、Codex、Cursor 或其他能跑 skill 的 Agent 都可以用它操作你的 Inwit，而不必再做一个第二大脑。
-
-1. 在 **设置 → 接口令牌** 签发 `iwt_` 前缀的个人访问令牌（明文只显示一次，可随时撤销）。
-2. 按下面的 [编码 Agent](#编码-agent) 把 skill 装到对应工具，并设置 `INWIT_TOKEN` / `INWIT_BASE_URL`。
-3. 接口目录按域拆开（[skills/inwit/references/](skills/inwit/references/)），Agent 只加载当前意图的那一个模块，不要靠记忆编字段，也不要手搓文档 JSON。
-
-外部 Agent **只负责投喂和读取**：把笔记、问号送进来，看今天的队列。消化、SM-2、知识地图仍在服务端跑。
-
-Skill 里写好的典型工作流：
-
-- **投喂笔记**：`POST /api/open/documents`（markdown 或 html）。
-- **提问并制卡**：`POST /api/chat`，问题以 `？` / `?` 结尾。
-- **今日复习**：`GET /api/review/today`，反馈 `POST /api/review/:cardId/feedback`。
-- **主题 / 地图**：见 topics 模块。
-- **任务进度**：`GET /api/jobs/queue`。
-
-对内 Agent 和对外 skill 操作的是同一份数据：你在网页里扔的，Claude 看得到；Claude 投喂的笔记，首页和文档列表立刻出现。
 
 ---
 
@@ -158,6 +107,34 @@ Skill 里写好的典型工作流：
 
 ---
 
+## Agent 替你做什么
+
+Inwit 把 Agent 当成产品的一部分，而不是外挂聊天窗。配置好模型（设置 → 模型配置，用户 BYOK；系统可走百炼兜底）之后，后台 Agent 持续工作：
+
+| 能力 | 做什么 | 何时跑 |
+|---|---|---|
+| 消化 | 把长内容切成原子卡片（概念 + 例子 + 易混点），出题，挂到知识地图 | 资料入库后 |
+| 问答 | 直接提问，中文回答落成文档，并自动转卡片 | 以问号结尾发送 |
+| 主题 | 整理 / 补全知识地图，未归属资料聚成一类时提议开题 | 你点「整理地图」，或后台建议 |
+| 进化 | 反复忘的换讲法、拆小、出混淆对比 | 复习反馈触发 |
+| 周报 | 回忆成功率、建议重学的概念 | 按周自动 |
+| 提取 / 识别 | 从原件抽文本，识别扫描页 | 导入 PDF 等 |
+
+切卡会直接写入，开题要你点头。三档反馈（忘了 / 模糊 / 想起来了）才改间隔。任务页能看见 Agent 在跑什么、失败了什么、用了多少 token。
+
+<p align="center">
+  <img src="docs/screenshots/readme/07-jobs.png" alt="任务队列：消化、问答、进化与用量" width="920" />
+</p>
+
+你在用的编码 Agent（Claude、Codex、Cursor……）也可以接入同一份数据：投喂笔记、提问制卡、看今日队列——装一个 skill 即可，见 [编码 Agent](#编码-agent)。对内 Agent 和对外 skill 操作的是同一份数据：你在网页里扔的，Claude 看得到；Claude 投喂的笔记，首页和文档列表立刻出现。
+
+<p align="center">
+  <img src="docs/diagrams/ai-first-paths.zh.svg#gh-light-mode-only" alt="对内 Inwit Agent 与对外 skill 汇入同一份数据" width="880" />
+  <img src="docs/diagrams/ai-first-paths.zh-dark.svg#gh-dark-mode-only" alt="对内 Inwit Agent 与对外 skill 汇入同一份数据" width="880" />
+</p>
+
+---
+
 ## 概念模型
 
 四个实体，对应四个动作：
@@ -169,68 +146,13 @@ Skill 里写好的典型工作流：
 | **主题**（Topic） | 贯通的方向 | 你给自己开的一门课：有目标、有资料、有卡片、有知识地图 |
 | **关联**（Link） | 贯通的结构 | 卡片↔卡片、卡片↔资料（锚点）、资料/卡片↔主题（归属） |
 
-复习不是实体，是卡片上的 SM-2 状态。未归属的资料可以由消化 Agent 软归属，用户只有确认权，没有整理义务。
-
----
-
-## 架构
-
-服务端优先。Web / 桌面 / 移动共用同一套 API 与 DTO。
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  客户端                                                  │
-│  Web (Vite + React 19 + @rabjs/react)                   │
-│  桌面 (Tauri 2，系统截图 / OCR)                           │
-│  移动 (Expo / React Native)                              │
-├─────────────────────────────────────────────────────────┤
-│  服务端  Fastify 5 + drizzle-orm                         │
-│  认证 · BYOK 模型 · 文档 inbox · 复习队列 · 任务与用量     │
-├─────────────────────────────────────────────────────────┤
-│  Agent 层（全部收敛于 pi-agent-core，不在体系外直调 LLM）  │
-│  消化  扫描 inbox → 切卡 → 出题 → 挂地图                   │
-│  问答  直接提问 → 中文回答 → 自动转卡片                    │
-│  主题  整理知识地图 / 补空白 / 提议开题                    │
-│  进化  换讲法 / 拆卡 / 混淆对比 / 周报复盘                 │
-│  LLM   @earendil-works/pi-ai，用户 BYOK + 系统兜底        │
-├─────────────────────────────────────────────────────────┤
-│  数据                                                    │
-│  PostgreSQL   业务数据 + 任务队列                         │
-│  Qdrant       向量召回（2560 维）                         │
-│  Meilisearch  中文稀疏召回                                │
-│  百炼         embedding + rerank                         │
-│  S3           附件（客户端只拿预签名 URL，不持有密钥）      │
-└─────────────────────────────────────────────────────────┘
-```
-
-检索是混合召回：Qdrant 语义 + Meili 关键词 → RRF 融合 → rerank。所有查询按 `userId` 隔离。
-
-Agent 跑在独立 worker 进程里。没有 worker，文档会停在「消化中…」。
-
-### 仓库结构
-
-pnpm monorepo，全 ESM（相对导入带 `.js` 后缀，tsconfig 为 NodeNext）。
-
-```
-inwit/
-├── apps/server       Fastify + drizzle + worker（:3020）
-├── apps/web          Vite + React + @rabjs/react（:5190，/api 代理到 3020）
-├── apps/desktop      Tauri 2 桌面壳
-├── apps/mobile       Expo / React Native
-├── packages/dto      前后端共享 zod schema（API 契约的唯一来源）
-├── packages/doc-schema / doc-engine / markdown
-├── packages/brand    App 图标源（改 logo.svg 后 raster-icons）
-├── skills/inwit      给外部编码 Agent 的 skill（HTTP 投喂 / 复习）
-└── docs/             PRD、设计稿、任务与开发日志
-```
-
-改 API：先改 `packages/dto`，再同步 server 的 parse/service 和 web 的调用方。
+复习不是实体，是卡片上的 SM-2 状态。未归属的资料可以由消化 Agent 软归属，你只有确认权，没有整理义务。
 
 ---
 
 ## 快速开始
 
-需要 **Node 22+** 和 **pnpm 10**。数据库与检索的连接写在 `apps/server/.env`（不入库）。
+直接使用托管版：[inwit.aimo.plus](https://inwit.aimo.plus)。要自己部署，需要 **Node 22+** 和 **pnpm 10**，数据库与检索的连接写在 `apps/server/.env`（不入库，清单见[环境变量](#环境变量)）。
 
 ```bash
 pnpm install
@@ -239,7 +161,7 @@ pnpm dev                                 # server :3020 + web :5190
 pnpm --filter @inwit/server worker        # 另开一个终端：消化 / 问答 / 进化 / 周报
 ```
 
-浏览器打开 [http://localhost:5190](http://localhost:5190)。
+浏览器打开 [http://localhost:5190](http://localhost:5190)。没有 worker，文档会停在「消化中…」。
 
 <p align="center">
   <img src="docs/screenshots/readme/00-login.png" alt="登录页" width="560" />
@@ -274,16 +196,18 @@ docker compose -f docker-compose.prod.yml up -d
 
 ## 编码 Agent
 
-Inwit 在 [`skills/`](skills) 下内置 [Agent Skills](https://code.claude.com/docs/en/claude-code/skills)，教编程 Agent 通过 HTTP API 操作同一份数据。技能本体是纯 `SKILL.md`（外加按域拆开的 `references/`），同一份文件适用于各编程工具。安装方式因工具而异——多个工具同时使用时，需要分别为每个工具安装。理念与工作流见 [Agent · AI First 的两条路径](#agent--ai-first-的两条路径)。
+Inwit 在 [`skills/`](skills) 下内置 [Agent Skills](https://code.claude.com/docs/en/claude-code/skills)，教编程 Agent 通过 HTTP API 操作同一份数据。技能本体是纯 `SKILL.md`（外加按域拆开的 `references/`），同一份文件适用于各编程工具。安装方式因工具而异——多个工具同时使用时，需要分别为每个工具安装。
 
-插件清单的布局与 [CSI](https://github.com/ximing/csi) 相同（`.claude-plugin` / `.codex-plugin` / `.cursor-plugin` 等）。装过一个再装另一个，各自装一次。
+外部 Agent **只负责投喂和读取**：把笔记、问号送进来，看今天的队列。消化、SM-2、知识地图仍在服务端跑。Skill 里写好的典型工作流：投喂笔记（`POST /api/open/documents`）、提问并制卡（`POST /api/chat`，问题以 `？` / `?` 结尾）、今日复习（`GET /api/review/today` + 反馈）、任务进度（`GET /api/jobs/queue`）。
 
-先在 Inwit **设置 → 接口令牌** 创建令牌（前缀 `iwt_`），写入环境变量，不要贴进对话或仓库：
+先在 Inwit **设置 → 接口令牌** 创建令牌（前缀 `iwt_`，明文只显示一次，可随时撤销），写入环境变量，不要贴进对话或仓库：
 
 ```bash
 export INWIT_TOKEN='iwt_…'
 export INWIT_BASE_URL='https://inwit.aimo.plus'   # 本地可省略，默认 http://localhost:3020
 ```
+
+插件清单的布局与 [CSI](https://github.com/ximing/csi) 相同（`.claude-plugin` / `.codex-plugin` / `.cursor-plugin` 等）。装过一个再装另一个，各自装一次。
 
 ### Claude Code
 
@@ -365,22 +289,54 @@ pi install git:github.com/ximing/inwit
 
 ---
 
-## 常用命令
+## 架构
 
-```bash
-pnpm -r typecheck
-pnpm -r build
-pnpm --filter @inwit/server test
-pnpm --filter @inwit/server test -- src/review/sm2.test.ts
-pnpm --filter @inwit/server migrate:generate   # schema 变更后生成
-pnpm --filter @inwit/server migrate            # 执行
-pnpm --filter @inwit/desktop test              # Tauri 合同测试
-pnpm --filter @inwit/brand raster-icons
+服务端优先。Web / 桌面 / 移动共用同一套 API 与 DTO。
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  客户端                                                  │
+│  Web (Vite + React 19 + @rabjs/react)                   │
+│  桌面 (Tauri 2，系统截图 / OCR)                           │
+│  移动 (Expo / React Native)                              │
+├─────────────────────────────────────────────────────────┤
+│  服务端  Fastify 5 + drizzle-orm                         │
+│  认证 · BYOK 模型 · 文档 inbox · 复习队列 · 任务与用量     │
+├─────────────────────────────────────────────────────────┤
+│  Agent 层（全部收敛于 pi-agent-core，不在体系外直调 LLM）  │
+│  消化  扫描 inbox → 切卡 → 出题 → 挂地图                   │
+│  问答  直接提问 → 中文回答 → 自动转卡片                    │
+│  主题  整理知识地图 / 补空白 / 提议开题                    │
+│  进化  换讲法 / 拆卡 / 混淆对比 / 周报复盘                 │
+│  LLM   @earendil-works/pi-ai，用户 BYOK + 系统兜底        │
+├─────────────────────────────────────────────────────────┤
+│  数据                                                    │
+│  PostgreSQL   业务数据 + 任务队列                         │
+│  Qdrant       向量召回（2560 维）                         │
+│  Meilisearch  中文稀疏召回                                │
+│  百炼         embedding + rerank                         │
+│  S3           附件（客户端只拿预签名 URL，不持有密钥）      │
+└─────────────────────────────────────────────────────────┘
 ```
 
-改 `apps/server/src/db/schema.ts` 必须走 drizzle migration，不手改数据库。
+检索是混合召回：Qdrant 语义 + Meili 关键词 → RRF 融合 → rerank。所有查询按 `userId` 隔离。
 
-发版前先升级 `apps/web/package.json` 的 `version`（semver）。Vite 构建时打进前端常量，设置页底部展示；不要在 UI 里手写版本号。
+Agent 跑在独立 worker 进程里，状态不在进程内存：领取、超时回收、失败重试都落在 PostgreSQL，进程重启也能接着跑。
+
+pnpm monorepo，全 ESM（相对导入带 `.js` 后缀，tsconfig 为 NodeNext）：
+
+```
+inwit/
+├── apps/server       Fastify + drizzle + worker（:3020）
+├── apps/web          Vite + React + @rabjs/react（:5190，/api 代理到 3020）
+├── apps/desktop      Tauri 2 桌面壳
+├── apps/mobile       Expo / React Native
+├── packages/dto      前后端共享 zod schema（API 契约的唯一来源）
+├── packages/doc-schema / doc-engine / markdown
+├── packages/brand    App 图标源（改 logo.svg 后 raster-icons）
+├── skills/inwit      给外部编码 Agent 的 skill（HTTP 投喂 / 复习）
+└── docs/             PRD、设计稿、任务与开发日志
+```
 
 ---
 
@@ -425,11 +381,12 @@ pnpm --filter @inwit/brand raster-icons
 约定（完整版在仓库根目录 [`CLAUDE.md`](CLAUDE.md)）：
 
 - **API 契约只出在 `@inwit/dto`**。先改 zod schema，再改 server / web。
-- **Schema 变更走 drizzle**（`schema.ts` → `migrate:generate` → `migrate`）。
+- **Schema 变更走 drizzle**（`schema.ts` → `migrate:generate` → `migrate`），不手改数据库。
 - **Agent 可测逻辑放 `*-logic.ts`**，编排和 IO 放旁边的模块；后端测试不连真实数据库。
 - **前端一页一个 Service**（`@rabjs/react`），不要另引状态库。文案中文，语气克制书面。不要用 `window.alert` / `prompt` / `confirm`，走全局 DialogService。
 - **样式按功能就近**：页面 CSS 放 `apps/web/src/pages/<功能>/`，不要往全局 `styles.css` 堆业务规则。新 CSS 必须在 `style-entry.css` 登记。
 - **图片与文件**只走服务端预签名 URL。
+- 发版前先升级 `apps/web/package.json` 的 `version`（semver），Vite 构建时打进前端常量；不要在 UI 里手写版本号。
 
 UI 视觉以 [`docs/design/v2/`](docs/design/v2/) 为设计稿。产品需求见 [`docs/prd.md`](docs/prd.md)。
 

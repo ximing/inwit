@@ -64,6 +64,13 @@
 }
 .doc-canvas-card.is-dimmed { opacity: 0.32; }
 .doc-canvas-card.is-faded { opacity: 0.18; }
+/* 整组拖动时，其余被选节点弱化提示将一起移动。 */
+.doc-canvas-card.is-ghosting { opacity: 0.45; }
+.doc-canvas-card.is-ghosting .mini-card,
+.doc-canvas-card.is-ghosting .canvas-node {
+  border-color: var(--accent-line);
+  border-style: dashed;
+}
 .doc-canvas-card.is-suspended .mini-card { opacity: 0.62; }
 /* 待办圆点：待确认 accent、待复习 gold，不参与节点尺寸。 */
 .canvas-todo {

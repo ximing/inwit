@@ -1,4 +1,4 @@
-import { outlineChildSlots, outlineSlot, type OutlineNode } from '@inwit/dto';
+import { outlineChildSlots, outlineSlot, planOutlinePlace, type OutlineNode } from '@inwit/dto';
 import type { MindDrop } from './mindmap-hit';
 
 export const MIND_NEW_TEXT = '新节点';
@@ -76,7 +76,10 @@ export function placeFromDrop(
 }
 
 /** 成为上一个兄弟的最后一个子节点。 */
-export function indentPlace(nodes: readonly OutlineNode[], id: string): MindPlace | null {
+export function indentPlace(
+  nodes: readonly OutlineNode[],
+  id: string,
+): MindPlace | null {
   const slot = outlineSlot(nodes, id);
   if (!slot || slot.index <= 0) return null;
   const prev = outlineChildSlots(nodes, slot.parentId)[slot.index - 1];
@@ -150,4 +153,55 @@ export function navigateMind(
   const target = siblings[next];
   if (!target) return { type: 'none' };
   return { type: 'select', id: target.id };
+}
+
+/**
+ * 整组拖放的落点换算。ids 是顶层被选节点（mindTopmostSelected 的结果）。
+ * index 先把整组从目标兄弟列表里拿掉再数，落定时依次插到 index、index+1…。
+ * 拖到空白且整组都已经是根时返回 null（不动）。
+ */
+export function placeGroupFromDrop(
+  nodes: readonly OutlineNode[],
+  ids: readonly string[],
+  drop: MindDrop,
+): MindPlace | null {
+  if (ids.length === 0) return null;
+  const group = new Set(ids);
+  if (drop.kind === 'root') {
+    const allRoots = ids.every((id) => (outlineSlot(nodes, id)?.parentId ?? null) === null);
+    if (allRoots) return null;
+    const roots = outlineChildSlots(nodes, null).filter((slot) => !group.has(slot.id));
+    return { parentId: null, index: roots.length };
+  }
+  if (drop.kind === 'child') {
+    if (group.has(drop.parentId)) return null;
+    const children = outlineChildSlots(nodes, drop.parentId).filter((slot) => !group.has(slot.id));
+    return { parentId: drop.parentId, index: children.length };
+  }
+  if (group.has(drop.siblingId)) return null;
+  const slot = outlineSlot(nodes, drop.siblingId);
+  if (!slot) return null;
+  const siblings = outlineChildSlots(nodes, slot.parentId).filter((item) => !group.has(item.id));
+  const at = siblings.findIndex((item) => item.id === drop.siblingId);
+  if (at < 0) return null;
+  return { parentId: slot.parentId, index: drop.kind === 'before' ? at : at + 1 };
+}
+
+export type MindGroupVerdict =
+  | { ok: true; unchanged: boolean }
+  | { ok: false; reason: 'missing' | 'self' | 'cycle' | 'depth' };
+
+/** 整组落位预检：每个顶层节点按 index+i 单独判（含层级上限），任一不合法则整组取消。 */
+export function planGroupPlace(
+  nodes: readonly OutlineNode[],
+  ids: readonly string[],
+  place: MindPlace,
+): MindGroupVerdict {
+  let unchanged = true;
+  for (let index = 0; index < ids.length; index += 1) {
+    const plan = planOutlinePlace(nodes, ids[index] as string, place.parentId, place.index + index);
+    if (!plan.ok) return { ok: false, reason: plan.reason };
+    if (!plan.unchanged) unchanged = false;
+  }
+  return { ok: true, unchanged };
 }

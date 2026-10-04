@@ -8,6 +8,7 @@ import {
   mindRelated,
   mindSearchIds,
   mindTodoCounts,
+  mindTopmostSelected,
   minimapCenter,
   minimapFrame,
   minimapViewport,
@@ -194,5 +195,37 @@ describe('minimap', () => {
     const back = minimapCenter(vp.x + vp.width / 2, vp.y + vp.height / 2, frame, view, stage);
     expect(back.panX).toBeCloseTo(view.panX);
     expect(back.panY).toBeCloseTo(view.panY);
+  });
+});
+
+describe('mindTopmostSelected', () => {
+  // a ── b ── c        x（独立树）
+  //      └─ d
+  const forest = [
+    member('a'),
+    member('b', 'a'),
+    member('c', 'b'),
+    member('d', 'b'),
+    member('x'),
+  ];
+
+  it('keeps only nodes whose ancestors are not selected', () => {
+    expect(mindTopmostSelected(forest, new Set(['a', 'b', 'c']))).toEqual(['a']);
+    expect(mindTopmostSelected(forest, new Set(['b', 'd']))).toEqual(['b']);
+    expect(mindTopmostSelected(forest, new Set(['c', 'x']))).toEqual(['c', 'x']);
+  });
+
+  it('selecting everything leaves the roots', () => {
+    expect(mindTopmostSelected(forest, new Set(['a', 'b', 'c', 'd', 'x']))).toEqual(['a', 'x']);
+  });
+
+  it('returns forest order, not selection order', () => {
+    expect(mindTopmostSelected(forest, new Set(['x', 'a']))).toEqual(['a', 'x']);
+  });
+
+  it('a parent cycle fully inside the selection has no topmost node', () => {
+    const loop = [member('p', 'q'), member('q', 'p'), member('r', 'p')];
+    expect(mindTopmostSelected(loop, new Set(['p', 'q', 'r']))).toEqual([]);
+    expect(mindTopmostSelected(loop, new Set(['p', 'r']))).toEqual(['p']);
   });
 });

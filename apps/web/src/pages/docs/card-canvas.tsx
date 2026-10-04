@@ -10,7 +10,6 @@ import {
   outlineChildSlots,
   planOutlinePlace,
   type DocumentCard,
-  type OutlinePlacement,
 } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import {
@@ -60,6 +59,8 @@ import {
   nudgePlace,
   outdentPlace,
   placeFromDrop,
+  placeGroupFromDrop,
+  planGroupPlace,
   siblingInsert,
 } from './mindmap-edit';
 import { loadFolds, saveFolds } from './mindmap-fold';
@@ -71,6 +72,7 @@ import {
   mindRelated,
   mindSearchIds,
   mindTodoCounts,
+  mindTopmostSelected,
   type MindCardTodo,
 } from './mindmap-focus';
 import { decideMindGesture, type MindIntent } from './mindmap-gesture';
@@ -89,9 +91,15 @@ type Drag = {
   drop: MindDrop;
 };
 
+type PlaceVerdict =
+  | { ok: true; unchanged: boolean }
+  | { ok: false; reason: 'missing' | 'self' | 'cycle' | 'depth' }
+  | null;
+
 function hintFor(
   drop: MindDrop,
-  plan: OutlinePlacement | null,
+  plan: PlaceVerdict,
+  count = 1,
 ): { text: string | null; accept: boolean } {
   if (!plan || !plan.ok) {
     return {
@@ -100,10 +108,11 @@ function hintFor(
     };
   }
   if (plan.unchanged) return { text: null, accept: false };
-  if (drop.kind === 'root') return { text: '独立成树', accept: true };
-  if (drop.kind === 'child') return { text: '成为子节点', accept: true };
-  if (drop.kind === 'before') return { text: '排在前面', accept: true };
-  return { text: '排在后面', accept: true };
+  const prefix = count > 1 ? `${count} 个节点：` : '';
+  if (drop.kind === 'root') return { text: `${prefix}独立成树`, accept: true };
+  if (drop.kind === 'child') return { text: `${prefix}成为子节点`, accept: true };
+  if (drop.kind === 'before') return { text: `${prefix}排在前面`, accept: true };
+  return { text: `${prefix}排在后面`, accept: true };
 }
 
 function SizedNode({
@@ -596,11 +605,23 @@ export const CardCanvas = observer(function CardCanvas({
     setEditingId(id);
   };
 
-  const dropTarget = drag ? placeFromDrop(forest, drag.id, drag.drop) : null;
-  const dropPlan = drag && dropTarget
-    ? planOutlinePlace(forest, drag.id, dropTarget.parentId, dropTarget.index)
+  /** 拖的是多选成员时整组一起动；只下发顶层被选节点（祖先在组里的随祖先走）。 */
+  const dragGroup =
+    drag && selectedIds.has(drag.id) && selectedIds.size > 1
+      ? mindTopmostSelected(forest, selectedIds)
+      : null;
+  const dragPlace = drag
+    ? dragGroup
+      ? placeGroupFromDrop(forest, dragGroup, drag.drop)
+      : placeFromDrop(forest, drag.id, drag.drop)
     : null;
-  const hint = drag ? hintFor(drag.drop, dropPlan) : null;
+  const dragVerdict: PlaceVerdict =
+    drag && dragPlace
+      ? dragGroup
+        ? planGroupPlace(forest, dragGroup, dragPlace)
+        : planOutlinePlace(forest, drag.id, dragPlace.parentId, dragPlace.index)
+      : null;
+  const hint = drag ? hintFor(drag.drop, dragVerdict, dragGroup?.length ?? 1) : null;
   const insertAt =
     drag && hint?.accept && (drag.drop.kind === 'before' || drag.drop.kind === 'after')
       ? boxById.get(drag.drop.siblingId)
@@ -749,13 +770,17 @@ export const CardCanvas = observer(function CardCanvas({
     gesture.moved = true;
     const rect = viewportRef.current?.getBoundingClientRect();
     const world = worldPoint(event.clientX, event.clientY);
+    const group =
+      selectedIds.has(gesture.id) && selectedIds.size > 1
+        ? new Set(mindTopmostSelected(forest, selectedIds))
+        : gesture.id;
     setDrag({
       id: gesture.id,
       dx: dxPx / view.zoom,
       dy: dyPx / view.zoom,
       x: rect ? event.clientX - rect.left : 0,
       y: rect ? event.clientY - rect.top : 0,
-      drop: hitMindDrop(layout.boxes, world.x, world.y, gesture.id),
+      drop: hitMindDrop(layout.boxes, world.x, world.y, group),
     });
     if (rect) {
       const pan = edgeAutoPan(
@@ -786,10 +811,35 @@ export const CardCanvas = observer(function CardCanvas({
     }
     if (decideMindGesture({ action: 'drag' }).type === 'ignore') suppressClick.current = true;
     const world = worldPoint(event.clientX, event.clientY);
-    const drop = hitMindDrop(layout.boxes, world.x, world.y, gesture.id);
+    const groupIds =
+      selectedIds.has(gesture.id) && selectedIds.size > 1
+        ? mindTopmostSelected(forest, selectedIds)
+        : null;
+    const drop = hitMindDrop(
+      layout.boxes,
+      world.x,
+      world.y,
+      groupIds ? new Set(groupIds) : gesture.id,
+    );
+    setDrag(null);
+    if (groupIds) {
+      // 整组拖动：落点换成「整组拿掉后」的下标，任一节点放不下就整组不动。
+      const place = placeGroupFromDrop(forest, groupIds, drop);
+      if (!place) return;
+      const verdict = planGroupPlace(forest, groupIds, place);
+      if (!verdict.ok) {
+        service.showToast(verdict.reason === 'depth' ? '层级太深了' : '不能放到这里');
+        return;
+      }
+      if (verdict.unchanged) return;
+      if (drop.kind === 'child') reveal(drop.parentId);
+      groupIds.forEach((id, index) => {
+        void service.placeOnCanvas(id, place.parentId, place.index + index);
+      });
+      return;
+    }
     const place = placeFromDrop(forest, gesture.id, drop);
     const plan = place ? planOutlinePlace(forest, gesture.id, place.parentId, place.index) : null;
-    setDrag(null);
     if (!place || !plan?.ok || plan.unchanged) return;
     if (drop.kind === 'child') reveal(drop.parentId);
     void service.placeOnCanvas(gesture.id, place.parentId, place.index);
@@ -1206,6 +1256,7 @@ export const CardCanvas = observer(function CardCanvas({
           const box = boxById.get(member.id);
           if (!box) return null;
           const dragging = drag?.id === member.id;
+          const ghosting = dragGroup !== null && !dragging && selectedIds.has(member.id);
           const accept = drag?.drop.kind === 'child' && drag.drop.parentId === member.id && hint?.accept === true;
           const card = member.kind === 'card' ? cardById.get(member.id) : undefined;
           const note = member.kind === 'annotation' ? noteById.get(member.id) : undefined;
@@ -1221,7 +1272,7 @@ export const CardCanvas = observer(function CardCanvas({
             <SizedNode
               key={member.id}
               id={member.id}
-              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}`}
+              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${ghosting ? ' is-ghosting' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}`}
               style={{
                 left: box.x,
                 top: box.y,

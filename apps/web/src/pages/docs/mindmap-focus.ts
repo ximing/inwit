@@ -167,6 +167,34 @@ export function mindTodoCounts(
   return counts;
 }
 
+/**
+ * 多选整组拖动时真正要移动的节点：祖先也在选择集里的节点随祖先一起走，
+ * 不单独下发移动。返回顺序保持 forest 顺序。
+ */
+export function mindTopmostSelected(
+  members: readonly CanvasMember[],
+  selectedIds: ReadonlySet<string>,
+): string[] {
+  const parentOf = new Map(members.map((member) => [member.id, member.parentId]));
+  const top = new Set<string>();
+  for (const member of members) {
+    if (!selectedIds.has(member.id)) continue;
+    let covered = false;
+    let cursor = parentOf.get(member.id) ?? null;
+    const seen = new Set<string>([member.id]);
+    while (cursor && !seen.has(cursor)) {
+      if (selectedIds.has(cursor)) {
+        covered = true;
+        break;
+      }
+      seen.add(cursor);
+      cursor = parentOf.get(cursor) ?? null;
+    }
+    if (!covered) top.add(member.id);
+  }
+  return members.filter((member) => top.has(member.id)).map((member) => member.id);
+}
+
 /** 框选：中心落在矩形里的节点，按传入顺序返回。 */
 export function mindMarqueeHits(
   boxes: readonly MindBox[],

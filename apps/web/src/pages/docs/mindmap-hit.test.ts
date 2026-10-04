@@ -24,3 +24,10 @@ describe('hitMindDrop', () => {
     expect(hitMindDrop(boxes, 40, 50, 'a')).toEqual({ kind: 'root' });
   });
 });
+
+describe('hitMindDrop with a dragged set', () => {
+  it('ignores every node in the dragged group', () => {
+    expect(hitMindDrop(boxes, 40, 50, new Set(['a', 'b']))).toEqual({ kind: 'root' });
+    expect(hitMindDrop(boxes, 40, 50, new Set(['b']))).toEqual({ kind: 'child', parentId: 'a' });
+  });
+});
