@@ -39,9 +39,10 @@ export class DocsAnnotationsService extends Service {
       CreateAnnotationInput,
       'kind' | 'pageIndex' | 'geometry' | 'imageKey' | 'anchorBlockIndex'
     > & { from?: number; to?: number },
-  ): Promise<boolean> {
+    opts?: { quiet?: boolean },
+  ): Promise<Annotation | null> {
     const clipped = quote.trim();
-    if (!clipped) return false;
+    if (!clipped) return null;
     try {
       const created = await createAnnotation({
         documentId,
@@ -66,11 +67,12 @@ export class DocsAnnotationsService extends Service {
           host?.ensureEntityMarks(this.docs.doc?.cards ?? [], this.annotations);
         }
       }
-      this.docs.openAnnotation(created.id);
-      return true;
+      // quiet：拖到脑图落成的批注不在正文侧打开，由画布接管选中。
+      if (!opts?.quiet) this.docs.openAnnotation(created.id);
+      return created;
     } catch (err) {
       this.docs.showToast(errorMessage(err, '没记下这条批注'));
-      return false;
+      return null;
     }
   }
 

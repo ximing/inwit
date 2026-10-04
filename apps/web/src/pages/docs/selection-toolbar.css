@@ -50,6 +50,9 @@
   font-weight: 500;
   letter-spacing: 0.02em;
 }
+/* 拖到脑图的把手。 */
+.float-tool.is-quote-drag { cursor: grab; }
+.float-tool.is-quote-drag:active { cursor: grabbing; }
 .float-tool-sep {
   width: 1px;
   height: 16px;

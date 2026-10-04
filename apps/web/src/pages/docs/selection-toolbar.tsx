@@ -1,18 +1,21 @@
 import { IMAGE_EXCERPT_QUOTE, type AnnotationGeometry } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
-import { Copy, Highlighter, Sparkles, SquarePlus } from 'lucide-react';
+import { Copy, GripVertical, Highlighter, Sparkles, SquarePlus } from 'lucide-react';
 import {
   useEffect,
   useLayoutEffect,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Tip } from '@/components/tip';
 import type { TextSelectionAnchor } from '@/lib/entity-marks';
+import { UiPrefsService } from '@/services/ui-prefs.service';
 import { DocsService } from './docs.service';
+import { encodeQuoteDrag, QUOTE_DRAG_MIME, type QuoteDragExtra } from './mindmap-quote';
 
 export type SelRect = { left: number; top: number; bottom: number };
 
@@ -74,14 +77,47 @@ export const SelectionActions = observer(function SelectionActions({
   };
 }) {
   const service = useService(DocsService);
+  const prefs = useService(UiPrefsService);
   const digesting = service.selectionDigesting;
   const locked = !documentId;
+  /** 只有脑图开着（map 布局）时，选区才能拖成脑图节点。 */
+  const canQuoteDrag = !locked && prefs.cardLayout === 'map';
 
   const resolveAnchor = (): { blockIndex?: number; from?: number; to?: number } => {
     const sel = getSelection?.();
     if (sel) return { blockIndex: sel.blockIndex, from: sel.from, to: sel.to };
     if (blockIndex != null) return { blockIndex };
     return {};
+  };
+
+  const quoteDragExtra = (): QuoteDragExtra => {
+    if (pdf) {
+      return {
+        kind: 'pdf',
+        pageIndex: pdf.pageIndex,
+        geometry: pdf.geometry,
+        ...(pdf.imageKey ? { imageKey: pdf.imageKey } : {}),
+      };
+    }
+    const anchor = resolveAnchor();
+    return {
+      ...(anchor.blockIndex != null ? { anchorBlockIndex: anchor.blockIndex } : {}),
+      ...(anchor.from != null && anchor.to != null ? { from: anchor.from, to: anchor.to } : {}),
+    };
+  };
+
+  const onQuoteDragStart = (event: ReactDragEvent<HTMLSpanElement>) => {
+    if (!documentId) return;
+    event.dataTransfer.setData(
+      QUOTE_DRAG_MIME,
+      encodeQuoteDrag({
+        documentId,
+        quote: clip(text, 20_000),
+        extra: quoteDragExtra(),
+      }),
+    );
+    event.dataTransfer.setData('text/plain', text);
+    event.dataTransfer.effectAllowed = 'copy';
   };
 
   const openPop = (kind: 'annotate' | 'card') => {
@@ -108,6 +144,20 @@ export const SelectionActions = observer(function SelectionActions({
 
   return (
     <>
+      {canQuoteDrag ? (
+        <Tip content="拖到脑图，落成批注节点">
+          <span
+            className="float-tool is-quote-drag"
+            role="button"
+            tabIndex={-1}
+            aria-label="拖到脑图，落成批注节点"
+            draggable
+            onDragStart={onQuoteDragStart}
+          >
+            <GripVertical width={15} height={15} strokeWidth={2} />
+          </span>
+        </Tip>
+      ) : null}
       <ToolIcon label="复制" onAction={() => void navigator.clipboard.writeText(text)}>
         <Copy width={15} height={15} strokeWidth={2} />
       </ToolIcon>

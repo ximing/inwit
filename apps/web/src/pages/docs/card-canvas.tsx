@@ -31,6 +31,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -78,6 +79,7 @@ import {
 import { decideMindGesture, type MindIntent } from './mindmap-gesture';
 import { hitMindDrop, type MindDrop } from './mindmap-hit';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
+import { parseQuoteDrag, quoteDropPlace, QUOTE_DRAG_MIME, type QuoteDragPayload } from './mindmap-quote';
 
 const NODE_W = 232;
 const NODE_H = 96;
@@ -245,6 +247,8 @@ export const CardCanvas = observer(function CardCanvas({
   const recallFolds = useRef<Set<string> | null>(null);
   /** Shift+拖空白的框选矩形（舞台坐标）。 */
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  /** 正文选区拖引文进来时的落点预览（drop 是世界坐标判定，x/y 是舞台坐标）。 */
+  const [quoteDrag, setQuoteDrag] = useState<{ x: number; y: number; drop: MindDrop } | null>(null);
   const marqueeGesture = useRef<{
     pointerId: number;
     originX: number;
@@ -657,6 +661,10 @@ export const CardCanvas = observer(function CardCanvas({
   const insertAt =
     drag && hint?.accept && (drag.drop.kind === 'before' || drag.drop.kind === 'after')
       ? boxById.get(drag.drop.siblingId)
+      : null;
+  const quoteInsertAt =
+    quoteDrag && (quoteDrag.drop.kind === 'before' || quoteDrag.drop.kind === 'after')
+      ? boxById.get(quoteDrag.drop.siblingId)
       : null;
 
   const applyMind = (id: string, intent: MindIntent) => {
@@ -1279,6 +1287,54 @@ export const CardCanvas = observer(function CardCanvas({
     void addText(null, outlineChildSlots(forest, null).length);
   };
 
+  /** 正文选区拖引文进来：和拖节点同一套落点判定与提示。 */
+  const onStageDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(QUOTE_DRAG_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    const rect = viewportRef.current?.getBoundingClientRect();
+    const world = worldPoint(event.clientX, event.clientY);
+    setQuoteDrag({
+      x: rect ? event.clientX - rect.left : 0,
+      y: rect ? event.clientY - rect.top : 0,
+      drop: hitMindDrop(layout.boxes, world.x, world.y, ''),
+    });
+  };
+
+  const onStageDragLeave = (event: ReactDragEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget;
+    if (next instanceof Node && event.currentTarget.contains(next)) return;
+    setQuoteDrag(null);
+  };
+
+  const onStageDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    const raw = event.dataTransfer.getData(QUOTE_DRAG_MIME);
+    setQuoteDrag(null);
+    if (!raw) return;
+    event.preventDefault();
+    const payload = parseQuoteDrag(raw);
+    if (!payload || !docId || payload.documentId !== docId) return;
+    const world = worldPoint(event.clientX, event.clientY);
+    const drop = hitMindDrop(layout.boxes, world.x, world.y, '');
+    void dropQuoteOnCanvas(payload, drop);
+  };
+
+  /** 引文落成批注节点：先以根身份进画布，再按落点挂到目标位置。 */
+  const dropQuoteOnCanvas = async (payload: QuoteDragPayload, drop: MindDrop) => {
+    const place = quoteDropPlace(forest, drop);
+    const id = await service.addCanvasQuoteAnnotation(
+      payload.documentId,
+      payload.quote,
+      payload.extra,
+    );
+    if (!id) return;
+    setSelectedId(id);
+    // 落点不合法（或拖到空白）时保持独立成树。
+    if (!place) return;
+    if (place.parentId) reveal(place.parentId);
+    void service.placeOnCanvas(id, place.parentId, place.index);
+  };
+
   const showMinimap =
     stageSize.width > 0 &&
     visible.length > 1 &&
@@ -1304,6 +1360,9 @@ export const CardCanvas = observer(function CardCanvas({
         onKeyDown={onKeyDown}
         onDoubleClick={onStageDoubleClick}
         onContextMenu={onStageContextMenu}
+        onDragOver={onStageDragOver}
+        onDragLeave={onStageDragLeave}
+        onDrop={onStageDrop}
       >
       <div
         className="doc-canvas-world"
@@ -1346,12 +1405,27 @@ export const CardCanvas = observer(function CardCanvas({
             }}
           />
         ) : null}
+        {quoteInsertAt && quoteDrag ? (
+          <div
+            className="doc-canvas-insert"
+            style={{
+              left: quoteInsertAt.x,
+              top:
+                quoteDrag.drop.kind === 'before'
+                  ? quoteInsertAt.y - 5
+                  : quoteInsertAt.y + quoteInsertAt.height + 3,
+              width: quoteInsertAt.width,
+            }}
+          />
+        ) : null}
         {visible.map((member) => {
           const box = boxById.get(member.id);
           if (!box) return null;
           const dragging = drag?.id === member.id;
           const ghosting = dragGroup !== null && !dragging && selectedIds.has(member.id);
           const accept = drag?.drop.kind === 'child' && drag.drop.parentId === member.id && hint?.accept === true;
+          const quoteAccept =
+            quoteDrag?.drop.kind === 'child' && quoteDrag.drop.parentId === member.id;
           const card = member.kind === 'card' ? cardById.get(member.id) : undefined;
           const note = member.kind === 'annotation' ? noteById.get(member.id) : undefined;
           const stored = nodeById.get(member.id);
@@ -1367,7 +1441,7 @@ export const CardCanvas = observer(function CardCanvas({
             <SizedNode
               key={member.id}
               id={member.id}
-              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${ghosting ? ' is-ghosting' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}${masked ? ' is-masked' : ''}`}
+              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${ghosting ? ' is-ghosting' : ''}${accept || quoteAccept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}${masked ? ' is-masked' : ''}`}
               style={{
                 left: box.x,
                 top: box.y,
@@ -1603,6 +1677,21 @@ export const CardCanvas = observer(function CardCanvas({
       {hint?.text ? (
         <div className="doc-canvas-hint" style={{ left: drag?.x ?? 0, top: drag?.y ?? 0 }} role="status">
           {hint.text}
+        </div>
+      ) : null}
+      {quoteDrag ? (
+        <div
+          className="doc-canvas-hint"
+          style={{ left: quoteDrag.x, top: quoteDrag.y }}
+          role="status"
+        >
+          {quoteDrag.drop.kind === 'child'
+            ? '落为子节点'
+            : quoteDrag.drop.kind === 'before'
+              ? '排在前面'
+              : quoteDrag.drop.kind === 'after'
+                ? '排在后面'
+                : '独立成树'}
         </div>
       ) : null}
       {selectedIds.size > 1 && !recall ? (

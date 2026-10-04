@@ -1177,7 +1177,22 @@ export class DocsService extends Service {
       'kind' | 'pageIndex' | 'geometry' | 'imageKey' | 'anchorBlockIndex'
     > & { from?: number; to?: number },
   ): Promise<boolean> {
-    return this.annotationService.addAnnotation(documentId, quote, note, extra);
+    return (await this.annotationService.addAnnotation(documentId, quote, note, extra)) !== null;
+  }
+
+  /** 正文选区拖到脑图：落成批注（不在正文侧打开），返回新批注 id 供画布落位。 */
+  async addCanvasQuoteAnnotation(
+    documentId: string,
+    quote: string,
+    extra?: Pick<
+      CreateAnnotationInput,
+      'kind' | 'pageIndex' | 'geometry' | 'imageKey' | 'anchorBlockIndex'
+    > & { from?: number; to?: number },
+  ): Promise<string | null> {
+    const created = await this.annotationService.addAnnotation(documentId, quote, '', extra, {
+      quiet: true,
+    });
+    return created?.id ?? null;
   }
 
   async saveAnnotationNote(id: string, note: string): Promise<boolean> {
