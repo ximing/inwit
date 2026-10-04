@@ -2,6 +2,7 @@
    Keep this eager entry so shared styles do not depend on route visitation order. */
 @import './styles.css';
 @import './components/app-dialog.css';
+@import './components/tip.css';
 @import './shell/styles.css';
 @import './shell/assistant.css';
 @import './pages/today/styles.css';

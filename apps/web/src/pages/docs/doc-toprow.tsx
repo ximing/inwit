@@ -1,6 +1,7 @@
 import { observer, useService } from '@rabjs/react';
 import { Maximize2, Minimize2, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { Tip } from '@/components/tip';
 import { documentReturnTarget } from '@/routes';
 import { UiPrefsService, type DocMode } from '@/services/ui-prefs.service';
 import { DocsService } from './docs.service';
@@ -94,12 +95,12 @@ export const DocTopRow = observer(function DocTopRow({
         ) : null}
         {showMode ? <ModeSwitch /> : null}
         <span className="divider" />
+        <Tip content={prefs.zenMode ? '退出禅模式' : '进入禅模式'}>
         <button
           type="button"
           className={`doc-fab-zen${prefs.zenMode ? ' is-on' : ''}`}
           aria-pressed={prefs.zenMode}
           aria-label={prefs.zenMode ? '退出禅模式' : '进入禅模式'}
-          title={prefs.zenMode ? '退出禅模式' : '进入禅模式'}
           onClick={() => prefs.setZenMode(!prefs.zenMode)}
         >
           {prefs.zenMode ? (
@@ -108,15 +109,17 @@ export const DocTopRow = observer(function DocTopRow({
             <Maximize2 width={13} height={13} strokeWidth={1.8} />
           )}
         </button>
+        </Tip>
+        <Tip content={backToTopic ? '返回主题' : '关闭'}>
         <button
           type="button"
           className="doc-fab-close"
           onClick={close}
-          title={backToTopic ? '返回主题' : '关闭'}
           aria-label={backToTopic ? '返回主题' : '关闭'}
         >
           <X width={13} height={13} strokeWidth={1.8} />
         </button>
+        </Tip>
       </div>
     </div>
   );

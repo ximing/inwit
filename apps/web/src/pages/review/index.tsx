@@ -15,6 +15,7 @@ import { cardPath } from '@/routes';
 import { cloneSettings, ReviewService } from './review.service';
 import { ReviewSectionHead, todayLabel } from './section-head';
 import { estimateReviewMinutes } from '@/lib/review-eta';
+import { Tip } from '@/components/tip';
 
 const ReportsPane = lazy(() => loadReportsPane().then((mod) => ({ default: mod.ReportsPane })));
 
@@ -284,11 +285,12 @@ const MiniCalendar = observer(function MiniCalendar() {
       .filter(Boolean)
       .join(' ');
     cells.push(
-      <span
-        className={cls}
+      <Tip
         key={key}
-        title={`${String(mon)}月${String(d)}日 · ${count > 0 ? `复习 ${String(count)} 次` : '没刷'}`}
-      />,
+        content={`${String(mon)}月${String(d)}日 · ${count > 0 ? `复习 ${String(count)} 次` : '没刷'}`}
+      >
+        <span className={cls} />
+      </Tip>,
     );
   }
   const trailing = (7 - ((lead + lastVisible) % 7)) % 7; // 补齐当前周，尾随空周裁掉
@@ -627,15 +629,16 @@ const SessionPane = observer(function SessionPane() {
   return (
     <div className="review-stage">
       <div className="stage-top">
-        <button
-          type="button"
-          className="stage-exit"
-          title="结束复习（Esc）"
-          aria-label="结束复习"
-          onClick={() => void service.exitSession()}
-        >
-          <X width={15} height={15} strokeWidth={2} />
-        </button>
+        <Tip content="结束复习（Esc）">
+          <button
+            type="button"
+            className="stage-exit"
+            aria-label="结束复习"
+            onClick={() => void service.exitSession()}
+          >
+            <X width={15} height={15} strokeWidth={2} />
+          </button>
+        </Tip>
         <div
           className="segs"
           role="progressbar"

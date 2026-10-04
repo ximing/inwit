@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { cardsForRail, MiniCard } from '@/components/reader/mini-card';
+import { Tip } from '@/components/tip';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
 import { ROUTES, topicHostId } from '@/routes';
 import { DialogService } from '@/services/dialog.service';
@@ -78,10 +79,10 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
       data-annotation-id={item.id}
       className={`note-item${on ? ' is-on' : ''}${editing ? ' is-editing' : ''}${lost ? ' is-lost' : ''}`}
     >
+      <Tip content={lost ? '原文已删除' : undefined}>
       <button
         type="button"
         className="note-item-main"
-        title={lost ? '原文已删除' : undefined}
         onClick={() => service.focusAnnotation(item.id)}
       >
         {item.kind === 'pdf' && item.imageKey ? <AnnotationThumb annotationId={item.id} /> : null}
@@ -90,6 +91,7 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
         {item.hasConvertedCard ? <p className="anchor-lost note-converted">已转成卡片</p> : null}
         {lost ? <p className="anchor-lost">原文已删除</p> : null}
       </button>
+      </Tip>
       {editing ? (
         <div className="note-edit">
           <textarea
@@ -116,13 +118,13 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
       ) : (
         <div className="note-item-ops">
           {!item.hasConvertedCard ? (
+            <Tip
+              content={!item.imageKey && !item.note.trim() ? '先写点笔记再转卡片' : '转为卡片'}
+            >
             <button
               type="button"
               className="note-op"
               aria-label="转为卡片"
-              title={
-                !item.imageKey && !item.note.trim() ? '先写点笔记再转卡片' : '转为卡片'
-              }
               disabled={
                 service.convertingAnnotationId === item.id ||
                 (!item.imageKey && !item.note.trim())
@@ -134,12 +136,13 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
             >
               <SquarePlus width={13} height={13} strokeWidth={1.8} />
             </button>
+            </Tip>
           ) : null}
+          <Tip content="编辑">
           <button
             type="button"
             className="note-op"
             aria-label="编辑想法"
-            title="编辑"
             onClick={(event) => {
               event.stopPropagation();
               setDraft(item.note);
@@ -148,11 +151,12 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
           >
             <Pencil width={13} height={13} strokeWidth={1.8} />
           </button>
+          </Tip>
+          <Tip content="删除">
           <button
             type="button"
             className="note-op"
             aria-label="删除批注"
-            title="删除"
             onClick={(event) => {
               event.stopPropagation();
               void service.removeAnnotation(item.id);
@@ -160,6 +164,7 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
           >
             <Trash2 width={13} height={13} strokeWidth={1.8} />
           </button>
+          </Tip>
         </div>
       )}
     </div>
@@ -227,21 +232,22 @@ const DocCardButton = observer(function DocCardButton({
         />
         {actions.archive ? (
           <div className="note-item-ops mini-ops">
+            <Tip content="编辑">
             <button
               type="button"
               className="note-op"
               aria-label="编辑卡片"
-              title="编辑"
               onClick={() => service.openCardEdit(card.id)}
             >
               <Pencil width={13} height={13} strokeWidth={1.8} />
             </button>
+            </Tip>
             {actions.suspend && !proposed ? (
+              <Tip content={suspended ? '恢复复习' : '已熟悉，不复习'}>
               <button
                 type="button"
                 className={`note-op${suspended ? ' is-on' : ''}`}
                 aria-label={suspended ? '恢复复习' : '已熟悉，不复习'}
-                title={suspended ? '恢复复习' : '已熟悉，不复习'}
                 disabled={service.acceptingProposed}
                 onClick={() => void service.toggleCardSuspended(card)}
               >
@@ -251,17 +257,19 @@ const DocCardButton = observer(function DocCardButton({
                   <Pause width={13} height={13} strokeWidth={1.8} />
                 )}
               </button>
+              </Tip>
             ) : null}
+            <Tip content="移入回收站">
             <button
               type="button"
               className="note-op"
               aria-label="删除卡片"
-              title="移入回收站"
               disabled={service.acceptingProposed}
               onClick={() => void service.archiveDocCard(card.id)}
             >
               <Trash2 width={13} height={13} strokeWidth={1.8} />
             </button>
+            </Tip>
           </div>
         ) : null}
       </div>
@@ -473,29 +481,32 @@ export const CardRail = observer(function CardRail() {
             </span>
             <span className="card-rail-spring" />
             {canAcceptAll ? (
+              <Tip content={service.cardDecisionBusy ? '还有卡片正在确认' : undefined}>
               <button
                 type="button"
                 className="card-rail-accept-all"
                 disabled={service.cardDecisionBusy || dialog.current !== null}
-                title={service.cardDecisionBusy ? '还有卡片正在确认' : undefined}
                 onClick={() => void acceptAll()}
               >
                 {service.acceptingProposed ? '确认中…' : '全部确认'}
               </button>
+              </Tip>
             ) : (
+              <Tip content="去复习">
               <Link
                 className={`card-rail-go${dueCount > 0 ? ' has-due' : ''}`}
                 to={ROUTES.review}
-                title="去复习"
                 aria-label={dueCount > 0 ? `去复习，${dueCount} 张待复习` : '去复习'}
               >
                 <Repeat width={12} height={12} strokeWidth={1.8} />
                 {dueCount > 0 ? <span className="card-rail-go-label">复习</span> : null}
                 {dueCount > 0 ? <span className="card-rail-go-num">{dueCount}</span> : null}
               </Link>
+              </Tip>
             )}
             {stack ? null : (
               <div className="card-rail-mode" role="radiogroup" aria-label="卡片栏摆放">
+                <Tip content={canDock ? '并排' : '窗口较窄，放不下并排'}>
                 <button
                   type="button"
                   role="radio"
@@ -503,44 +514,47 @@ export const CardRail = observer(function CardRail() {
                   aria-label="并排"
                   className={docked ? 'is-on' : undefined}
                   disabled={!canDock}
-                  title={canDock ? '并排' : '窗口较窄，放不下并排'}
                   onClick={dockRail}
                 >
                   <PanelRight width={13} height={13} strokeWidth={1.8} />
                 </button>
+                </Tip>
+                <Tip content="浮层">
                 <button
                   type="button"
                   role="radio"
                   aria-checked={showOverlay}
                   aria-label="浮层"
                   className={showOverlay ? 'is-on' : undefined}
-                  title="浮层"
                   onClick={floatRail}
                 >
                   <PictureInPicture2 width={13} height={13} strokeWidth={1.8} />
                 </button>
+                </Tip>
               </div>
             )}
             {docked ? (
+              <Tip content="收起">
               <button
                 type="button"
                 className="btn btn-ghost card-rail-icon"
                 aria-label="收起卡片栏"
-                title="收起"
                 onClick={dismissRail}
               >
                 <PanelRightClose width={14} height={14} strokeWidth={1.8} />
               </button>
+              </Tip>
             ) : showOverlay ? (
+              <Tip content="关闭">
               <button
                 type="button"
                 className="btn btn-ghost card-rail-icon"
                 aria-label="关闭卡片栏"
-                title="关闭"
                 onClick={dismissRail}
               >
                 <X width={14} height={14} strokeWidth={1.8} />
               </button>
+              </Tip>
             ) : null}
           </div>
 

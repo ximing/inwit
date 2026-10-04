@@ -3,6 +3,7 @@ import { observer, useService } from '@rabjs/react';
 import { Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
+import { Tip } from '@/components/tip';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { DocsService } from './docs.service';
 import { MIND_NEW_TEXT } from './mindmap-edit';
@@ -145,11 +146,11 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
 
   return (
     <div className={`canvas-node is-${kind}${editing ? ' is-editing' : ''}`}>
+      <Tip content="删除">
       <button
         type="button"
         className="canvas-node-op"
         aria-label="删除节点"
-        title="删除"
         onClick={(event) => {
           event.stopPropagation();
           void service.removeCanvasNode(id);
@@ -157,6 +158,7 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
       >
         <Trash2 width={13} height={13} strokeWidth={1.8} />
       </button>
+      </Tip>
       {kind === 'image' && imageKey ? <CanvasImage imageKey={imageKey} /> : null}
       {kind === 'text' && editing ? (
         <textarea

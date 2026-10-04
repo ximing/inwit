@@ -15,6 +15,7 @@ import {
 import { useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Chip } from '@/components/chip';
+import { Tip } from '@/components/tip';
 import { Tag } from '@/components/tag';
 import { formatDuration, formatRelativeTime, formatTokens } from '@/lib/format';
 import { jobsPath } from '@/routes';
@@ -114,9 +115,9 @@ const ExecutionCard = observer(function ExecutionCard({ models }: { models?: str
               <ul className="exec-steps">
                 {execution.steps.map((step, stepIndex) => (
                   <li key={stepIndex}>
-                    <span className="exec-tool" title={step.input_summary || undefined}>
-                      {step.tool}
-                    </span>
+                    <Tip content={step.input_summary || undefined}>
+                      <span className="exec-tool">{step.tool}</span>
+                    </Tip>
                     <span className="exec-ms">
                       {`${String(step.duration_ms)}ms`}
                       {step.output_chars != null ? ` · ${String(step.output_chars)}字` : ''}

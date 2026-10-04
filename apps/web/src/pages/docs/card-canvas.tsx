@@ -37,6 +37,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { Tip } from '@/components/tip';
 import { DialogService } from '@/services/dialog.service';
 import { CanvasFreeNode, CanvasNoteNode } from './canvas-nodes';
 import { useCardLinks } from './card-link-list';
@@ -1312,11 +1313,9 @@ export const CardCanvas = observer(function CardCanvas({
                 </button>
               ) : null}
               {todo ? (
-                <span
-                  className={`canvas-todo is-${todo}`}
-                  title={todo === 'confirm' ? '待确认' : '待复习'}
-                  aria-hidden
-                />
+                <Tip content={todo === 'confirm' ? '待确认' : '待复习'}>
+                  <span className={`canvas-todo is-${todo}`} aria-hidden />
+                </Tip>
               ) : null}
               {selectedId === member.id && !dragging ? (
                 <div
@@ -1326,10 +1325,10 @@ export const CardCanvas = observer(function CardCanvas({
                   style={{ transform: `scale(${1 / view.zoom})` }}
                 >
                   {member.kind !== 'image' ? (
+                    <Tip content="编辑（空格）">
                     <button
                       type="button"
                       aria-label="编辑"
-                      title="编辑（空格）"
                       onClick={(event) => {
                         event.stopPropagation();
                         if (member.kind === 'card') service.openCardEdit(member.id);
@@ -1338,13 +1337,14 @@ export const CardCanvas = observer(function CardCanvas({
                     >
                       <Pencil width={12} height={12} strokeWidth={1.8} />
                     </button>
+                    </Tip>
                   ) : null}
                   {member.kind === 'card' ? (
+                    <Tip content="脉络">
                     <button
                       type="button"
                       className={linksCardId === member.id ? 'is-on' : undefined}
                       aria-label="脉络"
-                      title="脉络"
                       aria-pressed={linksCardId === member.id}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -1353,11 +1353,12 @@ export const CardCanvas = observer(function CardCanvas({
                     >
                       <Waypoints width={12} height={12} strokeWidth={1.8} />
                     </button>
+                    </Tip>
                   ) : null}
+                  <Tip content="加子节点（Tab）">
                   <button
                     type="button"
                     aria-label="加子节点"
-                    title="加子节点（Tab）"
                     onClick={(event) => {
                       event.stopPropagation();
                       onAddChild(member.id);
@@ -1365,10 +1366,11 @@ export const CardCanvas = observer(function CardCanvas({
                   >
                     <Plus width={12} height={12} strokeWidth={1.8} />
                   </button>
+                  </Tip>
+                  <Tip content="加兄弟节点（Enter）">
                   <button
                     type="button"
                     aria-label="加兄弟节点"
-                    title="加兄弟节点（Enter）"
                     onClick={(event) => {
                       event.stopPropagation();
                       onAddSibling(member.id);
@@ -1376,11 +1378,12 @@ export const CardCanvas = observer(function CardCanvas({
                   >
                     <CornerDownRight width={12} height={12} strokeWidth={1.8} />
                   </button>
+                  </Tip>
                   {member.kind !== 'annotation' ? (
+                    <Tip content="删除">
                     <button
                       type="button"
                       aria-label="删除"
-                      title="删除"
                       onClick={(event) => {
                         event.stopPropagation();
                         if (member.kind === 'card') void service.archiveDocCard(member.id);
@@ -1389,6 +1392,7 @@ export const CardCanvas = observer(function CardCanvas({
                     >
                       <Trash2 width={12} height={12} strokeWidth={1.8} />
                     </button>
+                    </Tip>
                   ) : null}
                 </div>
               ) : null}
@@ -1467,6 +1471,7 @@ export const CardCanvas = observer(function CardCanvas({
       {helpOpen ? <CanvasHelp onClose={() => setHelpOpen(false)} /> : null}
       <div className="doc-canvas-tools">
         <div className="doc-canvas-tools-group">
+          <Tip content="撤销">
           <button
             type="button"
             aria-label="撤销"
@@ -1475,6 +1480,8 @@ export const CardCanvas = observer(function CardCanvas({
           >
             <Undo2 width={13} height={13} strokeWidth={1.8} />
           </button>
+          </Tip>
+          <Tip content="重做">
           <button
             type="button"
             aria-label="重做"
@@ -1483,29 +1490,34 @@ export const CardCanvas = observer(function CardCanvas({
           >
             <Redo2 width={13} height={13} strokeWidth={1.8} />
           </button>
+          </Tip>
         </div>
         <div className="doc-canvas-tools-group">
+          <Tip content="画布内搜索（⌘F）">
           <button
             type="button"
             aria-label="画布内搜索"
-            title="画布内搜索（⌘F）"
             onClick={() => setSearchOpen(true)}
           >
             <Search width={13} height={13} strokeWidth={1.8} />
           </button>
+          </Tip>
+          <Tip content="只看待办">
           <button
             type="button"
             className={`is-wide${todoOnly ? ' is-on' : ''}`}
             aria-label="只看待办"
-            title="只看待办"
             aria-pressed={todoOnly}
             onClick={() => setTodoOnly((value) => !value)}
           >
             待办
           </button>
-          <button type="button" aria-label="快捷键" title="快捷键（?）" onClick={() => setHelpOpen(true)}>
+          </Tip>
+          <Tip content="快捷键（?）">
+          <button type="button" aria-label="快捷键" onClick={() => setHelpOpen(true)}>
             ?
           </button>
+          </Tip>
         </div>
         <div className="doc-canvas-tools-group">
           <button
@@ -1553,15 +1565,16 @@ export const CardCanvas = observer(function CardCanvas({
           <button type="button" aria-label="缩小" onClick={() => zoomBy(1 / 1.12)}>
             －
           </button>
+          <Tip content="回到 100%">
           <button
             type="button"
             className="is-zoom"
             aria-label="回到 100%"
-            title="回到 100%"
             onClick={() => zoomBy(1 / viewRef.current.zoom)}
           >
             {Math.round(view.zoom * 100)}%
           </button>
+          </Tip>
           <button type="button" aria-label="放大" onClick={() => zoomBy(1.12)}>
             ＋
           </button>

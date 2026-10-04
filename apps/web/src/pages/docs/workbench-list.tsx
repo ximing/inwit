@@ -8,6 +8,7 @@ import { DocRowSummary } from '@/components/doc-row';
 import { SearchPalette, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
+import { Tip } from '@/components/tip';
 import { formatRelativeTime } from '@/lib/format';
 import { prefetchDocument } from '@/lib/document-prefetch';
 import { isPdfMime } from '@/lib/mime';
@@ -67,9 +68,9 @@ const DocStreamRow = observer(function DocStreamRow({
         </Tag>
       ) : null}
       {doc.status === 'failed' ? (
-        <span className="doc-failed" title={doc.failReason ?? undefined}>
-          失败{doc.failReason ? `：${doc.failReason}` : ''}
-        </span>
+        <Tip content={doc.failReason ?? undefined}>
+          <span className="doc-failed">失败{doc.failReason ? `：${doc.failReason}` : ''}</span>
+        </Tip>
       ) : null}
     </>
   );
@@ -324,18 +325,18 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
                 全部主题
               </button>
               {service.topics.map((topic) => (
-                <button
-                  key={topic.id}
-                  type="button"
-                  role="option"
-                  aria-selected={service.filterTopicId === topic.id}
-                  className={service.filterTopicId === topic.id ? 'is-on' : undefined}
-                  title={topic.goal ?? topic.title}
-                  onClick={() => pickFilter(topic.id)}
-                >
-                  <span className="dot" />
-                  {topic.title}
-                </button>
+                <Tip key={topic.id} content={topic.goal ?? topic.title}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={service.filterTopicId === topic.id}
+                    className={service.filterTopicId === topic.id ? 'is-on' : undefined}
+                    onClick={() => pickFilter(topic.id)}
+                  >
+                    <span className="dot" />
+                    {topic.title}
+                  </button>
+                </Tip>
               ))}
               <div className="topic-menu-sep" />
               <button
@@ -351,27 +352,29 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
             </div>
           ) : null}
         </div>
-        <button
-          type="button"
-          className="ws-head-icon"
-          aria-label="搜索"
-          title="搜索（⌘K）"
-          onClick={openSearchPalette}
-        >
-          <Search width={14} height={14} strokeWidth={1.8} />
-        </button>
-        <div className="ws-plus-wrap">
+        <Tip content="搜索（⌘K）">
           <button
             type="button"
-            className={`ws-head-icon${service.listPlusOpen ? ' is-on' : ''}`}
-            aria-label="新建或导入"
-            title="新建 / 导入"
-            aria-haspopup="menu"
-            aria-expanded={service.listPlusOpen}
-            onClick={() => service.toggleListPlus()}
+            className="ws-head-icon"
+            aria-label="搜索"
+            onClick={openSearchPalette}
           >
-            <Plus width={14} height={14} strokeWidth={1.8} />
+            <Search width={14} height={14} strokeWidth={1.8} />
           </button>
+        </Tip>
+        <div className="ws-plus-wrap">
+          <Tip content="新建 / 导入">
+            <button
+              type="button"
+              className={`ws-head-icon${service.listPlusOpen ? ' is-on' : ''}`}
+              aria-label="新建或导入"
+              aria-haspopup="menu"
+              aria-expanded={service.listPlusOpen}
+              onClick={() => service.toggleListPlus()}
+            >
+              <Plus width={14} height={14} strokeWidth={1.8} />
+            </button>
+          </Tip>
           {service.listPlusOpen ? (
             <div className="topic-menu ws-plus-menu" role="menu">
               <button

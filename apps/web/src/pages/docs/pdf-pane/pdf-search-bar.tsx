@@ -3,6 +3,7 @@ import { useSearch } from '@embedpdf/plugin-search/react';
 import { observer, useService } from '@rabjs/react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { Tip } from '@/components/tip';
 import { PdfPaneService } from '../pdf-pane.service';
 import { searchResultLabel } from './chrome-logic.js';
 
@@ -82,35 +83,38 @@ export const PdfSearchBar = observer(function PdfSearchBar({ documentId }: { doc
           <span className="pdf-search-count" aria-live="polite">
             {pdf.searchQuery.trim() ? label : ''}
           </span>
-          <button
-            type="button"
-            className="btn btn-ghost pdf-icon-btn"
-            aria-label="上一个"
-            title="上一个"
-            disabled={disabledNav}
-            onClick={() => search.provides?.previousResult()}
-          >
-            <ChevronUp width={14} height={14} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost pdf-icon-btn"
-            aria-label="下一个"
-            title="下一个"
-            disabled={disabledNav}
-            onClick={() => search.provides?.nextResult()}
-          >
-            <ChevronDown width={14} height={14} strokeWidth={1.8} />
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost pdf-icon-btn"
-            aria-label="关闭查找"
-            title="关闭查找"
-            onClick={close}
-          >
-            <X width={14} height={14} strokeWidth={1.8} />
-          </button>
+          <Tip content="上一个">
+            <button
+              type="button"
+              className="btn btn-ghost pdf-icon-btn"
+              aria-label="上一个"
+              disabled={disabledNav}
+              onClick={() => search.provides?.previousResult()}
+            >
+              <ChevronUp width={14} height={14} strokeWidth={1.8} />
+            </button>
+          </Tip>
+          <Tip content="下一个">
+            <button
+              type="button"
+              className="btn btn-ghost pdf-icon-btn"
+              aria-label="下一个"
+              disabled={disabledNav}
+              onClick={() => search.provides?.nextResult()}
+            >
+              <ChevronDown width={14} height={14} strokeWidth={1.8} />
+            </button>
+          </Tip>
+          <Tip content="关闭查找">
+            <button
+              type="button"
+              className="btn btn-ghost pdf-icon-btn"
+              aria-label="关闭查找"
+              onClick={close}
+            >
+              <X width={14} height={14} strokeWidth={1.8} />
+            </button>
+          </Tip>
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import type { TopicGraphCard } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { Tip } from '@/components/tip';
 import { LINK_META } from '@/pages/docs/card-links-logic';
 import { CanvasLinksPanel, LINKS_PANEL_H, LINKS_PANEL_W } from '@/pages/docs/canvas-links-panel';
 import { CanvasMinimap } from '@/pages/docs/canvas-minimap';
@@ -385,11 +386,9 @@ export const TopicCanvas = observer(function TopicCanvas() {
                   <span className="topic-canvas-concept">{card.concept}</span>
                 </button>
                 {todo ? (
-                  <span
-                    className={`canvas-todo is-${todo}`}
-                    title={todo === 'confirm' ? '待确认' : '待复习'}
-                    aria-hidden
-                  />
+                  <Tip content={todo === 'confirm' ? '待确认' : '待复习'}>
+                    <span className={`canvas-todo is-${todo}`} aria-hidden />
+                  </Tip>
                 ) : null}
               </div>
             );

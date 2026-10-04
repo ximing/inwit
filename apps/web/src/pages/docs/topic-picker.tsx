@@ -1,5 +1,6 @@
 import type { Topic } from '@inwit/dto';
 import { ChevronDown } from 'lucide-react';
+import { Tip } from '@/components/tip';
 
 export function TopicPicker({
   topics,
@@ -48,17 +49,17 @@ export function TopicPicker({
             不指定主题
           </button>
           {topics.map((topic) => (
-            <button
-              key={topic.id}
-              type="button"
-              role="option"
-              aria-selected={topicId === topic.id}
-              className={topicId === topic.id ? 'is-on' : undefined}
-              title={topic.goal ?? topic.title}
-              onClick={() => onSelect(topic.id)}
-            >
-              {topic.title}
-            </button>
+            <Tip key={topic.id} content={topic.goal ?? topic.title}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={topicId === topic.id}
+                className={topicId === topic.id ? 'is-on' : undefined}
+                onClick={() => onSelect(topic.id)}
+              >
+                {topic.title}
+              </button>
+            </Tip>
           ))}
           <div className="topic-menu-sep" />
           <button type="button" className="topic-menu-new" onClick={onNew}>

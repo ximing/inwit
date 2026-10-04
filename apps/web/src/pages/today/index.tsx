@@ -1,3 +1,4 @@
+import { Tip } from '@/components/tip';
 import { weeklyReportsPath } from '@/routes';
 import {
   agentDocumentMetaLabel,
@@ -200,17 +201,17 @@ const TodayPageContent = observer(function TodayPageContent() {
                   不指定主题
                 </button>
                 {service.topics.map((topic) => (
-                  <button
-                    key={topic.id}
-                    type="button"
-                    role="option"
-                    aria-selected={service.topicId === topic.id}
-                    className={service.topicId === topic.id ? 'is-on' : undefined}
-                    title={topic.goal ?? topic.title}
-                    onClick={() => service.selectTopic(topic.id)}
-                  >
-                    {topic.title}
-                  </button>
+                  <Tip key={topic.id} content={topic.goal ?? topic.title}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={service.topicId === topic.id}
+                      className={service.topicId === topic.id ? 'is-on' : undefined}
+                      onClick={() => service.selectTopic(topic.id)}
+                    >
+                      {topic.title}
+                    </button>
+                  </Tip>
                 ))}
                 <div className="topic-menu-sep" />
                 <button type="button" className="topic-menu-new" onClick={() => service.openNewTopic()}>

@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { Tip } from '@/components/tip';
 import type { TextSelectionAnchor } from '@/lib/entity-marks';
 import { DocsService } from './docs.service';
 
@@ -35,20 +36,21 @@ function ToolIcon({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      className={`float-tool${wide ? ' is-wide' : ''}`}
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
-        event.preventDefault();
-        if (disabled) return;
-        onAction();
-      }}
-    >
-      {children}
-    </button>
+    <Tip content={label}>
+      <button
+        type="button"
+        className={`float-tool${wide ? ' is-wide' : ''}`}
+        aria-label={label}
+        disabled={disabled}
+        onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
+          event.preventDefault();
+          if (disabled) return;
+          onAction();
+        }}
+      >
+        {children}
+      </button>
+    </Tip>
   );
 }
 

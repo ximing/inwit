@@ -6,6 +6,7 @@ import { useRotate } from '@embedpdf/plugin-rotate/react';
 import { observer, useService } from '@rabjs/react';
 import { Crop, Minus, PanelLeft, Plus, RotateCw, Search } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { Tip } from '@/components/tip';
 import { PdfPaneService } from '../pdf-pane.service';
 import {
   PDF_ZOOM_PRESETS,
@@ -76,16 +77,17 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
   return (
     <div className="pdf-toolbar" role="toolbar" aria-label="阅读工具">
       <div className="pdf-toolbar-start">
-        <button
-          type="button"
-          className={`btn btn-ghost pdf-icon-btn${pdf.thumbsOpen ? ' is-on' : ''}`}
-          aria-pressed={pdf.thumbsOpen}
-          aria-label={pdf.thumbsOpen ? '收起缩略图' : '展开缩略图'}
-          title={pdf.thumbsOpen ? '收起缩略图' : '展开缩略图'}
-          onClick={() => pdf.toggleThumbs()}
-        >
-          <PanelLeft width={14} height={14} strokeWidth={1.8} />
-        </button>
+        <Tip content={pdf.thumbsOpen ? '收起缩略图' : '展开缩略图'}>
+          <button
+            type="button"
+            className={`btn btn-ghost pdf-icon-btn${pdf.thumbsOpen ? ' is-on' : ''}`}
+            aria-pressed={pdf.thumbsOpen}
+            aria-label={pdf.thumbsOpen ? '收起缩略图' : '展开缩略图'}
+            onClick={() => pdf.toggleThumbs()}
+          >
+            <PanelLeft width={14} height={14} strokeWidth={1.8} />
+          </button>
+        </Tip>
         <form className="pdf-page-form" onSubmit={commitPage}>
           <input
             className="pdf-page-input"
@@ -104,28 +106,31 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
       </div>
 
       <div className="pdf-toolbar-mid">
-        <button
-          type="button"
-          className="btn btn-ghost pdf-icon-btn"
-          aria-label="缩小"
-          disabled={!zoom.provides}
-          onClick={() => zoom.provides?.zoomOut()}
-        >
-          <Minus width={14} height={14} strokeWidth={1.8} />
-        </button>
-        <div className="pdf-zoom">
+        <Tip content="缩小">
           <button
             type="button"
-            className={`btn btn-ghost pdf-zoom-btn${pdf.zoomMenuOpen ? ' is-on' : ''}`}
-            aria-haspopup="menu"
-            aria-expanded={pdf.zoomMenuOpen}
-            aria-label="缩放"
-            title="缩放"
+            className="btn btn-ghost pdf-icon-btn"
+            aria-label="缩小"
             disabled={!zoom.provides}
-            onClick={() => pdf.toggleZoomMenu()}
+            onClick={() => zoom.provides?.zoomOut()}
           >
-            {formatZoomPercent(level || 1)}
+            <Minus width={14} height={14} strokeWidth={1.8} />
           </button>
+        </Tip>
+        <div className="pdf-zoom">
+          <Tip content="缩放">
+            <button
+              type="button"
+              className={`btn btn-ghost pdf-zoom-btn${pdf.zoomMenuOpen ? ' is-on' : ''}`}
+              aria-haspopup="menu"
+              aria-expanded={pdf.zoomMenuOpen}
+              aria-label="缩放"
+              disabled={!zoom.provides}
+              onClick={() => pdf.toggleZoomMenu()}
+            >
+              {formatZoomPercent(level || 1)}
+            </button>
+          </Tip>
           {pdf.zoomMenuOpen ? (
             <div className="pdf-zoom-menu" role="menu">
               {PDF_ZOOM_PRESETS.map((preset) => (
@@ -142,50 +147,55 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
             </div>
           ) : null}
         </div>
-        <button
-          type="button"
-          className="btn btn-ghost pdf-icon-btn"
-          aria-label="放大"
-          disabled={!zoom.provides}
-          onClick={() => zoom.provides?.zoomIn()}
-        >
-          <Plus width={14} height={14} strokeWidth={1.8} />
-        </button>
+        <Tip content="放大">
+          <button
+            type="button"
+            className="btn btn-ghost pdf-icon-btn"
+            aria-label="放大"
+            disabled={!zoom.provides}
+            onClick={() => zoom.provides?.zoomIn()}
+          >
+            <Plus width={14} height={14} strokeWidth={1.8} />
+          </button>
+        </Tip>
       </div>
 
       <div className="pdf-toolbar-end">
-        <button
-          type="button"
-          className="btn btn-ghost pdf-icon-btn"
-          aria-label="顺时针旋转"
-          title="顺时针旋转"
-          disabled={!rotate.provides}
-          onClick={() => rotate.provides?.rotateForward()}
-        >
-          <RotateCw width={14} height={14} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          className={`btn btn-ghost pdf-icon-btn${pdf.searchOpen ? ' is-on' : ''}`}
-          aria-pressed={pdf.searchOpen}
-          aria-label="在文档中查找"
-          title="在文档中查找"
-          onClick={() => pdf.toggleSearch()}
-        >
-          <Search width={14} height={14} strokeWidth={1.8} />
-        </button>
-        <button
-          type="button"
-          className={`btn btn-ghost pdf-tool-text${capturing ? ' is-on' : ''}`}
-          aria-pressed={capturing}
-          aria-label={capturing ? '取消框选' : '框选摘录'}
-          title={capturing ? '取消框选' : '框选摘录'}
-          disabled={!capture.provides}
-          onClick={() => capture.provides?.toggleMarqueeCapture()}
-        >
-          <Crop width={14} height={14} strokeWidth={1.8} />
-          {capturing ? '取消框选' : '框选摘录'}
-        </button>
+        <Tip content="顺时针旋转">
+          <button
+            type="button"
+            className="btn btn-ghost pdf-icon-btn"
+            aria-label="顺时针旋转"
+            disabled={!rotate.provides}
+            onClick={() => rotate.provides?.rotateForward()}
+          >
+            <RotateCw width={14} height={14} strokeWidth={1.8} />
+          </button>
+        </Tip>
+        <Tip content="在文档中查找">
+          <button
+            type="button"
+            className={`btn btn-ghost pdf-icon-btn${pdf.searchOpen ? ' is-on' : ''}`}
+            aria-pressed={pdf.searchOpen}
+            aria-label="在文档中查找"
+            onClick={() => pdf.toggleSearch()}
+          >
+            <Search width={14} height={14} strokeWidth={1.8} />
+          </button>
+        </Tip>
+        <Tip content={capturing ? '取消框选' : '框选摘录'}>
+          <button
+            type="button"
+            className={`btn btn-ghost pdf-tool-text${capturing ? ' is-on' : ''}`}
+            aria-pressed={capturing}
+            aria-label={capturing ? '取消框选' : '框选摘录'}
+            disabled={!capture.provides}
+            onClick={() => capture.provides?.toggleMarqueeCapture()}
+          >
+            <Crop width={14} height={14} strokeWidth={1.8} />
+            {capturing ? '取消框选' : '框选摘录'}
+          </button>
+        </Tip>
         {pdf.ocrPending ? <span className="pdf-toolbar-hint">识别中，可先用框选摘录</span> : null}
       </div>
     </div>

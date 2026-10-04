@@ -1,5 +1,6 @@
 import { IMAGE_EXCERPT_QUOTE, type DocumentCard } from '@inwit/dto';
 import { Fragment, type ReactNode } from 'react';
+import { Tip } from '@/components/tip';
 import { parseCloze } from '@/lib/cloze';
 import { formatNextReview, masteryLevel } from '@/lib/format';
 
@@ -73,11 +74,11 @@ export function MiniCard({
   const answer = card.questions[0]?.answer ?? card.example;
   const proposed = card.acceptance === 'proposed';
   return (
+    <Tip content={lost ? '原文已删除' : undefined}>
     <button
       type="button"
       data-card-id={card.id}
       className={`mini-card${open ? ' is-open' : ''}${active ? ' is-on' : ''}${lost ? ' is-lost' : ''}`}
-      title={lost ? '原文已删除' : undefined}
       onClick={onClick}
     >
       {thumb}
@@ -101,5 +102,6 @@ export function MiniCard({
         {lost ? <span className="anchor-lost">原文已删除</span> : null}
       </div>
     </button>
+    </Tip>
   );
 }

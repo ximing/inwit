@@ -18,6 +18,7 @@ import {
 import { Suspense, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 import { isSearchHotkey, requestSearchFocus } from '@/components/search/search-hotkey';
+import { Tip } from '@/components/tip';
 import { UserAvatar } from '@/components/user-avatar';
 import { ROUTES } from '@/routes';
 import { AuthService } from '@/services/auth.service';
@@ -90,64 +91,67 @@ const LayoutContent = observer(function LayoutContent() {
             <div className="brand-name">Inwit</div>
             <div className="brand-tag">扔进去，它来消化</div>
           </div>
-          <button
-            type="button"
-            className="rail-collapse"
-            aria-label={collapsed ? '展开导航' : '收起导航'}
-            aria-expanded={!collapsed}
-            title={collapsed ? '展开导航' : '收起导航'}
-            onClick={() => prefs.toggleNavRail()}
-          >
-            {collapsed ? <PanelLeftOpen strokeWidth={1.8} /> : <PanelLeftClose strokeWidth={1.8} />}
-          </button>
+          <Tip content={collapsed ? '展开导航' : '收起导航'} side="right">
+            <button
+              type="button"
+              className="rail-collapse"
+              aria-label={collapsed ? '展开导航' : '收起导航'}
+              aria-expanded={!collapsed}
+              onClick={() => prefs.toggleNavRail()}
+            >
+              {collapsed ? <PanelLeftOpen strokeWidth={1.8} /> : <PanelLeftClose strokeWidth={1.8} />}
+            </button>
+          </Tip>
         </div>
         <nav className="nav">
           {NAV.map((item) => {
             const Icon = item.icon;
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                data-label={item.label}
-                className={({ isActive }) => (isActive ? 'nav-item is-on' : 'nav-item')}
-                onPointerEnter={() => prefetchPage(item.to)}
-                onFocus={() => prefetchPage(item.to)}
-              >
-                <span className="nav-ico">
-                  <Icon strokeWidth={1.8} />
-                </span>
-                <span className="nav-label">{item.label}</span>
-                {item.badge && layout.dueCount > 0 ? (
-                  <span className="nav-badge">{layout.dueCount}</span>
-                ) : null}
-              </NavLink>
+              <Tip key={item.to} content={collapsed ? item.label : undefined} side="right">
+                <NavLink
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) => (isActive ? 'nav-item is-on' : 'nav-item')}
+                  onPointerEnter={() => prefetchPage(item.to)}
+                  onFocus={() => prefetchPage(item.to)}
+                >
+                  <span className="nav-ico">
+                    <Icon strokeWidth={1.8} />
+                  </span>
+                  <span className="nav-label">{item.label}</span>
+                  {item.badge && layout.dueCount > 0 ? (
+                    <span className="nav-badge">{layout.dueCount}</span>
+                  ) : null}
+                </NavLink>
+              </Tip>
             );
           })}
         </nav>
         <div className="rail-foot">
           <div className="rail-account">
-            <NavLink
-              to={ROUTES.settings}
-              className="rail-user"
-              title={label || '设置'}
-              onPointerEnter={() => prefetchPage(ROUTES.settings)}
-              onFocus={() => prefetchPage(ROUTES.settings)}
-            >
-              <UserAvatar />
-              <span className="rail-user-meta">
-                <span className="rail-email">{label}</span>
-              </span>
-            </NavLink>
-            <button
-              type="button"
-              className="rail-more"
-              aria-label="账户菜单"
-              aria-haspopup="menu"
-              title="账户菜单"
-            >
-              <MoreHorizontal strokeWidth={1.8} />
-            </button>
+            <Tip content={collapsed ? label || '设置' : undefined} side="top">
+              <NavLink
+                to={ROUTES.settings}
+                className="rail-user"
+                onPointerEnter={() => prefetchPage(ROUTES.settings)}
+                onFocus={() => prefetchPage(ROUTES.settings)}
+              >
+                <UserAvatar />
+                <span className="rail-user-meta">
+                  <span className="rail-email">{label}</span>
+                </span>
+              </NavLink>
+            </Tip>
+            <Tip content="账户菜单" side="right">
+              <button
+                type="button"
+                className="rail-more"
+                aria-label="账户菜单"
+                aria-haspopup="menu"
+              >
+                <MoreHorizontal strokeWidth={1.8} />
+              </button>
+            </Tip>
             <div className="rail-menu" role="menu">
               <button
                 type="button"

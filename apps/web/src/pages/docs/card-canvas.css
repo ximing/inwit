@@ -76,7 +76,6 @@
   border-radius: 999px;
   border: 2px solid var(--surface);
   background: var(--accent);
-  pointer-events: none;
 }
 .canvas-todo.is-review { background: var(--gold); }
 /* 框选矩形（舞台坐标）。 */

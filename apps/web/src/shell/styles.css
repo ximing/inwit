@@ -278,30 +278,6 @@ img.avatar { background: var(--bg-sunken); }
     padding: 0 4px;
     font-size: 10px;
   }
-  .rail.is-collapsed .nav-item::after {
-    content: attr(data-label);
-    position: absolute;
-    left: calc(100% + 10px);
-    top: 50%;
-    transform: translateY(-50%);
-    padding: 4px 8px;
-    border-radius: 6px;
-    background: var(--surface);
-    color: var(--ink);
-    border: 1px solid var(--line);
-    box-shadow: var(--shadow-2);
-    font-size: 12.5px;
-    font-weight: 500;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    z-index: 8;
-    transition: opacity 0.12s ease;
-  }
-  .rail.is-collapsed .nav-item:hover::after,
-  .rail.is-collapsed .nav-item:focus-visible::after {
-    opacity: 1;
-  }
   .rail.is-collapsed .rail-user-meta { display: none; }
   .rail.is-collapsed .rail-user {
     justify-content: center;

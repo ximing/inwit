@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { DocRow } from '@/components/doc-row';
+import { Tip } from '@/components/tip';
 import { prefetchDocument } from '@/lib/document-prefetch';
 import { formatRelativeTime } from '@/lib/format';
 import { chapterMeta, TopicsService } from './topics.service';
@@ -285,7 +286,11 @@ export const FeedTab = observer(function FeedTab() {
 
 function StatusDot({ status }: { status: MapNodeStatus }) {
   const label = status === 'covered' ? '已覆盖' : status === 'learning' ? '学习中' : '未覆盖';
-  return <i className={`map-dot is-${status}`} title={label} aria-label={label} />;
+  return (
+    <Tip content={label}>
+      <i className={`map-dot is-${status}`} aria-label={label} />
+    </Tip>
+  );
 }
 
 export const NodeDrawer = observer(function NodeDrawer() {

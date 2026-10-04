@@ -8,6 +8,7 @@ import {
 import { observer, useService } from '@rabjs/react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Tip } from '@/components/tip';
 import { DocsService } from './docs.service';
 
 const QUESTION_TYPE_LABELS: Record<CardQuestionType, string> = {
@@ -181,17 +182,18 @@ export const CardEditDialog = observer(function CardEditDialog({
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      className="note-op"
-                      aria-label="删除这个问题"
-                      title="删除这个问题"
-                      onClick={() =>
-                        setQuestions((rows) => rows.filter((item) => item.key !== row.key))
-                      }
-                    >
-                      <Trash2 width={13} height={13} strokeWidth={1.8} />
-                    </button>
+                    <Tip content="删除这个问题">
+                      <button
+                        type="button"
+                        className="note-op"
+                        aria-label="删除这个问题"
+                        onClick={() =>
+                          setQuestions((rows) => rows.filter((item) => item.key !== row.key))
+                        }
+                      >
+                        <Trash2 width={13} height={13} strokeWidth={1.8} />
+                      </button>
+                    </Tip>
                   </div>
                   <textarea
                     rows={2}

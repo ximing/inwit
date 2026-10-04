@@ -1,0 +1,28 @@
+/* 悬停提示。视觉与收起导航时的标签一致：纸面、细边、短句。 */
+.tip-host {
+  display: inline-flex;
+  flex: none;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.tip-bubble {
+  position: fixed;
+  z-index: 1400;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-2);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}

@@ -23,6 +23,7 @@ import {
   Table as TableIcon,
 } from 'lucide-react';
 import { type MouseEvent, type ReactNode } from 'react';
+import { Tip } from '@/components/tip';
 import { selectionAnchorFromEditor } from '@/lib/entity-marks';
 import { SelectionActions } from './selection-toolbar';
 
@@ -45,21 +46,22 @@ export function EditorToolButton({
 }) {
   const className = variant === 'paper' ? 'paper-tool' : 'float-tool';
   return (
-    <button
-      type="button"
-      className={`${className}${active ? ' is-on' : ''}`}
-      aria-label={label}
-      title={label}
-      aria-pressed={active}
-      disabled={disabled}
-      onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {
-        event.preventDefault();
-        if (disabled) return;
-        onAction();
-      }}
-    >
-      {children}
-    </button>
+    <Tip content={label}>
+      <button
+        type="button"
+        className={`${className}${active ? ' is-on' : ''}`}
+        aria-label={label}
+        aria-pressed={active}
+        disabled={disabled}
+        onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {
+          event.preventDefault();
+          if (disabled) return;
+          onAction();
+        }}
+      >
+        {children}
+      </button>
+    </Tip>
   );
 }
 

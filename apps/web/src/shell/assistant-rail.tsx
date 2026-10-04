@@ -3,6 +3,7 @@ import { observer, useService } from '@rabjs/react';
 import { Loader2, MessageSquare, PanelRightClose, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { LlmConfig } from '@inwit/dto';
+import { Tip } from '@/components/tip';
 import { listLlmConfigs } from '@/api/llm';
 import { Link, useLocation, useSearchParams } from 'react-router';
 import { listDocuments } from '@/api/documents';
@@ -78,6 +79,10 @@ export const AssistantRail = observer(function AssistantRail() {
   const [models, setModels] = useState<LlmConfig[]>([]);
   const [modelsReady, setModelsReady] = useState(false);
   const [modelId, setModelId] = useState<string | null>(readAssistantModelId);
+  const selectedModel = models.find((item) => item.id === modelId);
+  const modelTip = selectedModel
+    ? assistantModelOptionLabel(selectedModel, models)
+    : ASSISTANT_SYSTEM_MODEL_LABEL;
   const [mentions, setMentions] = useState<Mention[]>([]);
   const [query, setQuery] = useState<string | null>(null);
   const [results, setResults] = useState<DocumentListItem[]>([]);
@@ -270,17 +275,21 @@ export const AssistantRail = observer(function AssistantRail() {
             <button type="button" className="assistant-icon" aria-pressed={service.historyOpen} onClick={() => service.toggleHistory()}>
               历史
             </button>
-            <button type="button" className="assistant-icon" aria-label="新对话" onClick={() => service.startNew()}>
-              <Plus width={16} height={16} strokeWidth={1.8} />
-            </button>
-            <button
-              type="button"
-              className="assistant-icon"
-              aria-label="收起对话"
-              onClick={() => prefs.setAssistantCollapsed(true)}
-            >
-              <PanelRightClose width={16} height={16} strokeWidth={1.8} />
-            </button>
+            <Tip content="新对话">
+              <button type="button" className="assistant-icon" aria-label="新对话" onClick={() => service.startNew()}>
+                <Plus width={16} height={16} strokeWidth={1.8} />
+              </button>
+            </Tip>
+            <Tip content="收起对话">
+              <button
+                type="button"
+                className="assistant-icon"
+                aria-label="收起对话"
+                onClick={() => prefs.setAssistantCollapsed(true)}
+              >
+                <PanelRightClose width={16} height={16} strokeWidth={1.8} />
+              </button>
+            </Tip>
           </div>
         </header>
         <div className="assistant-scroll" ref={scrollRef}>
@@ -460,19 +469,12 @@ export const AssistantRail = observer(function AssistantRail() {
           <div className="assistant-compose-bar">
             <span className="assistant-hint">Enter 发送，Shift+Enter 换行</span>
             <div className="assistant-send">
+              <Tip content={modelTip}>
               <select
                 className="assistant-model"
                 aria-label="选择模型"
                 value={modelId ?? ''}
                 disabled={!modelsReady || models.length === 0}
-                title={
-                  models.find((item) => item.id === modelId)
-                    ? assistantModelOptionLabel(
-                        models.find((item) => item.id === modelId)!,
-                        models,
-                      )
-                    : ASSISTANT_SYSTEM_MODEL_LABEL
-                }
                 onChange={(event) => {
                   const next = event.target.value || null;
                   setModelId(next);
@@ -487,6 +489,7 @@ export const AssistantRail = observer(function AssistantRail() {
                   </option>
                 ))}
               </select>
+              </Tip>
               <button type="submit" className="btn btn-primary" disabled={service.busy || draft.trim().length === 0}>
                 发送
               </button>
