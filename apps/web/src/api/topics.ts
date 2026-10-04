@@ -3,6 +3,7 @@ import type {
   CreateTopicInput,
   Job,
   Topic,
+  TopicGraphResponse,
   TopicSuggestion,
   UpdateTopicInput,
 } from '@inwit/dto';
@@ -10,6 +11,10 @@ import { request } from './client';
 
 export function getTopic(id: string): Promise<Topic> {
   return request<Topic>(`/api/topics/${id}`);
+}
+
+export function getTopicGraph(id: string): Promise<TopicGraphResponse> {
+  return request<TopicGraphResponse>(`/api/topics/${id}/graph`);
 }
 
 export function listTopics(status?: Topic['status']): Promise<Topic[]> {

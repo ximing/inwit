@@ -19,6 +19,7 @@ import {
   Pencil,
   Plus,
   Redo2,
+  Search,
   Trash2,
   Type,
   Undo2,
@@ -41,6 +42,13 @@ import { CanvasFreeNode, CanvasNoteNode } from './canvas-nodes';
 import { useCardLinks } from './card-link-list';
 import { CanvasLinksPanel, LINKS_PANEL_H, LINKS_PANEL_W } from './canvas-links-panel';
 import { CanvasMinimap } from './canvas-minimap';
+import {
+  CanvasHelp,
+  CanvasMenu,
+  CanvasMultiBar,
+  CanvasSearch,
+  type CanvasMenuItem,
+} from './canvas-overlays';
 import { DocsService } from './docs.service';
 import {
   childPlace,
@@ -54,7 +62,16 @@ import {
   siblingInsert,
 } from './mindmap-edit';
 import { loadFolds, saveFolds } from './mindmap-fold';
-import { linksPanelAnchor, mindRelated } from './mindmap-focus';
+import {
+  edgeAutoPan,
+  linksPanelAnchor,
+  mindCardTodo,
+  mindMarqueeHits,
+  mindRelated,
+  mindSearchIds,
+  mindTodoCounts,
+  type MindCardTodo,
+} from './mindmap-focus';
 import { decideMindGesture, type MindIntent } from './mindmap-gesture';
 import { hitMindDrop, type MindDrop } from './mindmap-hit';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
@@ -128,6 +145,7 @@ function SizedNode({
       ref={ref}
       className={className}
       style={style}
+      data-node-id={id}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -194,11 +212,29 @@ export const CardCanvas = observer(function CardCanvas({
   const [sizes, setSizes] = useState<Record<string, { w: number; h: number }>>({});
   const [view, setView] = useState({ panX: 28, panY: 28, zoom: 1 });
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** 多选集合；恰好一个时退化为单选，脉络浮层、节点工具条、编辑态只看单选。 */
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const selectedId = selectedIds.size === 1 ? ([...selectedIds][0] ?? null) : null;
+  const setSelectedId = (id: string | null) =>
+    setSelectedIds(id ? new Set([id]) : new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   /** 脉络浮层被手动关掉的卡片；再选回这张卡时不自动重开，工具条可以开。 */
   const [linksOff, setLinksOff] = useState<string | null>(null);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  /** 只看待办：没有待办的节点淡出。 */
+  const [todoOnly, setTodoOnly] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchIndex, setSearchIndex] = useState(0);
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string | null } | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  /** Shift+拖空白的框选矩形（舞台坐标）。 */
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const marqueeGesture = useRef<{
+    pointerId: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
   const viewRef = useRef(view);
@@ -252,6 +288,9 @@ export const CardCanvas = observer(function CardCanvas({
     setSelectedId(null);
     setEditingId(null);
     setLinksOff(null);
+    setTodoOnly(false);
+    setSearchOpen(false);
+    setMenu(null);
   }
 
   const onSize = useCallback((id: string, w: number, h: number) => {
@@ -327,18 +366,60 @@ export const CardCanvas = observer(function CardCanvas({
     return targets;
   }, [linksCardId, selectedLinks, boxById, docId]);
 
+  /** 卡片待办（待确认/到期复习）与子树待办计数。 */
+  const cardTodos = useMemo(() => {
+    const now = Date.now();
+    const map = new Map<string, MindCardTodo>();
+    for (const [id, card] of cardById) {
+      const todo = mindCardTodo(card, now);
+      if (todo) map.set(id, todo);
+    }
+    return map;
+  }, [cardById]);
+  const todoCounts = useMemo(() => mindTodoCounts(forest, cardTodos), [forest, cardTodos]);
+
+  /** 画布内搜索的语料：卡片题面、批注引文与想法、文本节点。 */
+  const haystacks = useMemo(
+    () =>
+      visible.map((member): readonly [string, string] => {
+        if (member.kind === 'card') {
+          const card = cardById.get(member.id);
+          return [
+            member.id,
+            card ? `${card.concept} ${card.questions.map((q) => q.question).join(' ')}` : '',
+          ];
+        }
+        if (member.kind === 'annotation') {
+          const note = noteById.get(member.id);
+          return [member.id, note ? `${note.quote} ${note.note}` : ''];
+        }
+        return [member.id, nodeById.get(member.id)?.text ?? ''];
+      }),
+    [visible, cardById, noteById, nodeById],
+  );
+  const searchMatches = useMemo(
+    () => mindSearchIds(haystacks, searchQuery),
+    [haystacks, searchQuery],
+  );
+
   useEffect(() => {
     if (!docId) return;
     saveFolds(docId, [...folded]);
   }, [docId, folded]);
 
   useEffect(() => {
-    if (!selectedId) return;
-    if (hidden.has(selectedId) || !forest.some((member) => member.id === selectedId)) {
-      setSelectedId(null);
-      setEditingId(null);
-    }
-  }, [selectedId, hidden, forest]);
+    setSelectedIds((prev) => {
+      const next = new Set(
+        [...prev].filter((id) => !hidden.has(id) && forest.some((member) => member.id === id)),
+      );
+      return next.size === prev.size ? prev : next;
+    });
+  }, [hidden, forest]);
+
+  useEffect(() => {
+    if (selectedId) return;
+    setEditingId(null);
+  }, [selectedId]);
 
   const worldPoint = (clientX: number, clientY: number) => {
     const rect = viewportRef.current?.getBoundingClientRect();
@@ -435,6 +516,21 @@ export const CardCanvas = observer(function CardCanvas({
     return () => el.removeEventListener('wheel', onWheel);
   }, [stopViewAnim]);
 
+  const centerOn = useCallback(
+    (id: string) => {
+      const box = boxById.get(id);
+      const el = viewportRef.current;
+      if (!box || !el) return;
+      userMoved.current = true;
+      animateView({
+        zoom: viewRef.current.zoom,
+        panX: el.clientWidth / 2 - (box.x + box.width / 2) * viewRef.current.zoom,
+        panY: el.clientHeight / 2 - (box.y + box.height / 2) * viewRef.current.zoom,
+      });
+    },
+    [boxById, animateView],
+  );
+
   const revealFolded = (id: string): boolean => {
     const hiding = foldsHiding(forest, id, folded);
     if (hiding.length === 0) return false;
@@ -454,18 +550,10 @@ export const CardCanvas = observer(function CardCanvas({
       return;
     }
     if (revealFolded(id)) return;
-    const box = boxById.get(id);
-    const el = viewportRef.current;
-    if (!box || !el) return;
-    userMoved.current = true;
     setSelectedId(id);
-    animateView({
-      zoom: viewRef.current.zoom,
-      panX: el.clientWidth / 2 - (box.x + box.width / 2) * viewRef.current.zoom,
-      panY: el.clientHeight / 2 - (box.y + box.height / 2) * viewRef.current.zoom,
-    });
+    centerOn(id);
     service.clearScrollCard();
-  }, [service, service.scrollCardId, boxById, forest, folded, animateView]);
+  }, [service, service.scrollCardId, forest, folded, centerOn]);
 
   useEffect(() => {
     const id = service.scrollAnnotationId;
@@ -475,18 +563,10 @@ export const CardCanvas = observer(function CardCanvas({
       return;
     }
     if (revealFolded(id)) return;
-    const box = boxById.get(id);
-    const el = viewportRef.current;
-    if (!box || !el) return;
-    userMoved.current = true;
     setSelectedId(id);
-    animateView({
-      zoom: viewRef.current.zoom,
-      panX: el.clientWidth / 2 - (box.x + box.width / 2) * viewRef.current.zoom,
-      panY: el.clientHeight / 2 - (box.y + box.height / 2) * viewRef.current.zoom,
-    });
+    centerOn(id);
     service.clearScrollAnnotation();
-  }, [service, service.scrollAnnotationId, boxById, forest, folded, animateView]);
+  }, [service, service.scrollAnnotationId, forest, folded, centerOn]);
 
   const reveal = (id: string) => {
     setFolded((prev) => {
@@ -554,12 +634,32 @@ export const CardCanvas = observer(function CardCanvas({
     }
   };
 
+  const stagePoint = (event: { clientX: number; clientY: number }) => {
+    const rect = viewportRef.current?.getBoundingClientRect();
+    return rect
+      ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      : { x: 0, y: 0 };
+  };
+
   const onViewportPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-links-panel, .canvas-node-bar, .doc-canvas-minimap')) return;
+    if (menu) {
+      setMenu(null);
+      if (!target.closest('.canvas-menu')) return;
+    }
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-links-panel, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
+    if (event.button !== 0 && event.button !== 1) return;
+    if (event.button === 1) event.preventDefault();
     stopViewAnim();
+    if (event.button === 0 && event.shiftKey) {
+      // Shift+拖空白：框选。起点用舞台坐标，松手时换成世界坐标算命中。
+      const point = stagePoint(event);
+      marqueeGesture.current = { pointerId: event.pointerId, originX: point.x, originY: point.y };
+      setMarquee({ x: point.x, y: point.y, w: 0, h: 0 });
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     applyMind('', decideMindGesture({ action: 'empty' }));
     panGesture.current = {
       pointerId: event.pointerId,
@@ -573,6 +673,17 @@ export const CardCanvas = observer(function CardCanvas({
   };
 
   const onViewportPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const box = marqueeGesture.current;
+    if (box && box.pointerId === event.pointerId) {
+      const point = stagePoint(event);
+      setMarquee({
+        x: Math.min(box.originX, point.x),
+        y: Math.min(box.originY, point.y),
+        w: Math.abs(point.x - box.originX),
+        h: Math.abs(point.y - box.originY),
+      });
+      return;
+    }
     const pan = panGesture.current;
     if (!pan || pan.pointerId !== event.pointerId) return;
     setView((prev) => ({
@@ -583,6 +694,25 @@ export const CardCanvas = observer(function CardCanvas({
   };
 
   const endPan = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const box = marqueeGesture.current;
+    if (box && box.pointerId === event.pointerId) {
+      marqueeGesture.current = null;
+      const rect = marquee;
+      setMarquee(null);
+      if (rect && rect.w > 4 && rect.h > 4) {
+        const a = {
+          x: (rect.x - viewRef.current.panX) / viewRef.current.zoom,
+          y: (rect.y - viewRef.current.panY) / viewRef.current.zoom,
+        };
+        const b = {
+          x: (rect.x + rect.w - viewRef.current.panX) / viewRef.current.zoom,
+          y: (rect.y + rect.h - viewRef.current.panY) / viewRef.current.zoom,
+        };
+        const hits = mindMarqueeHits(layout.boxes, a, b);
+        setSelectedIds((prev) => new Set([...prev, ...hits]));
+      }
+      return;
+    }
     if (panGesture.current?.pointerId !== event.pointerId) return;
     panGesture.current = null;
   };
@@ -626,6 +756,16 @@ export const CardCanvas = observer(function CardCanvas({
       y: rect ? event.clientY - rect.top : 0,
       drop: hitMindDrop(layout.boxes, world.x, world.y, gesture.id),
     });
+    if (rect) {
+      const pan = edgeAutoPan(
+        { x: event.clientX - rect.left, y: event.clientY - rect.top },
+        { width: rect.width, height: rect.height },
+      );
+      if (pan) {
+        userMoved.current = true;
+        setView((prev) => ({ ...prev, panX: prev.panX + pan.dx, panY: prev.panY + pan.dy }));
+      }
+    }
   };
 
   const onNodePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -718,6 +858,38 @@ export const CardCanvas = observer(function CardCanvas({
       }
       return;
     }
+    if (meta && event.key.toLowerCase() === 'f') {
+      event.preventDefault();
+      event.stopPropagation();
+      setSearchOpen(true);
+      return;
+    }
+    if (meta && event.key.toLowerCase() === 'a') {
+      event.preventDefault();
+      event.stopPropagation();
+      setSelectedIds(new Set(visible.map((member) => member.id)));
+      return;
+    }
+    if (event.key === 'Escape' && menu) {
+      event.preventDefault();
+      event.stopPropagation();
+      setMenu(null);
+      return;
+    }
+    if (helpOpen) {
+      if (event.key === 'Escape' || event.key === '?') {
+        event.preventDefault();
+        event.stopPropagation();
+        setHelpOpen(false);
+      }
+      return;
+    }
+    if (event.key === '?') {
+      event.preventDefault();
+      event.stopPropagation();
+      setHelpOpen(true);
+      return;
+    }
     if (target.closest(KEY_CONTROLS)) return;
     if (!selectedId) return;
     if (event.key === 'Escape') {
@@ -765,6 +937,10 @@ export const CardCanvas = observer(function CardCanvas({
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
       event.stopPropagation();
+      if (selectedIds.size > 1) {
+        batchArchive();
+        return;
+      }
       if (member.kind === 'text' || member.kind === 'image') void service.removeCanvasNode(selectedId);
       else if (member.kind === 'card') void service.archiveDocCard(selectedId);
       return;
@@ -805,6 +981,150 @@ export const CardCanvas = observer(function CardCanvas({
     if (place) void addText(place.parentId, place.index);
   };
 
+  /** 多选里的卡片节点；批注没有复习操作。 */
+  const selectedCards = [...selectedIds]
+    .map((id) => cardById.get(id))
+    .filter((card): card is DocumentCard => Boolean(card));
+
+  const batchArchive = () => {
+    for (const id of selectedIds) {
+      const member = forest.find((item) => item.id === id);
+      if (!member) continue;
+      if (member.kind === 'card') void service.archiveDocCard(id);
+      else if (member.kind === 'text' || member.kind === 'image') void service.removeCanvasNode(id);
+    }
+  };
+
+  const batchConfirm = () => {
+    for (const card of selectedCards) {
+      if (card.acceptance === 'proposed') void service.acceptDocCard(card.id);
+    }
+  };
+
+  const batchSuspend = (suspend: boolean) => {
+    for (const card of selectedCards) {
+      if (!card.review) continue;
+      if ((card.review.suspendedAt != null) !== suspend) void service.toggleCardSuspended(card);
+    }
+  };
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchIndex(0);
+    viewportRef.current?.focus({ preventScroll: true });
+  };
+
+  const goMatch = (step: number) => {
+    if (searchMatches.length === 0) return;
+    const next = (searchIndex + step + searchMatches.length) % searchMatches.length;
+    setSearchIndex(next);
+    const id = searchMatches[next];
+    if (!id) return;
+    revealFolded(id);
+    setSelectedIds(new Set([id]));
+    centerOn(id);
+  };
+
+  const onStageContextMenu = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('.doc-canvas-tools, .canvas-links-panel, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
+    event.preventDefault();
+    const nodeEl = target.closest('.doc-canvas-card');
+    const id = nodeEl?.getAttribute('data-node-id') ?? null;
+    const point = stagePoint(event);
+    if (id && !selectedIds.has(id)) setSelectedIds(new Set([id]));
+    setMenu({ x: point.x, y: point.y, id });
+  };
+
+  const menuItems = ((): CanvasMenuItem[] => {
+    if (!menu) return [];
+    if (!menu.id) {
+      return [
+        {
+          key: 'text',
+          label: '新建文本节点',
+          onSelect: () => void addText(null, outlineChildSlots(forest, null).length),
+        },
+        {
+          key: 'todo',
+          label: todoOnly ? '显示全部节点' : '只看待办',
+          onSelect: () => setTodoOnly((value) => !value),
+        },
+        {
+          key: 'fit',
+          label: '全部适配',
+          onSelect: () => {
+            const zoom = zoomFor('all');
+            if (zoom == null) return;
+            userMoved.current = true;
+            placeView(zoom);
+          },
+        },
+        { key: 'help', label: '快捷键', onSelect: () => setHelpOpen(true) },
+      ];
+    }
+    const id = menu.id;
+    const member = forest.find((item) => item.id === id);
+    if (!member) return [];
+    const items: CanvasMenuItem[] = [];
+    if (member.kind !== 'image') {
+      items.push({
+        key: 'edit',
+        label: '编辑',
+        onSelect: () => {
+          if (member.kind === 'card') service.openCardEdit(id);
+          else setEditingId(id);
+        },
+      });
+    }
+    if (member.kind === 'card') {
+      items.push({
+        key: 'links',
+        label: '脉络',
+        onSelect: () => {
+          setSelectedIds(new Set([id]));
+          setLinksOff(null);
+        },
+      });
+    }
+    if (member.kind === 'card' || member.kind === 'annotation') {
+      items.push({
+        key: 'locate',
+        label: '在正文定位',
+        onSelect: () => service.selectCanvasNode(id),
+      });
+    }
+    const copyText =
+      member.kind === 'card'
+        ? (cardById.get(id)?.concept ?? '')
+        : member.kind === 'annotation'
+          ? `${noteById.get(id)?.quote ?? ''}\n${noteById.get(id)?.note ?? ''}`.trim()
+          : (nodeById.get(id)?.text ?? '');
+    if (copyText) {
+      items.push({
+        key: 'copy',
+        label: '复制文本',
+        onSelect: () => void navigator.clipboard?.writeText(copyText),
+      });
+    }
+    items.push({ key: 'child', label: '加子节点', onSelect: () => onAddChild(id) });
+    items.push({ key: 'sibling', label: '加兄弟节点', onSelect: () => onAddSibling(id) });
+    if (member.kind !== 'annotation') {
+      items.push({
+        key: 'delete',
+        label: member.kind === 'card' ? '归档' : '删除',
+        danger: true,
+        onSelect: () => {
+          if (member.kind === 'card') void service.archiveDocCard(id);
+          else void service.removeCanvasNode(id);
+        },
+      });
+    }
+    return items;
+  })();
+
   /** 双击空白：新文本节点独立成树，进编辑态；cardKey 变化触发自动适配。 */
   const onStageDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
@@ -838,6 +1158,7 @@ export const CardCanvas = observer(function CardCanvas({
         onPointerCancel={endPan}
         onKeyDown={onKeyDown}
         onDoubleClick={onStageDoubleClick}
+        onContextMenu={onStageContextMenu}
       >
       <div
         className="doc-canvas-world"
@@ -889,13 +1210,17 @@ export const CardCanvas = observer(function CardCanvas({
           const note = member.kind === 'annotation' ? noteById.get(member.id) : undefined;
           const stored = nodeById.get(member.id);
           const count = childCount.get(member.id) ?? 0;
-          const selected = selectedId === member.id;
+          const selected = selectedIds.has(member.id);
           const dimmed = related !== null && !related.has(member.id) && !dragging;
+          const faded = todoOnly && !todoCounts.has(member.id);
+          const suspended = card?.review?.suspendedAt != null;
+          const todo = card ? cardTodos.get(member.id) : undefined;
+          const subtreeTodo = todoCounts.get(member.id) ?? 0;
           return (
             <SizedNode
               key={member.id}
               id={member.id}
-              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}`}
+              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${accept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}`}
               style={{
                 left: box.x,
                 top: box.y,
@@ -915,6 +1240,17 @@ export const CardCanvas = observer(function CardCanvas({
                 }
                 const target = event.target;
                 if (target instanceof Element && target.closest(NODE_CONTROLS)) return;
+                if (event.shiftKey) {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(member.id)) next.delete(member.id);
+                    else next.add(member.id);
+                    return next;
+                  });
+                  event.preventDefault();
+                  event.stopPropagation();
+                  return;
+                }
                 applyMind(
                   member.id,
                   decideMindGesture({
@@ -957,17 +1293,32 @@ export const CardCanvas = observer(function CardCanvas({
                   type="button"
                   className={`canvas-fold${folded.has(member.id) ? ' is-folded' : ''}`}
                   aria-expanded={!folded.has(member.id)}
-                  aria-label={folded.has(member.id) ? `展开，下面有 ${count} 个` : '折叠'}
+                  aria-label={
+                    folded.has(member.id)
+                      ? `展开，下面有 ${count} 个${subtreeTodo > 0 ? `，${subtreeTodo} 个待办` : ''}`
+                      : '折叠'
+                  }
                   onClick={(event) => {
                     event.stopPropagation();
                     toggleFold(member.id);
                     viewportRef.current?.focus();
                   }}
                 >
-                  {folded.has(member.id) ? count : '–'}
+                  {folded.has(member.id)
+                    ? subtreeTodo > 0
+                      ? `${count}·${subtreeTodo}`
+                      : count
+                    : '–'}
                 </button>
               ) : null}
-              {selected && !dragging ? (
+              {todo ? (
+                <span
+                  className={`canvas-todo is-${todo}`}
+                  title={todo === 'confirm' ? '待确认' : '待复习'}
+                  aria-hidden
+                />
+              ) : null}
+              {selectedId === member.id && !dragging ? (
                 <div
                   className="canvas-node-bar"
                   role="toolbar"
@@ -1045,6 +1396,27 @@ export const CardCanvas = observer(function CardCanvas({
           );
         })}
       </div>
+      {marquee ? (
+        <div
+          className="doc-canvas-marquee"
+          style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
+          aria-hidden
+        />
+      ) : null}
+      {searchOpen ? (
+        <CanvasSearch
+          query={searchQuery}
+          matchCount={searchMatches.length}
+          matchIndex={Math.min(searchIndex, Math.max(0, searchMatches.length - 1))}
+          onQuery={(query) => {
+            setSearchQuery(query);
+            setSearchIndex(0);
+          }}
+          onNext={() => goMatch(1)}
+          onPrev={() => goMatch(-1)}
+          onClose={closeSearch}
+        />
+      ) : null}
       {linksCardId && stageSize.width > 0
         ? (() => {
             const box = boxById.get(linksCardId);
@@ -1079,6 +1451,20 @@ export const CardCanvas = observer(function CardCanvas({
           {hint.text}
         </div>
       ) : null}
+      {selectedIds.size > 1 ? (
+        <CanvasMultiBar
+          count={selectedIds.size}
+          confirming={selectedCards.some((card) => card.acceptance === 'proposed')}
+          suspending={selectedCards.some((card) => card.review)}
+          onConfirm={batchConfirm}
+          onSuspend={() => batchSuspend(true)}
+          onResume={() => batchSuspend(false)}
+          onArchive={batchArchive}
+          onClear={() => setSelectedIds(new Set())}
+        />
+      ) : null}
+      {menu ? <CanvasMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} /> : null}
+      {helpOpen ? <CanvasHelp onClose={() => setHelpOpen(false)} /> : null}
       <div className="doc-canvas-tools">
         <div className="doc-canvas-tools-group">
           <button
@@ -1096,6 +1482,29 @@ export const CardCanvas = observer(function CardCanvas({
             onClick={() => void service.redoCanvas()}
           >
             <Redo2 width={13} height={13} strokeWidth={1.8} />
+          </button>
+        </div>
+        <div className="doc-canvas-tools-group">
+          <button
+            type="button"
+            aria-label="画布内搜索"
+            title="画布内搜索（⌘F）"
+            onClick={() => setSearchOpen(true)}
+          >
+            <Search width={13} height={13} strokeWidth={1.8} />
+          </button>
+          <button
+            type="button"
+            className={`is-wide${todoOnly ? ' is-on' : ''}`}
+            aria-label="只看待办"
+            title="只看待办"
+            aria-pressed={todoOnly}
+            onClick={() => setTodoOnly((value) => !value)}
+          >
+            待办
+          </button>
+          <button type="button" aria-label="快捷键" title="快捷键（?）" onClick={() => setHelpOpen(true)}>
+            ?
           </button>
         </div>
         <div className="doc-canvas-tools-group">

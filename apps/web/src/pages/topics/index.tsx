@@ -23,6 +23,7 @@ const HostedDocsPage = lazy(() =>
 );
 import { DialogService } from '@/services/dialog.service';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
+import { TopicCanvas } from './topic-canvas';
 import { TopicsService, type TopicListItem } from './topics.service';
 
 function warmTopicDoc(id: string): void {
@@ -676,6 +677,15 @@ const TopicSearch = observer(function TopicSearch() {
           <button
             type="button"
             role="tab"
+            aria-selected={service.tab === 'canvas'}
+            className={service.tab === 'canvas' ? 'is-on' : undefined}
+            onClick={() => service.setTab('canvas')}
+          >
+            脑图
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={service.tab === 'feed'}
             className={service.tab === 'feed' ? 'is-on' : undefined}
             onClick={() => service.setTab('feed')}
@@ -695,6 +705,7 @@ const TopicSearch = observer(function TopicSearch() {
         <>
           {service.tab === 'docs' ? <DocsTab /> : null}
           {service.tab === 'map' ? <MapTab /> : null}
+          {service.tab === 'canvas' ? <TopicCanvas /> : null}
           {service.tab === 'feed' ? <FeedTab /> : null}
         </>
       )}

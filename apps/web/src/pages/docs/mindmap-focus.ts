@@ -134,3 +134,84 @@ export function minimapCenter(
     panY: stage.height / 2 - worldY * view.zoom,
   };
 }
+
+/** 卡片待办：待确认优先，其次到期复习。已熟悉（suspended）不算待办。 */
+export type MindCardTodo = 'confirm' | 'review';
+
+export function mindCardTodo(
+  card: { acceptance: string; review: { dueAt: string; suspendedAt: string | null } | null },
+  now: number,
+): MindCardTodo | null {
+  if (card.acceptance === 'proposed') return 'confirm';
+  if (!card.review || card.review.suspendedAt) return null;
+  const due = Date.parse(card.review.dueAt);
+  return Number.isFinite(due) && due <= now ? 'review' : null;
+}
+
+/** 每个节点的子树（含自己）里有多少张待办卡片；没有待办的节点不在结果里。 */
+export function mindTodoCounts(
+  members: readonly CanvasMember[],
+  todos: ReadonlyMap<string, MindCardTodo>,
+): Map<string, number> {
+  const parentOf = new Map(members.map((member) => [member.id, member.parentId]));
+  const counts = new Map<string, number>();
+  for (const id of todos.keys()) {
+    let cursor: string | null = id;
+    const seen = new Set<string>();
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor);
+      counts.set(cursor, (counts.get(cursor) ?? 0) + 1);
+      cursor = parentOf.get(cursor) ?? null;
+    }
+  }
+  return counts;
+}
+
+/** 框选：中心落在矩形里的节点，按传入顺序返回。 */
+export function mindMarqueeHits(
+  boxes: readonly MindBox[],
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): string[] {
+  const left = Math.min(a.x, b.x);
+  const right = Math.max(a.x, b.x);
+  const top = Math.min(a.y, b.y);
+  const bottom = Math.max(a.y, b.y);
+  return boxes
+    .filter((box) => {
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      return cx >= left && cx <= right && cy >= top && cy <= bottom;
+    })
+    .map((box) => box.id);
+}
+
+/** 画布内搜索：大小写不敏感的包含匹配，保持传入顺序。 */
+export function mindSearchIds(
+  entries: readonly (readonly [string, string])[],
+  query: string,
+): string[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return entries.filter(([, text]) => text.toLowerCase().includes(q)).map(([id]) => id);
+}
+
+/**
+ * 拖拽接近视口边缘时的单步平移量，越靠边越快。
+ * 指针在舞台左边沿时返回正的 dx（世界右移，露出左侧内容）。
+ */
+export function edgeAutoPan(
+  point: { x: number; y: number },
+  stage: Size,
+  margin = 28,
+  maxSpeed = 16,
+): { dx: number; dy: number } | null {
+  const ramp = (overflow: number) => Math.ceil(Math.min(1, overflow / margin) * maxSpeed);
+  let dx = 0;
+  let dy = 0;
+  if (point.x < margin) dx = ramp(margin - point.x);
+  else if (point.x > stage.width - margin) dx = -ramp(point.x - (stage.width - margin));
+  if (point.y < margin) dy = ramp(margin - point.y);
+  else if (point.y > stage.height - margin) dy = -ramp(point.y - (stage.height - margin));
+  return dx !== 0 || dy !== 0 ? { dx, dy } : null;
+}

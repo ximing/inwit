@@ -783,3 +783,98 @@ button.related-card {
   .topic-feed-time { left: -72px; width: 52px; font-size: 10px; }
   .topic-feed-item::before { left: -18px; }
 }
+
+/* ---------- 主题脑图 ---------- */
+.topic-canvas {
+  height: min(74vh, 860px);
+  margin: 0 16px 16px;
+}
+.topic-canvas-empty {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+}
+.topic-canvas-card { cursor: default; }
+.topic-canvas-node {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 84px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.topic-canvas-node:hover {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-1);
+}
+.topic-canvas-card.is-selected .topic-canvas-node {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-1);
+}
+.topic-canvas-kicker {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topic-canvas-concept {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+/* 关系按类型着色：易混淆 accent、前置 gold、相关 中性、同概念 绿。
+   树边实线、画不进树的关联是虚线。 */
+.doc-canvas-edges path.is-rel-conf { stroke: var(--accent); }
+.doc-canvas-edges path.is-rel-pre { stroke: var(--gold); }
+.doc-canvas-edges path.is-rel-rel { stroke: color-mix(in srgb, var(--ink-3) 70%, var(--line)); }
+.doc-canvas-edges path.is-rel-same { stroke: var(--green); }
+.doc-canvas-edges path.is-tree { opacity: 0.85; }
+.topic-canvas-legend {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 4;
+  display: flex;
+  gap: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-1);
+  font-size: 11px;
+  color: var(--ink-3);
+  user-select: none;
+}
+.topic-canvas-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.topic-canvas-legend i {
+  width: 14px;
+  height: 0;
+  border-top: 2px dashed var(--ink-3);
+}
+.topic-canvas-legend i.is-rel-conf { border-color: var(--accent); }
+.topic-canvas-legend i.is-rel-pre { border-color: var(--gold); }
+.topic-canvas-legend i.is-rel-rel { border-color: var(--ink-3); }
+.topic-canvas-legend i.is-rel-same { border-color: var(--green); }
+.topic-canvas-zoom {
+  min-width: 40px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}

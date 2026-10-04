@@ -12,7 +12,7 @@ import type {
   SyncChange,
   Topic,
 } from '@inwit/dto';
-import { isChatQuestion, topicJobPayloadFrom } from '@inwit/dto';
+import { isChatQuestion, topicJobPayloadFrom, type TopicGraphResponse } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
 import { getReviewTopicStats } from '@/api/review';
 import { listDocuments } from '@/api/documents';
@@ -52,6 +52,7 @@ import {
   createTopic,
   deleteTopic,
   getTopic,
+  getTopicGraph,
   listTopics,
   restoreTopic,
   updateTopic,
@@ -116,7 +117,7 @@ async function fetchDocumentWindow(
   return { items, total };
 }
 
-export type TopicTab = 'docs' | 'map' | 'feed';
+export type TopicTab = 'docs' | 'map' | 'feed' | 'canvas';
 export type TopicEditField = 'title' | 'goal';
 
 export type TopicListItem = {
@@ -360,6 +361,24 @@ export class TopicsService extends Service {
 
   setTab(tab: TopicTab): void {
     this.tab = tab;
+    if (tab === 'canvas') void this.loadGraph();
+  }
+
+  /** 主题脑图数据；进入脑图 tab 时懒加载。 */
+  graph: TopicGraphResponse | null = null;
+  graphTopicId: string | null = null;
+
+  async loadGraph(): Promise<void> {
+    if (!this.topicId || this.graphTopicId === this.topicId) return;
+    const topicId = this.topicId;
+    try {
+      const graph = await getTopicGraph(topicId);
+      if (this.topicId !== topicId) return;
+      this.graph = graph;
+      this.graphTopicId = topicId;
+    } catch {
+      if (this.topicId === topicId) this.toast = '主题脑图没加载出来。';
+    }
   }
 
   /** 在当前主题页打开文档，地址仍是 /topics，关闭后主题页不会被卸掉。 */

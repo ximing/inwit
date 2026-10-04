@@ -16,6 +16,7 @@ import {
   listTopics,
   updateTopic,
 } from './topic.service.js';
+import { getTopicGraph } from './topic-graph.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 const suggestionKeyParamsSchema = z.object({
@@ -57,6 +58,11 @@ export function registerTopicRoutes(app: FastifyInstance): void {
   app.get('/api/topics/:id', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     return getTopic(requireUser(req).id, id);
+  });
+
+  app.get('/api/topics/:id/graph', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    return getTopicGraph(requireUser(req).id, id);
   });
 
   app.patch('/api/topics/:id', auth, async (req) => {

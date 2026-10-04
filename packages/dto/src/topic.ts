@@ -1,4 +1,10 @@
 import { z } from 'zod';
+import {
+  cardAcceptanceSchema,
+  cardLinkOriginSchema,
+  cardLinkTypeSchema,
+  cardReviewSummarySchema,
+} from './card.js';
 import { jobSchema } from './job.js';
 
 export const TOPIC_STATUSES = ['active', 'archived'] as const;
@@ -87,3 +93,30 @@ export const acceptTopicSuggestionResultSchema = z.object({
   suggestion: topicSuggestionSchema,
 });
 export type AcceptTopicSuggestionResult = z.infer<typeof acceptTopicSuggestionResultSchema>;
+
+/** 主题脑图：主题下全部卡片与它们之间的知识关联。 */
+export const topicGraphCardSchema = z.object({
+  id: z.string().uuid(),
+  documentId: z.string().uuid().nullable(),
+  documentTitle: z.string().nullable(),
+  concept: z.string(),
+  hasImage: z.boolean(),
+  acceptance: cardAcceptanceSchema,
+  review: cardReviewSummarySchema.nullable(),
+});
+export type TopicGraphCard = z.infer<typeof topicGraphCardSchema>;
+
+export const topicGraphLinkSchema = z.object({
+  fromCardId: z.string().uuid(),
+  toCardId: z.string().uuid(),
+  type: cardLinkTypeSchema,
+  origin: cardLinkOriginSchema,
+  reason: z.string().nullable(),
+});
+export type TopicGraphLink = z.infer<typeof topicGraphLinkSchema>;
+
+export const topicGraphResponseSchema = z.object({
+  cards: z.array(topicGraphCardSchema),
+  links: z.array(topicGraphLinkSchema),
+});
+export type TopicGraphResponse = z.infer<typeof topicGraphResponseSchema>;
