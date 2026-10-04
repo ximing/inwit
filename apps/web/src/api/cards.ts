@@ -4,8 +4,10 @@ import type {
   Card,
   CardDetail,
   CardImageResponse,
+  CardLink,
   CardLinksResponse,
   CreateCardInput,
+  CreateCardLinkInput,
   RejectCardInput,
   ReviewState,
   SetCardOutlineInput,
@@ -83,6 +85,13 @@ export function getCardImage(id: string): Promise<CardImageResponse> {
 
 export function getCardLinks(id: string): Promise<CardLinksResponse> {
   return request<CardLinksResponse>(`/api/cards/${id}/links`);
+}
+
+export function createCardLink(id: string, input: CreateCardLinkInput): Promise<CardLink> {
+  return request<CardLink>(`/api/cards/${id}/links`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export function deleteCardLink(id: string): Promise<void> {

@@ -1,6 +1,7 @@
 import {
   archiveListQuerySchema,
   createCardInputSchema,
+  createCardLinkInputSchema,
   rejectCardInputSchema,
   setCardOutlineInputSchema,
   updateCardInputSchema,
@@ -12,6 +13,7 @@ import { resumeCard, suspendCard } from '../review/review.service.js';
 import {
   archiveCard,
   createCard,
+  createCardLink,
   destroyCard,
   deleteCardLink,
   getCard,
@@ -106,6 +108,14 @@ export function registerCardRoutes(app: FastifyInstance): void {
   app.get('/api/cards/:id/links', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     return listCardLinks(requireUser(req).id, id);
+  });
+
+  /** 手绘关系边：从 :id 连到 input.toCardId。 */
+  app.post('/api/cards/:id/links', auth, async (req, reply) => {
+    const { id } = idParamsSchema.parse(req.params);
+    const input = createCardLinkInputSchema.parse(req.body);
+    const created = await createCardLink(requireUser(req).id, id, input);
+    return reply.code(201).send(created);
   });
 
   app.delete('/api/card-links/:id', auth, async (req, reply) => {

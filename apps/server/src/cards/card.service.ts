@@ -9,6 +9,7 @@ import type {
   CardLinkWithCard,
   CardSummary,
   CreateCardInput,
+  CreateCardLinkInput,
   UpdateCardInput,
 } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
@@ -31,6 +32,7 @@ import { tryDeleteCardFromIndex, tryIndexCard } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { presignGet } from '../storage/client.js';
 import { shouldIndexCard } from './card-acceptance-logic.js';
+import { checkNewCardLink } from './card-link-logic.js';
 import { diffCardQuestions, normalizeTags } from './card-logic.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
 import { detachCanvasMember } from '../canvas/canvas.service.js';
@@ -227,6 +229,44 @@ export async function deleteCardLink(userId: string, id: string): Promise<void> 
     .limit(1);
   if (!row) throw AppError.of(404, 'CARD_LINK_NOT_FOUND');
   await getDb().delete(cardLinks).where(and(eq(cardLinks.id, id), eq(cardLinks.userId, userId)));
+}
+
+/** 手绘关系边：两张卡都须是本人的，拒绝自环和同向同类型重复，origin 记为 user。 */
+export async function createCardLink(
+  userId: string,
+  fromCardId: string,
+  input: CreateCardLinkInput,
+): Promise<CardLink> {
+  await getOwnedCard(userId, fromCardId);
+  await getOwnedCard(userId, input.toCardId);
+
+  const existing = await getDb()
+    .select({
+      fromCardId: cardLinks.fromCardId,
+      toCardId: cardLinks.toCardId,
+      type: cardLinks.type,
+    })
+    .from(cardLinks)
+    .where(and(eq(cardLinks.userId, userId), eq(cardLinks.fromCardId, fromCardId)));
+  const check = checkNewCardLink(fromCardId, input.toCardId, input.type, existing);
+  if (!check.ok) {
+    throw AppError.of(check.code === 'CARD_LINK_SELF' ? 400 : 409, check.code);
+  }
+
+  const reason = input.reason?.trim() ?? '';
+  const [row] = await getDb()
+    .insert(cardLinks)
+    .values({
+      userId,
+      fromCardId,
+      toCardId: input.toCardId,
+      type: input.type,
+      origin: 'user',
+      reason: reason === '' ? null : reason,
+    })
+    .returning();
+  if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
+  return toPublicLink(row);
 }
 
 export async function setCardMapNode(

@@ -235,6 +235,100 @@
 }
 .canvas-fold:hover { color: var(--accent); border-color: var(--accent-line); }
 .canvas-fold.is-folded:hover { color: var(--bg); }
+/* 连线把手：卡片节点右缘下侧的小圆点，hover/选中/连线中出现。 */
+.canvas-link-dot {
+  position: absolute;
+  z-index: 2;
+  right: -8px;
+  bottom: 8px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  border-radius: 999px;
+  background: var(--accent);
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.12s;
+  touch-action: none;
+}
+.doc-canvas-card:hover .canvas-link-dot,
+.doc-canvas-card.is-selected .canvas-link-dot,
+.doc-canvas-card:has(.canvas-link-dot:active) .canvas-link-dot {
+  opacity: 1;
+}
+.canvas-link-dot:hover { transform: scale(1.2); }
+/* 手绘中的关系边。 */
+.doc-canvas-edges path.is-linking {
+  stroke: var(--accent);
+  stroke-width: 2;
+  opacity: 0.9;
+}
+/* 关系类型选择浮层：舞台坐标，落在目标卡片旁。 */
+.canvas-link-editor {
+  position: absolute;
+  z-index: 9;
+  width: 236px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-2);
+  animation: canvas-links-in 160ms ease;
+}
+.canvas-link-editor-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.canvas-link-editor-types {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.canvas-link-editor-types button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.canvas-link-editor-types button:hover { background: var(--bg-sunken); color: var(--ink); }
+.canvas-link-editor-types button.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+.canvas-link-editor textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  resize: none;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.canvas-link-editor textarea:focus { outline: none; border-color: var(--accent-line); }
+.canvas-link-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
 /* 选中节点的浮动工具条：世界坐标锚在节点上方，按缩放反向放大保持恒定尺寸。 */
 .canvas-node-bar {
   position: absolute;
@@ -672,4 +766,6 @@
   .doc-canvas-card { transition: none; }
   .doc-canvas-edges path { transition: none; }
   .canvas-links-panel { animation: none; }
+  .canvas-link-editor { animation: none; }
+  .canvas-link-dot { transition: none; }
 }

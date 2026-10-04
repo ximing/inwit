@@ -9,6 +9,7 @@
 import {
   outlineChildSlots,
   planOutlinePlace,
+  type CardLinkType,
   type DocumentCard,
 } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
@@ -38,10 +39,17 @@ import {
   type ReactNode,
 } from 'react';
 import { Tip } from '@/components/tip';
+import { createCardLink } from '@/api/cards';
+import { errorMessage } from '@/api/client';
 import { DialogService } from '@/services/dialog.service';
 import { CanvasFreeNode, CanvasNoteNode } from './canvas-nodes';
 import { useCardLinks } from './card-link-list';
-import { CanvasLinksPanel, LINKS_PANEL_H, LINKS_PANEL_W } from './canvas-links-panel';
+import {
+  CanvasLinkEditor,
+  CanvasLinksPanel,
+  LINKS_PANEL_H,
+  LINKS_PANEL_W,
+} from './canvas-links-panel';
 import { CanvasMinimap } from './canvas-minimap';
 import {
   CanvasHelp,
@@ -77,7 +85,7 @@ import {
   type MindCardTodo,
 } from './mindmap-focus';
 import { decideMindGesture, type MindIntent } from './mindmap-gesture';
-import { hitMindDrop, type MindDrop } from './mindmap-hit';
+import { hitCardBox, hitMindDrop, type MindDrop } from './mindmap-hit';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
 import { parseQuoteDrag, quoteDropPlace, QUOTE_DRAG_MIME, type QuoteDragPayload } from './mindmap-quote';
 
@@ -192,7 +200,7 @@ function ghostPath(from: MindBox, to: MindBox): string {
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
 /** 这些控件自己处理点击，不拿来拖节点、也不抢选中。卡片本身是按钮，不在这里。 */
-const NODE_CONTROLS = '.note-op, .canvas-node-op, .canvas-fold, .canvas-node-bar, .mini-decision, .card-links, a, input, textarea';
+const NODE_CONTROLS = '.note-op, .canvas-node-op, .canvas-fold, .canvas-node-bar, .canvas-link-dot, .mini-decision, .card-links, a, input, textarea';
 const KEY_CONTROLS = '.doc-canvas-tools, .canvas-fold, .canvas-node-op, .canvas-node-bar, .note-op, textarea, input';
 
 export const CardCanvas = observer(function CardCanvas({
@@ -249,6 +257,23 @@ export const CardCanvas = observer(function CardCanvas({
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   /** 正文选区拖引文进来时的落点预览（drop 是世界坐标判定，x/y 是舞台坐标）。 */
   const [quoteDrag, setQuoteDrag] = useState<{ x: number; y: number; drop: MindDrop } | null>(null);
+  /** 手绘关系边：起点卡 + 指针世界坐标；松开落在卡片上时转成 linkEditor。 */
+  const [linkDraft, setLinkDraft] = useState<{
+    fromId: string;
+    x: number;
+    y: number;
+    hoverId: string | null;
+  } | null>(null);
+  /** 关系类型选择浮层（舞台坐标）。 */
+  const [linkEditor, setLinkEditor] = useState<{
+    fromId: string;
+    toId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [linkSaving, setLinkSaving] = useState(false);
+  /** 新建关联后递增，让脉络浮层和画外虚线重新拉取。 */
+  const [linksTick, setLinksTick] = useState(0);
   const marqueeGesture = useRef<{
     pointerId: number;
     originX: number;
@@ -342,6 +367,8 @@ export const CardCanvas = observer(function CardCanvas({
     () => new Map((service.doc?.cards ?? []).map((card) => [card.id, card])),
     [service.doc],
   );
+  /** 画布上可作关系边落点的卡片 id。 */
+  const cardIdSet = useMemo(() => new Set(cardById.keys()), [cardById]);
 
   /** 进入默写：记住折叠现场并收起全部子树；退出时还原。 */
   const toggleRecall = () => {
@@ -394,7 +421,7 @@ export const CardCanvas = observer(function CardCanvas({
     !recall && selectedId && cardById.has(selectedId) && linksOff !== selectedId
       ? selectedId
       : null;
-  const { links: selectedLinks } = useCardLinks(linksCardId);
+  const { links: selectedLinks } = useCardLinks(linksCardId, linksTick);
   /** 本文内、且在画布上的关联卡片，画虚线边。 */
   const ghostTargets = useMemo(() => {
     if (!linksCardId || !selectedLinks) return [];
@@ -716,7 +743,7 @@ export const CardCanvas = observer(function CardCanvas({
       setMenu(null);
       if (!target.closest('.canvas-menu')) return;
     }
-    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-links-panel, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-links-panel, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
     if (event.button !== 0 && event.button !== 1) return;
     if (event.button === 1) event.preventDefault();
     stopViewAnim();
@@ -969,6 +996,18 @@ export const CardCanvas = observer(function CardCanvas({
       setSelectedIds(new Set(visible.map((member) => member.id)));
       return;
     }
+    if (event.key === 'Escape' && linkDraft) {
+      event.preventDefault();
+      event.stopPropagation();
+      setLinkDraft(null);
+      return;
+    }
+    if (event.key === 'Escape' && linkEditor) {
+      event.preventDefault();
+      event.stopPropagation();
+      setLinkEditor(null);
+      return;
+    }
     if (event.key === 'Escape' && menu) {
       event.preventDefault();
       event.stopPropagation();
@@ -1154,7 +1193,7 @@ export const CardCanvas = observer(function CardCanvas({
   const onStageContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('.doc-canvas-tools, .canvas-links-panel, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
+    if (target.closest('.doc-canvas-tools, .canvas-links-panel, .canvas-link-editor, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
     event.preventDefault();
     const nodeEl = target.closest('.doc-canvas-card');
     const id = nodeEl?.getAttribute('data-node-id') ?? null;
@@ -1335,6 +1374,65 @@ export const CardCanvas = observer(function CardCanvas({
     void service.placeOnCanvas(id, place.parentId, place.index);
   };
 
+  /** 连线把手按下：开始手绘关系边（卡片节点才有把手）。 */
+  const onLinkDotDown = (fromId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    event.preventDefault();
+    const world = worldPoint(event.clientX, event.clientY);
+    setLinkDraft({ fromId, x: world.x, y: world.y, hoverId: null });
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Capture can fail for a synthetic pointer.
+    }
+  };
+
+  const onLinkDotMove = (fromId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (linkDraft?.fromId !== fromId) return;
+    const world = worldPoint(event.clientX, event.clientY);
+    setLinkDraft({
+      fromId,
+      x: world.x,
+      y: world.y,
+      hoverId: hitCardBox(layout.boxes, world.x, world.y, fromId, cardIdSet),
+    });
+  };
+
+  /** 松开：落在另一张卡片上弹出类型选择，落在空白或非卡片节点上取消。 */
+  const onLinkDotUp = (fromId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (linkDraft?.fromId !== fromId) return;
+    event.stopPropagation();
+    const world = worldPoint(event.clientX, event.clientY);
+    const target = hitCardBox(layout.boxes, world.x, world.y, fromId, cardIdSet);
+    setLinkDraft(null);
+    if (!target) return;
+    const point = stagePoint(event);
+    setLinkEditor({ fromId, toId: target, x: point.x, y: point.y });
+  };
+
+  const saveLink = async (type: CardLinkType, reason: string) => {
+    const editor = linkEditor;
+    if (!editor || linkSaving) return;
+    setLinkSaving(true);
+    try {
+      await createCardLink(editor.fromId, {
+        toCardId: editor.toId,
+        type,
+        ...(reason.trim() ? { reason: reason.trim() } : {}),
+      });
+      setLinkEditor(null);
+      setLinksTick((tick) => tick + 1);
+      // 选中起点卡：脉络浮层立即可见这条新边。
+      setSelectedIds(new Set([editor.fromId]));
+      setLinksOff(null);
+    } catch (err) {
+      service.showToast(errorMessage(err, '没连上'));
+    } finally {
+      setLinkSaving(false);
+    }
+  };
+
   const showMinimap =
     stageSize.width > 0 &&
     visible.length > 1 &&
@@ -1394,6 +1492,20 @@ export const CardCanvas = observer(function CardCanvas({
                 return <path key={`ghost-${id}`} className="is-ghost" d={ghostPath(from, to)} />;
               })
             : null}
+          {linkDraft
+            ? (() => {
+                const from = boxById.get(linkDraft.fromId);
+                if (!from) return null;
+                const to: MindBox = {
+                  id: '__link-tip',
+                  x: linkDraft.x - 1,
+                  y: linkDraft.y - 1,
+                  width: 2,
+                  height: 2,
+                };
+                return <path className="is-ghost is-linking" d={ghostPath(from, to)} />;
+              })()
+            : null}
         </svg>
         {insertAt && drag ? (
           <div
@@ -1426,6 +1538,7 @@ export const CardCanvas = observer(function CardCanvas({
           const accept = drag?.drop.kind === 'child' && drag.drop.parentId === member.id && hint?.accept === true;
           const quoteAccept =
             quoteDrag?.drop.kind === 'child' && quoteDrag.drop.parentId === member.id;
+          const linkAccept = linkDraft?.hoverId === member.id;
           const card = member.kind === 'card' ? cardById.get(member.id) : undefined;
           const note = member.kind === 'annotation' ? noteById.get(member.id) : undefined;
           const stored = nodeById.get(member.id);
@@ -1441,7 +1554,7 @@ export const CardCanvas = observer(function CardCanvas({
             <SizedNode
               key={member.id}
               id={member.id}
-              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${ghosting ? ' is-ghosting' : ''}${accept || quoteAccept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}${masked ? ' is-masked' : ''}`}
+              className={`doc-canvas-card${dragging ? ' is-dragging' : ''}${ghosting ? ' is-ghosting' : ''}${accept || quoteAccept || linkAccept ? ' is-drop' : ''}${selected ? ' is-selected' : ''}${dimmed ? ' is-dimmed' : ''}${faded ? ' is-faded' : ''}${suspended ? ' is-suspended' : ''}${masked ? ' is-masked' : ''}`}
               style={{
                 left: box.x,
                 top: box.y,
@@ -1540,6 +1653,17 @@ export const CardCanvas = observer(function CardCanvas({
                 <Tip content={todo === 'confirm' ? '待确认' : '待复习'}>
                   <span className={`canvas-todo is-${todo}`} aria-hidden />
                 </Tip>
+              ) : null}
+              {member.kind === 'card' && !recall ? (
+                <button
+                  type="button"
+                  className="canvas-link-dot"
+                  aria-label="拖到另一张卡，建立关联"
+                  onPointerDown={(event) => onLinkDotDown(member.id, event)}
+                  onPointerMove={(event) => onLinkDotMove(member.id, event)}
+                  onPointerUp={(event) => onLinkDotUp(member.id, event)}
+                  onPointerCancel={() => setLinkDraft(null)}
+                />
               ) : null}
               {selectedId === member.id && !dragging && !recall ? (
                 <div
@@ -1657,11 +1781,22 @@ export const CardCanvas = observer(function CardCanvas({
                   width: LINKS_PANEL_W,
                   height: LINKS_PANEL_H,
                 })}
+                refreshKey={linksTick}
                 onClose={() => setLinksOff(linksCardId)}
               />
             );
           })()
         : null}
+      {linkEditor && stageSize.width > 0 ? (
+        <CanvasLinkEditor
+          x={linkEditor.x}
+          y={linkEditor.y}
+          stage={stageSize}
+          saving={linkSaving}
+          onSave={(type, reason) => void saveLink(type, reason)}
+          onClose={() => setLinkEditor(null)}
+        />
+      ) : null}
       {showMinimap ? (
         <CanvasMinimap
           layout={layout}

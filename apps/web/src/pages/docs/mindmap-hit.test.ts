@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hitMindDrop } from './mindmap-hit';
+import { hitCardBox, hitMindDrop } from './mindmap-hit';
 import type { MindBox } from './mindmap-layout';
 
 const boxes: MindBox[] = [
@@ -29,5 +29,16 @@ describe('hitMindDrop with a dragged set', () => {
   it('ignores every node in the dragged group', () => {
     expect(hitMindDrop(boxes, 40, 50, new Set(['a', 'b']))).toEqual({ kind: 'root' });
     expect(hitMindDrop(boxes, 40, 50, new Set(['b']))).toEqual({ kind: 'child', parentId: 'a' });
+  });
+});
+
+describe('hitCardBox', () => {
+  it('hits only card boxes, never the source itself', () => {
+    const cardIds = new Set(['a']);
+    expect(hitCardBox(boxes, 40, 50, 'from', cardIds)).toBe('a');
+    expect(hitCardBox(boxes, 40, 50, 'a', cardIds)).toBeNull();
+    // b 是文本节点，不是合法落点
+    expect(hitCardBox(boxes, 40, 172, 'from', cardIds)).toBeNull();
+    expect(hitCardBox(boxes, 400, 40, 'from', cardIds)).toBeNull();
   });
 });

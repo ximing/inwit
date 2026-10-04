@@ -9,8 +9,12 @@ import { groupedCardLinks, LINK_META } from './card-links-logic';
 
 /**
  * 展开卡片后懒加载知识关联。脑图的画外虚线边也用这份数据。
+ * refreshKey 变化时重新拉取（新建/删除关联后由调用方递增）。
  */
-export function useCardLinks(cardId: string | null): {
+export function useCardLinks(
+  cardId: string | null,
+  refreshKey = 0,
+): {
   links: CardLinksResponse | null;
   failed: boolean;
 } {
@@ -37,7 +41,7 @@ export function useCardLinks(cardId: string | null): {
     return () => {
       cancelled = true;
     };
-  }, [cardId]);
+  }, [cardId, refreshKey]);
 
   return { links, failed };
 }
@@ -45,15 +49,17 @@ export function useCardLinks(cardId: string | null): {
 export function CardLinks({
   cardId,
   documentId,
+  refreshKey = 0,
 }: {
   cardId: string;
   documentId: string | null;
+  refreshKey?: number;
 }) {
   const location = useLocation();
   const [params] = useSearchParams();
   const hostTopic = topicHostId(location.pathname, params);
   const fromTopic = fromTopicOf(params);
-  const { links, failed } = useCardLinks(cardId);
+  const { links, failed } = useCardLinks(cardId, refreshKey);
 
   const groups = links ? groupedCardLinks(links) : [];
 

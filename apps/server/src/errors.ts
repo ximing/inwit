@@ -21,6 +21,8 @@ export const ERROR_MESSAGES = {
   DOCUMENT_NOT_FOUND: '文档不存在',
   ANNOTATION_NOT_FOUND: '批注不存在',
   CARD_LINK_NOT_FOUND: '卡片关联不存在',
+  CARD_LINK_SELF: '不能关联自己',
+  CARD_LINK_EXISTS: '这条关联已经存在',
   TOPIC_NOT_FOUND: '主题不存在',
   TOPIC_ARCHIVED: '主题已归档，无法写入',
   MAP_NODE_NOT_FOUND: '知识地图节点不存在',

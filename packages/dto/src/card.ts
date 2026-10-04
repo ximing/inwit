@@ -98,6 +98,14 @@ export const cardLinksResponseSchema = z.object({
 });
 export type CardLinksResponse = z.infer<typeof cardLinksResponseSchema>;
 
+/** 手绘关系边：从一张卡连到另一张卡，origin 固定为 user。 */
+export const createCardLinkInputSchema = z.object({
+  toCardId: z.string().uuid(),
+  type: cardLinkTypeSchema,
+  reason: z.string().trim().refine(codePointsAtMost(500)).optional(),
+});
+export type CreateCardLinkInput = z.infer<typeof createCardLinkInputSchema>;
+
 /** Slim review fields for the card detail page — avoids a cycle with review.ts. */
 export const cardReviewSummarySchema = z.object({
   dueAt: z.string(),

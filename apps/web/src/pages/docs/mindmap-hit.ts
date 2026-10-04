@@ -50,3 +50,20 @@ export function hitMindDrop(
   if (best) return { kind: best.kind, siblingId: best.id };
   return { kind: 'root' };
 }
+
+/** 手绘关系边的落点：指针落在哪张卡片节点里（非卡片不算），不含起点自己。 */
+export function hitCardBox(
+  boxes: readonly MindBox[],
+  x: number,
+  y: number,
+  fromId: string,
+  cardIds: ReadonlySet<string>,
+): string | null {
+  for (const box of boxes) {
+    if (box.id === fromId || !cardIds.has(box.id)) continue;
+    if (x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height) {
+      return box.id;
+    }
+  }
+  return null;
+}
