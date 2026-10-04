@@ -5,6 +5,8 @@ import {
   docsPath,
   documentReturnTarget,
   fromTopicOf,
+  isSettingsSection,
+  settingsPath,
   topicDocPath,
   topicHostId,
   topicPath,
@@ -13,6 +15,18 @@ import {
 const DOC = '11111111-1111-4111-8111-111111111111';
 const CARD = '22222222-2222-4222-8222-222222222222';
 const TOPIC = '33333333-3333-4333-8333-333333333333';
+
+describe('settingsPath', () => {
+  it('gives each settings option its own path', () => {
+    expect(settingsPath()).toBe('/settings/profile');
+    expect(settingsPath('files')).toBe('/settings/files');
+    expect(settingsPath('token', { pane: 'logs' })).toBe('/settings/token?pane=logs');
+    expect(settingsPath('archive', { pane: 'logs' })).toBe('/settings/archive');
+    expect(isSettingsSection('files')).toBe(true);
+    expect(isSettingsSection('nope')).toBe(false);
+    expect(isSettingsSection(undefined)).toBe(false);
+  });
+});
 
 describe('docsPath fromTopic', () => {
   it('omits an empty entrance and keeps the docs list close target', () => {

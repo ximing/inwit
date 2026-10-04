@@ -82,7 +82,7 @@ export function App() {
             <Route path={routeSegment(ROUTES.topic)} element={<LegacyTopicRedirect />} />
             <Route path={routeSegment(ROUTES.jobs)} element={<JobsPage />} />
             <Route path={routeSegment(ROUTES.memory)} element={<MemoryPage />} />
-            <Route path={routeSegment(ROUTES.settings)} element={<SettingsPage />} />
+            <Route path={`${routeSegment(ROUTES.settings)}/:section?`} element={<SettingsPage />} />
           </Route>
         </Route>
       </Routes>

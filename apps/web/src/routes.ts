@@ -11,6 +11,29 @@ export const ROUTES = {
   settings: '/settings',
 } as const;
 
+export const SETTINGS_SECTIONS = [
+  'profile',
+  'appearance',
+  'models',
+  'ocr',
+  'token',
+  'archive',
+  'files',
+] as const;
+
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
+export function isSettingsSection(value: string | undefined): value is SettingsSection {
+  return SETTINGS_SECTIONS.some((section) => section === value);
+}
+
+/** One settings screen. `pane=logs` opens 接口令牌 → 调用日志. */
+export function settingsPath(section: SettingsSection = 'profile', opts?: { pane?: 'logs' }): string {
+  const path = `${ROUTES.settings}/${section}`;
+  if (section === 'token' && opts?.pane === 'logs') return `${path}?pane=logs`;
+  return path;
+}
+
 export function docsPath(
   docId?: string,
   opts?: { edit?: boolean; anchor?: string; annotation?: string; fromTopic?: string | null },

@@ -1,10 +1,9 @@
 import { observer, useService } from '@rabjs/react';
 import type { StorageFileKind } from '@inwit/dto';
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'react-router';
 import { Tag } from '@/components/tag';
 import { formatDateTime } from '@/lib/format';
-import { SettingsService } from './settings.service';
 import { FilesService } from './files.service';
 import {
   FILE_KIND_LABEL,
@@ -24,31 +23,16 @@ const KIND_FILTERS: Array<{ id: 'all' | StorageFileKind; label: string }> = [
 ];
 
 export const FilesSection = observer(function FilesSection() {
-  const settings = useService(SettingsService);
   const files = useService(FilesService);
-  const rootRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-    if (settings.section === 'files') {
-      files.ensureLoaded();
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) files.ensureLoaded();
-      },
-      { rootMargin: '240px' },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [settings.section, files]);
+    files.ensureLoaded();
+  }, [files]);
 
   const showList = files.ready && files.configured && files.summary.totalCount > 0;
 
   return (
-    <section className="section" id="files" ref={rootRef}>
+    <section className="section" id="files">
       <div className="section-title">文件</div>
       <div className="section-lede">
         这个账号放在对象存储里的原文、正文图片和视频、摘录图、头像。这里只查看，不删除。

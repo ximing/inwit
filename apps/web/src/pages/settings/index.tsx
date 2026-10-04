@@ -1,10 +1,12 @@
 import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect, useRef } from 'react';
+import { NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { OCR_DEFAULT_MODEL, docDisplayTitle, type LlmProvider } from '@inwit/dto';
 import { UserAvatar } from '@/components/user-avatar';
 import { Tag } from '@/components/tag';
 import { APP_VERSION } from '@/lib/app-version';
 import { formatDate, formatDateTime } from '@/lib/format';
+import { isSettingsSection, settingsPath, type SettingsSection } from '@/routes';
 
 /** 回收站摘要：单行截断。 */
 function clipArchiveText(text: string, max = 60): string {
@@ -22,7 +24,6 @@ import {
   PROVIDER_LABELS,
   PROVIDERS,
   SettingsService,
-  type SettingsSection,
 } from './settings.service';
 
 const THEME_SWATCH: Record<ThemePreference, string> = {
@@ -31,14 +32,14 @@ const THEME_SWATCH: Record<ThemePreference, string> = {
   system: 'linear-gradient(90deg,#f6f3ec 50%,#1c1915 50%)',
 };
 
-const NAV: Array<{ id: SettingsSection; href: string; label: string }> = [
-  { id: 'profile', href: '#profile', label: '个人资料' },
-  { id: 'appearance', href: '#appearance', label: '外观' },
-  { id: 'models', href: '#models', label: '模型配置' },
-  { id: 'ocr', href: '#ocr', label: '文档解析' },
-  { id: 'token', href: '#token', label: '接口令牌' },
-  { id: 'archive', href: '#archive', label: '回收站' },
-  { id: 'files', href: '#files', label: '文件' },
+const NAV: Array<{ id: SettingsSection; label: string }> = [
+  { id: 'profile', label: '个人资料' },
+  { id: 'appearance', label: '外观' },
+  { id: 'models', label: '模型配置' },
+  { id: 'ocr', label: '文档解析' },
+  { id: 'token', label: '接口令牌' },
+  { id: 'archive', label: '回收站' },
+  { id: 'files', label: '文件' },
 ];
 
 const SettingsPageContent = observer(function SettingsPageContent() {
@@ -46,31 +47,53 @@ const SettingsPageContent = observer(function SettingsPageContent() {
   const theme = useService(ThemeService);
   const dialog = useService(DialogService);
   const avatarInput = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
+  const [searchParams] = useSearchParams();
+  const section: SettingsSection = isSettingsSection(params.section) ? params.section : 'profile';
 
   useEffect(() => {
-    service.applyHash();
     void service.load();
   }, [service]);
+
+  useEffect(() => {
+    const hash = location.hash.replace(/^#/, '');
+    if (hash === 'token-logs') {
+      navigate(settingsPath('token', { pane: 'logs' }), { replace: true });
+      return;
+    }
+    if (isSettingsSection(hash)) {
+      navigate(settingsPath(hash), { replace: true });
+      return;
+    }
+    if (!isSettingsSection(params.section)) {
+      navigate(settingsPath('profile'), { replace: true });
+    }
+  }, [location.hash, params.section, navigate]);
+
+  useEffect(() => {
+    if (params.section !== 'token') return;
+    service.setTokenPane(searchParams.get('pane') === 'logs' ? 'logs' : 'list');
+  }, [params.section, searchParams, service]);
 
   return (
     <div className="settings-layout">
       <nav className="settings-nav" aria-label="设置分节">
         {NAV.map((item) => (
-          <a
+          <NavLink
             key={item.id}
-            href={item.href}
-            className={service.section === item.id ? 'is-on' : undefined}
-            onClick={(event) => {
-              event.preventDefault();
-              service.setSection(item.id);
-            }}
+            to={settingsPath(item.id)}
+            end
+            className={({ isActive }) => (isActive ? 'is-on' : undefined)}
           >
             {item.label}
-          </a>
+          </NavLink>
         ))}
       </nav>
 
       <div>
+        {section === 'profile' ? (
         <div className="section" id="profile">
           <div className="section-title">个人资料</div>
           <div className="section-lede">头像、用户名和登录邮箱。</div>
@@ -151,6 +174,8 @@ const SettingsPageContent = observer(function SettingsPageContent() {
           </div>
         </div>
 
+        ) : null}
+        {section === 'appearance' ? (
         <div className="section" id="appearance">
           <div className="section-title">外观</div>
           <div className="section-lede">浅色是白日书桌，深色是灯下夜读。</div>
@@ -171,6 +196,8 @@ const SettingsPageContent = observer(function SettingsPageContent() {
           </div>
         </div>
 
+        ) : null}
+        {section === 'models' ? (
         <div className="section" id="models">
           <div className="section-title">模型配置</div>
           <div className="section-lede">自带密钥（BYOK）。完整密钥只在新增时提交一次，列表里只显示掩码。</div>
@@ -327,6 +354,8 @@ const SettingsPageContent = observer(function SettingsPageContent() {
           </ul>
         </div>
 
+        ) : null}
+        {section === 'ocr' ? (
         <div className="section" id="ocr">
           <div className="section-title">文档解析（OCR）</div>
           <div className="section-lede">
@@ -402,6 +431,8 @@ const SettingsPageContent = observer(function SettingsPageContent() {
           </form>
         </div>
 
+        ) : null}
+        {section === 'token' ? (
         <div className="section" id="token">
           <div className="section-title">接口令牌</div>
           <div className="section-lede">
@@ -414,7 +445,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
               role="tab"
               aria-selected={service.tokenPane === 'list'}
               className={service.tokenPane === 'list' ? 'is-on' : undefined}
-              onClick={() => service.setTokenPane('list')}
+              onClick={() => navigate(settingsPath('token'))}
             >
               令牌
             </button>
@@ -423,7 +454,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
               role="tab"
               aria-selected={service.tokenPane === 'logs'}
               className={service.tokenPane === 'logs' ? 'is-on' : undefined}
-              onClick={() => service.setTokenPane('logs')}
+              onClick={() => navigate(settingsPath('token', { pane: 'logs' }))}
             >
               调用日志
             </button>
@@ -584,6 +615,8 @@ const SettingsPageContent = observer(function SettingsPageContent() {
           )}
         </div>
 
+        ) : null}
+        {section === 'archive' ? (
         <div className="section" id="archive">
           <div className="section-title">回收站</div>
           <div className="section-lede">
@@ -861,7 +894,8 @@ const SettingsPageContent = observer(function SettingsPageContent() {
           </div>
         </div>
 
-        <FilesSection />
+        ) : null}
+        {section === 'files' ? <FilesSection /> : null}
 
         <p className="settings-version">版本 {APP_VERSION}</p>
       </div>

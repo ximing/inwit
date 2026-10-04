@@ -64,7 +64,6 @@ export const PROVIDER_MODELS: Record<LlmProvider, string> = {
 
 export const PROVIDERS = LLM_PROVIDERS;
 
-export type SettingsSection = 'profile' | 'appearance' | 'models' | 'ocr' | 'token' | 'archive' | 'files';
 export type TokenPane = 'list' | 'logs';
 
 export { ACCESS_TOKEN_MAX_PER_USER, ACCESS_TOKEN_NAME_MAX };
@@ -90,7 +89,6 @@ export class SettingsService extends Service {
   testingId: string | null = null;
   testResults: Record<string, LlmTestResult> = {};
   busyId: string | null = null;
-  section: SettingsSection = 'profile';
   displayName = '';
   email = '';
   profileError: string | null = null;
@@ -137,33 +135,6 @@ export class SettingsService extends Service {
     const user = this.auth.user;
     this.displayName = user?.displayName ?? '';
     this.email = user?.email ?? '';
-  }
-
-  applyHash(): void {
-    const hash = window.location.hash.replace(/^#/, '');
-    if (hash === 'token-logs') {
-      this.section = 'token';
-      this.tokenPane = 'logs';
-      return;
-    }
-    if (
-      hash === 'models' ||
-      hash === 'appearance' ||
-      hash === 'profile' ||
-      hash === 'ocr' ||
-      hash === 'token' ||
-      hash === 'archive' ||
-      hash === 'files'
-    ) {
-      this.section = hash;
-      if (hash === 'token') this.tokenPane = 'list';
-    }
-  }
-
-  setSection(section: SettingsSection): void {
-    this.section = section;
-    const el = document.getElementById(section);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   setDisplayName(value: string): void {
