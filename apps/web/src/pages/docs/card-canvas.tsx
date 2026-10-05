@@ -563,6 +563,15 @@ export const CardCanvas = observer(function CardCanvas({
     const el = viewportRef.current;
     if (!el) return;
     const onWheel = (event: WheelEvent) => {
+      // 覆盖层（脉络浮层、菜单、小地图等）有自己的滚动：放行原生滚动，不平移/缩放画布。
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          '.doc-canvas-tools, .canvas-links-panel, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar',
+        )
+      ) {
+        return;
+      }
       event.preventDefault();
       stopViewAnim();
       userMoved.current = true;

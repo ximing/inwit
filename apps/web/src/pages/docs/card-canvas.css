@@ -159,6 +159,8 @@
   width: 264px;
   max-height: 320px;
   overflow: auto;
+  /* 滚到底后不串到画布平移 */
+  overscroll-behavior: contain;
   padding: 10px 12px 12px;
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -654,6 +656,7 @@
   max-width: calc(100% - 32px);
   max-height: calc(100% - 32px);
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: 14px;
