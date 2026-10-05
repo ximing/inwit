@@ -42,6 +42,7 @@ COPY apps/desktop/package.json apps/desktop/
 COPY apps/mobile/package.json apps/mobile/
 RUN pnpm install --frozen-lockfile --filter=@inwit/web...
 COPY packages/dto packages/dto
+COPY packages/markdown packages/markdown
 COPY packages/doc-schema packages/doc-schema
 COPY apps/web apps/web
 RUN pnpm --filter @inwit/doc-schema build \
