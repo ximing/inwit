@@ -12,6 +12,7 @@ import {
   signAssetMultipart,
 } from '@/api/assets';
 import { insertMathLatex, updateMathLatex } from '@inwit/doc-schema';
+import { dispatchMarkdownPaste } from '@inwit/doc-schema/paste-markdown';
 import { createDocExtensions } from '@/components/doc/extensions';
 import { docEntities } from '@/lib/anchors';
 import {
@@ -324,6 +325,11 @@ export const PaperEditor = observer(function PaperEditor({
           event.preventDefault();
           return true;
         }
+        if (dispatchMarkdownPaste(view, dt)) {
+          event.preventDefault();
+          queueMicrotask(() => void rehostRef.current());
+          return true;
+        }
         queueMicrotask(() => void rehostRef.current());
         return false;
       },
@@ -340,6 +346,11 @@ export const PaperEditor = observer(function PaperEditor({
         if (files && files.length > 0) {
           event.preventDefault();
           void ingestRef.current(files);
+          return true;
+        }
+        if (dispatchMarkdownPaste(view, dt, insertAt)) {
+          event.preventDefault();
+          queueMicrotask(() => void rehostRef.current());
           return true;
         }
         return false;

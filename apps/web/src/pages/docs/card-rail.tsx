@@ -2,6 +2,7 @@ import type { Annotation, DocumentCard } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import {
   ChevronDown,
+  Lightbulb,
   List,
   PanelRight,
   PanelRightClose,
@@ -37,6 +38,7 @@ import { cardRailCanDock, cardRailMode } from './card-rail-mode';
 import { CardLinks } from './card-link-list';
 import { DocsService } from './docs.service';
 import { mindCardActions } from './mindmap-gesture';
+import { ThoughtComposer } from './thought-composer';
 
 const AnnotationThumb = observer(function AnnotationThumb({
   annotationId,
@@ -62,6 +64,7 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
   const [saving, setSaving] = useState(false);
   const on = service.activeAnnotationId === item.id;
   const lost = service.isAnnotationAnchorLost(item);
+  const thought = item.kind === 'note';
 
   useEffect(() => {
     if (!editing) setDraft(item.note);
@@ -85,8 +88,16 @@ const AnnotationItem = observer(function AnnotationItem({ item }: { item: Annota
         className="note-item-main"
         onClick={() => service.focusAnnotation(item.id)}
       >
-        {item.kind === 'pdf' && item.imageKey ? <AnnotationThumb annotationId={item.id} /> : null}
-        <p className="note-quote">{item.quote}</p>
+        {thought ? (
+          <p className="note-kind">
+            <Lightbulb width={12} height={12} strokeWidth={1.8} aria-hidden />
+            想法
+          </p>
+        ) : null}
+        {(item.kind === 'pdf' || thought) && item.imageKey ? (
+          <AnnotationThumb annotationId={item.id} />
+        ) : null}
+        {thought ? null : <p className="note-quote">{item.quote}</p>}
         {!editing && item.note.trim() ? <p className="note-body">{item.note}</p> : null}
         {item.hasConvertedCard ? <p className="anchor-lost note-converted">已转成卡片</p> : null}
         {lost ? <p className="anchor-lost">原文已删除</p> : null}
@@ -559,6 +570,11 @@ export const CardRail = observer(function CardRail() {
           </div>
 
           <section className="card-rail-sec is-notes" aria-label="批注">
+            {service.doc ? (
+              <div className="card-rail-thought">
+                <ThoughtComposer documentId={service.doc.id} />
+              </div>
+            ) : null}
             <button
               type="button"
               className="card-rail-notes-toggle"

@@ -464,6 +464,79 @@ html.is-resizing-card-rail * {
   justify-content: flex-end;
   gap: 6px;
 }
+
+/* 记一条想法：批注栏常驻输入区与浮动输入框共用。 */
+.thought-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.thought-box textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  outline: none;
+}
+.thought-box textarea:focus {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+  background: var(--surface);
+}
+.thought-box textarea::placeholder { color: var(--ink-4); }
+.thought-thumb {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+}
+.thought-thumb img {
+  max-width: 120px;
+  max-height: 90px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  display: block;
+  object-fit: cover;
+}
+.thought-thumb-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  box-shadow: var(--shadow-1);
+}
+.thought-thumb-remove:hover { color: var(--ink); }
+.thought-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.thought-attach { padding: 4px 8px; }
+.card-rail-thought {
+  padding: 8px 0 4px;
+}
+.thought-pop { width: 300px; }
+.note-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ink-4);
+}
 .card-rail-handle {
   position: absolute;
   top: 50%;

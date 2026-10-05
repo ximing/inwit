@@ -9,12 +9,12 @@ import type {
 import { and, asc, count, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations, documents, type AnnotationRow } from '../db/schema.js';
-import { isExcerptKeyFor } from '../documents/excerpt-logic.js';
 import { detachCanvasMember } from '../canvas/canvas.service.js';
 import { getOwnedDocument } from '../documents/document.service.js';
 import { AppError } from '../errors.js';
 import { tryDeleteAnnotationFromIndex, tryIndexAnnotation } from '../retrieval/pipeline.js';
 import { presignGet } from '../storage/client.js';
+import { isAnnotationImageKeyFor } from './annotation-image-logic.js';
 
 export function toPublicAnnotation(row: AnnotationRow): Annotation {
   return {
@@ -81,7 +81,7 @@ export async function createAnnotation(
   input: CreateAnnotationInput,
 ): Promise<Annotation> {
   await getOwnedDocument(userId, input.documentId);
-  if (input.imageKey && !isExcerptKeyFor(input.imageKey, userId, input.documentId)) {
+  if (input.imageKey && !isAnnotationImageKeyFor(userId, input.documentId, input.imageKey)) {
     throw AppError.of(400, 'VALIDATION_ERROR');
   }
   const [row] = await getDb()
@@ -89,7 +89,7 @@ export async function createAnnotation(
     .values({
       userId,
       documentId: input.documentId,
-      quote: input.quote,
+      quote: input.quote ?? '',
       note: input.note ?? '',
       kind: input.kind ?? 'text',
       pageIndex: input.pageIndex ?? null,
@@ -110,7 +110,7 @@ export async function getAnnotationImage(
 ): Promise<AnnotationImageResponse> {
   const row = await getOwnedAnnotation(userId, id);
   if (!row.imageKey) throw AppError.of(404, 'ANNOTATION_IMAGE_NOT_FOUND');
-  if (!isExcerptKeyFor(row.imageKey, userId, row.documentId)) {
+  if (!isAnnotationImageKeyFor(userId, row.documentId, row.imageKey)) {
     throw AppError.of(404, 'ANNOTATION_IMAGE_NOT_FOUND');
   }
   const url = await presignGet(row.imageKey);

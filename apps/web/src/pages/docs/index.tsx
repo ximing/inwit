@@ -18,6 +18,7 @@ import { NewTopicDialog } from './new-topic-dialog';
 import { PaneEdit } from './pane-edit';
 import { PaneEmpty, PaneRead } from './pane-read';
 import { SelectionPopoverHost } from './selection-toolbar';
+import { ThoughtPop } from './thought-pop';
 import { WorkbenchList } from './workbench-list';
 
 const DocsPageContent = observer(function DocsPageContent() {
@@ -96,35 +97,58 @@ const DocsPageContent = observer(function DocsPageContent() {
       service.closeCardRailOverlay();
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (service.newTopicOpen) {
-        service.closeNewTopic();
+      if (event.key === 'Escape') {
+        if (service.thoughtPop) {
+          service.closeThoughtPop();
+          return;
+        }
+        if (service.newTopicOpen) {
+          service.closeNewTopic();
+          return;
+        }
+        if (railMode() === 'overlay') {
+          dismissRail();
+          return;
+        }
+        if (service.cardRailOverlayOpen) service.closeCardRailOverlay();
+        if (search.hasQuery) {
+          search.clear();
+          return;
+        }
+        let handled = false;
+        if (service.topicMenuOpen) {
+          service.closeTopicMenu();
+          handled = true;
+        }
+        if (service.paneTopicMenuOpen) {
+          service.closePaneTopicMenu();
+          handled = true;
+        }
+        if (service.activeCardId || service.activeAnnotationId) {
+          service.closeHighlight();
+          handled = true;
+        }
+        if (handled) return;
+        if (prefs.zenMode) prefs.setZenMode(false);
         return;
       }
-      if (railMode() === 'overlay') {
-        dismissRail();
-        return;
+      // 快捷键 n：唤起记想法浮层。焦点在输入框/编辑器里时不触发。
+      if (
+        (event.key === 'n' || event.key === 'N') &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey
+      ) {
+        const target = event.target;
+        const editable =
+          target instanceof HTMLElement &&
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable);
+        if (editable || !service.doc || service.thoughtPop) return;
+        event.preventDefault();
+        service.openThoughtPop();
       }
-      if (service.cardRailOverlayOpen) service.closeCardRailOverlay();
-      if (search.hasQuery) {
-        search.clear();
-        return;
-      }
-      let handled = false;
-      if (service.topicMenuOpen) {
-        service.closeTopicMenu();
-        handled = true;
-      }
-      if (service.paneTopicMenuOpen) {
-        service.closePaneTopicMenu();
-        handled = true;
-      }
-      if (service.activeCardId || service.activeAnnotationId) {
-        service.closeHighlight();
-        handled = true;
-      }
-      if (handled) return;
-      if (prefs.zenMode) prefs.setZenMode(false);
     };
     const onPointer = (event: MouseEvent) => {
       const target = event.target;
@@ -268,6 +292,14 @@ const DocsPageContent = observer(function DocsPageContent() {
     service.clearBodyFocus();
   }, [service, service.bodyFocusCardId, service.bodyFocusAnnotationId, revealSeq]);
 
+  // 想法软锚点：把记录的块滚进视口（无 mark、无高亮）。
+  useEffect(() => {
+    const blockIndex = service.bodyFocusBlockIndex;
+    if (blockIndex == null) return;
+    service.editorHost?.scrollBlockIntoView(blockIndex);
+    service.clearBodyFocusBlock();
+  }, [service, service.bodyFocusBlockIndex, revealSeq]);
+
   const composingNew = !docId && service.composingNew;
   const openingDoc = Boolean(docId) && settledDocId !== docId;
   const showEmpty = !docId && !composingNew;
@@ -299,6 +331,7 @@ const DocsPageContent = observer(function DocsPageContent() {
         </p>
       ) : null}
       <SelectionPopoverHost />
+      {service.thoughtPop ? <ThoughtPop /> : null}
       {service.newTopicOpen ? <NewTopicDialog /> : null}
       {service.editingCard ? <CardEditDialog card={service.editingCard} /> : null}
     </div>

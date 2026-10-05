@@ -22,7 +22,12 @@ export function registerCanvasRoutes(app: FastifyInstance): void {
     return { nodes };
   });
 
-  /** 在画布上新建文本或图片节点，可以挂到某个节点下面。 */
+  /**
+   * 在画布上新建文本或图片节点，可以挂到某个节点下面。
+   * @deprecated 仅为旧客户端保留。新的文本/图片节点一律走「note 批注 + 落位」
+   * （POST /api/annotations kind='note' → PATCH /api/documents/:id/canvas/:nodeId），
+   * 新代码不要再调用这个端点。
+   */
   app.post('/api/documents/:id/canvas', auth, async (req, reply) => {
     const { id } = idParamsSchema.parse(req.params);
     const input = createCanvasNodeInputSchema.parse(req.body);

@@ -136,4 +136,42 @@ describe('cardInputFromAnnotation', () => {
     expect(parsed?.concept).toBe(IMAGE_EXCERPT_QUOTE);
     expect(parsed?.example).toBe('   ');
   });
+
+  it('converts a note thought: empty quote leaves no anchorText, soft anchor rides along', () => {
+    const parsed = cardInputFromAnnotation({
+      id: ANNOTATION_ID,
+      documentId: DOCUMENT_ID,
+      note: '这个想法值得记\n展开一点',
+      quote: '',
+      imageKey: null,
+      anchorBlockIndex: 7,
+    });
+    expect(parsed).toEqual({
+      documentId: DOCUMENT_ID,
+      concept: '这个想法值得记',
+      example: '这个想法值得记\n展开一点',
+      anchorBlockIndex: 7,
+      annotationId: ANNOTATION_ID,
+    });
+    expect(parsed && 'anchorText' in parsed).toBe(false);
+  });
+
+  it('converts a pure-image note thought through the image branch', () => {
+    const parsed = cardInputFromAnnotation({
+      id: ANNOTATION_ID,
+      documentId: DOCUMENT_ID,
+      note: '',
+      quote: '',
+      imageKey: 'users/u/doc-assets/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png',
+      anchorBlockIndex: null,
+    });
+    expect(parsed).toEqual({
+      documentId: DOCUMENT_ID,
+      concept: IMAGE_EXCERPT_QUOTE,
+      example: '',
+      anchorText: IMAGE_EXCERPT_QUOTE,
+      imageKey: 'users/u/doc-assets/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png',
+      annotationId: ANNOTATION_ID,
+    });
+  });
 });

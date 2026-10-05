@@ -5,14 +5,52 @@ import { useEffect, useRef, useState } from 'react';
 import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb';
 import { Tip } from '@/components/tip';
 import { AssetUrlsService } from '@/services/asset-urls.service';
+import { DialogService } from '@/services/dialog.service';
 import { DocsService } from './docs.service';
 import { MIND_NEW_TEXT } from './mindmap-edit';
-import { mindDraftAfter, mindDraftKeyCommand } from './mindmap-gesture';
+import { mindDraftAfter, mindDraftDirty, mindDraftKeyCommand } from './mindmap-gesture';
 
 function noteKicker(item: Annotation): string {
   if (item.kind === 'pdf') return `PDF ${(item.pageIndex ?? 0) + 1}`;
   if (item.kind === 'media') return '摘录';
+  if (item.kind === 'note') return '想法';
   return '批注';
+}
+
+/**
+ * Esc 取消节点编辑：无改动直接退；有改动弹确认，确认后丢弃草稿。
+ * 确认框会抢走焦点触发 textarea blur，先把 skipBlur 立起来避免被当成提交。
+ * 放弃时不复位 skipBlur：卸载时的 blur 靠它吞掉（与既有 Esc 路径同一模式）。
+ */
+function cancelDraftEdit(input: {
+  saved: string;
+  draft: string;
+  setDraft: (value: string) => void;
+  onCloseEdit: () => void;
+  skipBlur: { current: boolean };
+  area: HTMLTextAreaElement | null;
+  dialog: DialogService;
+}): void {
+  const discard = () => {
+    input.setDraft(mindDraftAfter(input.saved, input.draft, 'cancel').text);
+    input.onCloseEdit();
+  };
+  if (!mindDraftDirty(input.saved, input.draft)) {
+    input.skipBlur.current = true;
+    discard();
+    return;
+  }
+  input.skipBlur.current = true;
+  void input.dialog
+    .confirm('有未保存的修改，放弃吗？', { title: '退出编辑', ok: '放弃', danger: true })
+    .then((ok) => {
+      if (ok) {
+        discard();
+        return;
+      }
+      input.skipBlur.current = false;
+      input.area?.focus();
+    });
 }
 
 const NoteThumb = observer(function NoteThumb({ annotationId }: { annotationId: string }) {
@@ -38,7 +76,9 @@ export const CanvasNoteNode = observer(function CanvasNoteNode({
   onCloseEdit: () => void;
 }) {
   const service = useService(DocsService);
+  const dialog = useService(DialogService);
   const skipBlur = useRef(false);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState(item.note);
   const on = service.activeAnnotationId === item.id;
 
@@ -66,25 +106,39 @@ export const CanvasNoteNode = observer(function CanvasNoteNode({
     >
       <p className="canvas-node-kicker">{noteKicker(item)}</p>
       {item.imageKey ? <NoteThumb annotationId={item.id} /> : null}
-      <p className="canvas-node-quote">{item.quote}</p>
+      {item.quote.trim() ? <p className="canvas-node-quote">{item.quote}</p> : null}
       {editing ? (
         <textarea
           rows={3}
           value={draft}
           maxLength={20_000}
           autoFocus
+          ref={areaRef}
           aria-label="编辑批注"
+          onFocus={(event) => {
+            if (item.note === MIND_NEW_TEXT) event.currentTarget.select();
+          }}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
-            const command = mindDraftKeyCommand(event.key, event.metaKey || event.ctrlKey);
+            const command = mindDraftKeyCommand(
+              event.key,
+              event.metaKey || event.ctrlKey,
+              event.shiftKey,
+            );
             if (!command) return;
             event.stopPropagation();
             if (command === 'cancel') {
               event.preventDefault();
-              skipBlur.current = true;
-              setDraft(mindDraftAfter(item.note, draft, 'cancel').text);
-              onCloseEdit();
+              cancelDraftEdit({
+                saved: item.note,
+                draft,
+                setDraft,
+                onCloseEdit,
+                skipBlur,
+                area: areaRef.current,
+                dialog,
+              });
               return;
             }
             event.preventDefault();
@@ -124,7 +178,9 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
   onCloseEdit: () => void;
 }) {
   const service = useService(DocsService);
+  const dialog = useService(DialogService);
   const skipBlur = useRef(false);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
   const [draft, setDraft] = useState(text);
 
   useEffect(() => {
@@ -166,6 +222,7 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
           value={draft}
           maxLength={4000}
           autoFocus
+          ref={areaRef}
           aria-label="编辑文本"
           onFocus={(event) => {
             if (text === MIND_NEW_TEXT) event.currentTarget.select();
@@ -173,14 +230,24 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
-            const command = mindDraftKeyCommand(event.key, event.metaKey || event.ctrlKey);
+            const command = mindDraftKeyCommand(
+              event.key,
+              event.metaKey || event.ctrlKey,
+              event.shiftKey,
+            );
             if (!command) return;
             event.stopPropagation();
             if (command === 'cancel') {
               event.preventDefault();
-              skipBlur.current = true;
-              setDraft(mindDraftAfter(text, draft, 'cancel').text);
-              onCloseEdit();
+              cancelDraftEdit({
+                saved: text,
+                draft,
+                setDraft,
+                onCloseEdit,
+                skipBlur,
+                area: areaRef.current,
+                dialog,
+              });
               return;
             }
             event.preventDefault();

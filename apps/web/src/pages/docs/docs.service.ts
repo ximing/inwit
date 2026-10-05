@@ -308,6 +308,8 @@ export class DocsService extends Service {
   scrollAnnotationId: string | null = null;
   bodyFocusCardId: string | null = null;
   bodyFocusAnnotationId: string | null = null;
+  /** 想法批注的软锚点：点击后正文要滚到的顶层块号（1 起）。 */
+  bodyFocusBlockIndex: number | null = null;
   /** 脑图再次选中同一张卡或批注时，正文滚动和 PDF 跳转靠它再走一次。 */
   documentRevealSeq = 0;
   appliedUrlAnchor: string | null = null;
@@ -336,6 +338,8 @@ export class DocsService extends Service {
       imageKey?: string;
     };
   } | null = null;
+  /** 记想法浮动输入框的位置；null 表示没打开。 */
+  thoughtPop: { left: number; top: number } | null = null;
   editorHost: DocEditorHost | null = null;
 
   pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -1072,6 +1076,15 @@ export class DocsService extends Service {
       this.activeAnnotationId = id;
       this.activeCardId = null;
       this.bodyFocusCardId = null;
+      if (item.kind === 'note') {
+        // 想法没有正文锚点：有软锚点就把对应块滚进视口，否则只停在脑图选中。
+        this.bodyFocusAnnotationId = null;
+        if (item.anchorBlockIndex != null) {
+          this.bodyFocusBlockIndex = item.anchorBlockIndex;
+          this.documentRevealSeq += 1;
+        }
+        return;
+      }
       this.bodyFocusAnnotationId = id;
       this.documentRevealSeq += 1;
     }
@@ -1082,6 +1095,7 @@ export class DocsService extends Service {
     if (this.activeAnnotationId === id) {
       this.activeAnnotationId = null;
       this.bodyFocusAnnotationId = null;
+      this.bodyFocusBlockIndex = null;
       return;
     }
     const item = this.annotations.find((note) => note.id === id);
@@ -1091,6 +1105,14 @@ export class DocsService extends Service {
     }
     this.activeAnnotationId = id;
     this.activeCardId = null;
+    if (item?.kind === 'note') {
+      this.bodyFocusAnnotationId = null;
+      if (item.anchorBlockIndex != null) {
+        this.bodyFocusBlockIndex = item.anchorBlockIndex;
+        this.documentRevealSeq += 1;
+      }
+      return;
+    }
     this.bodyFocusAnnotationId = id;
   }
 
@@ -1102,6 +1124,7 @@ export class DocsService extends Service {
     this.scrollAnnotationId = null;
     this.bodyFocusCardId = null;
     this.bodyFocusAnnotationId = null;
+    this.bodyFocusBlockIndex = null;
   }
 
   clearScrollCard(): void {
@@ -1115,6 +1138,28 @@ export class DocsService extends Service {
   clearBodyFocus(): void {
     this.bodyFocusCardId = null;
     this.bodyFocusAnnotationId = null;
+  }
+
+  clearBodyFocusBlock(): void {
+    this.bodyFocusBlockIndex = null;
+  }
+
+  /** 打开记想法浮动输入框。不传位置时取窗口上方居中。 */
+  openThoughtPop(at?: { left: number; top: number }): void {
+    this.thoughtPop = at ?? { left: window.innerWidth / 2, top: 120 };
+  }
+
+  closeThoughtPop(): void {
+    this.thoughtPop = null;
+  }
+
+  /** 记想法时静默记录的软锚点：正文视口顶部所在块。取不到就返回 null，不阻塞。 */
+  thoughtAnchorBlockIndex(): number | null {
+    try {
+      return this.editorHost?.viewportTopBlockIndex() ?? null;
+    } catch {
+      return null;
+    }
   }
 
   attachEditorHost(host: DocEditorHost | null): void {
@@ -1195,6 +1240,37 @@ export class DocsService extends Service {
     return created?.id ?? null;
   }
 
+  /** 记一条想法（kind='note'）。成功后插入本地列表并选中；quiet 供脑图管线使用。 */
+  async addThought(
+    input: {
+      documentId: string;
+      note: string;
+      imageKey?: string;
+      anchorBlockIndex?: number;
+    },
+    opts?: { quiet?: boolean },
+  ): Promise<Annotation | null> {
+    return this.annotationService.addThought(input, opts);
+  }
+
+  /** 想法/脑图贴图上传：走 assets presign 链路，返回 imageKey（object key，不是 URL）。 */
+  async uploadThoughtImage(file: File): Promise<string | null> {
+    try {
+      const stored = await storeDocAsset(file, canvasAssetApi);
+      if (stored.kind !== 'image') {
+        this.showToast('请选择图片');
+        return null;
+      }
+      return stored.assetSrc.startsWith('asset:')
+        ? stored.assetSrc.slice('asset:'.length)
+        : stored.assetSrc;
+    } catch (err) {
+      const fallback = err instanceof AssetUploadError ? err.message : '图片没传上去';
+      this.showToast(errorMessage(err, fallback));
+      return null;
+    }
+  }
+
   async saveAnnotationNote(id: string, note: string): Promise<boolean> {
     return this.annotationService.saveAnnotationNote(id, note);
   }
@@ -1239,6 +1315,7 @@ export class DocsService extends Service {
         ...(input.anchorText?.trim() ? { anchorText: input.anchorText.trim() } : {}),
         ...(input.anchorBlockIndex != null ? { anchorBlockIndex: input.anchorBlockIndex } : {}),
         ...(input.imageKey ? { imageKey: input.imageKey } : {}),
+        ...(input.annotationId ? { annotationId: input.annotationId } : {}),
       });
       if (this.doc?.id === input.documentId) {
         const have = this.doc.cards.some((item) => item.id === card.id);
@@ -1371,7 +1448,10 @@ export class DocsService extends Service {
       this.refuseCanvas(moved.reason === 'depth' ? '层级太深了' : '不能放到这里');
       return;
     }
-    if (moved.unchanged) return;
+    // 成员可能只有合并视图里的虚拟根（新批注还没有 canvas 行）：
+    // 位置没变也要补落一行，否则「落位」只存在于 mergeCanvasForest 的兜底逻辑里。
+    const hasRow = this.canvasNodes.some((node) => node.id === memberId);
+    if (moved.unchanged && hasRow) return;
     const moves =
       'moves' in moved
         ? moved.moves
@@ -1431,16 +1511,22 @@ export class DocsService extends Service {
     };
   }
 
+  /**
+   * 脑图「添加文本节点」：实际是 quiet 创建一条 note 批注再落位，
+   * 撤销/重放走批注 + 摆放的既有 history（place 记录），不为 note 新造类型。
+   */
   async addCanvasTextAt(parentId: string | null, index: number): Promise<string | null> {
-    const created = await this.insertCanvasNode({
-      kind: 'text',
-      text: MIND_NEW_TEXT,
-      parentId,
-      index,
-    });
-    return created?.id ?? null;
+    if (!this.doc) return null;
+    const created = await this.annotationService.addThought(
+      { documentId: this.doc.id, note: MIND_NEW_TEXT },
+      { quiet: true },
+    );
+    if (!created) return null;
+    await this.placeOnCanvas(created.id, parentId, index);
+    return created.id;
   }
 
+  /** 脑图「添加图片节点」：上传后 quiet 创建 note 批注（纯图片想法）再落位。 */
   async addCanvasImage(file: File, parentId: string | null = null): Promise<void> {
     if (!this.doc || this.canvasUploading) return;
     this.canvasUploading = true;
@@ -1453,9 +1539,13 @@ export class DocsService extends Service {
       const imageKey = stored.assetSrc.startsWith('asset:')
         ? stored.assetSrc.slice('asset:'.length)
         : stored.assetSrc;
-      await this.insertCanvasNode(
-        parentId ? { kind: 'image', imageKey, parentId } : { kind: 'image', imageKey },
+      const created = await this.annotationService.addThought(
+        { documentId: this.doc.id, note: '', imageKey },
+        { quiet: true },
       );
+      if (!created) return;
+      // 与文本节点一致：无父节点也落一条 canvas 根行，不靠 mergeCanvasForest 兜底。
+      await this.placeOnCanvas(created.id, parentId);
     } catch (err) {
       const fallback = err instanceof AssetUploadError ? err.message : '图片没放上去';
       this.showToast(errorMessage(err, fallback));

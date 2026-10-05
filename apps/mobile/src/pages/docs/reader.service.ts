@@ -24,7 +24,6 @@ import {
 } from '@/api/annotations';
 import { presignAsset } from '@/api/assets';
 import {
-  createCanvasNode,
   deleteCanvasNode,
   listCanvasNodes,
   updateCanvasNode,
@@ -787,6 +786,13 @@ export class ReaderService extends Service {
     }
     if (member.kind === 'annotation') {
       const note = this.annotations.find((item) => item.id === id);
+      if (note?.kind === 'note') {
+        return {
+          kicker: '想法',
+          title: note.note.trim() || '想法',
+          imageKey: note.imageKey,
+        };
+      }
       const raw = note?.quote.trim() || '批注';
       const title = raw === IMAGE_EXCERPT_QUOTE ? '图片摘录' : raw;
       const kicker = note?.kind === 'pdf' ? `PDF ${(note.pageIndex ?? 0) + 1}` : '批注';
@@ -927,13 +933,24 @@ export class ReaderService extends Service {
           this.upsertCanvasNode(updated);
           return;
         }
-        const created = await createCanvasNode(documentId, {
-          kind: 'text',
-          text,
-          ...(sheet.parentId ? { parentId: sheet.parentId } : {}),
+        // 新文本节点 = note 批注 + 落位（批注是痕迹层，画布只负责摆放）。
+        const created = await createAnnotation({
+          documentId,
+          kind: 'note',
+          note: text,
         });
         this.cardWriteGen += 1;
-        this.upsertCanvasNode(created);
+        this.canvasGen += 1;
+        if (this.doc?.id === documentId) {
+          this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+          this.entityGen += 1;
+        }
+        this.echoDocumentRow(created.documentId, created.updatedAt);
+        // 无父节点也落一条 canvas 根行（与 web 一致），不靠 mergeCanvasForest 兜底。
+        const placed = await updateCanvasNode(documentId, created.id, {
+          parentId: sheet.parentId,
+        });
+        this.upsertCanvasNode(placed);
       });
       this.showToast(sheet.mode === 'edit' ? '已改好' : '已加上');
       this.closeSheet();
@@ -962,13 +979,22 @@ export class ReaderService extends Service {
     this.canvasGen += 1;
     try {
       await this.withDetailWrite(async () => {
-        const created = await createCanvasNode(documentId, {
-          kind: 'image',
+        // 新图片节点 = 纯图片 note 批注 + 落位。
+        const created = await createAnnotation({
+          documentId,
+          kind: 'note',
           imageKey,
-          ...(parentId ? { parentId } : {}),
         });
         this.cardWriteGen += 1;
-        this.upsertCanvasNode(created);
+        this.canvasGen += 1;
+        if (this.doc?.id === documentId) {
+          this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+          this.entityGen += 1;
+        }
+        this.echoDocumentRow(created.documentId, created.updatedAt);
+        // 无父节点也落一条 canvas 根行（与 web 一致），不靠 mergeCanvasForest 兜底。
+        const placed = await updateCanvasNode(documentId, created.id, { parentId });
+        this.upsertCanvasNode(placed);
       });
       void this.ensureCanvasImages();
       this.showToast('已加上图片');

@@ -253,6 +253,13 @@
       "when": 1790867671706,
       "tag": "0035_agent_message_stream",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791126188606,
+      "tag": "0036_open_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

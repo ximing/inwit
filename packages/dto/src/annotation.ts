@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const ANNOTATION_KINDS = ['text', 'pdf', 'media'] as const;
+export const ANNOTATION_KINDS = ['text', 'pdf', 'media', 'note'] as const;
 export const annotationKindSchema = z.enum(ANNOTATION_KINDS);
 export type AnnotationKind = z.infer<typeof annotationKindSchema>;
 
@@ -14,6 +14,7 @@ export type AnnotationGeometry = z.infer<typeof annotationGeometrySchema>;
 const PDF_REQUIRED_FIELDS = ['pageIndex', 'geometry'] as const;
 const TEXT_FORBIDDEN_FIELDS = ['pageIndex', 'geometry', 'imageKey', 'positionMs'] as const;
 const NON_TEXT_FORBIDDEN_FIELDS = ['anchorBlockIndex'] as const;
+const NOTE_FORBIDDEN_FIELDS = ['pageIndex', 'geometry', 'positionMs'] as const;
 
 export const annotationSchema = z.object({
   id: z.string().uuid(),
@@ -50,7 +51,8 @@ export type ArchivedAnnotationsResponse = z.infer<typeof archivedAnnotationsResp
 export const createAnnotationInputSchema = z
   .object({
     documentId: z.string().uuid(),
-    quote: z.string().trim().min(1).max(20_000),
+    /** 正文选段。kind='note'（无锚点想法）必须缺省或为空，其它 kind 必填。 */
+    quote: z.string().trim().max(20_000).optional(),
     note: z.string().max(20_000).optional(),
     kind: annotationKindSchema.optional(),
     pageIndex: z.number().int().nonnegative().optional(),
@@ -61,6 +63,40 @@ export const createAnnotationInputSchema = z
   })
   .superRefine((value, ctx) => {
     const kind = value.kind ?? 'text';
+    if (kind === 'note') {
+      // 想法：无锚点。quote 必须空，note 与 imageKey 至少其一，软锚点 anchorBlockIndex 可带。
+      if (value.quote !== undefined && value.quote !== '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['quote'],
+          message: 'quote must be empty when kind is note',
+        });
+      }
+      if ((value.note === undefined || value.note.trim() === '') && !value.imageKey) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['note'],
+          message: 'note or imageKey required when kind is note',
+        });
+      }
+      for (const field of NOTE_FORBIDDEN_FIELDS) {
+        if (value[field] !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message: `${field} is not allowed when kind is note`,
+          });
+        }
+      }
+      return;
+    }
+    if (value.quote === undefined || value.quote === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['quote'],
+        message: 'quote is required',
+      });
+    }
     if (kind === 'pdf') {
       for (const field of PDF_REQUIRED_FIELDS) {
         if (value[field] == null) {

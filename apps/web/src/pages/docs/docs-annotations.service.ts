@@ -76,6 +76,44 @@ export class DocsAnnotationsService extends Service {
     }
   }
 
+  /**
+   * 记一条想法（kind='note'，无锚点批注）。可带软锚点 anchorBlockIndex 与贴图。
+   * quiet：脑图管线创建时不打开批注栏选中，由画布接管。
+   */
+  async addThought(
+    input: {
+      documentId: string;
+      note: string;
+      imageKey?: string;
+      anchorBlockIndex?: number;
+    },
+    opts?: { quiet?: boolean },
+  ): Promise<Annotation | null> {
+    const note = input.note.trim();
+    if (!note && !input.imageKey) return null;
+    try {
+      const created = await createAnnotation({
+        documentId: input.documentId,
+        kind: 'note',
+        ...(note ? { note } : {}),
+        ...(input.imageKey ? { imageKey: input.imageKey } : {}),
+        ...(input.anchorBlockIndex !== undefined
+          ? { anchorBlockIndex: input.anchorBlockIndex }
+          : {}),
+      });
+      if (!this.docs.doc || this.docs.doc.id === input.documentId) {
+        this.docs.bumpCardWriteGen();
+        this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+        this.docs.echoDocumentRow(input.documentId, created.updatedAt);
+      }
+      if (!opts?.quiet) this.docs.openAnnotation(created.id);
+      return created;
+    } catch (err) {
+      this.docs.showToast(errorMessage(err, '没记下这条想法'));
+      return null;
+    }
+  }
+
   async saveAnnotationNote(id: string, note: string): Promise<boolean> {
     try {
       const updated = await updateAnnotation(id, { note });

@@ -3,6 +3,7 @@ import {
   decideMindGesture,
   mindCardActions,
   mindDraftAfter,
+  mindDraftDirty,
   mindDraftKeyCommand,
 } from './mindmap-gesture';
 
@@ -111,12 +112,17 @@ describe('mind map gesture', () => {
     });
   });
 
-  it('cancels a text or note draft on Escape and commits on Ctrl or Cmd+Enter', () => {
+  it('cancels a text or note draft on Escape and commits on Enter, Shift+Enter stays a newline', () => {
     expect(mindDraftKeyCommand('Escape', false)).toBe('cancel');
     expect(mindDraftKeyCommand('Escape', true)).toBe('cancel');
     expect(mindDraftAfter('原文', '改过', 'cancel')).toEqual({ text: '原文', save: false });
+    expect(mindDraftKeyCommand('Enter', false)).toBe('commit');
     expect(mindDraftKeyCommand('Enter', true)).toBe('commit');
-    expect(mindDraftKeyCommand('Enter', false)).toBeNull();
+    expect(mindDraftKeyCommand('Enter', false, true)).toBeNull();
+    expect(mindDraftKeyCommand('Enter', true, true)).toBe('commit');
+    expect(mindDraftDirty('原文', '改过')).toBe(true);
+    expect(mindDraftDirty('原文', '原文')).toBe(false);
+    expect(mindDraftDirty('原文', '  原文  ')).toBe(false);
     expect(mindDraftAfter('原文', '改过', 'commit')).toEqual({ text: '改过', save: true });
     expect(mindDraftAfter('原文', '  原文  ', 'commit')).toEqual({ text: '  原文  ', save: false });
     expect(decideMindGesture({ action: 'escape', editing: true })).toEqual({ type: 'cancel-draft' });

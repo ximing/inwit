@@ -195,10 +195,32 @@ async function placeInTx(
     const row = loaded.rows.find((item) => item.id === nodeId);
     return row ? toPublic(row) : virtualNode(documentId, member);
   };
+  // 成员可能只有合并视图里的虚拟根（批注/卡片还没有 canvas 行）：
+  // 「位置不变」的落位也要补写真实行，挂到目标父节点末尾，避免脏位置与既有行重叠。
+  const persistFirstPlacement = async (): Promise<CanvasNode> => {
+    let position = 0;
+    for (const item of loaded.forest) {
+      if (item.parentId === parentId && item.id !== nodeId && item.position >= position) {
+        position = item.position + 1;
+      }
+    }
+    const updated = await writeMove(
+      db,
+      userId,
+      documentId,
+      loaded,
+      { id: nodeId, parentId, position },
+      new Date(),
+    );
+    return toPublic(updated);
+  };
   if (index === undefined) {
     const plan = planOutlineMove(loaded.forest, nodeId, parentId);
     if (!plan.ok) throw AppError.of(400, 'CANVAS_NODE_INVALID');
-    if (plan.unchanged) return existing();
+    if (plan.unchanged) {
+      if (!loaded.rows.some((item) => item.id === nodeId)) return persistFirstPlacement();
+      return existing();
+    }
     const updated = await writeMove(
       db,
       userId,
@@ -211,7 +233,10 @@ async function placeInTx(
   }
   const plan = planOutlinePlace(loaded.forest, nodeId, parentId, index);
   if (!plan.ok) throw AppError.of(400, 'CANVAS_NODE_INVALID');
-  if (plan.unchanged || plan.moves.length === 0) return existing();
+  if (plan.unchanged || plan.moves.length === 0) {
+    if (!loaded.rows.some((item) => item.id === nodeId)) return persistFirstPlacement();
+    return existing();
+  }
   const now = new Date();
   let primary: CanvasNodeRow | null = null;
   for (const move of plan.moves) {

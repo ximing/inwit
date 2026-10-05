@@ -824,7 +824,13 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                 <tbody>
                   {service.archivedAnnotations.map((item) => (
                     <tr key={item.id}>
-                      <td>{clipArchiveText(item.note.trim() || item.quote)}</td>
+                      <td>
+                        {clipArchiveText(
+                          item.note.trim() ||
+                            item.quote.trim() ||
+                            (item.kind === 'note' ? '想法' : ''),
+                        )}
+                      </td>
                       <td>{item.documentTitle ?? '（文档已删除）'}</td>
                       <td>{item.deletedAt ? formatDateTime(item.deletedAt) : '—'}</td>
                       <td>

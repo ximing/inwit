@@ -60,10 +60,20 @@ export function decideMindGesture(gesture: MindGesture): MindIntent {
 }
 
 /** Escape 放弃草稿。Ctrl/Cmd+Enter 提交。其余按键留给输入框。 */
-export function mindDraftKeyCommand(key: string, mod: boolean): 'cancel' | 'commit' | null {
+export function mindDraftKeyCommand(
+  key: string,
+  mod: boolean,
+  shift = false,
+): 'cancel' | 'commit' | null {
   if (key === 'Escape') return 'cancel';
-  if (key === 'Enter' && mod) return 'commit';
+  // Enter 提交；Shift+Enter 换行（走默认行为）；Cmd/Ctrl+Enter 兼容旧习惯也提交。
+  if (key === 'Enter' && (mod || !shift)) return 'commit';
   return null;
+}
+
+/** 有未保存改动（与 commit 的 save 判定同口径）。Esc 取消前据此决定是否弹确认。 */
+export function mindDraftDirty(saved: string, draft: string): boolean {
+  return mindDraftAfter(saved, draft, 'commit').save;
 }
 
 /** 取消回到保存过的文本。提交时，去掉两端空白后没变就不写。 */

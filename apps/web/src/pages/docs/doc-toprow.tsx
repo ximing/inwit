@@ -1,5 +1,5 @@
 import { observer, useService } from '@rabjs/react';
-import { Maximize2, Minimize2, X } from 'lucide-react';
+import { Lightbulb, Maximize2, Minimize2, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { Tip } from '@/components/tip';
 import { formatRelativeTime } from '@/lib/format';
@@ -104,6 +104,21 @@ export const DocTopRow = observer(function DocTopRow({
         ) : null}
         {showMode ? <ModeSwitch /> : null}
         <span className="divider" />
+        {!editing && docId ? (
+          <Tip content="记一条想法（N）">
+          <button
+            type="button"
+            className="doc-fab-zen"
+            aria-label="记一条想法"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              service.openThoughtPop({ left: rect.left + rect.width / 2, top: rect.bottom });
+            }}
+          >
+            <Lightbulb width={13} height={13} strokeWidth={1.8} />
+          </button>
+          </Tip>
+        ) : null}
         <Tip content={prefs.zenMode ? '退出禅模式' : '进入禅模式'}>
         <button
           type="button"

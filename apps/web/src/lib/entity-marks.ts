@@ -44,6 +44,10 @@ export type MissingAnchor = {
 export type DocEditorHost = {
   getJSON: () => PmDocJson;
   selectionAnchor: () => TextSelectionAnchor | null;
+  /** 视口顶部所在的顶层块号（1 起），取不到返回 null。想法批注的软锚点用它。 */
+  viewportTopBlockIndex: () => number | null;
+  /** 把某个顶层块滚进视口（无 mark、无高亮）。 */
+  scrollBlockIntoView: (blockIndex: number) => boolean;
   applyEntityMark: (kind: AnchorKind, id: string, from: number, to: number) => boolean;
   ensureEntityMarks: (
     cards: readonly CardAnchorInput[],
@@ -263,9 +267,39 @@ export function createDocEditorHost(editor: Editor): DocEditorHost {
   return {
     getJSON: () => asPmJson(editor.getJSON()),
     selectionAnchor: () => selectionAnchorFromEditor(editor),
+    viewportTopBlockIndex: () => viewportTopBlockIndexOf(editor),
+    scrollBlockIntoView: (blockIndex) => scrollBlockIntoViewOnEditor(editor, blockIndex),
     applyEntityMark: (kind, id, from, to) => applyEntityMarkOnEditor(editor, kind, id, from, to),
     ensureEntityMarks: (cards, notes) => ensureEntityMarksOnEditor(editor, cards, notes),
   };
+}
+
+/** 视口顶部命中的顶层块号（1 起）。编辑器还没排版好或取不到坐标时返回 null。 */
+export function viewportTopBlockIndexOf(editor: Editor): number | null {
+  if (typeof window === 'undefined') return null;
+  const rect = editor.view.dom.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return null;
+  // 已滚进正文时 rect.top 为负：取窗口顶部附近的块；否则取正文第一个块。
+  const top = rect.top < 0 ? 1 : Math.min(rect.top + 1, window.innerHeight - 1);
+  const hit = editor.view.posAtCoords({ left: rect.left + 16, top });
+  if (!hit) return null;
+  try {
+    return blockIndexAt(editor.state.doc, hit.pos);
+  } catch {
+    return null;
+  }
+}
+
+/** 把第 blockIndex 个顶层块滚到视口中央。无 mark、无高亮。 */
+export function scrollBlockIntoViewOnEditor(editor: Editor, blockIndex: number): boolean {
+  if (!Number.isFinite(blockIndex) || blockIndex < 1) return false;
+  const child = editor.view.dom.children.item(blockIndex - 1);
+  if (!(child instanceof HTMLElement)) return false;
+  const reduce =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  child.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+  return true;
 }
 
 export function blockIndexForQuoteOnPage(

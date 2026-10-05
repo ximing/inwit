@@ -103,6 +103,86 @@ describe('createAnnotationInputSchema', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('requires a non-empty quote for anchored kinds', () => {
+    expect(createAnnotationInputSchema.safeParse({ documentId }).success).toBe(false);
+    expect(
+      createAnnotationInputSchema.safeParse({ documentId, quote: '   ' }).success,
+    ).toBe(false);
+    expect(
+      createAnnotationInputSchema.safeParse({
+        documentId,
+        kind: 'pdf',
+        pageIndex: 0,
+        geometry: { quads: [[0, 0, 1, 1]] },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts a note thought without quote, with note or imageKey', () => {
+    const parsed = createAnnotationInputSchema.parse({
+      documentId,
+      kind: 'note',
+      note: '随手一记',
+      anchorBlockIndex: 3,
+    });
+    expect(parsed.kind).toBe('note');
+    expect(parsed.quote).toBeUndefined();
+    expect(parsed.anchorBlockIndex).toBe(3);
+
+    const imageOnly = createAnnotationInputSchema.parse({
+      documentId,
+      kind: 'note',
+      imageKey: 'users/u/doc-assets/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee.png',
+    });
+    expect(imageOnly.imageKey).toContain('/doc-assets/');
+
+    const emptyQuote = createAnnotationInputSchema.parse({
+      documentId,
+      kind: 'note',
+      quote: '  ',
+      note: '空白 quote 也算没传',
+    });
+    expect(emptyQuote.quote).toBe('');
+  });
+
+  it('rejects note thoughts without content or with a quote', () => {
+    expect(createAnnotationInputSchema.safeParse({ documentId, kind: 'note' }).success).toBe(false);
+    expect(
+      createAnnotationInputSchema.safeParse({ documentId, kind: 'note', note: '  ' }).success,
+    ).toBe(false);
+    expect(
+      createAnnotationInputSchema.safeParse({
+        documentId,
+        kind: 'note',
+        quote: '一段原文',
+        note: '想法',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects note thoughts carrying anchor-only fields', () => {
+    expect(
+      createAnnotationInputSchema.safeParse({ documentId, kind: 'note', note: '想', pageIndex: 0 })
+        .success,
+    ).toBe(false);
+    expect(
+      createAnnotationInputSchema.safeParse({
+        documentId,
+        kind: 'note',
+        note: '想',
+        geometry: { quads: [[0, 0, 1, 1]] },
+      }).success,
+    ).toBe(false);
+    expect(
+      createAnnotationInputSchema.safeParse({
+        documentId,
+        kind: 'note',
+        note: '想',
+        positionMs: 100,
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe('excerptUploadInputSchema', () => {

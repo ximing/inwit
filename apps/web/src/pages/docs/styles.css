@@ -99,6 +99,12 @@ html.is-resizing-doc-list * {
   flex: none;
 }
 .ws-capture .btn { height: 30px; font-size: 12.5px; padding: 0 12px; }
+/* 投入中：capture 作为 .ai-shell 的内层，去掉自身描边/投影，由壳的流光描边接管（T28） */
+.ws-capture .ai-shell .capture {
+  border-color: transparent;
+  box-shadow: none;
+  border-radius: calc(var(--r-md) - 1.5px);
+}
 
 /* 列表头：常驻主题筛选下拉框 + 全局搜索 / 新建 图标 */
 .ws-listhead {
@@ -195,6 +201,55 @@ html.is-resizing-doc-list * {
   border-color: var(--accent-line);
   background: var(--accent-soft);
 }
+/* 拖拽悬停：border-color 三色流转，近似设计稿画板 2 的流光虚线落区（T28） */
+.ws-scroll.is-drop {
+  animation: ws-drop-flow 3.6s linear infinite;
+}
+@keyframes ws-drop-flow {
+  0% {
+    border-color: var(--ai-a);
+  }
+  33% {
+    border-color: var(--ai-b);
+  }
+  66% {
+    border-color: var(--ai-c);
+  }
+  100% {
+    border-color: var(--ai-a);
+  }
+}
+/* 上传中：流光壳 + 真实百分比（T28，设计稿画板 2 两阶段形态） */
+.ws-upload {
+  margin: 6px 2px 8px;
+}
+.ws-upload-shell.is-slow {
+  animation-duration: 5.5s;
+}
+.ws-upload-inner {
+  min-height: 40px;
+}
+.ws-upload-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.ws-upload-pct {
+  font-size: 12px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.ws-upload-inner .btn {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+  flex: none;
+}
 .ws-importing {
   display: flex;
   align-items: center;
@@ -210,6 +265,27 @@ html.is-resizing-doc-list * {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+}
+/* 消化中（分钟级后台 job）：行左 2.5px 竖向流光边，克制持续态，不轮播不整壳（T28） */
+.ws-doc-row.is-digesting {
+  position: relative;
+  overflow: hidden;
+}
+.ws-doc-row.is-digesting::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2.5px;
+  background: linear-gradient(180deg, var(--ai-a), var(--ai-b), var(--ai-c), var(--ai-a));
+  background-size: 100% 300%;
+  animation: ai-edge-flow 4.8s linear infinite;
+}
+/* busy tag 内的 ✦：随 tag 缩小 */
+.row-title .tag .spark {
+  font-size: 9px;
+  margin-right: 4px;
 }
 .ws-doc-row-link {
   flex: 1;
@@ -233,6 +309,12 @@ html.is-resizing-doc-list * {
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .icon-spin { animation: none; }
+  /* 拖拽落区退回静态描边；消化中竖边退回静态渐变（T28） */
+  .ws-scroll.is-drop { animation: none; border-color: var(--accent-line); }
+  .ws-doc-row.is-digesting::before {
+    animation: none;
+    background: linear-gradient(180deg, var(--ai-a), var(--ai-b));
+  }
 }
 
 .row {
