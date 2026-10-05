@@ -45,7 +45,8 @@ COPY packages/dto packages/dto
 COPY packages/markdown packages/markdown
 COPY packages/doc-schema packages/doc-schema
 COPY apps/web apps/web
-RUN pnpm --filter @inwit/doc-schema build \
+RUN pnpm --filter @inwit/markdown build \
+ && pnpm --filter @inwit/doc-schema build \
  && pnpm --filter @inwit/dto build \
  && pnpm --filter @inwit/web build
 
