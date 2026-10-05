@@ -14,6 +14,7 @@ export {
   serializeMdastToMarkdown,
   serializePmJSONToMarkdown,
 } from './pipeline.js';
+export { htmlClipboardIsRich, markdownPasteBlocks } from './paste.js';
 export { mdastToPmJSON, pmJSONToMdast, safeMediaSrc } from './pmjson.js';
 export { remarkVitalEntity } from './remark-vital-entity.js';
 export {

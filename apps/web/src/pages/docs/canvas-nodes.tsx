@@ -83,7 +83,13 @@ export const CanvasNoteNode = observer(function CanvasNoteNode({
   const on = service.activeAnnotationId === item.id;
 
   useEffect(() => {
-    if (!editing) setDraft(item.note);
+    // 进入编辑态重置 skipBlur：卸载聚焦的 textarea 不一定触发 blur，
+    // 上次 Esc 取消立的标志若留到这次编辑，会把失焦提交吞掉（内容丢失）。
+    if (editing) {
+      skipBlur.current = false;
+      return;
+    }
+    setDraft(item.note);
   }, [editing, item.note]);
 
   const commit = () => {
@@ -184,7 +190,11 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
   const [draft, setDraft] = useState(text);
 
   useEffect(() => {
-    if (!editing) setDraft(text);
+    if (editing) {
+      skipBlur.current = false;
+      return;
+    }
+    setDraft(text);
   }, [editing, text]);
 
   const commit = () => {

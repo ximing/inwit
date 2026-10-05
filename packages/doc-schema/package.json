@@ -25,6 +25,11 @@
       "types": "./src/schema/math-plain.ts",
       "import": "./dist/schema/math-plain.js",
       "default": "./dist/schema/math-plain.js"
+    },
+    "./paste-markdown": {
+      "types": "./src/paste-markdown.ts",
+      "import": "./dist/paste-markdown.js",
+      "default": "./dist/paste-markdown.js"
     }
   },
   "scripts": {
@@ -34,6 +39,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@inwit/markdown": "workspace:*",
     "@tiptap/core": "^3.31.3",
     "@tiptap/extension-image": "3.31.3",
     "@tiptap/extension-mathematics": "3.31.3",

@@ -701,6 +701,9 @@ export const CardCanvas = observer(function CardCanvas({
       return;
     }
     if (intent.type === 'clear') {
+      // pointerdown 先于 blur：先主动 blur 让编辑中的节点提交草稿，否则 textarea
+      // 在 blur 前被卸载，commit 不执行，内容静默丢失。
+      if (document.activeElement instanceof HTMLTextAreaElement) document.activeElement.blur();
       setSelectedId(null);
       setEditingId(null);
       setPeekId(null);
@@ -712,6 +715,8 @@ export const CardCanvas = observer(function CardCanvas({
     selectedRef.current = id;
     setSelectedId(id);
     if (intent.type === 'select') {
+      // 同上：点别的节点也是 pointerdown 先行，先让在编辑的节点提交。
+      if (document.activeElement instanceof HTMLTextAreaElement) document.activeElement.blur();
       // 选中别的节点时，先前偷看的那张重新盖上（点击偷看在 applyMind 之后单独设置）。
       if (recall && previous !== id) setPeekId(null);
       setEditingId(null);

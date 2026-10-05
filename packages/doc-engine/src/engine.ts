@@ -1,4 +1,5 @@
 import { insertMathLatex, updateMathLatex } from '@inwit/doc-schema';
+import { dispatchMarkdownPaste } from '@inwit/doc-schema/paste-markdown';
 import type { PmDocJson } from '@inwit/dto';
 import { Editor } from '@tiptap/core';
 import { AssetMap } from './asset-map';
@@ -289,6 +290,21 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
     editorProps: {
       attributes: {
         spellcheck: 'false',
+      },
+      handlePaste: (view, event) => {
+        const dt = event.clipboardData;
+        if (!dt || !dispatchMarkdownPaste(view, dt)) return false;
+        event.preventDefault();
+        return true;
+      },
+      handleDrop: (view, event) => {
+        const dt = event.dataTransfer;
+        if (!dt) return false;
+        const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+        const at = coords?.pos ?? view.state.selection.from;
+        if (!dispatchMarkdownPaste(view, dt, at)) return false;
+        event.preventDefault();
+        return true;
       },
       handleClickOn: (_view, _pos, node, nodePos, event) => {
         if (!editable) return false;
