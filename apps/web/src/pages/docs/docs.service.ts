@@ -64,8 +64,13 @@ import {
 import {
   asListItem,
   captureIsChat,
+  FlipFollowUpScheduler,
   hasPendingDoc,
+  justFlippedFromPending,
   mergeDetail,
+  mergeDocMeta,
+  mergeStatusDetail,
+  pendingPollTargets,
   sendCapture,
   showToast,
   startPolling,
@@ -347,6 +352,7 @@ export class DocsService extends Service {
   selectionTickTimer: ReturnType<typeof setTimeout> | null = null;
   selectionWatchdog: ReturnType<typeof setTimeout> | null = null;
   private selectionTickInflight = false;
+  private flipFollowUps = new FlipFollowUpScheduler();
   loadGen = 0;
 
   private _sync: SyncService | null = null;
@@ -2111,15 +2117,14 @@ export class DocsService extends Service {
     this.importService.abortInFlight();
     this.stopPolling();
     this.finishSelectionPoll();
+    this.flipFollowUps.clear();
     stopToast(this);
     super.destroy();
   }
 
   syncPolling(): void {
-    if (this.syncActive()) {
-      this.stopPolling();
-      return;
-    }
+    // sync 激活期间不再停轮询：有 pending 文档或上传时进入轻量轮询（tickPending
+    // 里只合状态字段），让「消化完成」在文档打开时也能 live 翻转。
     const listPending = hasPendingDoc(this.documents);
     const docPending = this.doc?.status === 'pending';
     const uploading = Object.keys(this.uploadByDoc).length > 0;
@@ -2128,23 +2133,62 @@ export class DocsService extends Service {
   }
 
   startPolling(): void {
-    if (this.syncActive()) return;
     startPolling(this, () => void this.tickPending());
   }
 
   async tickPending(): Promise<void> {
-    const pending = this.documents.filter((item) => item.status === 'pending');
-    const extra =
-      this.doc?.status === 'pending' && !pending.some((item) => item.id === this.doc?.id)
-        ? [this.doc.id]
-        : [];
-    const ids = [...pending.map((item) => item.id), ...extra];
+    const lite = this.syncActive();
+    const ids = pendingPollTargets(this.documents, this.doc);
+    const before = this.statusSnapshot(ids);
     const tasks: Promise<void>[] = [this.refreshJobs()];
     if (ids.length > 0) {
-      tasks.push(...ids.map((id) => this.refreshOne(id)));
+      tasks.push(...ids.map((id) => (lite ? this.refreshOneMeta(id) : this.refreshOne(id))));
     }
     await Promise.all(tasks);
+    // digest 的状态翻转先于 meta（标题/描述/主题）落库时，翻转这次 fetch 拿到的
+    // 还是旧文案；翻转后没有 pending 轮询即停，行数据就滞留了。给刚翻转的文档
+    // 安排延迟补拉，让 meta 落定后行数据跟上。
+    const after = this.statusSnapshot(ids);
+    for (const id of justFlippedFromPending(before, after)) this.scheduleFlipFollowUp(id);
     this.syncPolling();
+  }
+
+  private statusSnapshot(ids: readonly string[]): { id: string; status: string }[] {
+    return ids.map((id) => {
+      const known = this.doc?.id === id ? this.doc : this.documents.find((item) => item.id === id);
+      return { id, status: known?.status ?? 'pending' };
+    });
+  }
+
+  private scheduleFlipFollowUp(id: string): void {
+    this.flipFollowUps.schedule(id, (docId) => {
+      const known =
+        this.doc?.id === docId ? this.doc : this.documents.find((item) => item.id === docId);
+      // 文档已删（forgetDocument 会 cancel，这里是兜底）或又变回 pending
+      // （正常轮询已接管）时不补拉。
+      if (!known || known.status === 'pending') return;
+      void (this.syncActive() ? this.refreshOneMeta(docId) : this.refreshOne(docId));
+    });
+  }
+
+  /**
+   * sync 激活期间的轻量刷新：只合状态类字段（status/failReason/updatedAt/卡数），
+   * 正文、preview 与编辑器状态一律不动，避免轮询 clobber 正在编辑的内容。
+   */
+  async refreshOneMeta(id: string): Promise<void> {
+    try {
+      const detail = await getDocument(id);
+      this.documents = this.documents.map((item) =>
+        item.id === id ? mergeStatusDetail(item, detail) : item,
+      );
+      if (this.doc?.id === id) this.doc = mergeDocMeta(this.doc, detail);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        this.forgetDocument(id);
+        return;
+      }
+      // Transient poll errors should not wipe the list.
+    }
   }
 
   async refreshJobs(): Promise<void> {
@@ -2214,12 +2258,12 @@ export class DocsService extends Service {
 
   private onSyncEvent(event: SyncEvent): void {
     if (event.type === 'active') {
+      // sync 激活后仍保留轻量轮询（有 pending 时），停的只是 selection 补拉。
+      this.syncPolling();
       if (event.active) {
-        this.stopPolling();
         this.disarmSelectionLoop();
-      } else {
-        this.syncPolling();
-        if (this.selectionPollDocId) this.armSelectionLoop(this.selectionPollDocId);
+      } else if (this.selectionPollDocId) {
+        this.armSelectionLoop(this.selectionPollDocId);
       }
       return;
     }
@@ -2426,6 +2470,7 @@ export class DocsService extends Service {
 
   private forgetDocument(id: string): void {
     dropPrefetchedDocument(id);
+    this.flipFollowUps.cancel(id);
     const had = this.documents.some((item) => item.id === id);
     this.documents = this.documents.filter((item) => item.id !== id);
     if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);

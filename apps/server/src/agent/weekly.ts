@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
 import { WEEKLY_SYSTEM_PROMPT, weeklyUserPrompt } from './prompts.js';
 import { runAgentJob } from './run-agent-job.js';
 import {
+  docLinksToCard,
   parseWeeklyReportMemory,
   startOfWeekMonday,
   weeklyReportMemoryKey,
@@ -74,7 +75,8 @@ async function assertWeeklyOutcome(userId: string, session: WeeklySession): Prom
   }
   const stats = session.stats;
   if (stats && stats.relearn.length > 0) {
-    const missing = stats.relearn.filter((item) => !contentText.includes(`/cards/${item.cardId}`));
+    // 卡片链接是 PM JSON 里的 link mark，纯文本提取拿不到 href，必须校验 mark。
+    const missing = stats.relearn.filter((item) => !docLinksToCard(doc.contentJson, item.cardId));
     if (missing.length > 0) {
       throw new Error('weekly report document missing card links for relearn concepts');
     }

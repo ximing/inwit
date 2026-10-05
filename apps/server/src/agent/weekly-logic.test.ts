@@ -1,10 +1,13 @@
 import { agentDocumentMetaLabel, weeklyReportBannerText, weeklyReportJobPayloadFrom } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
+import { documentPlainText, markdownToContentJson } from '../documents/content-json.js';
 import {
   annotationDeepLink,
   annotationsMarkdown,
+  collectLinkHrefs,
   coveragePct,
   dataSummaryMarkdown,
+  docLinksToCard,
   ensureAnnotationLinks,
   ensureRelearnMarkdownLinks,
   ensureWeeklyReportBody,
@@ -217,6 +220,66 @@ describe('document body helpers', () => {
     const body = ensureWeeklyReportBody('这周还行。', stats);
     expect(body).toContain('- 新批注 1 条');
     expect(body).toContain(`/docs?doc=${CARD_B}&annotation=${CARD_A}`);
+  });
+});
+
+describe('card link verification on PM JSON', () => {
+  it('collects hrefs from link marks nested anywhere in the doc', () => {
+    const contentJson = {
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                {
+                  type: 'paragraph',
+                  content: [
+                    { type: 'text', text: '见 ' },
+                    {
+                      type: 'text',
+                      text: '偏差',
+                      marks: [{ type: 'link', attrs: { href: `/cards/${CARD_A}` } }],
+                    },
+                    { type: 'text', text: '，不是链接' },
+                    {
+                      type: 'text',
+                      text: '加粗',
+                      marks: [{ type: 'bold' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(collectLinkHrefs(contentJson)).toEqual([`/cards/${CARD_A}`]);
+    expect(docLinksToCard(contentJson, CARD_A)).toBe(true);
+    expect(docLinksToCard(contentJson, CARD_B)).toBe(false);
+    expect(collectLinkHrefs(null)).toEqual([]);
+    expect(collectLinkHrefs({ type: 'doc' })).toEqual([]);
+  });
+
+  it('finds card links that plain-text extraction cannot see (T29 P4 根因回归)', () => {
+    // markdown 链接落成 PM JSON 后是 text 节点上的 link mark，href 不进纯文本；
+    // 旧校验用 documentPlainText 找 /cards/:id，relearn 非空时必挂并重试耗尽。
+    const md = [
+      '想起来了 7 次，模糊 2 次，忘了 1 次。',
+      '',
+      '## 建议重学',
+      '',
+      `- [偏差](/cards/${CARD_A})：连着忘`,
+      `- [方差](/cards/${CARD_B})：一换数据就抖`,
+    ].join('\n');
+    const contentJson = markdownToContentJson(md);
+    expect(documentPlainText(contentJson)).not.toContain(`/cards/${CARD_A}`);
+    expect(docLinksToCard(contentJson, CARD_A)).toBe(true);
+    expect(docLinksToCard(contentJson, CARD_B)).toBe(true);
+    expect(docLinksToCard(contentJson, CARD_C)).toBe(false);
   });
 });
 

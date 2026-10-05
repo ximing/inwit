@@ -142,6 +142,38 @@ export function mentionsDistribution(contentMd: string): boolean {
   return /想起来了/.test(contentMd) && /模糊/.test(contentMd) && /忘了/.test(contentMd);
 }
 
+/**
+ * 收集 PM JSON 里所有 link mark 的 href。纯文本提取（pmJsonToText）只拼 text
+ * 节点，链接是 text 上的 mark，href 不会出现在纯文本里——校验链接必须看 mark。
+ */
+export function collectLinkHrefs(contentJson: unknown): string[] {
+  const hrefs: string[] = [];
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return;
+    const record = node as { marks?: unknown; content?: unknown };
+    if (Array.isArray(record.marks)) {
+      for (const mark of record.marks) {
+        if (!mark || typeof mark !== 'object') continue;
+        const candidate = mark as { type?: unknown; attrs?: unknown };
+        if (candidate.type !== 'link') continue;
+        const href = (candidate.attrs as { href?: unknown } | null | undefined)?.href;
+        if (typeof href === 'string') hrefs.push(href);
+      }
+    }
+    if (Array.isArray(record.content)) {
+      for (const child of record.content) walk(child);
+    }
+  };
+  walk(contentJson);
+  return hrefs;
+}
+
+/** 文档（含链接 mark）里是否有指向 /cards/:cardId 的链接。 */
+export function docLinksToCard(contentJson: unknown, cardId: string): boolean {
+  const needle = `/cards/${cardId}`;
+  return collectLinkHrefs(contentJson).some((href) => href.includes(needle));
+}
+
 export function dataSummaryMarkdown(stats: WeekStats): string {
   const r = stats.reviews;
   const lines = [
