@@ -9,6 +9,7 @@ import { bindServices, observer, useService } from '@rabjs/react';
 import { ArrowLeft, ChevronDown, ChevronRight, Tags } from 'lucide-react';
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
+import { AiSpark } from '@/components/ai-flow';
 import { DocumentActions, useDocumentMenu } from '@/components/document-actions';
 import { SearchBox, SearchResults, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
@@ -592,9 +593,8 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
     <>
       {kind ? (
         <Tag tone={kind.tone}>
-          {kind.pulse ? <span className="pulse" /> : null}
-          {kind.pulse ? '\u00a0' : null}
-          {kind.label}
+          {kind.pulse ? <AiSpark /> : null}
+          {kind.pulse ? <span className="shimmer-text">{kind.label}</span> : kind.label}
         </Tag>
       ) : null}
       {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
@@ -604,7 +604,7 @@ const TopicDocCard = observer(function TopicDocCard({ doc }: { doc: DocumentList
   return (
     <button
       type="button"
-      className={`topic-doc-card${face.title ? '' : ' is-untitled'}`}
+      className={`topic-doc-card${face.title ? '' : ' is-untitled'}${doc.status === 'pending' ? ' is-digesting' : ''}`}
       aria-label={docCardLabel(face)}
       {...menu}
       onPointerEnter={() => warmTopicDoc(doc.id)}

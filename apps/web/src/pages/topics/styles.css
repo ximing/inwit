@@ -402,6 +402,35 @@
   margin-top: 6px;
 }
 .topic-doc-card .hang b { color: var(--green); font-weight: 500; }
+
+/* 消化中（T28）：行左 2.5px 竖向流光边 + tag 内 ✦ + shimmer，与 DocRow/工作台一致 */
+.topic-doc-card.is-digesting {
+  position: relative;
+  overflow: hidden;
+}
+.topic-doc-card.is-digesting::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2.5px;
+  background: linear-gradient(180deg, var(--ai-a), var(--ai-b), var(--ai-c), var(--ai-a));
+  background-size: 100% 300%;
+  animation: ai-edge-flow 4.8s linear infinite;
+}
+.topic-doc-card .tag .spark {
+  font-size: 9px;
+  margin-right: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topic-doc-card.is-digesting::before {
+    animation: none;
+    background: linear-gradient(180deg, var(--ai-a), var(--ai-b));
+  }
+}
+
 .load-more { margin-top: 12px; }
 
 .topic-feed {

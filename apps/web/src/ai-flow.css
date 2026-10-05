@@ -1,0 +1,184 @@
+/* ---------- AI 流光原语（T28） ----------
+   跨页面共享基础原语：流光描边壳、✦ 呼吸、shimmer 文案、阶段轮播、竖向流光边。
+   视觉与规则的唯一真相来源：docs/design/v2/ingest-ai.html「核心：AI 流光」段。
+   三色变量 --ai-a/--ai-b/--ai-c 定义在 styles.css :root，直接引用品牌色。 */
+
+@property --ai-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes ai-flow {
+  to {
+    --ai-angle: 360deg;
+  }
+}
+
+/* 流光描边壳：包在 capture / 上传条外面 */
+.ai-shell {
+  position: relative;
+  border-radius: var(--r-md);
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--ai-angle),
+    var(--ai-a) 0%,
+    var(--ai-b) 22%,
+    var(--ai-c) 42%,
+    var(--ai-a) 58%,
+    var(--ai-b) 78%,
+    var(--ai-c) 92%,
+    var(--ai-a) 100%
+  );
+  animation: ai-flow 3.6s linear infinite;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--gold) 7%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.ai-shell-inner {
+  border-radius: calc(var(--r-md) - 1.5px);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  min-height: 44px;
+}
+
+/* ✦ 呼吸 */
+.spark {
+  color: var(--ai-b);
+  display: inline-flex;
+  animation: spark-breathe 1.8s ease-in-out infinite;
+  flex: none;
+}
+@keyframes spark-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+/* shimmer 文案：朱红→金→墨绿 扫光 */
+.shimmer-text {
+  background: linear-gradient(
+    100deg,
+    var(--ink-3) 20%,
+    var(--ai-a) 38%,
+    var(--ai-b) 50%,
+    var(--ai-c) 60%,
+    var(--ink-3) 80%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: shimmer-slide 2.6s linear infinite;
+}
+@keyframes shimmer-slide {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+/* 阶段轮播：淡出上浮 / 淡入 */
+.stage {
+  transition:
+    opacity 0.28s ease,
+    transform 0.28s ease;
+}
+.stage.out {
+  opacity: 0;
+  transform: translateY(-3px);
+}
+.stage.in {
+  animation: stage-in 0.32s ease;
+}
+@keyframes stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ai-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px 0;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 16px;
+}
+.ai-status .pct {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 左侧竖向流光边：分钟级后台 job 的克制持续态（4.8s 慢速，不轮播不整壳） */
+.ai-edge {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2.5px;
+  background: linear-gradient(180deg, var(--ai-a), var(--ai-b), var(--ai-c), var(--ai-a));
+  background-size: 100% 300%;
+  animation: ai-edge-flow 4.8s linear infinite;
+}
+@keyframes ai-edge-flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 300%;
+  }
+}
+
+/* 完成回落：卡数淡入（一次性，配合 stage-in） */
+.card-count {
+  display: inline-block;
+  animation: stage-in 0.45s ease both;
+}
+
+/* 降级：减弱动态 → 静态渐变 + 纯文字（设计稿画板 5） */
+@media (prefers-reduced-motion: reduce) {
+  .ai-shell,
+  .ai-edge {
+    animation: none !important;
+  }
+  .ai-shell {
+    background: linear-gradient(90deg, var(--ai-a), var(--ai-b));
+  }
+  .ai-edge {
+    background: linear-gradient(180deg, var(--ai-a), var(--ai-b)) !important;
+  }
+  .shimmer-text {
+    animation: none !important;
+    background: none !important;
+    color: var(--ink-3) !important;
+    -webkit-text-fill-color: currentColor;
+  }
+  .spark {
+    animation: none !important;
+  }
+  .stage {
+    transition: none !important;
+  }
+  .stage.in,
+  .card-count {
+    animation: none !important;
+  }
+}

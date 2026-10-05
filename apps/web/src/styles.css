@@ -12,6 +12,10 @@
   --duration-theme: 150ms;
   --duration-hover: 100ms;
   --duration-rail: 150ms;
+  /* AI 流光三色（T28）：直接引用品牌色，暗色主题随 accent/gold/green 自动换亮色调 */
+  --ai-a: var(--accent);
+  --ai-b: var(--gold);
+  --ai-c: var(--green);
 }
 
 /* Light colors on :root (fallback) and html[data-theme=light] so --bg is never theme-orphaned. */

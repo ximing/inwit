@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { AiSpark, AiStageText } from '@/components/ai-flow';
 import { SearchPalette, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
@@ -95,6 +96,14 @@ function jobDetail(job: Job): string {
   const split = summary.indexOf(sep);
   if (split > 0) return summary.slice(split + sep.length);
   return summary || job.description;
+}
+
+/** 消化中 job 的阶段轮播文案（T28，设计稿 ingest-ai.html 画板 4） */
+const DIGEST_JOB_STAGES = ['消化中，正在通读…', '提炼要点…', '写成卡片…'];
+
+/** 最近动态里进行中的 digest job：标题加粗在前，detail 换成 shimmer 阶段轮播 */
+function digestJobRunning(job: Job): boolean {
+  return job.type === 'digest' && job.status !== 'done' && job.status !== 'failed';
 }
 
 function docTag(doc: DocumentListItem): { tone: 'ai' | 'topic'; label: string } | null {
@@ -406,8 +415,18 @@ const TodayPageContent = observer(function TodayPageContent() {
               <Icon strokeWidth={2} />
             </span>
             <div className="act-body">
-              <b>{jobHeadline(job)}</b>
-              {detail ? ` · ${detail}` : null}
+              {digestJobRunning(job) ? (
+                <>
+                  {detail ? <b>{detail}</b> : null}
+                  {detail ? ' · ' : null}
+                  <AiStageText stages={DIGEST_JOB_STAGES} />
+                </>
+              ) : (
+                <>
+                  <b>{jobHeadline(job)}</b>
+                  {detail ? ` · ${detail}` : null}
+                </>
+              )}
             </div>
             <span className="act-time">{formatRelativeTime(job.createdAt)}</span>
           </div>
@@ -438,8 +457,8 @@ const TodayPageContent = observer(function TodayPageContent() {
               {tag ? <Tag tone={tag.tone}>{tag.label}</Tag> : null}
               {doc.status === 'pending' ? (
                 <span className="doc-digesting" aria-busy>
-                  <span className="pulse" />
-                  消化中
+                  <AiSpark />
+                  <span className="shimmer-text">消化中</span>
                 </span>
               ) : doc.status === 'failed' ? (
                 <span className="doc-failed">失败</span>

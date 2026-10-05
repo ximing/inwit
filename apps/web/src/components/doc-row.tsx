@@ -5,7 +5,9 @@ import {
   docCardLabel,
   type DocumentListItem,
 } from '@inwit/dto';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
+import { AiSpark } from '@/components/ai-flow';
 import { formatRelativeTime } from '@/lib/format';
 import { docPath } from '@/routes';
 
@@ -43,11 +45,22 @@ export function DocRow({
   const agentLabel = agentDocumentMetaLabel(doc.source, doc.title, doc.kind);
   const face = docCardFace(doc, 160);
   const hasChip = doc.status === 'pending' || doc.status === 'failed' || doc.proposedCount > 0;
+  // 消化完成回落：pending → 非 pending 且非 failed 时卡数淡入一次（T28 目标 5）
+  const prevStatusRef = useRef(doc.status);
+  const [justDigested, setJustDigested] = useState(false);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    if (prev === 'pending' && doc.status !== 'pending' && doc.status !== 'failed') {
+      setJustDigested(true);
+    }
+    prevStatusRef.current = doc.status;
+  }, [doc.status]);
   const status = (
     <>
       {doc.status === 'pending' ? (
         <span className="doc-digesting" aria-busy>
-          消化中…
+          <AiSpark />
+          <span className="shimmer-text">消化中</span>
         </span>
       ) : null}
       {doc.status === 'failed' ? <span className="doc-failed">失败</span> : null}
@@ -72,14 +85,16 @@ export function DocRow({
         <p className="doc-snippet is-blank">{BLANK_DOCUMENT_LABEL}</p>
       ) : null}
       <p className="meta">
-        {doc.cardCount} 张卡 · {formatRelativeTime(doc.updatedAt)}
+        <span className={justDigested ? 'card-count' : undefined}>{doc.cardCount} 张卡</span>
+        {' · '}
+        {formatRelativeTime(doc.updatedAt)}
         {doc.topicTitle ? ` · ${doc.topicTitle}` : ''}
         {agentLabel ? ` · ${agentLabel}` : ''}
       </p>
       {hanging ? <p className="doc-hang">挂在：{hanging}</p> : null}
     </>
   );
-  const className = `doc-row${face.title ? '' : ' is-untitled'}`;
+  const className = `doc-row${face.title ? '' : ' is-untitled'}${doc.status === 'pending' ? ' is-digesting' : ''}`;
   const label = docCardLabel(face);
   if (onOpen) {
     return (

@@ -3,6 +3,7 @@ import { observer, useService } from '@rabjs/react';
 import { ChevronDown, FilePlus, Loader2, Plus, Search, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { AiSpark, AiStageText } from '@/components/ai-flow';
 import { DocumentActions, useDocumentMenu } from '@/components/document-actions';
 import { DocRowSummary } from '@/components/doc-row';
 import { SearchPalette, SearchService } from '@/components/search';
@@ -27,6 +28,25 @@ function warmDocument(doc: DocumentListItem): void {
 
 function transferHasFiles(event: DragEvent): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files');
+}
+
+/* AI 等待态阶段文案（T28，设计稿 ingest-ai.html 画板 1/2） */
+const CAPTURE_STAGES_AUTO = ['正在收下这句话…', '落成一篇文档…', '排队等 AI 消化…'];
+const CAPTURE_STAGES_CHAT = ['正在理解你的问题…', '翻你的卡片找答案…', '落成一篇回答…'];
+const UPLOAD_DONE_STAGES = ['上传完成，交给 AI…', '正在读这篇文档…', '稍后会提炼成卡片…'];
+
+/** 消化完成回落：pending → 非 pending 且非 failed 时让卡数淡入一次（T28 目标 5）。 */
+function useJustDigested(status: DocumentListItem['status']): boolean {
+  const prevRef = useRef(status);
+  const [justDigested, setJustDigested] = useState(false);
+  useEffect(() => {
+    const prev = prevRef.current;
+    if (prev === 'pending' && status !== 'pending' && status !== 'failed') {
+      setJustDigested(true);
+    }
+    prevRef.current = status;
+  }, [status]);
+  return justDigested;
 }
 
 function rowKindTag(
@@ -58,13 +78,19 @@ const DocStreamRow = observer(function DocStreamRow({
   const stage = service.stageFor(doc);
   const kind = rowKindTag(doc, stage);
   const face = docCardFace(doc, 120);
+  // \u5206\u949f\u7ea7\u540e\u53f0\u9636\u6bb5\uff08\u4e0a\u4f20/\u63d0\u53d6/\u8bc6\u522b/\u6d88\u5316\uff09\uff1a\u884c\u5de6\u7ad6\u5411\u6d41\u5149\u8fb9 + busy tag shimmer\uff08T28\uff09
+  const digesting =
+    stage.kind === 'upload' ||
+    stage.kind === 'extract' ||
+    stage.kind === 'ocr' ||
+    stage.kind === 'digest';
+  const justDigested = useJustDigested(doc.status);
   const tags = (
     <>
       {kind ? (
         <Tag tone={kind.tone}>
-          {kind.pulse ? <span className="pulse" /> : null}
-          {kind.pulse ? '\u00a0' : null}
-          {kind.label}
+          {kind.pulse ? <AiSpark /> : null}
+          {kind.pulse ? <span className="shimmer-text">{kind.label}</span> : kind.label}
         </Tag>
       ) : null}
       {doc.status === 'failed' ? (
@@ -76,7 +102,10 @@ const DocStreamRow = observer(function DocStreamRow({
   );
   const hasTags = Boolean(kind || doc.status === 'failed');
   return (
-    <div className={`row ws-doc-row${selected ? ' is-on' : ''}${face.title ? '' : ' is-untitled'}`} {...menu}>
+    <div
+      className={`row ws-doc-row${selected ? ' is-on' : ''}${face.title ? '' : ' is-untitled'}${digesting ? ' is-digesting' : ''}`}
+      {...menu}
+    >
       <Link
         to={docsPath(doc.id)}
         className="ws-doc-row-link"
@@ -97,7 +126,9 @@ const DocStreamRow = observer(function DocStreamRow({
           {doc.source === 'import' ? <Tag className="tag-import">导入</Tag> : null}
           {doc.source === 'screenshot' ? <Tag className="tag-import">截图</Tag> : null}
           {doc.topicTitle ? <Tag tone="topic">{doc.topicTitle}</Tag> : null}
-          {doc.cardCount > 0 ? <span>{doc.cardCount} 卡</span> : null}
+          {doc.cardCount > 0 ? (
+            <span className={justDigested ? 'card-count' : undefined}>{doc.cardCount} 卡</span>
+          ) : null}
           {doc.cardCount > 0 ? <span>·</span> : null}
           <span>{formatRelativeTime(doc.updatedAt)}</span>
         </div>
@@ -139,6 +170,7 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
   const moreRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [dropActive, setDropActive] = useState(false);
+  const [sendMode, setSendMode] = useState<'auto' | 'chat'>('auto');
 
   useEffect(() => {
     const root = scrollRef.current;
@@ -162,11 +194,14 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
     service.uploadingDocumentId !== null
       ? (service.uploadByDoc[service.uploadingDocumentId]?.percent ?? null)
       : null;
+  // 分片传完、completeImport 未返回的窗口：切「交给 AI」阶段轮播，不再显示百分比
+  const uploadDone = uploadPercent !== null && uploadPercent >= 100;
   const askClass = ['btn', 'btn-ghost', service.draftLooksLikeQuestion ? 'is-accent' : '']
     .filter(Boolean)
     .join(' ');
 
   const submit = async (mode: 'auto' | 'chat') => {
+    setSendMode(mode);
     const id = await service.send(mode);
     if (id) navigate(docsPath(id));
   };
@@ -254,43 +289,54 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
         </div>
       ) : null}
       <div className="ws-capture">
-        <div className="capture">
-          <CaptureEditor
-            placeholder="扔一句话进来，或以问号结尾问 AI…"
-            onTextChange={(text) => service.setDraft(text)}
-            onSubmit={() => void submit('auto')}
-            onReady={(handle) => service.bindCapture(handle)}
-          />
-          <div className="capture-bar">
-            <TopicPicker
-              topics={service.topics}
-              topicId={service.captureTopicId}
-              open={service.topicMenuOpen}
-              onToggle={() => service.toggleTopicMenu()}
-              onSelect={(id) => service.selectCaptureTopic(id)}
-              onNew={() => service.openNewTopic('capture')}
+        <div className={sending ? 'ai-shell' : undefined}>
+          <div className="capture">
+            <CaptureEditor
+              placeholder="扔一句话进来，或以问号结尾问 AI…"
+              disabled={sending}
+              onTextChange={(text) => service.setDraft(text)}
+              onSubmit={() => void submit('auto')}
+              onReady={(handle) => service.bindCapture(handle)}
             />
-            <div className="capture-actions">
-              <ScreenshotButton topicId={service.captureTopicId} />
-              <button
-                type="button"
-                className={askClass}
-                disabled={!service.canSend}
-                onClick={() => void submit('chat')}
-              >
-                {sending ? '提问中…' : '问 AI'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={!service.canSend}
-                onClick={() => void submit('auto')}
-              >
-                {sending ? '投入中…' : '扔进去'}
-              </button>
+            <div className="capture-bar">
+              <TopicPicker
+                topics={service.topics}
+                topicId={service.captureTopicId}
+                open={service.topicMenuOpen}
+                onToggle={() => service.toggleTopicMenu()}
+                onSelect={(id) => service.selectCaptureTopic(id)}
+                onNew={() => service.openNewTopic('capture')}
+              />
+              <div className="capture-actions">
+                <ScreenshotButton topicId={service.captureTopicId} />
+                <button
+                  type="button"
+                  className={askClass}
+                  disabled={!service.canSend}
+                  onClick={() => void submit('chat')}
+                >
+                  {sending ? '提问中…' : '问 AI'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!service.canSend}
+                  onClick={() => void submit('auto')}
+                >
+                  {sending ? '投入中…' : '扔进去'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
+        {sending ? (
+          <div className="ai-status" role="status">
+            <AiSpark delay={0.3} />
+            <AiStageText
+              stages={sendMode === 'chat' ? CAPTURE_STAGES_CHAT : CAPTURE_STAGES_AUTO}
+            />
+          </div>
+        ) : null}
         {service.error ? (
           <p className="banner-error" role="alert">
             {service.error}
@@ -438,24 +484,38 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
           </p>
         ) : null}
         {importing ? (
-          <p className="ws-importing">
-            <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
-            正在上传 {service.importingName}
-            {uploadPercent !== null ? ` ${uploadPercent}%` : ''}
-            {service.uploadingDocumentId ? (
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={service.cancelingId === service.uploadingDocumentId}
-                onClick={() => {
-                  const id = service.uploadingDocumentId;
-                  if (id) void service.cancelImport(id);
-                }}
-              >
-                取消
-              </button>
-            ) : null}
-          </p>
+          <div className="ws-upload" role="status">
+            <div className={`ai-shell ws-upload-shell${uploadDone ? ' is-slow' : ''}`}>
+              <div className="ai-shell-inner ws-upload-inner">
+                <AiSpark />
+                <span className="ws-upload-name">{service.importingName}</span>
+                {!uploadDone && uploadPercent !== null ? (
+                  <span className="ws-upload-pct">{uploadPercent}%</span>
+                ) : null}
+                {service.uploadingDocumentId ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={service.cancelingId === service.uploadingDocumentId}
+                    onClick={() => {
+                      const id = service.uploadingDocumentId;
+                      if (id) void service.cancelImport(id);
+                    }}
+                  >
+                    取消
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="ai-status">
+              <AiSpark delay={uploadDone ? 0.5 : 0.3} />
+              {uploadDone ? (
+                <AiStageText stages={UPLOAD_DONE_STAGES} />
+              ) : (
+                <span className="shimmer-text">正在上传…</span>
+              )}
+            </div>
+          </div>
         ) : null}
         {service.documents.length === 0 && !service.$model.boot.loading && !service.$model.loadDocuments.loading && !importing ? (
           <p className="hint">这张纸还是空的。扔一句话进来。</p>

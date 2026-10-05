@@ -69,6 +69,28 @@ button.doc-row {
 .doc-failed { color: var(--accent); }
 .doc-hang { margin: 4px 0 0; color: var(--ink-4); font-size: 12px; }
 
-@media (prefers-reduced-motion: no-preference) {
-  .doc-digesting { animation: pulse 1.5s ease-in-out infinite; }
+/* 消化中（T28）：✦ 呼吸 + shimmer 小字，去掉原 pulse 动画；行左竖向流光边 */
+.doc-digesting .spark {
+  font-size: 10px;
+}
+.doc-row.is-digesting {
+  position: relative;
+}
+.doc-row.is-digesting::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2.5px;
+  background: linear-gradient(180deg, var(--ai-a), var(--ai-b), var(--ai-c), var(--ai-a));
+  background-size: 100% 300%;
+  animation: ai-edge-flow 4.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-row.is-digesting::before {
+    animation: none;
+    background: linear-gradient(180deg, var(--ai-a), var(--ai-b));
+  }
 }
