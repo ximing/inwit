@@ -196,8 +196,7 @@ html.is-resizing-doc-list * {
   border-radius: var(--r-md);
   transition: background 0.13s, border-color 0.13s;
 }
-.ws-scroll.is-drop,
-.ws-scroll.is-busy {
+.ws-scroll.is-drop {
   border-color: var(--accent-line);
   background: var(--accent-soft);
 }
@@ -459,8 +458,10 @@ html.is-resizing-doc-list * {
 }
 .doc-toprow .spacer { flex: 1; min-width: 8px; }
 .doc-toprow .topic-pick-wrap { min-width: 0; }
+/* bar 形态（PDF）：放在 .pane-scroll.is-pdf 栏内，上 padding 16 + min-height 30，
+   控件中心 y≈31，与卡片栏操作栏（.card-rail-head）同一水平线，几何对齐 inline 形态 */
 .doc-toprow.is-bar {
-  padding: 8px 20px 0;
+  padding: 16px 20px 0;
   position: static;
   background: none;
   flex: none;
@@ -586,6 +587,13 @@ html.is-resizing-doc-list * {
 }
 .pane-meta .topic-pick-wrap { margin-right: 2px; }
 .pane-meta .sep { color: var(--ink-4); margin: 0 8px; opacity: 0.55; }
+/* 进行中的阶段（上传/提取/识别/消化）：✦ + shimmer，与文档行 busy tag 同款（T28） */
+.pane-meta .pane-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.pane-meta .pane-stage .spark { font-size: 10px; }
 
 .doc-answer {
   border: 1px solid var(--gold-line);

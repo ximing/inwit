@@ -252,13 +252,8 @@ export const WorkbenchList = observer(function WorkbenchList({ selectedId }: { s
     event.preventDefault();
   };
 
-  const scrollClass = [
-    'ws-scroll',
-    dropActive ? 'is-drop' : '',
-    importing ? 'is-busy' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  // 上传中只有导入项（ws-upload 流光壳）变色，整列表不再染色（is-busy 已移除）
+  const scrollClass = ['ws-scroll', dropActive ? 'is-drop' : ''].filter(Boolean).join(' ');
 
   // 列表头：常驻主题筛选下拉框 + 全局搜索弹窗入口
   const filterTopic = service.topics.find((topic) => topic.id === service.filterTopicId) ?? null;

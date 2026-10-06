@@ -1,6 +1,32 @@
 import { listBodyPreview, type DocumentListItem } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
+import { AiSpark, AiStageText } from '@/components/ai-flow';
+import type { DocPipelineStage } from '@/lib/doc-pipeline';
 import { DocsService } from './docs.service';
+
+/** 消化阶段的轮播文案（T28，设计稿 ingest-ai.html 画板 4，与 today 页一致） */
+const DIGEST_STAGE_LABELS = ['消化中，正在通读…', '提炼要点…', '写成卡片…'];
+
+/** 进行中的阶段：✦ 呼吸 + shimmer；消化阶段轮播进展文案，上传/识别 label 自带进度。 */
+function StageLabel({ stage }: { stage: DocPipelineStage }) {
+  if (stage.kind === 'digest') {
+    return (
+      <span className="pane-stage" role="status">
+        <AiSpark />
+        <AiStageText stages={DIGEST_STAGE_LABELS} />
+      </span>
+    );
+  }
+  if (stage.pulse && stage.label) {
+    return (
+      <span className="pane-stage" role="status">
+        <AiSpark />
+        <span className="shimmer-text">{stage.label}</span>
+      </span>
+    );
+  }
+  return stage.label ? <span>{stage.label}</span> : null;
+}
 
 /**
  * 状态行：只在消化中 / 失败 / 可重试 / 可取消时出现，平时不渲染。
@@ -30,7 +56,7 @@ export const DocPaneMeta = observer(function DocPaneMeta({
   if (!stageLabel && !failed && !stage.canRetry && !stage.canCancel) return null;
   return (
     <div className="pane-meta">
-      {stageLabel ? <span>{stageLabel}</span> : null}
+      {stageLabel ? <StageLabel stage={stage} /> : null}
       {failed ? (
         <>
           {stageLabel ? <span className="sep">·</span> : null}

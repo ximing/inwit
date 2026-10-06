@@ -16,8 +16,9 @@
   display: flex;
   flex-direction: column;
 }
+/* 顶行（.doc-toprow.is-bar）已在栏内占 16+30，标题起点对齐普通文档 pane-head 的 y=60 */
 .pdf-pane-head {
-  padding: 16px 20px 4px;
+  padding: 14px 20px 4px;
   flex: none;
 }
 .pdf-pane-head .pane-title {

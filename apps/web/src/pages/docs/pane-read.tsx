@@ -88,20 +88,23 @@ export const PaneRead = observer(function PaneRead() {
 
   return (
     <div className="pane-doc">
-      {isPdf ? <DocTopRow editing={false} docId={doc.id} hideModeSwitch layout="bar" /> : null}
       <div className="pane-main">
         <div className={`pane-scroll${isPdf ? ' is-pdf' : ''}`} ref={scrollRef}>
           {isPdf ? (
-            <Suspense
-              fallback={
-                <p className="empty">
-                  <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
-                  正在打开…
-                </p>
-              }
-            >
-              <PdfPane />
-            </Suspense>
+            <>
+              {/* 与普通文档一致：顶行放在正文栏内，与卡片栏操作栏同一水平线 */}
+              <DocTopRow editing={false} docId={doc.id} hideModeSwitch layout="bar" />
+              <Suspense
+                fallback={
+                  <p className="empty">
+                    <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
+                    正在打开…
+                  </p>
+                }
+              >
+                <PdfPane />
+              </Suspense>
+            </>
           ) : (
             <div className="pane-inner">
               <div className="pane-head">
