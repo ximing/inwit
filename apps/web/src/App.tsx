@@ -14,6 +14,8 @@ import {
   TopicsPage,
 } from '@/shell/page-loaders';
 import { RequireAuth } from '@/shell/RequireAuth';
+import { RouteErrorBoundary } from '@/shell/route-error-boundary';
+import { RouteProgress } from '@/shell/route-progress';
 
 const REQUIRED_PATHS = [
   ROUTES.login,
@@ -52,19 +54,22 @@ function LegacyTopicRedirect() {
 export function App() {
   return (
     <>
+      <RouteProgress />
       <Routes>
         <Route
           path={ROUTES.login}
           element={
-            <Suspense
-              fallback={
-                <div className="splash">
-                  <p className="brand-mark">Inwit</p>
-                </div>
-              }
-            >
-              <LoginPage />
-            </Suspense>
+            <RouteErrorBoundary>
+              <Suspense
+                fallback={
+                  <div className="splash">
+                    <p className="brand-mark">Inwit</p>
+                  </div>
+                }
+              >
+                <LoginPage />
+              </Suspense>
+            </RouteErrorBoundary>
           }
         />
         <Route element={<RequireAuth />}>
