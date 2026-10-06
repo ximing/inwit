@@ -9,6 +9,7 @@ import { ScreenshotService } from '@/services/screenshot.service';
 import { ThemeService } from '@/services/theme.service';
 import { EditorPresenceService } from '@/services/editor-presence.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
+import { RouteLoadService } from '@/shell/route-load.service';
 import '@/style-entry.css';
 
 register(AuthService);
@@ -17,12 +18,14 @@ register(ScreenshotService);
 register(ThemeService);
 register(UiPrefsService);
 register(EditorPresenceService);
+register(RouteLoadService);
 resolve(AuthService);
 resolve(DialogService);
 resolve(ScreenshotService);
 resolve(ThemeService);
 resolve(UiPrefsService);
 resolve(EditorPresenceService);
+resolve(RouteLoadService);
 
 const rootEl = document.getElementById('root');
 if (rootEl) {
