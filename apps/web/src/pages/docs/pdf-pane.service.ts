@@ -19,6 +19,8 @@ import {
   type PdfRect,
 } from './pdf-pane/annotation-adapter';
 import { isPdfOcrPending, pageIndexFromAnchor } from './pdf-pane/page-logic';
+import { warmPdfEngine } from './pdf-pane/pdf-engine';
+import { openPdfFile } from './pdf-pane/pdf-file-cache';
 
 export type PdfJumpRequest = {
   key: string;
@@ -32,6 +34,9 @@ export class PdfPaneService extends Service {
   fileUrl: string | null = null;
   fileMime: string | null = null;
   fileError: string | null = null;
+  /** 下载进度（字节）；null 表示不在下载阶段 */
+  fileLoaded: number | null = null;
+  fileTotal: number | null = null;
   loadGen = 0;
   selectionText = '';
   selectionPageIndex = 0;
@@ -86,15 +91,35 @@ export class PdfPaneService extends Service {
     this.fileError = null;
     this.fileUrl = null;
     this.fileMime = null;
+    this.fileLoaded = null;
+    this.fileTotal = null;
+    // 引擎启动与文件下载并行，互不等待
+    warmPdfEngine();
     try {
       const file = await getDocumentFile(documentId);
       if (gen !== this.loadGen) return;
-      this.fileUrl = file.url;
-      this.fileMime = file.mime;
+      const handle = await openPdfFile({
+        documentId,
+        version: this.docs.doc?.updatedAt ?? '',
+        sourceUrl: file.url,
+        mime: file.mime,
+        onProgress: (loaded, total) => {
+          if (gen !== this.loadGen) return;
+          this.fileLoaded = loaded;
+          this.fileTotal = total;
+        },
+      });
+      if (gen !== this.loadGen) return;
+      this.fileUrl = handle.url;
+      this.fileMime = handle.mime;
+      this.fileLoaded = null;
+      this.fileTotal = null;
     } catch (err) {
       if (gen !== this.loadGen) return;
       this.fileUrl = null;
       this.fileMime = null;
+      this.fileLoaded = null;
+      this.fileTotal = null;
       this.fileError = errorMessage(err, '打不开这份 PDF');
     }
   }

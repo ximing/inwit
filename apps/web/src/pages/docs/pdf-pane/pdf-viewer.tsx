@@ -1,7 +1,6 @@
 import { createPluginRegistration } from '@embedpdf/core';
 import { EmbedPDF, useDocumentState } from '@embedpdf/core/react';
-import { usePdfiumEngine } from '@embedpdf/engines/react';
-import { ignore, type Rect } from '@embedpdf/models';
+import { ignore, type PdfEngine, type Rect } from '@embedpdf/models';
 import {
   AnnotationLayer,
   AnnotationPluginPackage,
@@ -42,9 +41,7 @@ import {
   useZoom,
 } from '@embedpdf/plugin-zoom/react';
 import { observer, useService } from '@rabjs/react';
-import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import wasmUrl from '@embedpdf/pdfium/pdfium.wasm?url';
 import { ThemeService } from '@/services/theme.service';
 import { DocsService } from '../docs.service';
 import { PdfPaneService } from '../pdf-pane.service';
@@ -52,11 +49,39 @@ import { blockIndexForQuoteOnPage } from '@/lib/entity-marks';
 import { SelectionActions } from '../selection-toolbar';
 import { geometryFromRects, importAnnotationsFromOwn, PDF_EXCERPT_STROKE } from './annotation-adapter';
 import { isEditableKeyTarget, pdfViewerKeyAction } from './chrome-logic.js';
+import { sharedPdfiumEngine } from './pdf-engine';
+import { PdfLoading } from './pdf-loading';
 import { PdfSearchBar } from './pdf-search-bar.js';
 import { PdfThumbs } from './pdf-thumbs.js';
 import { PdfToolbar } from './pdf-toolbar.js';
 import { isMarqueeLargeEnough, rectsFromFormattedSelection } from './selection-logic.js';
-import { toAbsoluteUrl } from './wasm-url-logic';
+
+/** 订阅模块级共享引擎；引擎常驻，不随组件卸载销毁。 */
+function useSharedPdfiumEngine(): {
+  engine: PdfEngine<Blob> | null;
+  isLoading: boolean;
+  error: Error | null;
+} {
+  const [state, setState] = useState<{ engine: PdfEngine<Blob> | null; error: Error | null }>({
+    engine: null,
+    error: null,
+  });
+  useEffect(() => {
+    let alive = true;
+    sharedPdfiumEngine().then(
+      (engine) => {
+        if (alive) setState({ engine, error: null });
+      },
+      (err) => {
+        if (alive) setState({ engine: null, error: err instanceof Error ? err : new Error(String(err)) });
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return { engine: state.engine, isLoading: !state.engine && !state.error, error: state.error };
+}
 
 type PdfViewerProps = {
   documentId: string;
@@ -530,25 +555,14 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
 });
 
 export const PdfViewer = observer(function PdfViewer({ documentId, fileUrl }: PdfViewerProps) {
-  // Vite `?url` yields a root-relative path in dev; blob workers cannot fetch that.
-  const pdfiumWasmUrl = toAbsoluteUrl(wasmUrl);
-  const { engine, isLoading, error } = usePdfiumEngine({
-    wasmUrl: pdfiumWasmUrl,
-    worker: true,
-    fontFallback: null,
-  });
+  const { engine, isLoading, error } = useSharedPdfiumEngine();
   const plugins = useMemo(() => buildPlugins(documentId, fileUrl), [documentId, fileUrl]);
 
   if (error) {
     return <p className="empty">PDF 引擎没能加载</p>;
   }
   if (isLoading || !engine) {
-    return (
-      <p className="empty">
-        <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
-        正在打开…
-      </p>
-    );
+    return <PdfLoading stage="engine" />;
   }
 
   return (
@@ -560,12 +574,7 @@ export const PdfViewer = observer(function PdfViewer({ documentId, fileUrl }: Pd
               {({ isLoaded, isLoading: docLoading, isError }) => {
                 if (isError) return <p className="empty">这份 PDF 打不开</p>;
                 if (docLoading || !isLoaded) {
-                  return (
-                    <p className="empty">
-                      <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
-                      正在打开…
-                    </p>
-                  );
+                  return <PdfLoading stage="read" />;
                 }
                 return <PdfDocumentBody documentId={activeDocumentId} />;
               }}

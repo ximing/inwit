@@ -4,11 +4,11 @@ import {
   docDisplayTitle,
 } from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
-import { Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { Tag } from '@/components/tag';
 import { DocsService } from './docs.service';
 import { PdfPaneService } from './pdf-pane.service';
+import { PdfLoading } from './pdf-pane/pdf-loading';
 import { PdfViewer } from './pdf-pane/pdf-viewer';
 
 const PdfPaneView = observer(function PdfPaneView() {
@@ -66,15 +66,14 @@ const PdfPaneView = observer(function PdfPaneView() {
       </div>
       {pdf.fileError ? (
         <p className="empty">{pdf.fileError}</p>
-      ) : pdf.$model.loadFile.loading && !pdf.fileUrl ? (
-        <p className="empty">
-          <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
-          正在打开…
-        </p>
       ) : pdf.fileUrl ? (
         <PdfViewer documentId={doc.id} fileUrl={pdf.fileUrl} />
       ) : (
-        <p className="empty">正在打开…</p>
+        <PdfLoading
+          stage={pdf.fileLoaded != null ? 'download' : 'open'}
+          loaded={pdf.fileLoaded}
+          total={pdf.fileTotal}
+        />
       )}
     </div>
   );

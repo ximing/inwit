@@ -91,7 +91,7 @@ export const PdfSearchBar = observer(function PdfSearchBar({ documentId }: { doc
               disabled={disabledNav}
               onClick={() => search.provides?.previousResult()}
             >
-              <ChevronUp width={15} height={15} strokeWidth={1.8} />
+              <ChevronUp width={15} height={15} strokeWidth={2} />
             </button>
           </Tip>
           <Tip content="下一个">
@@ -102,7 +102,7 @@ export const PdfSearchBar = observer(function PdfSearchBar({ documentId }: { doc
               disabled={disabledNav}
               onClick={() => search.provides?.nextResult()}
             >
-              <ChevronDown width={15} height={15} strokeWidth={1.8} />
+              <ChevronDown width={15} height={15} strokeWidth={2} />
             </button>
           </Tip>
           <Tip content="关闭查找">
@@ -112,7 +112,7 @@ export const PdfSearchBar = observer(function PdfSearchBar({ documentId }: { doc
               aria-label="关闭查找"
               onClick={close}
             >
-              <X width={15} height={15} strokeWidth={1.8} />
+              <X width={15} height={15} strokeWidth={2} />
             </button>
           </Tip>
         </div>

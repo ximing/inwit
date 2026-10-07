@@ -31,12 +31,14 @@
   flex-direction: column;
   outline: none;
 }
-/* 工具行：与编辑模式 .paper-toolbar 同款扁平样式——透明贴 --bg、底部一条细线，不成阅读器色条 */
+/* 工具行：与编辑模式 .paper-toolbar 同款扁平样式——透明贴 --bg、底部一条细线、
+   紧凑左排，组间一道短分隔线，不再是阅读器式的三段分布色条 */
 .pdf-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 20px 6px;
+  gap: 2px;
+  /* 左 12px + 按钮内距，首个图标边线与 20px 栏内距对齐（同 .paper-toolbar-inner 的 -8px） */
+  padding: 4px 20px 6px 12px;
   flex: none;
   color: var(--ink-3);
   font-size: 12.5px;
@@ -45,26 +47,18 @@
   min-height: 40px;
   flex-wrap: nowrap;
   overflow-x: auto;
+  scrollbar-width: none;
 }
-.pdf-toolbar-start,
-.pdf-toolbar-end {
-  /* basis 取内容宽且不收缩：栏太窄时整条工具行横向滚动，end 组不会向左叠压 mid 组 */
-  flex: 1 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-/* 首末按钮内距不计入排版，图标边线与 20px 栏内距对齐（同 .paper-toolbar-inner 的 -8px 处理） */
-.pdf-toolbar-start { margin-left: -8px; }
-.pdf-toolbar-end {
-  justify-content: flex-end;
-  margin-right: -8px;
-}
-.pdf-toolbar-mid {
+.pdf-toolbar::-webkit-scrollbar { display: none; }
+.pdf-toolbar > * {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: 2px;
+}
+.pdf-tool-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+  margin: 0 6px;
+  flex: none;
 }
 /* 扁平工具按钮：与编辑模式 .paper-tool 同一语言（30×28、hover 沉底、is-on 用 accent） */
 .pdf-tool {
@@ -245,7 +239,7 @@
   min-height: 0;
   position: relative;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--bg-sunken);
   border-right: 1px solid var(--line-soft);
 }
 .pdf-thumbs-pane {
@@ -268,7 +262,7 @@
   flex: none;
   overflow: hidden;
   border-radius: 2px;
-  background: var(--surface);
+  background: var(--bg);
   box-shadow: 0 0 0 1px var(--line), var(--shadow-1);
 }
 .pdf-thumb.is-current .pdf-thumb-frame {
@@ -279,7 +273,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: var(--surface);
+  background: var(--bg);
 }
 .pdf-thumb-label {
   font-size: 11px;
@@ -295,16 +289,17 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  background: var(--bg);
+  /* 桌面比纸暗半档，纸浮在桌面上 */
+  background: var(--bg-sunken);
   outline: none;
 }
+/* 纸张与文档纸（--bg）同色；栅格白底 multiply 落到纸色上，彩色内容只轻微压暗 */
 .pdf-page {
-  background: var(--surface);
+  background: var(--bg);
   box-shadow: 0 0 0 1px rgba(60, 48, 30, 0.12), var(--shadow-2);
-  /* 让页面栅格的 multiply 只溶到纸面底色，不与纸外的 viewport 串色 */
+  /* 让页面栅格的 multiply 只溶到纸面底色，不与纸外的桌面串色 */
   isolation: isolate;
 }
-/* 浅色模式：栅格白底 multiply 落到 --surface，与全局纸张/卡片同色；彩色内容只轻微压暗 */
 .pdf-page > img,
 .pdf-thumb-img {
   mix-blend-mode: multiply;
@@ -314,6 +309,11 @@
 .pdf-thumb-img {
   -webkit-user-drag: none;
   user-select: none;
+}
+/* 暗色纸张是反色后的深色，桌面退回 --bg 保持反差 */
+html[data-theme='dark'] .pdf-viewport,
+html[data-theme='dark'] .pdf-thumbs {
+  background: var(--bg);
 }
 html[data-theme='dark'] .pdf-page {
   background: #14120e;
@@ -346,4 +346,75 @@ html[data-theme='dark'] .pdf-thumb-img {
   border-radius: 8px;
   white-space: nowrap;
   box-shadow: var(--shadow-1);
+}
+/* 打开过程占位：纸形骨架 + 阶段文案（取得文档 → 准备引擎 → 读取文档） */
+.pdf-loading {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 32px;
+  background: var(--bg-sunken);
+}
+.pdf-loading-page {
+  width: min(46%, 300px);
+  aspect-ratio: 210 / 260;
+  border-radius: 3px;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px rgba(60, 48, 30, 0.12), var(--shadow-2);
+  position: relative;
+  overflow: hidden;
+}
+/* 纸面上一道缓慢的流光，表示正在读取 */
+.pdf-loading-page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 68%
+  );
+  transform: translateX(-100%);
+  animation: pdf-loading-sweep 1.6s ease-in-out infinite;
+}
+@keyframes pdf-loading-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+.pdf-loading-label {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+html[data-theme='dark'] .pdf-loading {
+  background: var(--bg);
+}
+html[data-theme='dark'] .pdf-loading-page {
+  background: #14120e;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.4),
+    0 12px 28px rgba(0, 0, 0, 0.32);
+}
+html[data-theme='dark'] .pdf-loading-page::after {
+  background: linear-gradient(
+    105deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 68%
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .pdf-loading-page::after {
+    animation: none;
+  }
 }
