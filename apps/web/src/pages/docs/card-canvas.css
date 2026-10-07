@@ -480,10 +480,12 @@
   z-index: 4;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  /* 空间不够时不换行（药丸里折行会散架），整条单行横向滚动 */
+  flex-wrap: nowrap;
   gap: 2px;
   max-width: calc(100% - 20px);
+  overflow-x: auto;
+  scrollbar-width: none;
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -492,10 +494,12 @@
   -webkit-backdrop-filter: blur(10px);
   box-shadow: var(--shadow-1);
 }
+.doc-canvas-tools::-webkit-scrollbar { display: none; }
 .doc-canvas-tools-group {
   display: flex;
   align-items: center;
   gap: 2px;
+  flex: none;
 }
 .doc-canvas-tools-group + .doc-canvas-tools-group {
   margin-left: 2px;
@@ -523,6 +527,32 @@
 .doc-canvas-tools button:disabled { opacity: 0.4; cursor: default; }
 .doc-canvas-tools button:not(:disabled):hover { color: var(--ink); background: var(--bg-sunken); }
 .doc-canvas-tools button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* 窄栏渐进精简（.card-rail 已是 inline-size 容器）：先藏「?」快捷键按钮与
+   文本/图片的文字标签（图标保留）；更窄再藏「适配」（画布菜单「全部适配」与
+   ⌘0 仍可达）。精简后仍装不下才退回横向滚动 */
+@container card-rail (max-width: 540px) {
+  .doc-canvas-tools .is-help,
+  .doc-canvas-tools .btn-label { display: none; }
+}
+@container card-rail (max-width: 430px) {
+  .doc-canvas-tools .is-fit { display: none; }
+}
+/* 超窄（overlay 栏）：药丸按组折成两行，去掉跨组分隔线与整角，行尾对齐，不再滚动 */
+@container card-rail (max-width: 300px) {
+  .doc-canvas-tools {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 2px;
+    overflow: visible;
+    border-radius: var(--r-md);
+  }
+  .doc-canvas-tools-group + .doc-canvas-tools-group {
+    margin-left: 2px;
+    padding-left: 0;
+    border-left: 0;
+  }
+}
 
 /* 画布内搜索：顶部居中浮条。 */
 .canvas-search {

@@ -80,12 +80,12 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
         <Tip content={pdf.thumbsOpen ? '收起缩略图' : '展开缩略图'}>
           <button
             type="button"
-            className={`btn btn-ghost pdf-icon-btn${pdf.thumbsOpen ? ' is-on' : ''}`}
+            className={`pdf-tool${pdf.thumbsOpen ? ' is-on' : ''}`}
             aria-pressed={pdf.thumbsOpen}
             aria-label={pdf.thumbsOpen ? '收起缩略图' : '展开缩略图'}
             onClick={() => pdf.toggleThumbs()}
           >
-            <PanelLeft width={14} height={14} strokeWidth={1.8} />
+            <PanelLeft width={15} height={15} strokeWidth={1.8} />
           </button>
         </Tip>
         <form className="pdf-page-form" onSubmit={commitPage}>
@@ -109,19 +109,19 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
         <Tip content="缩小">
           <button
             type="button"
-            className="btn btn-ghost pdf-icon-btn"
+            className="pdf-tool"
             aria-label="缩小"
             disabled={!zoom.provides}
             onClick={() => zoom.provides?.zoomOut()}
           >
-            <Minus width={14} height={14} strokeWidth={1.8} />
+            <Minus width={15} height={15} strokeWidth={1.8} />
           </button>
         </Tip>
         <div className="pdf-zoom">
           <Tip content="缩放">
             <button
               type="button"
-              className={`btn btn-ghost pdf-zoom-btn${pdf.zoomMenuOpen ? ' is-on' : ''}`}
+              className={`pdf-tool is-label${pdf.zoomMenuOpen ? ' is-on' : ''}`}
               aria-haspopup="menu"
               aria-expanded={pdf.zoomMenuOpen}
               aria-label="缩放"
@@ -150,12 +150,12 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
         <Tip content="放大">
           <button
             type="button"
-            className="btn btn-ghost pdf-icon-btn"
+            className="pdf-tool"
             aria-label="放大"
             disabled={!zoom.provides}
             onClick={() => zoom.provides?.zoomIn()}
           >
-            <Plus width={14} height={14} strokeWidth={1.8} />
+            <Plus width={15} height={15} strokeWidth={1.8} />
           </button>
         </Tip>
       </div>
@@ -164,35 +164,35 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
         <Tip content="顺时针旋转">
           <button
             type="button"
-            className="btn btn-ghost pdf-icon-btn"
+            className="pdf-tool"
             aria-label="顺时针旋转"
             disabled={!rotate.provides}
             onClick={() => rotate.provides?.rotateForward()}
           >
-            <RotateCw width={14} height={14} strokeWidth={1.8} />
+            <RotateCw width={15} height={15} strokeWidth={1.8} />
           </button>
         </Tip>
         <Tip content="在文档中查找">
           <button
             type="button"
-            className={`btn btn-ghost pdf-icon-btn${pdf.searchOpen ? ' is-on' : ''}`}
+            className={`pdf-tool${pdf.searchOpen ? ' is-on' : ''}`}
             aria-pressed={pdf.searchOpen}
             aria-label="在文档中查找"
             onClick={() => pdf.toggleSearch()}
           >
-            <Search width={14} height={14} strokeWidth={1.8} />
+            <Search width={15} height={15} strokeWidth={1.8} />
           </button>
         </Tip>
         <Tip content={capturing ? '取消框选' : '框选摘录'}>
           <button
             type="button"
-            className={`btn btn-ghost pdf-tool-text${capturing ? ' is-on' : ''}`}
+            className={`pdf-tool${capturing ? ' is-on' : ''}`}
             aria-pressed={capturing}
             aria-label={capturing ? '取消框选' : '框选摘录'}
             disabled={!capture.provides}
             onClick={() => capture.provides?.toggleMarqueeCapture()}
           >
-            <Crop width={14} height={14} strokeWidth={1.8} />
+            <Crop width={15} height={15} strokeWidth={1.8} />
             {capturing ? '取消框选' : '框选摘录'}
           </button>
         </Tip>

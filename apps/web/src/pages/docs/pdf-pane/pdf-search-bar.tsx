@@ -86,33 +86,33 @@ export const PdfSearchBar = observer(function PdfSearchBar({ documentId }: { doc
           <Tip content="上一个">
             <button
               type="button"
-              className="btn btn-ghost pdf-icon-btn"
+              className="pdf-tool"
               aria-label="上一个"
               disabled={disabledNav}
               onClick={() => search.provides?.previousResult()}
             >
-              <ChevronUp width={14} height={14} strokeWidth={1.8} />
+              <ChevronUp width={15} height={15} strokeWidth={1.8} />
             </button>
           </Tip>
           <Tip content="下一个">
             <button
               type="button"
-              className="btn btn-ghost pdf-icon-btn"
+              className="pdf-tool"
               aria-label="下一个"
               disabled={disabledNav}
               onClick={() => search.provides?.nextResult()}
             >
-              <ChevronDown width={14} height={14} strokeWidth={1.8} />
+              <ChevronDown width={15} height={15} strokeWidth={1.8} />
             </button>
           </Tip>
           <Tip content="关闭查找">
             <button
               type="button"
-              className="btn btn-ghost pdf-icon-btn"
+              className="pdf-tool"
               aria-label="关闭查找"
               onClick={close}
             >
-              <X width={14} height={14} strokeWidth={1.8} />
+              <X width={15} height={15} strokeWidth={1.8} />
             </button>
           </Tip>
         </div>

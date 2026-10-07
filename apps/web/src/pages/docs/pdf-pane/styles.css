@@ -31,15 +31,16 @@
   flex-direction: column;
   outline: none;
 }
+/* 工具行：与编辑模式 .paper-toolbar 同款扁平样式——透明贴 --bg、底部一条细线，不成阅读器色条 */
 .pdf-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 4px 20px 6px;
   flex: none;
   color: var(--ink-3);
   font-size: 12.5px;
-  background: var(--surface);
+  background: var(--bg);
   border-bottom: 1px solid var(--line-soft);
   min-height: 40px;
   flex-wrap: nowrap;
@@ -47,14 +48,17 @@
 }
 .pdf-toolbar-start,
 .pdf-toolbar-end {
-  flex: 1;
+  /* basis 取内容宽且不收缩：栏太窄时整条工具行横向滚动，end 组不会向左叠压 mid 组 */
+  flex: 1 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  gap: 2px;
 }
+/* 首末按钮内距不计入排版，图标边线与 20px 栏内距对齐（同 .paper-toolbar-inner 的 -8px 处理） */
+.pdf-toolbar-start { margin-left: -8px; }
 .pdf-toolbar-end {
   justify-content: flex-end;
+  margin-right: -8px;
 }
 .pdf-toolbar-mid {
   flex: none;
@@ -62,25 +66,43 @@
   align-items: center;
   gap: 2px;
 }
-.pdf-toolbar .pdf-icon-btn {
-  width: 28px;
+/* 扁平工具按钮：与编辑模式 .paper-tool 同一语言（30×28、hover 沉底、is-on 用 accent） */
+.pdf-tool {
   height: 28px;
-  padding: 0;
-}
-.pdf-toolbar .pdf-tool-text {
-  height: 28px;
-  padding: 0 8px;
+  min-width: 30px;
+  padding: 0 7px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: none;
+  color: var(--ink-3);
   font-size: 12.5px;
+  transition: background 0.12s, color 0.12s;
 }
-.pdf-toolbar .pdf-icon-btn svg,
-.pdf-toolbar .pdf-tool-text svg {
-  width: 14px;
-  height: 14px;
+.pdf-tool:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.pdf-tool.is-on {
+  background: var(--bg-sunken);
+  color: var(--accent);
+}
+.pdf-tool:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.pdf-tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.pdf-tool svg {
   flex: none;
 }
-.pdf-toolbar .btn.is-on {
-  background: var(--accent-soft);
-  color: var(--accent-deep);
+.pdf-tool.is-label {
+  min-width: 46px;
+  font-variant-numeric: tabular-nums;
 }
 .pdf-page-form {
   display: inline-flex;
@@ -91,13 +113,17 @@
   width: 3.2em;
   height: 28px;
   text-align: center;
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: var(--bg-sunken);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
   font-variant-numeric: tabular-nums;
   font-size: 12.5px;
   color: var(--ink);
   padding: 0 4px;
+  transition: background 0.12s, border-color 0.12s;
+}
+.pdf-page-input:hover {
+  border-color: var(--line);
 }
 .pdf-page-input:focus {
   outline: none;
@@ -113,13 +139,6 @@
 }
 .pdf-zoom {
   position: relative;
-}
-.pdf-zoom-btn {
-  height: 28px;
-  min-width: 52px;
-  padding: 0 8px;
-  font-variant-numeric: tabular-nums;
-  font-size: 12.5px;
 }
 .pdf-zoom-menu {
   position: absolute;
@@ -165,7 +184,7 @@
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows var(--duration-hover) ease;
-  background: var(--surface);
+  background: var(--bg);
   border-bottom: 1px solid transparent;
   flex: none;
 }
@@ -214,11 +233,6 @@
   font-size: 12px;
   color: var(--ink-3);
 }
-.pdf-search .pdf-icon-btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-}
 .pdf-stage {
   flex: 1;
   min-height: 0;
@@ -231,7 +245,7 @@
   min-height: 0;
   position: relative;
   overflow: hidden;
-  background: var(--surface);
+  background: var(--bg);
   border-right: 1px solid var(--line-soft);
 }
 .pdf-thumbs-pane {
@@ -254,7 +268,7 @@
   flex: none;
   overflow: hidden;
   border-radius: 2px;
-  background: #fffdf8;
+  background: var(--surface);
   box-shadow: 0 0 0 1px var(--line), var(--shadow-1);
 }
 .pdf-thumb.is-current .pdf-thumb-frame {
@@ -265,7 +279,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #fffdf8;
+  background: var(--surface);
 }
 .pdf-thumb-label {
   font-size: 11px;
@@ -285,8 +299,15 @@
   outline: none;
 }
 .pdf-page {
-  background: #fffdf8;
+  background: var(--surface);
   box-shadow: 0 0 0 1px rgba(60, 48, 30, 0.12), var(--shadow-2);
+  /* 让页面栅格的 multiply 只溶到纸面底色，不与纸外的 viewport 串色 */
+  isolation: isolate;
+}
+/* 浅色模式：栅格白底 multiply 落到 --surface，与全局纸张/卡片同色；彩色内容只轻微压暗 */
+.pdf-page > img,
+.pdf-thumb-img {
+  mix-blend-mode: multiply;
 }
 /* 渲染层是 <img>，默认可被原生拖拽：拖出幽灵图并触发 pointercancel，划词/框选被打断 */
 .pdf-page img,
@@ -301,9 +322,10 @@ html[data-theme='dark'] .pdf-page {
     0 2px 8px rgba(0, 0, 0, 0.4),
     0 12px 28px rgba(0, 0, 0, 0.32);
 }
-/* 暗色下反色渲染页面，hue-rotate 把色相翻回来，避免白纸刺眼 */
+/* 暗色下反色渲染页面，hue-rotate 把色相翻回来，避免白纸刺眼；反色后不能再 multiply */
 html[data-theme='dark'] .pdf-page > img,
 html[data-theme='dark'] .pdf-thumb-img {
+  mix-blend-mode: normal;
   filter: invert(0.93) hue-rotate(180deg) brightness(1.02) contrast(0.92);
 }
 /* 划词高亮层是 multiply 混合，压在反色后的深底上会糊掉，暗色改回普通混合 */

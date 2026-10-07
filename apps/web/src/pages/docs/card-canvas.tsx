@@ -1928,7 +1928,7 @@ export const CardCanvas = observer(function CardCanvas({
             </Tip>
           ) : null}
           <Tip content="快捷键（?）">
-          <button type="button" aria-label="快捷键" onClick={() => setHelpOpen(true)}>
+          <button type="button" className="is-help" aria-label="快捷键" onClick={() => setHelpOpen(true)}>
             ?
           </button>
           </Tip>
@@ -1949,7 +1949,7 @@ export const CardCanvas = observer(function CardCanvas({
             }}
           >
             <Type width={13} height={13} strokeWidth={1.8} />
-            文本
+            <span className="btn-label">文本</span>
           </button>
           <button
             type="button"
@@ -1959,7 +1959,7 @@ export const CardCanvas = observer(function CardCanvas({
             onClick={() => fileRef.current?.click()}
           >
             <ImagePlus width={13} height={13} strokeWidth={1.8} />
-            图片
+            <span className="btn-label">图片</span>
           </button>
           <input
             ref={fileRef}
@@ -1995,6 +1995,7 @@ export const CardCanvas = observer(function CardCanvas({
           </button>
           <button
             type="button"
+            className="is-fit"
             aria-label="适配"
             onClick={() => {
               const zoom = zoomFor('all');
