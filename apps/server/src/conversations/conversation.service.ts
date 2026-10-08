@@ -4,10 +4,11 @@ import type {
   ConversationDetail,
   ConversationDocumentRef,
   ConversationMessage,
+  ConversationNodeRef,
   RetryConversationInput,
   SendConversationInput,
 } from '@inwit/dto';
-import { conversationActionSchema, conversationJobPayloadSchema } from '@inwit/dto';
+import { conversationActionSchema, conversationJobPayloadSchema, conversationNodeRefSchema } from '@inwit/dto';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { enqueueJob } from '../jobs/enqueue.js';
 import { getDb } from '../db/index.js';
@@ -20,7 +21,8 @@ import {
   type JobRow,
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
-import { clipReason, conversationTitle, normalizeDocumentIds } from '../agent/conversation-logic.js';
+import { clipReason, conversationTitle, normalizeDocumentIds, normalizeNodeRefs } from '../agent/conversation-logic.js';
+import { loadMindNodeFacts, ownedNodeRefs } from '../agent/conversation-nodes.js';
 import { assertOwnedLlmConfig } from '../llm/llm.service.js';
 
 const MESSAGE_CAP = 200;
@@ -42,6 +44,16 @@ function readActions(value: unknown): ConversationAction[] {
 function readDocumentIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string');
+}
+
+function readNodeRefs(value: unknown): ConversationNodeRef[] {
+  if (!Array.isArray(value)) return [];
+  const refs: ConversationNodeRef[] = [];
+  for (const item of value) {
+    const parsed = conversationNodeRefSchema.safeParse(item);
+    if (parsed.success) refs.push(parsed.data);
+  }
+  return refs;
 }
 
 function toConversation(row: AgentConversationRow): Conversation {
@@ -80,6 +92,7 @@ function toMessage(row: AgentMessageRow, titles: Map<string, string>): Conversat
     thinking: row.thinking,
     activity: row.activity,
     documents: documentRefs(documentIds, titles),
+    nodes: readNodeRefs(row.nodeRefs),
     actions: readActions(row.actions),
     status: row.status,
     failReason: row.failReason,
@@ -168,6 +181,8 @@ export async function sendConversationMessage(
   input: SendConversationInput,
 ): Promise<ConversationDetail> {
   const documentIds = await keepOwned(userId, normalizeDocumentIds(input.documentIds));
+  const nodeFacts = await loadMindNodeFacts(userId, normalizeNodeRefs(input.nodes ?? []));
+  const nodeRefs = ownedNodeRefs(nodeFacts);
   const dirtyDocumentIds = normalizeDocumentIds(input.dirtyDocumentIds, 8);
   const text = input.text.trim();
   if (input.llmConfigId) await assertOwnedLlmConfig(userId, input.llmConfigId);
@@ -217,6 +232,7 @@ export async function sendConversationMessage(
       role: 'user',
       content: text,
       documentIds,
+      nodeRefs,
       actions: [],
       status: 'done',
       createdAt: now,
@@ -421,7 +437,8 @@ export async function failConversationMessage(job: JobRow, reason: string): Prom
 
 export async function loadConversationRun(userId: string, conversationId: string, messageId: string): Promise<{
   mentions: { id: string; title: string }[];
-  earlier: { role: 'user' | 'assistant'; content: string }[];
+  nodes: Awaited<ReturnType<typeof loadMindNodeFacts>>;
+  earlier: { role: 'user' | 'assistant'; content: string; nodes: ConversationNodeRef[] }[];
   latest: string;
 } | null> {
   const [assistant] = await getDb()
@@ -448,11 +465,18 @@ export async function loadConversationRun(userId: string, conversationId: string
   if (!latestUser) return null;
   const mentionIds = readDocumentIds(latestUser.documentIds);
   const titles = await titlesFor(userId, mentionIds);
+  const latestRefs = readNodeRefs(latestUser.nodeRefs);
+  const nodes = await loadMindNodeFacts(userId, latestRefs);
   const earlier = prior
     .filter((row) => row.id !== latestUser.id && (row.role === 'user' || row.status === 'done'))
-    .map((row) => ({ role: row.role, content: row.content }));
+    .map((row) => ({
+      role: row.role,
+      content: row.content,
+      nodes: row.role === 'user' ? readNodeRefs(row.nodeRefs) : [],
+    }));
   return {
     mentions: documentRefs(mentionIds, titles),
+    nodes,
     earlier,
     latest: latestUser.content,
   };

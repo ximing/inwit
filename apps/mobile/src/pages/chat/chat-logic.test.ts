@@ -69,6 +69,19 @@ describe('conversationActionLine', () => {
         null,
       ).text,
     ).toBe('已写入 3 张卡片到《笔记》');
+    expect(
+      conversationActionLine(
+        {
+          type: 'update_mind_node',
+          documentId: DOC,
+          nodeId: OTHER,
+          title: '梯度',
+          status: 'rejected',
+          reason: '找不到这个节点',
+        },
+        null,
+      ).text,
+    ).toBe('没能修改节点「梯度」：找不到这个节点');
   });
 });
 

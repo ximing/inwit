@@ -168,7 +168,7 @@ const HELP_SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['Enter', '加兄弟节点'],
       ['Shift+单击', '加选 / 减选'],
       ['⌘A', '全选'],
-      ['Delete', '删除（卡片归档）'],
+      ['Delete', '删除（卡片、批注进回收站）'],
     ],
   },
   {

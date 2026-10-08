@@ -1419,6 +1419,12 @@ const CanvasActionsSheet = observer(function CanvasActionsSheet({
           {member.kind === 'text' || member.kind === 'image' ? (
             <CanvasAction label="删除" danger onPress={() => void service.removeCanvasNode(sheet.nodeId)} />
           ) : null}
+          {member.kind === 'annotation' ? (
+            <CanvasAction label="删除" danger onPress={() => void service.deleteAnnotationNote(sheet.nodeId)} />
+          ) : null}
+          {member.kind === 'card' ? (
+            <CanvasAction label="移入回收站" danger onPress={() => void service.archiveDocCard(sheet.nodeId, false)} />
+          ) : null}
         </View>
       ) : null}
     </BottomSheet>

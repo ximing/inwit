@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   decideMindGesture,
   mindCardActions,
+  mindDeleteAction,
+  mindNodeChatLabel,
   mindDraftAfter,
   mindDraftDirty,
   mindDraftKeyCommand,
@@ -110,6 +112,20 @@ describe('mind map gesture', () => {
       type: 'edit',
       editor: 'none',
     });
+  });
+
+  it('deletes every node kind: cards and annotations go to the recycle bin', () => {
+    expect(mindDeleteAction('card')).toBe('archive-card');
+    expect(mindDeleteAction('annotation')).toBe('remove-annotation');
+    expect(mindDeleteAction('text')).toBe('remove-node');
+    expect(mindDeleteAction('image')).toBe('remove-node');
+  });
+
+  it('labels a mind-map node from the first line of its visible text', () => {
+    expect(mindNodeChatLabel({ kind: 'card', concept: '梯度\n是方向' })).toBe('梯度');
+    expect(mindNodeChatLabel({ kind: 'annotation', quote: '引文', note: '  ' })).toBe('引文');
+    expect(mindNodeChatLabel({ kind: 'image' })).toBe('图片');
+    expect(mindNodeChatLabel({ kind: 'text', text: '' })).toBe('文本');
   });
 
   it('cancels a text or note draft on Escape and commits on Enter, Shift+Enter stays a newline', () => {

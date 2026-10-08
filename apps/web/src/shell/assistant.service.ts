@@ -1,5 +1,12 @@
 import { Service } from '@rabjs/react';
-import { CONVERSATION_MENTION_MAX, docDisplayTitle, type Conversation, type ConversationDetail } from '@inwit/dto';
+import {
+  CONVERSATION_MENTION_MAX,
+  CONVERSATION_NODE_MAX,
+  docDisplayTitle,
+  type Conversation,
+  type ConversationDetail,
+  type ConversationNodeRef,
+} from '@inwit/dto';
 import { getDocument } from '@/api/documents';
 import { ApiError, errorMessage } from '@/api/client';
 import {
@@ -41,6 +48,10 @@ export class AssistantService extends Service {
   contextDocId: string | null = null;
   contextDismissed = false;
   contextTitle: string | null = null;
+  /** Mind-map nodes waiting on the next message. */
+  nodes: ConversationNodeRef[] = [];
+  /** Bumps when a node is attached so the compose box can take focus. */
+  composeFocus = 0;
   private listTicket = 0;
   private openTicket = 0;
   private contextTicket = 0;
@@ -78,6 +89,29 @@ export class AssistantService extends Service {
 
   dismissContext(): void {
     this.contextDismissed = true;
+  }
+
+  attachNode(node: ConversationNodeRef): void {
+    const label = [...node.label.trim()].slice(0, 80).join('');
+    if (!label) return;
+    const next = { ...node, label };
+    if (this.nodes.some((item) => item.nodeId === next.nodeId && item.documentId === next.documentId)) {
+      this.composeFocus += 1;
+      return;
+    }
+    if (this.nodes.length >= CONVERSATION_NODE_MAX) {
+      this.error = `一次最多加入 ${String(CONVERSATION_NODE_MAX)} 个节点`;
+      this.composeFocus += 1;
+      return;
+    }
+    this.error = null;
+    this.nodes = [...this.nodes, next];
+    this.composeFocus += 1;
+  }
+
+  dismissNode(nodeId: string): void {
+    this.nodes = this.nodes.filter((item) => item.nodeId !== nodeId);
+    if (this.error === `一次最多加入 ${String(CONVERSATION_NODE_MAX)} 个节点`) this.error = null;
   }
 
   toggleHistory(): void {
@@ -133,9 +167,11 @@ export class AssistantService extends Service {
     const ids = [...documentIds];
     const chip = this.contextChip;
     if (chip && !ids.includes(chip.id)) ids.push(chip.id);
+    const attached = this.nodes;
     const input = {
       text: trimmed,
       documentIds: ids.slice(0, CONVERSATION_MENTION_MAX),
+      ...(attached.length > 0 ? { nodes: attached } : {}),
       dirtyDocumentIds: this.dirtyIds(),
       ...(llmConfigId ? { llmConfigId } : {}),
     };
@@ -144,6 +180,7 @@ export class AssistantService extends Service {
         ? await sendConversationMessage(this.current.id, input)
         : await createConversation(input);
       this.current = detail;
+      this.nodes = [];
       this.historyOpen = false;
       writeStored(detail.id);
       void this.loadList();

@@ -25,6 +25,8 @@ const TOOL_ACTIVITY: Record<string, string> = {
   update_document: '正在修改文档',
   create_document: '正在写新文档',
   write_cards: '正在写卡片',
+  read_mind_node: '正在阅读节点',
+  update_mind_node: '正在修改节点',
   search_cards: '正在检索卡片',
   search_user_memories: '正在检索记忆',
   search_memory_collections: '正在检索记忆',

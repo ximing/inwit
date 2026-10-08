@@ -1801,7 +1801,7 @@ export class ReaderService extends Service {
     }
   }
 
-  async archiveDocCard(id: string): Promise<void> {
+  async archiveDocCard(id: string, reopen = true): Promise<void> {
     if (this.cardBusy) return;
     const sheet = this.sheet;
     const fromCards =
@@ -1809,7 +1809,7 @@ export class ReaderService extends Service {
     this.closeSheet();
     const ok = await confirmAction('移入回收站', '移入后可在设置里恢复。', '移入回收站', true);
     if (!ok) {
-      if (this.doc?.cards.some((card) => card.id === id)) this.openCard(id, fromCards);
+      if (reopen && this.doc?.cards.some((card) => card.id === id)) this.openCard(id, fromCards);
       return;
     }
     this.cardBusy = true;
@@ -1884,11 +1884,15 @@ export class ReaderService extends Service {
   }
 
   async deleteAnnotationNote(id: string): Promise<void> {
-    const annotationIds = this.sheet?.kind === 'annotations' ? this.sheet.annotationIds : [id];
+    const annotationIds = this.sheet?.kind === 'annotations' ? this.sheet.annotationIds : null;
     this.closeSheet();
-    const ok = await confirmAction('删除这条批注？', '删除后可在设置里恢复。', '删除', true);
+    const hasChild = this.forest.some((node) => node.parentId === id);
+    const message = hasChild
+      ? '删除后可在设置里恢复。挂在下面的节点会各自成为一棵树，不会一起删掉。'
+      : '删除后可在设置里恢复。';
+    const ok = await confirmAction('删除这条批注？', message, '删除', true);
     if (!ok) {
-      this.sheet = { kind: 'annotations', annotationIds };
+      if (annotationIds) this.sheet = { kind: 'annotations', annotationIds };
       return;
     }
     try {

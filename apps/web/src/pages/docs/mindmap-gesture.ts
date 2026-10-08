@@ -86,6 +86,47 @@ export function mindDraftAfter(
   return { text: draft, save: draft.trim() !== saved };
 }
 
+/** 选中节点的删除。卡片和批注进回收站；迁移前留下的文本、图片节点直接删掉。 */
+export function mindDeleteAction(
+  kind: MindNodeKind,
+): 'archive-card' | 'remove-annotation' | 'remove-node' {
+  if (kind === 'card') return 'archive-card';
+  if (kind === 'annotation') return 'remove-annotation';
+  return 'remove-node';
+}
+
+const CHAT_LABEL_MAX = 80;
+const CHAT_LABEL_FALLBACK: Record<MindNodeKind, string> = {
+  card: '卡片',
+  annotation: '批注',
+  text: '文本',
+  image: '图片',
+};
+
+/** Chip text for 「加入对话」. The first non-empty line, clipped to the conversation label cap. */
+export function mindNodeChatLabel(input: {
+  kind: MindNodeKind;
+  concept?: string;
+  quote?: string;
+  note?: string;
+  text?: string;
+}): string {
+  const fallback = CHAT_LABEL_FALLBACK[input.kind];
+  const source =
+    input.kind === 'card'
+      ? (input.concept ?? '')
+      : input.kind === 'annotation'
+        ? input.note?.trim() || input.quote || ''
+        : input.kind === 'text'
+          ? (input.text ?? '')
+          : '';
+  const line = source
+    .split('\n')
+    .map((part) => part.trim())
+    .find((part) => part.length > 0);
+  return [...(line || fallback)].slice(0, CHAT_LABEL_MAX).join('');
+}
+
 /**
  * 脑图里选中一张未展开的卡，也要能确认、标问题、暂停或恢复、归档、看关联。
  * 列表里仍只看展开。两者都没有时这些操作不出现。

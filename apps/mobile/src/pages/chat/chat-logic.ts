@@ -68,6 +68,13 @@ export function conversationActionLine(
   if (action.type === 'create_document') {
     return { text: `已新建《${action.title}》`, documentId: action.documentId };
   }
+  if (action.type === 'update_mind_node') {
+    if (action.status === 'applied') {
+      return { text: `已更新节点「${action.title}」`, documentId: action.documentId };
+    }
+    const reason = action.reason ? `：${action.reason}` : '';
+    return { text: `没能修改节点「${action.title}」${reason}`, documentId: action.documentId };
+  }
   return {
     text: `已写入 ${String(action.count)} 张卡片到《${action.title}》`,
     documentId: action.documentId,

@@ -53,6 +53,7 @@ describe('conversation stream', () => {
       }),
     ).toEqual({ text: '回答', thinking: '可见' });
     expect(toolActivity('read_document')).toBe('正在阅读文档');
+    expect(toolActivity('update_mind_node')).toBe('正在修改节点');
     expect(toolActivity('something_else')).toBe('正在调用工具');
   });
 });

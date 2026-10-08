@@ -1,4 +1,10 @@
-import { docDisplayTitle, type ConversationAction, type DocumentListItem } from '@inwit/dto';
+import {
+  CONVERSATION_NODE_KIND_LABELS,
+  docDisplayTitle,
+  type ConversationAction,
+  type ConversationNodeRef,
+  type DocumentListItem,
+} from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
 import { Loader2, MessageSquare, PanelRightClose, Plus, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
@@ -56,7 +62,18 @@ function actionView(
     };
   }
   if (action.type === 'create_document') return { text: `已新建《${action.title}》`, href };
+  if (action.type === 'update_mind_node') {
+    if (action.status === 'applied') return { text: `已更新节点「${action.title}」`, href };
+    return {
+      text: `没能修改节点「${action.title}」${action.reason ? `：${action.reason}` : ''}`,
+      href,
+    };
+  }
   return { text: `已写入 ${String(action.count)} 张卡片到《${action.title}》`, href };
+}
+
+function nodeChipLabel(node: ConversationNodeRef): string {
+  return `${CONVERSATION_NODE_KIND_LABELS[node.kind]} · ${node.label}`;
 }
 
 function mentionTitle(item: DocumentListItem): string {
@@ -95,6 +112,11 @@ export const AssistantRail = observer(function AssistantRail() {
   useEffect(() => {
     service.setContext(docId);
   }, [service, docId]);
+
+  useEffect(() => {
+    if (prefs.assistantCollapsed || service.composeFocus === 0) return;
+    inputRef.current?.focus();
+  }, [service.composeFocus, prefs.assistantCollapsed]);
 
   useEffect(() => {
     if (prefs.assistantCollapsed) return;
@@ -327,12 +349,15 @@ export const AssistantRail = observer(function AssistantRail() {
             <ol className="assistant-messages">
               {service.current.messages.map((message) => (
                 <li key={message.id} className={message.role === 'user' ? 'assistant-msg is-user' : 'assistant-msg'}>
-                  {message.documents.length > 0 ? (
+                  {message.documents.length > 0 || (message.nodes?.length ?? 0) > 0 ? (
                     <p className="assistant-msg-docs">
                       {message.documents.map((doc) => (
                         <Link key={doc.id} to={hrefFor(doc.id)}>
                           @{doc.title}
                         </Link>
+                      ))}
+                      {(message.nodes ?? []).map((node) => (
+                        <span key={node.nodeId}>{nodeChipLabel(node)}</span>
                       ))}
                     </p>
                   ) : null}
@@ -402,7 +427,7 @@ export const AssistantRail = observer(function AssistantRail() {
             void submit();
           }}
         >
-          {chips.length > 0 ? (
+          {chips.length > 0 || service.nodes.length > 0 ? (
             <ul className="assistant-chips">
               {chips.map((chip) => {
                 const contextual = context?.id === chip.id && !mentionIds.has(chip.id);
@@ -422,6 +447,18 @@ export const AssistantRail = observer(function AssistantRail() {
                   </li>
                 );
               })}
+              {service.nodes.map((node) => (
+                <li key={`node-${node.documentId}-${node.nodeId}`}>
+                  <span>{nodeChipLabel(node)}</span>
+                  <button
+                    type="button"
+                    aria-label={`移除节点 ${node.label}`}
+                    onClick={() => service.dismissNode(node.nodeId)}
+                  >
+                    <X width={12} height={12} strokeWidth={1.8} />
+                  </button>
+                </li>
+              ))}
             </ul>
           ) : null}
           <div className="assistant-input-wrap">
@@ -429,7 +466,9 @@ export const AssistantRail = observer(function AssistantRail() {
               ref={inputRef}
               value={draft}
               rows={3}
-              placeholder="提问，或输入 @ 选择文档"
+              placeholder={
+                service.nodes.length > 0 ? '就这些节点提问，或让它修改' : '提问，或输入 @ 选择文档'
+              }
               aria-label="对话输入"
               disabled={service.busy}
               onChange={(event) => {

@@ -12,13 +12,18 @@ import {
   documentEditRefusal,
   editRefusalReason,
   editRefusalStatus,
+  formatMindNode,
+  planMindNodeUpdate,
 } from './conversation-logic.js';
+import { applyMindNodeUpdate, loadMindNodeFacts, mindNodeAllowed } from './conversation-nodes.js';
 import { cardDraftSchema, searchCardsTool, writeCardsTool, type DigestSession } from './tools.js';
 import { memoryLoadTools } from './memory-tools.js';
 
 export interface ConversationSession {
   userId: string;
   dirtyDocumentIds: ReadonlySet<string>;
+  /** documentId:nodeId pairs the user attached in this conversation. */
+  mindNodeKeys: ReadonlySet<string>;
   allowCards: boolean;
   actions: ConversationAction[];
   writtenCardIds: string[];
@@ -327,6 +332,99 @@ export function conversationWriteCardsTool(
   };
 }
 
+const mindNodeIdSchema = Type.Object({
+  documentId: Type.String({ minLength: 36, maxLength: 36 }),
+  nodeId: Type.String({ minLength: 36, maxLength: 36 }),
+});
+
+export function readMindNodeTool(session: ConversationSession): AgentTool<typeof mindNodeIdSchema> {
+  return {
+    name: 'read_mind_node',
+    label: '读取脑图节点',
+    description:
+      '读取用户加入过对话的一个脑图节点，返回概念、笔记或文字。只能读已经加入的节点。图片没有可阅读的内容。',
+    parameters: mindNodeIdSchema,
+    execute: async (_id, params) => {
+      if (!mindNodeAllowed(session.mindNodeKeys, params.documentId, params.nodeId)) {
+        const reason = '这个节点没有加入对话';
+        return toolResult(JSON.stringify({ ok: false, reason }), { ok: false, reason });
+      }
+      const [facts] = await loadMindNodeFacts(session.userId, [
+        { documentId: params.documentId, nodeId: params.nodeId, kind: 'text', label: '节点' },
+      ]);
+      if (!facts || facts.missing) {
+        const reason = '找不到这个节点';
+        return toolResult(JSON.stringify({ ok: false, reason }), { ok: false, reason });
+      }
+      const text = formatMindNode(facts);
+      return toolResult(JSON.stringify({ ok: true, text }), { ok: true, text });
+    },
+  };
+}
+
+const updateMindNodeSchema = Type.Object({
+  documentId: Type.String({ minLength: 36, maxLength: 36 }),
+  nodeId: Type.String({ minLength: 36, maxLength: 36 }),
+  text: Type.String({ minLength: 1, maxLength: 20_000 }),
+  detail: Type.Optional(Type.String({ maxLength: 4000 })),
+});
+
+export function updateMindNodeTool(
+  session: ConversationSession,
+): AgentTool<typeof updateMindNodeSchema> {
+  return {
+    name: 'update_mind_node',
+    label: '修改脑图节点',
+    description:
+      '修改用户加入过对话的脑图节点。text 写入卡片概念、批注笔记或文本节点的文字。批注的引文不动。detail 只在用户要求改卡片例子时传入。不要改题目，不要删除节点，不要改没有加入对话的节点。图片节点会失败。',
+    parameters: updateMindNodeSchema,
+    execute: async (_id, params) => {
+      const refuse = (reason: string, title = '节点') => {
+        session.actions.push({
+          type: 'update_mind_node',
+          documentId: params.documentId,
+          nodeId: params.nodeId,
+          title,
+          status: 'rejected',
+          reason,
+        });
+        return toolResult(JSON.stringify({ ok: false, reason }), { ok: false, reason });
+      };
+      if (!mindNodeAllowed(session.mindNodeKeys, params.documentId, params.nodeId)) {
+        return refuse('这个节点没有加入对话');
+      }
+      const [facts] = await loadMindNodeFacts(session.userId, [
+        { documentId: params.documentId, nodeId: params.nodeId, kind: 'text', label: '节点' },
+      ]);
+      if (!facts || facts.missing) return refuse('找不到这个节点');
+      if (facts.rejected) return refuse('这张卡已经丢弃，不能修改', facts.label);
+      const plan = planMindNodeUpdate({
+        kind: facts.kind,
+        text: params.text,
+        ...(params.detail !== undefined ? { detail: params.detail } : {}),
+      });
+      if (!plan.ok) return refuse(plan.reason, facts.label);
+      const saved = await applyMindNodeUpdate(
+        session.userId,
+        { documentId: params.documentId, nodeId: params.nodeId },
+        plan,
+      );
+      if (!saved.ok) return refuse(saved.reason, facts.label);
+      session.actions.push({
+        type: 'update_mind_node',
+        documentId: params.documentId,
+        nodeId: params.nodeId,
+        title: saved.label,
+        status: 'applied',
+      });
+      return toolResult(
+        JSON.stringify({ ok: true, nodeId: params.nodeId, title: saved.label }),
+        { ok: true, nodeId: params.nodeId },
+      );
+    },
+  };
+}
+
 export function conversationTools(session: ConversationSession): AgentTool[] {
   const search = searchCardsTool(digestSession(session, session.userId));
   search.description = '检索用户已有卡片。回答前可以先查一次，避免把已经学过的内容再讲一遍。';
@@ -338,5 +436,7 @@ export function conversationTools(session: ConversationSession): AgentTool[] {
     updateDocumentTool(session),
     createConversationDocumentTool(session),
     conversationWriteCardsTool(session),
+    readMindNodeTool(session),
+    updateMindNodeTool(session),
   ];
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "agent_messages" ADD COLUMN "node_refs" jsonb DEFAULT '[]'::jsonb NOT NULL;

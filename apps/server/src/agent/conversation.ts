@@ -7,7 +7,7 @@ import {
   loadConversationRun,
   patchConversationDraft,
 } from '../conversations/conversation.service.js';
-import { wantsCards, buildConversationPrompt, fallbackReply } from './conversation-logic.js';
+import { wantsCards, buildConversationPrompt, fallbackReply, mindNodeKey } from './conversation-logic.js';
 import {
   applyConversationStream,
   conversationStreamView,
@@ -92,9 +92,11 @@ export const CONVERSATION_SYSTEM_PROMPT = `你是 Inwit 的对话助手。用户
 - 用户明确要求修改某篇已有文档时，调用 update_document，传入修改后的完整 Markdown 正文。只改用户指定的部分，其余内容保持原意。
 - 用户要新写一篇、且没有指定要改的文档时，调用 create_document。
 - 只有用户明确说要做成卡片、切卡或生成卡片时，才调用 write_cards。不要主动切卡，改完正文也不要再消化。
+- 用户可以把脑图节点加入对话。本轮带全文，之前加入的节点在对话里留着 id。讲解直接写在正文里。用户要求修改时调用 update_mind_node；这轮没有正文就先 read_mind_node。
 
 约束：
 - 有未保存修改的文档，update_document 会被拒绝。遇到拒绝就说明原因，不要换一篇偷偷改。
+- 只修改用户加入过对话的节点。卡片改概念，detail 才改例子；批注只改笔记，引文不动；文本节点改文字。图片不能改。不要改题目，不要删除节点。
 - 不要删除或归档文档，不要改复习计划、主题地图或设置。
 - 不知道就说不知道，不要编造文档内容。`;
 
@@ -108,9 +110,20 @@ export async function processConversation(job: JobRow): Promise<void> {
     return;
   }
 
+  const mindNodeKeys = new Set<string>();
+  for (const message of run.earlier) {
+    for (const node of message.nodes) {
+      mindNodeKeys.add(mindNodeKey(node.documentId, node.nodeId));
+    }
+  }
+  for (const node of run.nodes) {
+    mindNodeKeys.add(mindNodeKey(node.documentId, node.nodeId));
+  }
+
   const session: ConversationSession = {
     userId: job.userId,
     dirtyDocumentIds: new Set(dirtyDocumentIds),
+    mindNodeKeys,
     allowCards: wantsCards(run.latest),
     actions: [],
     writtenCardIds: [],
@@ -133,6 +146,7 @@ export async function processConversation(job: JobRow): Promise<void> {
     systemPrompt: CONVERSATION_SYSTEM_PROMPT,
     userPrompt: buildConversationPrompt({
       mentions: run.mentions,
+      nodes: run.nodes,
       dirtyDocumentIds,
       allowCards: session.allowCards,
       earlier: run.earlier,

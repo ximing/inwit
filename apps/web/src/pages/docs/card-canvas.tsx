@@ -1,7 +1,7 @@
 /**
  * 文档脑图。平移、缩放的世界坐标里自动布局，节点不记住坐标。
  * 单击选中，卡片和批注同时把左侧正文滚到锚点；空格或双击进入编辑。
- * Tab 加子节点，Enter 加兄弟节点，⌘] / ⌘[ 缩进提升。
+ * Tab 加子节点，Enter 加兄弟节点，Delete / Backspace 删除选中节点，⌘] / ⌘[ 缩进提升。
  * 双击空白新建文本节点。选中卡片时脉络以浮层锚在节点旁，
  * 本文内的关联画成虚线边；选中后无关节点弱化，小地图帮助定位。
  * 拖到上下沿插入，拖到节点上成为子节点，拖到空白处独立成树。
@@ -16,6 +16,7 @@ import { observer, useService } from '@rabjs/react';
 import {
   CornerDownRight,
   ImagePlus,
+  MessageSquarePlus,
   Pencil,
   Plus,
   Redo2,
@@ -42,6 +43,8 @@ import { Tip } from '@/components/tip';
 import { createCardLink } from '@/api/cards';
 import { errorMessage } from '@/api/client';
 import { DialogService } from '@/services/dialog.service';
+import { UiPrefsService } from '@/services/ui-prefs.service';
+import { AssistantService } from '@/shell/assistant.service';
 import { CanvasFreeNode, CanvasNoteNode } from './canvas-nodes';
 import { useCardLinks } from './card-link-list';
 import {
@@ -84,7 +87,7 @@ import {
   mindTopmostSelected,
   type MindCardTodo,
 } from './mindmap-focus';
-import { decideMindGesture, type MindIntent } from './mindmap-gesture';
+import { decideMindGesture, mindDeleteAction, mindNodeChatLabel, type MindIntent } from './mindmap-gesture';
 import { hitCardBox, hitMindDrop, type MindDrop } from './mindmap-hit';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
 import { parseQuoteDrag, quoteDropPlace, QUOTE_DRAG_MIME, type QuoteDragPayload } from './mindmap-quote';
@@ -210,6 +213,8 @@ export const CardCanvas = observer(function CardCanvas({
 }) {
   const service = useService(DocsService);
   const dialog = useService(DialogService);
+  const assistant = useService(AssistantService);
+  const prefs = useService(UiPrefsService);
   const fileRef = useRef<HTMLInputElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const userMoved = useRef(false);
@@ -396,6 +401,28 @@ export const CardCanvas = observer(function CardCanvas({
     () => new Map(service.canvasNodes.map((node) => [node.id, node])),
     [service.canvasNodes],
   );
+
+  const addNodeToChat = (id: string) => {
+    if (!docId) return;
+    const member = forest.find((item) => item.id === id);
+    if (!member) return;
+    const card = cardById.get(id);
+    const note = noteById.get(id);
+    const stored = nodeById.get(id);
+    prefs.setAssistantCollapsed(false);
+    assistant.attachNode({
+      documentId: docId,
+      nodeId: id,
+      kind: member.kind,
+      label: mindNodeChatLabel({
+        kind: member.kind,
+        concept: card?.concept,
+        quote: note?.quote,
+        note: note?.note,
+        text: stored?.text ?? undefined,
+      }),
+    });
+  };
   const layout = useMemo(
     () =>
       layoutMindForest(
@@ -1115,12 +1142,13 @@ export const CardCanvas = observer(function CardCanvas({
     if (event.key === 'Delete' || event.key === 'Backspace') {
       event.preventDefault();
       event.stopPropagation();
+      // 编辑草稿时 Backspace 只改文字。焦点若已经离开输入框，也不把整节点删掉。
+      if (editingId) return;
       if (selectedIds.size > 1) {
         batchArchive();
         return;
       }
-      if (member.kind === 'text' || member.kind === 'image') void service.removeCanvasNode(selectedId);
-      else if (member.kind === 'card') void service.archiveDocCard(selectedId);
+      deleteMember(selectedId);
       return;
     }
     if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
@@ -1164,13 +1192,17 @@ export const CardCanvas = observer(function CardCanvas({
     .map((id) => cardById.get(id))
     .filter((card): card is DocumentCard => Boolean(card));
 
+  const deleteMember = (id: string) => {
+    const target = forest.find((item) => item.id === id);
+    if (!target) return;
+    const action = mindDeleteAction(target.kind);
+    if (action === 'archive-card') void service.archiveDocCard(id);
+    else if (action === 'remove-annotation') void service.removeAnnotation(id);
+    else void service.removeCanvasNode(id);
+  };
+
   const batchArchive = () => {
-    for (const id of selectedIds) {
-      const member = forest.find((item) => item.id === id);
-      if (!member) continue;
-      if (member.kind === 'card') void service.archiveDocCard(id);
-      else if (member.kind === 'text' || member.kind === 'image') void service.removeCanvasNode(id);
-    }
+    for (const id of selectedIds) deleteMember(id);
   };
 
   const batchConfirm = () => {
@@ -1273,6 +1305,7 @@ export const CardCanvas = observer(function CardCanvas({
           onSelect: () => void navigator.clipboard?.writeText(maskedCopy),
         });
       }
+      items.push({ key: 'chat', label: '加入对话', onSelect: () => addNodeToChat(id) });
       return items;
     }
     if (member.kind !== 'image') {
@@ -1315,19 +1348,15 @@ export const CardCanvas = observer(function CardCanvas({
         onSelect: () => void navigator.clipboard?.writeText(copyText),
       });
     }
+    items.push({ key: 'chat', label: '加入对话', onSelect: () => addNodeToChat(id) });
     items.push({ key: 'child', label: '加子节点', onSelect: () => onAddChild(id) });
     items.push({ key: 'sibling', label: '加兄弟节点', onSelect: () => onAddSibling(id) });
-    if (member.kind !== 'annotation') {
-      items.push({
-        key: 'delete',
-        label: member.kind === 'card' ? '归档' : '删除',
-        danger: true,
-        onSelect: () => {
-          if (member.kind === 'card') void service.archiveDocCard(id);
-          else void service.removeCanvasNode(id);
-        },
-      });
-    }
+    items.push({
+      key: 'delete',
+      label: member.kind === 'card' ? '归档' : '删除',
+      danger: true,
+      onSelect: () => deleteMember(id),
+    });
     return items;
   })();
 
@@ -1741,21 +1770,30 @@ export const CardCanvas = observer(function CardCanvas({
                     <CornerDownRight width={12} height={12} strokeWidth={1.8} />
                   </button>
                   </Tip>
-                  {member.kind !== 'annotation' ? (
-                    <Tip content="删除">
-                    <button
-                      type="button"
-                      aria-label="删除"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (member.kind === 'card') void service.archiveDocCard(member.id);
-                        else void service.removeCanvasNode(member.id);
-                      }}
-                    >
-                      <Trash2 width={12} height={12} strokeWidth={1.8} />
-                    </button>
-                    </Tip>
-                  ) : null}
+                  <Tip content="加入对话">
+                  <button
+                    type="button"
+                    aria-label="加入对话"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      addNodeToChat(member.id);
+                    }}
+                  >
+                    <MessageSquarePlus width={12} height={12} strokeWidth={1.8} />
+                  </button>
+                  </Tip>
+                  <Tip content={member.kind === 'card' ? '移入回收站' : '删除'}>
+                  <button
+                    type="button"
+                    aria-label="删除"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      deleteMember(member.id);
+                    }}
+                  >
+                    <Trash2 width={12} height={12} strokeWidth={1.8} />
+                  </button>
+                  </Tip>
                 </div>
               ) : null}
             </SizedNode>

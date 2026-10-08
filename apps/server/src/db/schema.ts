@@ -53,6 +53,7 @@ import type {
   CardAcceptance,
   CardLinkOrigin,
   ConversationAction,
+  ConversationNodeRef,
   CardLinkType,
   CardQuestionType,
   CardSource,
@@ -788,6 +789,11 @@ export const agentMessages = pgTable(
     /** What the assistant is doing while the reply is still pending. */
     activity: varchar('activity', { length: 40 }),
     documentIds: jsonb('document_ids').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** Mind-map nodes the user attached on this turn. Empty for assistant rows. */
+    nodeRefs: jsonb('node_refs')
+      .$type<ConversationNodeRef[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     actions: jsonb('actions').$type<ConversationAction[]>().notNull().default(sql`'[]'::jsonb`),
     status: varchar('status', { length: 16 })
       .$type<'pending' | 'done' | 'failed'>()

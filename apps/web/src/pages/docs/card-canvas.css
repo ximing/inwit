@@ -538,17 +538,30 @@
 @container card-rail (max-width: 430px) {
   .doc-canvas-tools .is-fit { display: none; }
 }
-/* 超窄（overlay 栏）：药丸按组折成两行，去掉跨组分隔线与整角，行尾对齐，不再滚动 */
+/* 超窄：四组收成右下角两列。绝对定位且宽度不定时，折行 flex 会收成一组一行。
+   列用 max-content，文字不折行，避免「待办 / 默写」被挤成竖排。 */
 @container card-rail (max-width: 300px) {
   .doc-canvas-tools {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    display: grid;
+    grid-template-columns: max-content max-content;
+    justify-content: end;
+    justify-items: end;
+    align-items: center;
+    column-gap: 6px;
     row-gap: 2px;
+    width: max-content;
+    padding: 3px 4px;
     overflow: visible;
     border-radius: var(--r-md);
   }
+  .doc-canvas-tools button {
+    white-space: nowrap;
+    padding: 0 4px;
+  }
+  .doc-canvas-tools button.is-wide { padding: 0 6px; }
+  .doc-canvas-tools button.is-zoom { min-width: 36px; padding: 0 2px; }
   .doc-canvas-tools-group + .doc-canvas-tools-group {
-    margin-left: 2px;
+    margin-left: 0;
     padding-left: 0;
     border-left: 0;
   }
