@@ -11,6 +11,7 @@ import { LINK_META } from '@/pages/docs/card-links-logic';
 import { CanvasLinksPanel, LINKS_PANEL_H, LINKS_PANEL_W } from '@/pages/docs/canvas-links-panel';
 import { CanvasMinimap } from '@/pages/docs/canvas-minimap';
 import { CanvasSearch } from '@/pages/docs/canvas-overlays';
+import { wheelZoomFactor } from '@/pages/docs/canvas-zoom';
 import {
   linksPanelAnchor,
   mindCardTodo,
@@ -179,6 +180,7 @@ export const TopicCanvas = observer(function TopicCanvas() {
     return () => observer.disconnect();
   }, [fit]);
 
+  // graph 到了画布才出现。空依赖会在「正在铺开…」时错过滚轮绑定。
   useEffect(() => {
     const el = viewportRef.current;
     if (!el) return;
@@ -190,7 +192,10 @@ export const TopicCanvas = observer(function TopicCanvas() {
       const anchorY = event.clientY - rect.top;
       if (event.ctrlKey || event.metaKey) {
         setView((prev) => {
-          const zoom = Math.min(1.75, Math.max(0.35, prev.zoom * (event.deltaY < 0 ? 1.08 : 0.92)));
+          const zoom = Math.min(
+            1.75,
+            Math.max(0.35, prev.zoom * wheelZoomFactor(event.deltaY, event.deltaMode)),
+          );
           const worldX = (anchorX - prev.panX) / prev.zoom;
           const worldY = (anchorY - prev.panY) / prev.zoom;
           return { zoom, panX: anchorX - worldX * zoom, panY: anchorY - worldY * zoom };
@@ -201,7 +206,7 @@ export const TopicCanvas = observer(function TopicCanvas() {
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [graph]);
 
   useEffect(() => {
     if (selectedId && !cardById.has(selectedId)) setSelectedId(null);

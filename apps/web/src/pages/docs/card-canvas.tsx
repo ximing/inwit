@@ -63,6 +63,7 @@ import {
   CanvasSearch,
   type CanvasMenuItem,
 } from './canvas-overlays';
+import { wheelZoomFactor } from './canvas-zoom';
 import { DocsService } from './docs.service';
 import {
   childPlace,
@@ -609,7 +610,10 @@ export const CardCanvas = observer(function CardCanvas({
       const anchorY = event.clientY - rect.top;
       if (event.ctrlKey || event.metaKey) {
         setView((prev) => {
-          const zoom = Math.min(1.75, Math.max(0.35, prev.zoom * (event.deltaY < 0 ? 1.08 : 0.92)));
+          const zoom = Math.min(
+            1.75,
+            Math.max(0.35, prev.zoom * wheelZoomFactor(event.deltaY, event.deltaMode)),
+          );
           const worldX = (anchorX - prev.panX) / prev.zoom;
           const worldY = (anchorY - prev.panY) / prev.zoom;
           return { zoom, panX: anchorX - worldX * zoom, panY: anchorY - worldY * zoom };
