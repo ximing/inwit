@@ -1,12 +1,14 @@
 {
   "identifier": "default",
-  "description": "Main window, local to the app URL: event listen and titlebar theme only.",
+  "description": "Main window, local to the app URL: event listen, titlebar theme, and the due-count icon badge.",
   "windows": ["main"],
   "local": true,
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-set-theme",
-    "core:window:allow-set-background-color"
+    "core:window:allow-set-background-color",
+    "core:window:allow-set-badge-count",
+    "core:window:allow-set-overlay-icon"
   ]
 }

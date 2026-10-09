@@ -13,6 +13,10 @@ export const NATIVE_EVENT = {
 type NativeWindowHandle = {
   setTheme(theme: 'light' | 'dark'): Promise<void>;
   setBackgroundColor(color: string): Promise<void>;
+  /** macOS Dock and Linux launcher. `undefined` clears. Windows rejects this call. */
+  setBadgeCount(count?: number): Promise<void>;
+  /** Windows taskbar overlay. `undefined` clears. */
+  setOverlayIcon(icon?: Uint8Array): Promise<void>;
 };
 
 export async function invokeNative<T>(command: string): Promise<T | undefined> {
@@ -39,5 +43,7 @@ export async function loadNativeWindow(): Promise<NativeWindowHandle | null> {
   return {
     setTheme: (theme) => win.setTheme(theme),
     setBackgroundColor: (color) => win.setBackgroundColor(color),
+    setBadgeCount: (count) => win.setBadgeCount(count),
+    setOverlayIcon: (icon) => win.setOverlayIcon(icon),
   };
 }

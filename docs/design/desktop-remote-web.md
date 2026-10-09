@@ -416,19 +416,21 @@ capability `apps/desktop/src-tauri/capabilities/default.json`：
 ```json
 {
   "identifier": "default",
-  "description": "Main window, local to the app URL: event listen and titlebar theme only.",
+  "description": "Main window, local to the app URL: event listen, titlebar theme, and the due-count icon badge.",
   "windows": ["main"],
   "local": true,
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-set-theme",
-    "core:window:allow-set-background-color"
+    "core:window:allow-set-background-color",
+    "core:window:allow-set-badge-count",
+    "core:window:allow-set-overlay-icon"
   ]
 }
 ```
 
-不写 `remote`。不要用 `core:default`：Tauri 2.11.5 的这组权限包含 `core:path`、`core:event` 的 emit / emit-to、`core:window` 的光标与显示器几何、`core:webview` 的 `internal-toggle-devtools`、`core:app`、`core:image`、`core:resources`、`core:menu`（含 `set-as-app-menu`）和 `core:tray`。线上页面不需要这些。页面只 `listen` / `unlisten` 截图事件，并用 `setTheme` / `setBackgroundColor`。Rust 的 `app.emit` 不需要页面的 `allow-emit`。
+不写 `remote`。不要用 `core:default`：Tauri 2.11.5 的这组权限包含 `core:path`、`core:event` 的 emit / emit-to、`core:window` 的光标与显示器几何、`core:webview` 的 `internal-toggle-devtools`、`core:app`、`core:image`、`core:resources`、`core:menu`（含 `set-as-app-menu`）和 `core:tray`。线上页面不需要这些。页面只 `listen` / `unlisten` 截图事件，用 `setTheme` / `setBackgroundColor` 同步标题栏，并用 `setBadgeCount`（macOS Dock、Linux）和 `setOverlayIcon`（Windows 任务栏）把待复习数打到应用图标上。Rust 的 `app.emit` 不需要页面的 `allow-emit`。
 
 删除 `store:default`、`notification:default`、整段 `http:default`，以及 `window-state:default` 和 `global-shortcut:default`。后两个是 JS invoke 权限，不是插件在 Rust 里工作的条件。`global-shortcut:default` 若留下，脚本可以 `register` 一个系统级热键。S3 只作为 `fetch` 的跨源 PUT，不是文档源，不要把 `s3.aimo.plus` 或 `https://*/*` 写进 capability。客户端路由是 History API，不换源。
 
@@ -526,6 +528,7 @@ Web 客户端删除这些导出：`bootAuth`、`refreshSession`、`persistAuth`�
 |---|---|
 | `listen` / `unlisten` | capability 里的 `core:event:allow-listen` 与 `allow-unlisten`。没有 `allow-emit` / `allow-emit-to`。Rust 的 `app.emit` 不走页面权限 |
 | `setTheme` / `setBackgroundColor` | `core:window:allow-set-theme` 与 `allow-set-background-color`。应用 URL 是 `Origin::Local`，且 `"local": true` |
+| `setBadgeCount` / `setOverlayIcon` | `core:window:allow-set-badge-count` 与 `allow-set-overlay-icon`。待复习数来自 `LayoutService.dueCount`。0 清除角标。macOS / Linux 走数字角标；Windows 的 `setBadgeCount` 不可用，改画任务栏覆盖图标 |
 | `capture_region` / `clipboard_image` | 非插件命令。没有 app ACL manifest 时，local 源跳过 ACL。这不是 capability 里的一条 permission |
 
 页面不能调用：`core:default` 会带上的 path、resources、image、app、menu、tray、devtools（`internal-toggle-devtools`）、光标位置和显示器几何；`window-state` 的 JS 命令；`global-shortcut` 的 `register` / `unregister` / `unregister_all` / `is_registered`；`plugin-http`、store、notification、opener、shell。窗口几何由插件在进程内的 `on_window_ready` 恢复。热键由 `GlobalShortcutExt::register` 注册。
@@ -535,6 +538,7 @@ Web 客户端删除这些导出：`bootAuth`、`refreshSession`、`persistAuth`�
 | XSS 调用 `clipboard_image`，静默读取剪贴板图片 | 中 | 只有当前文档是 `get_app_url()`（应用源，`Origin::Local`）时才走这条 local 旁路。`on_navigation` 拒绝 `tauri:` 与 `tauri.localhost`，避免那两个同样算 local 的源加载。其它 https 主机就算占住主框架也不是 `get_app_url()`，没有 `remote`，插件命令和自定义命令都不授权。不增加 token / store / http / shell / opener 的 JS 权限。菜单和快捷键在 Rust 里直接调同一函数 |
 | XSS 调用 `capture_region` | 低 | 会隐藏窗口并进入选区，用户能看见。不是后台偷屏 |
 | XSS 调用 `setTheme` / `setBackgroundColor` | 低 | 只影响系统标题栏颜色。失败被 `syncNativeWindowTheme` 吞掉 |
+| XSS 调用 `setBadgeCount` / `setOverlayIcon` | 低 | 只改 Dock / 任务栏上的数字。失败被 `syncNativeDueBadge` 吞掉。不能读文件、不能改窗口几何 |
 | XSS `listen` 截图事件 | 低 | 只能收到壳已经发出的 base64 或错误字符串，不能自己 `emit` 去伪造给其它窗口 |
 | 把 `global-shortcut:default` 留在 capability 里 | 高 | 页面可以注册系统级热键。不授予。合同测试要求权限列表里没有它 |
 | 把 `core:default` 留在 capability 里 | 高 | 页面可以改菜单、托盘、开 devtools、解析路径。不授予 |
@@ -675,7 +679,7 @@ Web（Vitest）：
 - `beforeBuildCommand` 不存在。
 - `identifier`、窗口尺寸、系统标题栏、macOS ad-hoc 签名、图标、托盘、菜单、红灯隐藏，保持原断言。
 - 插件断言改为：Cargo 和 `lib.rs` **没有** `tauri-plugin-http`、`tauri-plugin-store`、`tauri-plugin-notification`、`unsafe-headers`；**仍有** `window-state`、`global-shortcut`、`tray-icon`。
-- capability：`local === true`；没有 `remote`（或 `remote.urls` 缺省且为空）；权限数组恰好是 `core:event:allow-listen`、`core:event:allow-unlisten`、`core:window:allow-set-theme`、`core:window:allow-set-background-color`。不含 `core:default`、`window-state:default`、`global-shortcut:default`、`store:default`、`notification:default`、`http:default`，也不含 `https://*/*`。
+- capability：`local === true`；没有 `remote`（或 `remote.urls` 缺省且为空）；权限数组恰好是 `core:event:allow-listen`、`core:event:allow-unlisten`、`core:window:allow-set-theme`、`core:window:allow-set-background-color`、`core:window:allow-set-badge-count`、`core:window:allow-set-overlay-icon`。不含 `core:default`、`window-state:default`、`global-shortcut:default`、`store:default`、`notification:default`、`http:default`，也不含 `https://*/*`。
 - `src-tauri/permissions` 目录不存在。不要为了让合同测试通过而去生成一份不含两个截图命令的 app ACL manifest。
 - `lib.rs` 里 `on_navigation` 对 `http` / `https` 返回 true，对 scheme `tauri` 和 host `tauri.localhost` 返回 false，并且这个回调里没有 `open::that`。`open::that` 只出现在 `on_new_window` 路径。`reload_main` 在当前源不是应用源时 `navigate` 到 `devUrl`（仅 `cfg(dev)`）或 `frontendDist`。判定应用源使用 `cfg(dev)` / `cfg!(dev)`，不用 `debug_assertions`。
 - `package.json` 不再依赖 `@inwit/web`、`plugin-http`、`plugin-store`。

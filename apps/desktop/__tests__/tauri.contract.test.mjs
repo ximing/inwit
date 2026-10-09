@@ -12,6 +12,8 @@ const PERMISSIONS = [
   'core:event:allow-unlisten',
   'core:window:allow-set-theme',
   'core:window:allow-set-background-color',
+  'core:window:allow-set-badge-count',
+  'core:window:allow-set-overlay-icon',
 ];
 
 describe('Tauri desktop contract', () => {
@@ -100,7 +102,7 @@ describe('Tauri desktop contract', () => {
     assert.ok(read('src-tauri/icons/tray.png').length > 0);
   });
 
-  it('allows only listen, unlisten, and titlebar theme on the local app URL', () => {
+  it('allows listen, unlisten, titlebar theme, and the due-count icon badge on the local app URL', () => {
     assert.equal(caps.local, true);
     assert.equal(caps.remote, undefined);
     assert.deepEqual(caps.permissions, PERMISSIONS);
@@ -159,6 +161,8 @@ describe('Tauri desktop contract', () => {
       assert.match(lib, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
     assert.match(lib, /剪贴板里没有图片/);
+    assert.match(native, /setBadgeCount/);
+    assert.match(native, /setOverlayIcon/);
   });
 
   it('ad-hoc signs macOS bundles so Apple Silicon is not marked damaged', () => {
