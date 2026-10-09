@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+/** Empty or whitespace means the default endpoint; any other value must be a URL. */
+export const optionalBaseUrlSchema = z.preprocess((value: unknown) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}, z.string().url().max(512).nullable().optional());
+
 export const paginationQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
   offset: z.coerce.number().int().min(0).default(0),

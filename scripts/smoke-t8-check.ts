@@ -15,8 +15,8 @@ function pass(name: string): void {
   console.log(`PASS  ${name}`);
 }
 
-const { rows } = await pool.query<{ id: string; email: string }>(`
-  SELECT u.id, u.email
+const { rows } = await pool.query<{ id: string; email: string; session_version: number | null }>(`
+  SELECT u.id, u.email, u.session_version
   FROM users u
   WHERE EXISTS (SELECT 1 FROM jobs j WHERE j.user_id = u.id)
     AND EXISTS (SELECT 1 FROM llm_usage_logs l WHERE l.user_id = u.id)
@@ -31,7 +31,9 @@ pass(`found user ${user.email}`);
 
 const app = await buildApp();
 try {
-  const signed = app.signCookie(signAccessToken(user.id));
+  const parsedVersion = Number(user.session_version ?? 0);
+  const sessionVersion = Number.isFinite(parsedVersion) ? parsedVersion : 0;
+  const signed = app.signCookie(signAccessToken(user.id, sessionVersion));
   const cookieHeader = `${ACCESS_COOKIE_NAME}=${encodeURIComponent(signed)}`;
 
   const unauth = await app.inject({ method: 'GET', url: '/api/admin/jobs' });

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackHeader } from '@/components/stack-header';
+import { confirmAction } from '@/lib/confirm';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { useTheme, type ThemeTokens } from '@/theme';
 import {
@@ -40,7 +41,7 @@ const TokensContent = observer(function TokensContent() {
       >
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.lede}>
-            用于脚本或自动化调用接口。生成后永久有效。请求头 Authorization: Bearer &lt;token&gt;。
+            用于脚本或自动化调用接口。生成后不会过期。请求头 Authorization: Bearer &lt;token&gt;。
           </Text>
 
           <View style={styles.tabs}>
@@ -103,15 +104,35 @@ const TokensContent = observer(function TokensContent() {
                     <Text style={styles.meta}>
                       {token.preview} · {formatDate(token.createdAt)} 生成
                     </Text>
-                    <Pressable
-                      disabled={service.copyingId === token.id}
-                      onPress={() => void service.copyAccessToken(token.id)}
-                      style={styles.secondary}
-                    >
-                      <Text style={styles.secondaryText}>
-                        {service.copyingId === token.id ? '复制中…' : '复制'}
-                      </Text>
-                    </Pressable>
+                    <View style={styles.actions}>
+                      <Pressable
+                        disabled={service.copyingId === token.id}
+                        onPress={() => void service.copyAccessToken(token.id)}
+                        style={styles.secondary}
+                      >
+                        <Text style={styles.secondaryText}>
+                          {service.copyingId === token.id ? '复制中…' : '复制'}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        disabled={service.revokingId === token.id}
+                        onPress={() => {
+                          void confirmAction(
+                            '作废令牌',
+                            '作废后，使用该令牌的脚本和移动端需要重新登录。',
+                            '作废',
+                            true,
+                          ).then((ok) => {
+                            if (ok) void service.revokeAccessToken(token.id);
+                          });
+                        }}
+                        style={styles.secondary}
+                      >
+                        <Text style={styles.dangerText}>
+                          {service.revokingId === token.id ? '作废中…' : '作废'}
+                        </Text>
+                      </Pressable>
+                    </View>
                   </View>
                 ))
               )}
@@ -226,9 +247,9 @@ function makeStyles(theme: ThemeTokens) {
     },
     cardTitle: { fontSize: 15, fontWeight: '600', color: theme.colors.ink },
     meta: { fontSize: 12.5, color: theme.colors.ink3, marginTop: 4, fontFamily: theme.typography.mono },
+    actions: { flexDirection: 'row', gap: 8, marginTop: 10 },
     secondary: {
       alignSelf: 'flex-start',
-      marginTop: 10,
       borderWidth: 1,
       borderColor: theme.colors.line,
       borderRadius: theme.radius.sm,
@@ -238,6 +259,7 @@ function makeStyles(theme: ThemeTokens) {
       justifyContent: 'center',
     },
     secondaryText: { color: theme.colors.ink2, fontSize: 13, fontWeight: '500' },
+    dangerText: { color: theme.colors.accent, fontSize: 13, fontWeight: '500' },
     logRow: {
       paddingVertical: 10,
       borderBottomWidth: StyleSheet.hairlineWidth,

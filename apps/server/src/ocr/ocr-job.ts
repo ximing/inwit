@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { finishExecution, startExecution } from '../agent/executions.js';
+import { AgentTerminalError } from '../agent/terminal-error.js';
 import { config } from '../config.js';
+import { AppError } from '../errors.js';
 import { getDb } from '../db/index.js';
 import { documents, jobs, ocrPages, type DocumentRow, type JobRow } from '../db/schema.js';
 import { markdownToContentJson } from '../documents/content-json.js';
@@ -307,6 +309,9 @@ export async function processOcr(job: JobRow): Promise<void> {
       status: 'failed',
       error: (err instanceof Error ? err.message : String(err)).slice(0, 2000),
     });
+    if (err instanceof AppError && err.code === 'LLM_NOT_CONFIGURED') {
+      throw new AgentTerminalError(err.message);
+    }
     throw err;
   } finally {
     await rm(dir, { recursive: true, force: true });

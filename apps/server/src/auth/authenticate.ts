@@ -1,4 +1,5 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import type { UserRow } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import type { AuthPrincipal } from '../types.js';
 import {
@@ -11,14 +12,15 @@ import { getUserById, issueAuthCookies } from './auth.service.js';
 import { ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, readSignedCookie } from './cookies.js';
 import { verifyToken } from './token.js';
 
-async function userIdFromToken(
+async function userFromToken(
   token: string,
   type: 'access' | 'refresh',
-): Promise<string | undefined> {
+): Promise<UserRow | undefined> {
   try {
-    const { userId } = verifyToken(token, type);
-    await getUserById(userId);
-    return userId;
+    const { userId, sessionVersion } = verifyToken(token, type);
+    const user = await getUserById(userId);
+    if (user.sessionVersion !== sessionVersion) return undefined;
+    return user;
   } catch {
     return undefined;
   }
@@ -30,8 +32,8 @@ async function principalFromBearer(token: string): Promise<AuthPrincipal | undef
     if (!found) return undefined;
     return { id: found.userId, accessTokenId: found.tokenId };
   }
-  const userId = await userIdFromToken(token, 'access');
-  return userId ? { id: userId } : undefined;
+  const user = await userFromToken(token, 'access');
+  return user ? { id: user.id } : undefined;
 }
 
 /** Fastify decorator: Bearer PAT / JWT, else access cookie (refresh cookie silently rotates it). */
@@ -48,19 +50,19 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply): Pr
 
   const access = readSignedCookie(req, ACCESS_COOKIE_NAME);
   if (access) {
-    const userId = await userIdFromToken(access, 'access');
-    if (userId) {
-      req.user = { id: userId };
+    const user = await userFromToken(access, 'access');
+    if (user) {
+      req.user = { id: user.id };
       return;
     }
   }
 
   const refresh = readSignedCookie(req, REFRESH_COOKIE_NAME);
   if (refresh) {
-    const userId = await userIdFromToken(refresh, 'refresh');
-    if (userId) {
-      issueAuthCookies(reply, userId);
-      req.user = { id: userId };
+    const user = await userFromToken(refresh, 'refresh');
+    if (user) {
+      issueAuthCookies(reply, user.id, user.sessionVersion);
+      req.user = { id: user.id };
       return;
     }
   }

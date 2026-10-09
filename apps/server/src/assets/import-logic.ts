@@ -4,6 +4,7 @@ import {
   type AssetKind,
 } from '@inwit/dto';
 import { AppError } from '../errors.js';
+import { assertPublicHttpUrl, isBlockedHostname, isBlockedIp } from '../net/public-url.js';
 import {
   ASSET_IMAGE_MIME_TO_EXT,
   ASSET_VIDEO_MIME_TO_EXT,
@@ -12,42 +13,13 @@ import {
   type AssetMime,
 } from './asset-logic.js';
 
+export { isBlockedHostname, isBlockedIp };
+
 export const ASSET_IMPORT_MAX_REDIRECTS = 3;
 export const ASSET_IMPORT_TIMEOUT_MS = 15_000;
 
-const BLOCKED_HOSTS = new Set(['localhost', 'metadata.google.internal']);
-
-export function isBlockedHostname(host: string): boolean {
-  const normalized = host.trim().toLowerCase().replace(/\.$/, '');
-  if (!normalized) return true;
-  if (BLOCKED_HOSTS.has(normalized)) return true;
-  if (normalized.endsWith('.localhost') || normalized.endsWith('.local')) return true;
-  return false;
-}
-
-export function isBlockedIp(ip: string): boolean {
-  const mapped = ipv4FromMapped(ip);
-  if (mapped) return isBlockedIpv4(mapped);
-  if (ip.includes(':')) return isBlockedIpv6(ip);
-  return isBlockedIpv4(ip);
-}
-
 export function parseImportUrl(raw: string): URL {
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    throw AppError.of(400, 'VALIDATION_ERROR');
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw AppError.of(400, 'VALIDATION_ERROR');
-  }
-  if (parsed.username || parsed.password) throw AppError.of(400, 'ASSET_IMPORT_BLOCKED');
-  if (isBlockedHostname(parsed.hostname)) throw AppError.of(400, 'ASSET_IMPORT_BLOCKED');
-  if (isIpLiteral(parsed.hostname) && isBlockedIp(stripIpv6Brackets(parsed.hostname))) {
-    throw AppError.of(400, 'ASSET_IMPORT_BLOCKED');
-  }
-  return parsed;
+  return assertPublicHttpUrl(raw);
 }
 
 export function kindFromMime(contentType: string): { kind: AssetKind; mime: AssetMime; ext: AssetExt } | null {
@@ -148,51 +120,4 @@ export async function readResponseBytes(
     offset += chunk.byteLength;
   }
   return out;
-}
-
-function isIpLiteral(host: string): boolean {
-  const bare = stripIpv6Brackets(host);
-  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(bare) || bare.includes(':');
-}
-
-function stripIpv6Brackets(host: string): string {
-  if (host.startsWith('[') && host.endsWith(']')) return host.slice(1, -1);
-  return host;
-}
-
-function ipv4FromMapped(ip: string): string | null {
-  const lower = ip.toLowerCase();
-  const prefix = '::ffff:';
-  if (lower.startsWith(prefix)) return ip.slice(prefix.length);
-  return null;
-}
-
-function isBlockedIpv4(ip: string): boolean {
-  const parts = ip.split('.').map((part) => Number(part));
-  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true;
-  const [a, b] = parts as [number, number, number, number];
-  if (a === 0 || a === 10 || a === 127) return true;
-  if (a === 169 && b === 254) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  if (a >= 224) return true;
-  return false;
-}
-
-function isBlockedIpv6(ip: string): boolean {
-  const lower = ip.toLowerCase();
-  if (lower === '::1' || lower === '::') return true;
-  const first = ipv6First16(lower);
-  if (first == null) return true;
-  if ((first & 0xfe00) === 0xfc00) return true;
-  if ((first & 0xffc0) === 0xfe80) return true;
-  if (first === 0xff00) return true;
-  return false;
-}
-
-function ipv6First16(ip: string): number | null {
-  const head = ip.split(':')[0];
-  if (!head) return ip.startsWith('::') ? 0 : null;
-  const value = Number.parseInt(head, 16);
-  return Number.isFinite(value) ? value : null;
 }

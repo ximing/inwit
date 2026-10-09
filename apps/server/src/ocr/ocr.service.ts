@@ -1,10 +1,10 @@
 import type { OcrConfig, OcrTestResult, UpsertOcrConfigInput } from '@inwit/dto';
 import { createCanvas } from '@napi-rs/canvas';
 import { and, eq } from 'drizzle-orm';
-import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { ocrConfigs, type OcrConfigRow } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { SAVED_ENDPOINT_CODES, assertOptionalPublicBaseUrl } from '../net/public-url.js';
 import { decryptSecret, encryptSecret, maskApiKey } from '../llm/crypto.js';
 import { logLlmUsage } from '../llm/usage.js';
 import { completeOcrPage } from './ocr-api.js';
@@ -40,7 +40,7 @@ export interface ResolvedOcr {
   source: 'user' | 'system';
 }
 
-/** User ocr_configs, then system DASHSCOPE_API_KEY. */
+/** The user's ocr_configs row. No system key. */
 export async function resolveOcrFor(userId: string): Promise<ResolvedOcr> {
   const row = await getRow(userId);
   if (row) {
@@ -54,13 +54,7 @@ export async function resolveOcrFor(userId: string): Promise<ResolvedOcr> {
       };
     }
   }
-  if (!config.DASHSCOPE_API_KEY) throw AppError.of(400, 'LLM_NOT_CONFIGURED');
-  return {
-    apiKey: config.DASHSCOPE_API_KEY,
-    model: OCR_DEFAULT_MODEL,
-    baseUrl: OCR_DEFAULT_BASE_URL,
-    source: 'system',
-  };
+  throw AppError.of(400, 'LLM_NOT_CONFIGURED');
 }
 
 export async function getOcrConfig(userId: string): Promise<OcrConfig | null> {
@@ -69,6 +63,7 @@ export async function getOcrConfig(userId: string): Promise<OcrConfig | null> {
 }
 
 export async function upsertOcrConfig(userId: string, input: UpsertOcrConfigInput): Promise<OcrConfig> {
+  if (input.baseUrl !== undefined) await assertOptionalPublicBaseUrl(input.baseUrl, SAVED_ENDPOINT_CODES);
   const existing = await getRow(userId);
   const now = new Date();
 
@@ -113,7 +108,15 @@ function testImagePng(): Buffer {
 }
 
 export async function testOcrConfig(userId: string): Promise<OcrTestResult> {
-  const resolved = await resolveOcrFor(userId);
+  let resolved: ResolvedOcr;
+  try {
+    resolved = await resolveOcrFor(userId);
+  } catch (err) {
+    if (err instanceof AppError && err.code === 'LLM_NOT_CONFIGURED') {
+      return { ok: false, error: err.message };
+    }
+    throw err;
+  }
   try {
     const result = await completeOcrPage({
       apiKey: resolved.apiKey,

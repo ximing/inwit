@@ -24,6 +24,7 @@ import { AppError } from '../errors.js';
 import { clipReason, conversationTitle, normalizeDocumentIds, normalizeNodeRefs } from '../agent/conversation-logic.js';
 import { loadMindNodeFacts, ownedNodeRefs } from '../agent/conversation-nodes.js';
 import { assertOwnedLlmConfig } from '../llm/llm.service.js';
+import { resolveModelFor } from '../llm/pi.js';
 
 const MESSAGE_CAP = 200;
 
@@ -186,6 +187,7 @@ export async function sendConversationMessage(
   const dirtyDocumentIds = normalizeDocumentIds(input.dirtyDocumentIds, 8);
   const text = input.text.trim();
   if (input.llmConfigId) await assertOwnedLlmConfig(userId, input.llmConfigId);
+  else await resolveModelFor(userId);
   const now = new Date();
 
   const id = await getDb().transaction(async (tx) => {
@@ -285,6 +287,7 @@ export async function retryConversationMessage(
   await ownedConversation(userId, conversationId);
   await assertNoPending(conversationId, userId);
   if (input.llmConfigId) await assertOwnedLlmConfig(userId, input.llmConfigId);
+  else await resolveModelFor(userId);
   const [message] = await getDb()
     .select()
     .from(agentMessages)

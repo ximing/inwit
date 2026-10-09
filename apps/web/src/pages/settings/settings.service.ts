@@ -19,8 +19,10 @@ import {
   type UpsertOcrConfigInput,
 } from '@inwit/dto';
 import {
+  changePassword as changePasswordRequest,
   confirmAvatar,
   createAccessToken,
+  deleteAccessToken,
   listAccessTokenLogs,
   listAccessTokens,
   requestAvatarUploadUrl,
@@ -92,6 +94,10 @@ export class SettingsService extends Service {
   displayName = '';
   email = '';
   profileError: string | null = null;
+  currentPassword = '';
+  newPassword = '';
+  confirmPassword = '';
+  passwordError: string | null = null;
   avatarError: string | null = null;
   ocrConfig: OcrConfig | null = null;
   ocrApiKey = '';
@@ -104,6 +110,7 @@ export class SettingsService extends Service {
   tokenName = '';
   accessTokenError: string | null = null;
   copyingId: string | null = null;
+  revokingId: string | null = null;
   accessTokenLogs: AccessTokenLog[] = [];
   accessTokenLogsTotal = 0;
   accessTokenLogsPage = 1;
@@ -143,6 +150,47 @@ export class SettingsService extends Service {
 
   setEmail(value: string): void {
     this.email = value;
+  }
+
+  setCurrentPassword(value: string): void {
+    this.currentPassword = value;
+  }
+
+  setNewPassword(value: string): void {
+    this.newPassword = value;
+  }
+
+  setConfirmPassword(value: string): void {
+    this.confirmPassword = value;
+  }
+
+  async changePassword(): Promise<void> {
+    this.passwordError = null;
+    if (this.currentPassword.length === 0) {
+      this.passwordError = '请填写当前密码';
+      return;
+    }
+    if (this.newPassword.length < 8) {
+      this.passwordError = '新密码至少 8 位';
+      return;
+    }
+    if (this.newPassword !== this.confirmPassword) {
+      this.passwordError = '两次输入的新密码不一致';
+      return;
+    }
+    try {
+      const result = await changePasswordRequest({
+        currentPassword: this.currentPassword,
+        newPassword: this.newPassword,
+      });
+      this.auth.setUser(result.user);
+      this.currentPassword = '';
+      this.newPassword = '';
+      this.confirmPassword = '';
+      this.showToast('密码已修改');
+    } catch (err) {
+      this.passwordError = errorMessage(err, '修改失败');
+    }
   }
 
   showToast(message: string): void {
@@ -556,6 +604,20 @@ export class SettingsService extends Service {
       this.showToast('已生成');
     } catch (err) {
       this.accessTokenError = errorMessage(err, '生成失败');
+    }
+  }
+
+  async revokeAccessToken(id: string): Promise<void> {
+    this.accessTokenError = null;
+    this.revokingId = id;
+    try {
+      await deleteAccessToken(id);
+      this.accessTokens = this.accessTokens.filter((token) => token.id !== id);
+      this.showToast('已作废');
+    } catch (err) {
+      this.accessTokenError = errorMessage(err, '作废失败');
+    } finally {
+      this.revokingId = null;
     }
   }
 

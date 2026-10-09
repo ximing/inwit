@@ -92,6 +92,8 @@ export const users = pgTable('users', {
   /** Object storage key (not a URL). */
   avatarKey: varchar('avatar_key', { length: 255 }),
   reviewSettings: jsonb('review_settings').$type<ReviewSettings>(),
+  /** Incremented to invalidate outstanding access and refresh JWTs. */
+  sessionVersion: integer('session_version').notNull().default(0),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
   updatedAt: timestamptz('updated_at').notNull().defaultNow(),
 });

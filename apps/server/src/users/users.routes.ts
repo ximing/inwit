@@ -1,5 +1,6 @@
 import {
   avatarUploadUrlInputSchema,
+  changePasswordInputSchema,
   confirmAvatarInputSchema,
   createAccessTokenInputSchema,
   listAccessTokenLogsQuerySchema,
@@ -10,11 +11,17 @@ import { z } from 'zod';
 import { requireUser } from '../auth/authenticate.js';
 import {
   createAccessToken,
+  deleteAccessToken,
   listAccessTokenLogs,
   listAccessTokens,
   revealAccessToken,
 } from '../auth/access-tokens.js';
-import { confirmAvatar, requestAvatarUpload, updateProfile } from './users.service.js';
+import {
+  changePassword,
+  confirmAvatar,
+  requestAvatarUpload,
+  updateProfile,
+} from './users.service.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
 
@@ -39,6 +46,17 @@ export function registerUserRoutes(app: FastifyInstance): void {
   app.post('/api/me/access-tokens/:id/reveal', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     return revealAccessToken(requireUser(req).id, id);
+  });
+
+  app.delete('/api/me/access-tokens/:id', auth, async (req, reply) => {
+    const { id } = idParamsSchema.parse(req.params);
+    await deleteAccessToken(requireUser(req).id, id);
+    return reply.code(204).send();
+  });
+
+  app.post('/api/me/password', auth, async (req, reply) => {
+    const input = changePasswordInputSchema.parse(req.body ?? {});
+    return changePassword(requireUser(req).id, input, req, reply);
   });
 
   app.get('/api/me/access-token-logs', auth, async (req) => {

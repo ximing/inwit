@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { llmConfigs, type LlmConfigRow } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { SAVED_ENDPOINT_CODES, assertOptionalPublicBaseUrl } from '../net/public-url.js';
 import { decryptSecret, encryptSecret, maskApiKey } from './crypto.js';
 import { completeChat } from './usage.js';
 import { resolvedFromRow } from './pi.js';
@@ -49,6 +50,7 @@ export async function createLlmConfig(
   userId: string,
   input: CreateLlmConfigInput,
 ): Promise<LlmConfig> {
+  await assertOptionalPublicBaseUrl(input.baseUrl, SAVED_ENDPOINT_CODES);
   const existing = await getDb()
     .select({ id: llmConfigs.id })
     .from(llmConfigs)
@@ -85,6 +87,7 @@ export async function updateLlmConfig(
   input: UpdateLlmConfigInput,
 ): Promise<LlmConfig> {
   const current = await getOwned(userId, id);
+  if (input.baseUrl !== undefined) await assertOptionalPublicBaseUrl(input.baseUrl, SAVED_ENDPOINT_CODES);
   const now = new Date();
   const [row] = await getDb()
     .update(llmConfigs)
@@ -143,7 +146,7 @@ export async function testLlmConfig(userId: string, id: string): Promise<LlmTest
         timeoutMs: 30_000,
         maxTokens: 64,
       },
-      { resolved: resolvedFromRow(row, apiKey) },
+      { resolved: await resolvedFromRow(row, apiKey) },
     );
     return { ok: true };
   } catch (err) {

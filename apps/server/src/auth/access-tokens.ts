@@ -94,6 +94,14 @@ export async function createAccessToken(
   return toPublic(row);
 }
 
+export async function deleteAccessToken(userId: string, id: string): Promise<void> {
+  const deleted = await getDb()
+    .delete(accessTokens)
+    .where(and(eq(accessTokens.id, id), eq(accessTokens.userId, userId)))
+    .returning({ id: accessTokens.id });
+  if (deleted.length === 0) throw AppError.of(404, 'ACCESS_TOKEN_NOT_FOUND');
+}
+
 export async function revealAccessToken(userId: string, id: string): Promise<AccessTokenSecret> {
   const row = await getOwnedAccessToken(userId, id);
   const token = decryptSecret(row.tokenEncrypted);

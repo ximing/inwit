@@ -38,8 +38,10 @@ import {
 import { AppError } from '../errors.js';
 import { toPublicJob } from '../jobs/jobs.service.js';
 import { cancelDocumentJobs, enqueueJob } from '../jobs/queue.js';
+import { resolveModelFor } from '../llm/pi.js';
 import { recalculateMapNodeStatus, requireWritableMapNode } from '../maps/map.service.js';
 import { ocrPayloadForRetry } from '../ocr/ocr-logic.js';
+import { resolveOcrFor } from '../ocr/ocr.service.js';
 import {
   tryDeleteAnnotationFromIndex,
   tryDeleteCardFromIndex,
@@ -123,6 +125,7 @@ export async function createDocument(
   const blank = isBlankDocumentContent(input.contentJson);
   // Editor documents are still being written; digest once the user pauses.
   const digestDelayMs = !blank && input.source === 'editor' ? config.DIGEST_IDLE_DELAY_MS : 0;
+  if (!blank) await resolveModelFor(userId);
 
   const document = await getDb().transaction(async (tx) => {
     const [row] = await tx
@@ -154,6 +157,7 @@ export async function createDocument(
 
 export async function createChat(userId: string, input: CreateChatInput): Promise<Document> {
   await assertWritableTopic(userId, input.topicId);
+  await resolveModelFor(userId);
 
   const document = await getDb().transaction(async (tx) => {
     const [row] = await tx
@@ -339,6 +343,8 @@ export async function updateDocument(
         idleDelayMs: config.DIGEST_IDLE_DELAY_MS,
       });
     }
+
+    if (plan.kind === 'enqueue') await resolveModelFor(userId);
 
     const now = new Date();
     const [updated] = await tx
@@ -770,6 +776,8 @@ export async function retryDocument(userId: string, id: string): Promise<Job> {
     pageCount: document.pageCount ?? null,
   });
   if (!kind) throw AppError.of(409, 'DOCUMENT_NOT_RETRYABLE');
+  if (kind === 'digest') await resolveModelFor(userId);
+  if (kind === 'ocr') await resolveOcrFor(userId);
 
   return getDb().transaction(async (tx) => {
     const [active] = await tx

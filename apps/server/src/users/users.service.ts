@@ -1,15 +1,21 @@
 import type {
+  AuthResponse,
   AvatarUploadUrlInput,
   AvatarUploadUrlResponse,
+  ChangePasswordInput,
   ConfirmAvatarInput,
   UpdateProfileInput,
   User,
 } from '@inwit/dto';
-import { and, eq, ne } from 'drizzle-orm';
-import { getUserById, toPublicUser } from '../auth/auth.service.js';
+import { and, eq, ne, sql } from 'drizzle-orm';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { authModeFromOrigin } from '../auth/auth-logic.js';
+import { getUserById, issueAuthResponse, toPublicUser } from '../auth/auth.service.js';
+import { hashPassword, verifyPassword } from '../auth/password.js';
+import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
-import { users } from '../db/schema.js';
+import { accessTokens, users } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { presignPut } from '../storage/client.js';
 import { avatarKeyFor, isAvatarKeyForUser, validateAvatarUpload } from '../storage/presign-logic.js';
@@ -47,6 +53,35 @@ export async function updateProfile(userId: string, input: UpdateProfileInput): 
     if (isUniqueViolation(err)) throw AppError.of(409, 'EMAIL_TAKEN');
     throw err;
   }
+}
+
+export async function changePassword(
+  userId: string,
+  input: ChangePasswordInput,
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<AuthResponse> {
+  const current = await getUserById(userId);
+  if (!(await verifyPassword(input.currentPassword, current.passwordHash))) {
+    throw AppError.of(401, 'WRONG_PASSWORD');
+  }
+  const passwordHash = await hashPassword(input.newPassword);
+  const row = await getDb().transaction(async (tx) => {
+    const [updated] = await tx
+      .update(users)
+      .set({
+        passwordHash,
+        sessionVersion: sql`${users.sessionVersion} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    if (!updated) throw AppError.of(401, 'INVALID_TOKEN');
+    await tx.delete(accessTokens).where(eq(accessTokens.userId, userId));
+    return updated;
+  });
+  const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+  return issueAuthResponse(reply, row, authModeFromOrigin(origin, config.WEB_ORIGIN));
 }
 
 export async function requestAvatarUpload(

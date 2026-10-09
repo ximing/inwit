@@ -5,6 +5,7 @@ import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { enqueueJob } from '../jobs/queue.js';
+import { resolveOcrFor } from '../ocr/ocr.service.js';
 import { isStorageConfigured, presignPut } from '../storage/client.js';
 import { EMPTY_PM_DOC } from './content-json.js';
 import { assertWritableTopic, getOwnedDocument, toPublicDocument } from './document.service.js';
@@ -53,6 +54,7 @@ export async function completeScreenshot(userId: string, documentId: string): Pr
   if (!isScreenshotSourceKey(doc.fileKey, userId, documentId)) {
     throw AppError.of(400, 'VALIDATION_ERROR');
   }
+  await resolveOcrFor(userId);
 
   const updated = await getDb().transaction(async (tx) => {
     const [row] = await tx

@@ -1,6 +1,7 @@
 import { Agent, type AgentEvent, type AgentTool } from '@earendil-works/pi-agent-core';
 import type { AgentExecutionStep, AgentExecutionTurn, AgentTurnPhase, AgentType } from '@inwit/dto';
 import type { JobRow } from '../db/schema.js';
+import { AppError } from '../errors.js';
 import { heartbeatJob, isJobRunning } from '../jobs/heartbeat.js';
 import { LlmConfigUnavailableError, modelResponseError, resolveModelFor } from '../llm/pi.js';
 import { logLlmUsage } from '../llm/usage.js';
@@ -101,6 +102,9 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
           resolved = await resolveModelFor(job.userId, run.llmConfigId);
         } catch (err) {
           if (err instanceof LlmConfigUnavailableError) throw new AgentTerminalError(err.message);
+          if (err instanceof AppError && err.code === 'LLM_NOT_CONFIGURED') {
+            throw new AgentTerminalError(err.message);
+          }
           throw err;
         }
         const maxTokens = typeof resolved.model.maxTokens === 'number' ? resolved.model.maxTokens : null;

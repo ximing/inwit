@@ -49,7 +49,7 @@ pnpm --filter @inwit/server migrate            # 执行
 
 - service 在事务内 `enqueueJob(tx, { userId, type, payload })`（`src/jobs/enqueue.ts`）
 - 独立 worker 进程（`src/worker.ts`）轮询 `jobs` 表：`recoverStuckJobs`（超时回收）→ `processDueJobs`，另有每小时扫描自动入队周报
-- job 类型分发到 `src/agent/`：`digest`（切卡）、`chat`（问答转卡片）、`evolve`（换讲法/拆卡/混淆对比）、`weekly_report`——全部构建在 `pi-agent-core` + `pi-ai` 上；LLM 为 BYOK（用户自配 key），系统兜底走百炼 Dashscope
+- job 类型分发到 `src/agent/`：`digest`（切卡）、`chat`（问答转卡片）、`evolve`（换讲法/拆卡/混淆对比）、`weekly_report`——全部构建在 `pi-agent-core` + `pi-ai` 上；LLM 为 BYOK（用户自配 key）。对话和消化必须使用用户自己的模型配置；embedding 与 rerank 仍用系统百炼密钥。
 - **Agent 代码的固定切分**：可测的纯逻辑放 `*-logic.ts`（有对应 `*.test.ts`），编排/IO 放 `*.ts`、工具定义放 `*-tools.ts`
 
 **检索层**（`src/retrieval/`）：混合召回 = Qdrant 向量（百炼 embedding，2560 维）+ Meilisearch 中文稀疏 → RRF 融合 → rerank。store 名按 `NODE_ENV` 区分（`inwit_cards_dev/prod`）。

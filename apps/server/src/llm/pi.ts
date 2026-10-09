@@ -16,6 +16,7 @@ import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { llmConfigs, type LlmConfigRow } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { REQUEST_ENDPOINT_CODES, assertPublicHttpUrl, assertResolvedPublic } from '../net/public-url.js';
 import { decryptSecret } from './crypto.js';
 import { resolveModelLimits } from './model-limits-logic.js';
 
@@ -121,15 +122,17 @@ export interface ResolvedModel {
   configId: string | null;
 }
 
-function resolvedOf(
+async function resolvedOf(
   provider: LlmProvider,
   modelId: string,
   apiKey: string,
   baseUrl: string | null,
   source: 'user' | 'system',
   configId: string | null,
-): ResolvedModel {
+): Promise<ResolvedModel> {
   const url = baseUrl && baseUrl.length > 0 ? baseUrl : DEFAULT_BASE_URL[provider];
+  const parsed = assertPublicHttpUrl(url, REQUEST_ENDPOINT_CODES);
+  await assertResolvedPublic(parsed.hostname, { codes: REQUEST_ENDPOINT_CODES });
   const piProvider = buildProvider(provider, modelId, url);
   const models = createModels();
   models.setProvider(piProvider);
@@ -138,11 +141,11 @@ function resolvedOf(
   return { models, model, apiKey, provider, modelId, source, configId };
 }
 
-export function resolvedFromRow(row: LlmConfigRow, apiKey: string): ResolvedModel {
+export async function resolvedFromRow(row: LlmConfigRow, apiKey: string): Promise<ResolvedModel> {
   return resolvedOf(row.provider, row.model, apiKey, row.baseUrl, 'user', row.id);
 }
 
-export function systemDashscopeModel(): ResolvedModel {
+export async function systemDashscopeModel(): Promise<ResolvedModel> {
   return resolvedOf(
     'dashscope',
     DASHSCOPE_FALLBACK_MODEL,
@@ -162,8 +165,9 @@ export class LlmConfigUnavailableError extends Error {
 }
 
 /**
- * A specific user llm_config, else the default, else system DashScope (qwen-plus).
+ * A specific user llm_config, else the user's default.
  * An explicit id that is missing does not fall back to another model.
+ * No usable default throws LLM_NOT_CONFIGURED and does not use the system key.
  */
 export async function resolveModelFor(userId: string, configId?: string | null): Promise<ResolvedModel> {
   if (configId) {
@@ -182,9 +186,9 @@ export async function resolveModelFor(userId: string, configId?: string | null):
     .from(llmConfigs)
     .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.isDefault, true)))
     .limit(1);
-  if (!row) return systemDashscopeModel();
+  if (!row) throw AppError.of(400, 'LLM_NOT_CONFIGURED');
   const apiKey = decryptSecret(row.apiKeyEncrypted);
-  if (!apiKey) return systemDashscopeModel();
+  if (!apiKey) throw AppError.of(400, 'LLM_NOT_CONFIGURED');
   return resolvedFromRow(row, apiKey);
 }
 

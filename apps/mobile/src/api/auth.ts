@@ -88,6 +88,10 @@ export function revealAccessToken(id: string): Promise<AccessTokenSecret> {
   return request<AccessTokenSecret>(`/api/me/access-tokens/${id}/reveal`, { method: 'POST' });
 }
 
+export function deleteAccessToken(id: string): Promise<void> {
+  return request<void>(`/api/me/access-tokens/${id}`, { method: 'DELETE' });
+}
+
 export function listAccessTokenLogs(
   query: Partial<ListAccessTokenLogsQuery> = {},
 ): Promise<Paginated<AccessTokenLog>> {

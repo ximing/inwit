@@ -96,7 +96,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
         {section === 'profile' ? (
         <div className="section" id="profile">
           <div className="section-title">个人资料</div>
-          <div className="section-lede">头像、用户名和登录邮箱。</div>
+          <div className="section-lede">头像、用户名、登录邮箱和密码。</div>
           <div className="panel">
             <div className="profile-row">
               <UserAvatar fallback="icon" className="profile-avatar" />
@@ -172,6 +172,64 @@ const SettingsPageContent = observer(function SettingsPageContent() {
               </button>
             </form>
           </div>
+          <form
+            className="panel profile-password"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              void service.changePassword();
+            }}
+          >
+            <div className="field">
+              <label htmlFor="settings-current-password">当前密码</label>
+              <input
+                id="settings-current-password"
+                type="password"
+                name="currentPassword"
+                autoComplete="current-password"
+                maxLength={128}
+                value={service.currentPassword}
+                onChange={(event) => service.setCurrentPassword(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="settings-new-password">新密码</label>
+              <input
+                id="settings-new-password"
+                type="password"
+                name="newPassword"
+                autoComplete="new-password"
+                maxLength={128}
+                value={service.newPassword}
+                onChange={(event) => service.setNewPassword(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="settings-confirm-password">再输入一次</label>
+              <input
+                id="settings-confirm-password"
+                type="password"
+                name="confirmPassword"
+                autoComplete="new-password"
+                maxLength={128}
+                value={service.confirmPassword}
+                onChange={(event) => service.setConfirmPassword(event.target.value)}
+              />
+            </div>
+            {service.passwordError ? (
+              <p className="banner-error" role="alert">
+                {service.passwordError}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={service.$model.changePassword.loading}
+            >
+              {service.$model.changePassword.loading ? '修改中…' : '修改密码'}
+            </button>
+            <p className="settings-hint">修改后，其它设备和脚本需要重新登录。当前页面保持登录。</p>
+          </form>
         </div>
 
         ) : null}
@@ -436,7 +494,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
         <div className="section" id="token">
           <div className="section-title">接口令牌</div>
           <div className="section-lede">
-            用于脚本或自动化调用接口。生成后永久有效，不会过期，也不会被删除。请求头{' '}
+            用于脚本或自动化调用接口。生成后不会过期。请求头{' '}
             <span className="mono">Authorization: Bearer &lt;token&gt;</span>。
           </div>
           <div className="settings-tabs" role="tablist" aria-label="接口令牌">
@@ -523,6 +581,24 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                           onClick={() => void service.copyAccessToken(token.id)}
                         >
                           {service.copyingId === token.id ? '复制中…' : '复制'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          disabled={service.revokingId === token.id}
+                          onClick={() => {
+                            void dialog
+                              .confirm('作废后，使用该令牌的脚本和移动端需要重新登录。', {
+                                title: '作废令牌',
+                                ok: '作废',
+                                danger: true,
+                              })
+                              .then((ok) => {
+                                if (ok) void service.revokeAccessToken(token.id);
+                              });
+                          }}
+                        >
+                          {service.revokingId === token.id ? '作废中…' : '作废'}
                         </button>
                       </div>
                     </li>

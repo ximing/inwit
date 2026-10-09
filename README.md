@@ -308,7 +308,7 @@ pi install git:github.com/ximing/inwit
 │  问答  直接提问 → 中文回答 → 自动转卡片                    │
 │  主题  整理知识地图 / 补空白 / 提议开题                    │
 │  进化  换讲法 / 拆卡 / 混淆对比 / 周报复盘                 │
-│  LLM   @earendil-works/pi-ai，用户 BYOK + 系统兜底        │
+│  LLM   @earendil-works/pi-ai，对话和消化用用户自己的模型   │
 ├─────────────────────────────────────────────────────────┤
 │  数据                                                    │
 │  PostgreSQL   业务数据 + 任务队列                         │
@@ -354,7 +354,7 @@ inwit/
 | `LLM_KEY_ENCRYPTION_KEY` | 32 字节 hex，加密用户 BYOK key |
 | `QDRANT_URL` `QDRANT_API_KEY` | 向量库 |
 | `MEILI_HOST` `MEILI_API_KEY` | 中文稀疏检索 |
-| `DASHSCOPE_API_KEY` | 百炼：系统兜底 chat、embedding、rerank |
+| `DASHSCOPE_API_KEY` | 百炼：embedding 与 rerank。对话和消化必须使用用户自己的模型配置 |
 | `EMBEDDING_MODEL` / `EMBEDDING_DIMENSIONS` | 默认 `qwen3-vl-embedding` / `2560` |
 | `RERANK_MODEL` | 默认 `qwen3.7-text-rerank` |
 | `WORKER_POLL_MS` `WORKER_CLAIM_LIMIT` `WORKER_STUCK_MS` `JOB_MAX_ATTEMPTS` | 队列 |

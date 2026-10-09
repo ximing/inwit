@@ -1,3 +1,4 @@
+import { REQUEST_ENDPOINT_CODES, assertPublicHttpUrl, assertResolvedPublic } from '../net/public-url.js';
 import {
   buildOcrChatBody,
   ocrChatCompletionsUrl,
@@ -42,6 +43,8 @@ export async function completeOcrPage(input: {
   task?: OcrBuiltinTask;
   timeoutMs?: number;
 }): Promise<OcrPageResult> {
+  const parsed = assertPublicHttpUrl(input.baseUrl, REQUEST_ENDPOINT_CODES);
+  await assertResolvedPublic(parsed.hostname, { codes: REQUEST_ENDPOINT_CODES });
   const url = ocrChatCompletionsUrl(input.baseUrl);
   const body = buildOcrChatBody({
     model: input.model,
@@ -52,6 +55,7 @@ export async function completeOcrPage(input: {
   try {
     res = await fetch(url, {
       method: 'POST',
+      redirect: 'manual',
       headers: {
         Authorization: `Bearer ${input.apiKey}`,
         'Content-Type': 'application/json',
@@ -64,6 +68,10 @@ export async function completeOcrPage(input: {
     throw new Error(redactSecret(message, input.apiKey));
   }
 
+  if (res.status >= 300 && res.status < 400) {
+    await res.body?.cancel().catch(() => undefined);
+    throw new Error('ocr request failed');
+  }
   const raw = await res.text();
   const redacted = redactSecret(raw, input.apiKey);
   if (!res.ok) {

@@ -20,6 +20,7 @@ import {
 import {
   confirmAvatar,
   createAccessToken,
+  deleteAccessToken,
   listAccessTokenLogs,
   listAccessTokens,
   requestAvatarUploadUrl,
@@ -110,6 +111,7 @@ export class SettingsService extends Service {
   tokenName = '';
   accessTokenError: string | null = null;
   copyingId: string | null = null;
+  revokingId: string | null = null;
   accessTokenLogs: AccessTokenLog[] = [];
   accessTokenLogsTotal = 0;
   accessTokenLogsPage = 1;
@@ -404,6 +406,20 @@ export class SettingsService extends Service {
       this.showToast('已生成');
     } catch (err) {
       this.accessTokenError = errorMessage(err, '生成失败');
+    }
+  }
+
+  async revokeAccessToken(id: string): Promise<void> {
+    this.accessTokenError = null;
+    this.revokingId = id;
+    try {
+      await deleteAccessToken(id);
+      this.accessTokens = this.accessTokens.filter((token) => token.id !== id);
+      this.showToast('已作废');
+    } catch (err) {
+      this.accessTokenError = errorMessage(err, '作废失败');
+    } finally {
+      this.revokingId = null;
     }
   }
 

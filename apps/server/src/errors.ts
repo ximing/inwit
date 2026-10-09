@@ -2,6 +2,7 @@ export const ERROR_MESSAGES = {
   VALIDATION_ERROR: '请求参数不合法',
   NOT_FOUND: '资源不存在',
   INVALID_CREDENTIALS: '邮箱或密码错误',
+  WRONG_PASSWORD: '当前密码不正确',
   INVALID_TOKEN: '登录已过期',
   INTERNAL_ERROR: '服务器内部错误',
   EMAIL_ALREADY_REGISTERED: '邮箱已注册',

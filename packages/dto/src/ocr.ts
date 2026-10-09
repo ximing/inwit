@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { optionalBaseUrlSchema } from './common.js';
 
 export const OCR_DEFAULT_MODEL = 'qwen-vl-ocr';
 
@@ -19,7 +20,7 @@ export type OcrConfig = z.infer<typeof ocrConfigSchema>;
 export const upsertOcrConfigInputSchema = z.object({
   apiKey: z.string().min(1).max(512).optional(),
   model: z.string().min(1).max(128).default(OCR_DEFAULT_MODEL),
-  baseUrl: z.string().url().max(512).nullable().optional(),
+  baseUrl: optionalBaseUrlSchema,
 });
 export type UpsertOcrConfigInput = z.infer<typeof upsertOcrConfigInputSchema>;
 

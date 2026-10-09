@@ -131,6 +131,7 @@
   min-width: 0;
 }
 .profile-avatar-actions .banner-error { margin: 0; }
+.profile-password { margin-top: 16px; }
 
 @media (max-width: 760px) {
   .settings-layout {

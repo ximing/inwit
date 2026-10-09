@@ -22,6 +22,12 @@ export type RegisterInput = z.infer<typeof registerInputSchema>;
 export const loginInputSchema = registerInputSchema;
 export type LoginInput = z.infer<typeof loginInputSchema>;
 
+export const changePasswordInputSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(8).max(128),
+});
+export type ChangePasswordInput = z.infer<typeof changePasswordInputSchema>;
+
 export const authModeSchema = z.enum(['cookie', 'bearer']);
 export type AuthMode = z.infer<typeof authModeSchema>;
 

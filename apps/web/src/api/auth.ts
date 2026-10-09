@@ -5,6 +5,7 @@ import type {
   AuthResponse,
   AvatarUploadUrlInput,
   AvatarUploadUrlResponse,
+  ChangePasswordInput,
   ConfirmAvatarInput,
   CreateAccessTokenInput,
   ListAccessTokenLogsQuery,
@@ -65,6 +66,13 @@ export function confirmAvatar(input: ConfirmAvatarInput): Promise<User> {
   });
 }
 
+export function changePassword(input: ChangePasswordInput): Promise<AuthResponse> {
+  return request<AuthResponse>('/api/me/password', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export function listAccessTokens(): Promise<AccessToken[]> {
   return request<AccessToken[]>('/api/me/access-tokens');
 }
@@ -78,6 +86,10 @@ export function createAccessToken(input: CreateAccessTokenInput): Promise<Access
 
 export function revealAccessToken(id: string): Promise<AccessTokenSecret> {
   return request<AccessTokenSecret>(`/api/me/access-tokens/${id}/reveal`, { method: 'POST' });
+}
+
+export function deleteAccessToken(id: string): Promise<void> {
+  return request<void>(`/api/me/access-tokens/${id}`, { method: 'DELETE' });
 }
 
 export function listAccessTokenLogs(

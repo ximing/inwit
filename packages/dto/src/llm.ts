@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { optionalBaseUrlSchema } from './common.js';
 
 export const LLM_PROVIDERS = ['openai', 'deepseek', 'claude', 'zhipu', 'dashscope'] as const;
 export const llmProviderSchema = z.enum(LLM_PROVIDERS);
@@ -28,14 +29,14 @@ export const createLlmConfigInputSchema = z.object({
   apiKey: z.string().min(1).max(512),
   model: z.string().min(1).max(128),
   isDefault: z.boolean().optional(),
-  baseUrl: z.string().url().max(512).nullable().optional(),
+  baseUrl: optionalBaseUrlSchema,
 });
 export type CreateLlmConfigInput = z.infer<typeof createLlmConfigInputSchema>;
 
 export const updateLlmConfigInputSchema = z.object({
   apiKey: z.string().min(1).max(512).optional(),
   model: z.string().min(1).max(128).optional(),
-  baseUrl: z.string().url().max(512).nullable().optional(),
+  baseUrl: optionalBaseUrlSchema,
 });
 export type UpdateLlmConfigInput = z.infer<typeof updateLlmConfigInputSchema>;
 

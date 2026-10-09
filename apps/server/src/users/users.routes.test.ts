@@ -15,6 +15,7 @@ vi.mock('../auth/access-tokens.js', () => ({
   listAccessTokens: vi.fn(),
   createAccessToken: vi.fn(),
   revealAccessToken: vi.fn(),
+  deleteAccessToken: vi.fn(),
   listAccessTokenLogs: vi.fn(),
 }));
 
@@ -22,14 +23,17 @@ vi.mock('./users.service.js', () => ({
   updateProfile: vi.fn(),
   requestAvatarUpload: vi.fn(),
   confirmAvatar: vi.fn(),
+  changePassword: vi.fn(),
 }));
 
 import {
   createAccessToken,
+  deleteAccessToken,
   listAccessTokenLogs,
   listAccessTokens,
   revealAccessToken,
 } from '../auth/access-tokens.js';
+import { changePassword } from './users.service.js';
 import { registerUserRoutes } from './users.routes.js';
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
@@ -57,6 +61,8 @@ describe('access token routes', () => {
     vi.mocked(createAccessToken).mockReset();
     vi.mocked(revealAccessToken).mockReset();
     vi.mocked(listAccessTokenLogs).mockReset();
+    vi.mocked(deleteAccessToken).mockReset();
+    vi.mocked(changePassword).mockReset();
   });
 
   it('GET /api/me/access-tokens lists tokens', async () => {
@@ -119,6 +125,43 @@ describe('access token routes', () => {
       limit: 20,
       offset: 0,
     });
+    await app.close();
+  });
+
+  it('DELETE /api/me/access-tokens/:id revokes the token', async () => {
+    vi.mocked(deleteAccessToken).mockResolvedValue(undefined);
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/me/access-tokens/${sample.id}`,
+    });
+    expect(res.statusCode).toBe(204);
+    expect(deleteAccessToken).toHaveBeenCalledWith(USER_ID, sample.id);
+    await app.close();
+  });
+
+  it('DELETE /api/me/access-tokens/:id returns 404 when missing', async () => {
+    vi.mocked(deleteAccessToken).mockRejectedValue(AppError.of(404, 'ACCESS_TOKEN_NOT_FOUND'));
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/api/me/access-tokens/${sample.id}`,
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('ACCESS_TOKEN_NOT_FOUND');
+    await app.close();
+  });
+
+  it('POST /api/me/password rejects a short new password', async () => {
+    const app = await buildTestApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/password',
+      payload: { currentPassword: 'current', newPassword: 'short' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('VALIDATION_ERROR');
+    expect(changePassword).not.toHaveBeenCalled();
     await app.close();
   });
 
