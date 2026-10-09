@@ -12,6 +12,9 @@ export const MIND_EDIT_MAX = 80;
 /** 文本章节标题，与画布文本节点一致。 */
 export const MIND_TEXT_MAX = 4000;
 
+/** 划线原文和说明，与批注字段上限一致。 */
+export const MIND_QUOTE_MAX = 20_000;
+
 const REF_RE = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -35,6 +38,12 @@ export type MindEditInput = {
   ref?: string;
   nodeId?: string;
   text?: string;
+  /** create_highlight：read_document 里「[块 N | …]」的 N。 */
+  blockIndex?: number;
+  /** create_highlight：这一块里连续的原文。 */
+  quote?: string;
+  /** create_highlight：脑图上显示的短标题。 */
+  note?: string;
   parentId?: string | null;
   parentRef?: string;
   index?: number;
@@ -42,6 +51,15 @@ export type MindEditInput = {
 
 export type MindEditStep =
   | { op: 'create_text'; ref: string; text: string; parent: MindEditParent; index?: number }
+  | {
+      op: 'create_highlight';
+      ref: string;
+      quote: string;
+      note: string;
+      blockIndex: number;
+      parent: MindEditParent;
+      index?: number;
+    }
   | { op: 'rename_text'; nodeId: string; text: string }
   | { op: 'move'; nodeId: string; parent: MindEditParent; index?: number }
   | { op: 'delete_text'; nodeId: string };
@@ -53,6 +71,7 @@ export type MindEditPlan =
       /** 模拟之后的树。新建章节的 id 是 `ref:` 加临时编号，落库时会换成真正的 id。 */
       nodes: MindEditMember[];
       createdCount: number;
+      highlightCount: number;
       renamedCount: number;
       movedCount: number;
       deletedCount: number;
@@ -78,6 +97,27 @@ function readTitle(text: string | undefined): { ok: true; text: string } | { ok:
   if (trimmed.length === 0) return { ok: false, reason: '章节标题不能为空' };
   if ([...trimmed].length > MIND_TEXT_MAX) return { ok: false, reason: '章节标题过长' };
   return { ok: true, text: trimmed };
+}
+
+function readQuote(quote: string | undefined): { ok: true; quote: string } | { ok: false; reason: string } {
+  const trimmed = quote?.trim() ?? '';
+  if (trimmed.length === 0) return { ok: false, reason: '划线原文不能为空' };
+  if ([...trimmed].length > MIND_QUOTE_MAX) return { ok: false, reason: '划线原文过长' };
+  return { ok: true, quote: trimmed };
+}
+
+function readNote(note: string | undefined): { ok: true; note: string } | { ok: false; reason: string } {
+  const trimmed = note?.trim() ?? '';
+  if ([...trimmed].length > MIND_QUOTE_MAX) return { ok: false, reason: '划线说明过长' };
+  return { ok: true, note: trimmed };
+}
+
+function readBlockIndex(
+  blockIndex: number | undefined,
+): { ok: true; blockIndex: number } | { ok: false; reason: string } {
+  if (blockIndex === undefined) return { ok: false, reason: '要写明原文在第几块' };
+  if (!Number.isInteger(blockIndex) || blockIndex < 1) return { ok: false, reason: '块号不合法' };
+  return { ok: true, blockIndex };
 }
 
 function readRef(ref: string | undefined): { ok: true; ref: string } | { ok: false; reason: string } {
@@ -179,6 +219,25 @@ function appendPosition(nodes: readonly MindEditMember[]): number {
   return position;
 }
 
+/** 把本批新建的节点放进模拟树。ref 要在成功之后再登记，避免自己挂到自己下面。 */
+function placeCreated(
+  nodes: MindEditMember[],
+  refs: ReadonlyMap<string, string>,
+  id: string,
+  kind: CanvasNodeKind,
+  parent: MindEditParent,
+  index: number | undefined,
+): { ok: true } | { ok: false; reason: string } {
+  if (parent.kind === 'root' && index === undefined) {
+    nodes.push({ id, kind, parentId: null, position: appendPosition(nodes) });
+    return { ok: true };
+  }
+  nodes.push({ id, kind, parentId: null, position: 0 });
+  const resolved = resolveParentId(parent, refs, nodes);
+  if (!resolved.ok) return resolved;
+  return relocate(nodes, id, resolved.parentId, index);
+}
+
 /**
  * 按顺序模拟一批脑图编辑。
  * 没被点名的节点留在原来的父节点上。新建章节要先出现，后面的操作才能用它的 ref。
@@ -210,20 +269,44 @@ export function planMindEdits(
       if (!index.ok) return index;
 
       const id = `ref:${ref.ref}`;
-      if (parent.parent.kind === 'root' && index.index === undefined) {
-        nodes.push({ id, kind: 'text', parentId: null, position: appendPosition(nodes) });
-      } else {
-        nodes.push({ id, kind: 'text', parentId: null, position: 0 });
-        const resolved = resolveParentId(parent.parent, refs, nodes);
-        if (!resolved.ok) return resolved;
-        const placed = relocate(nodes, id, resolved.parentId, index.index);
-        if (!placed.ok) return placed;
-      }
+      const placed = placeCreated(nodes, refs, id, 'text', parent.parent, index.index);
+      if (!placed.ok) return placed;
       refs.set(ref.ref, id);
       steps.push({
         op: 'create_text',
         ref: ref.ref,
         text: title.text,
+        parent: parent.parent,
+        ...(index.index !== undefined ? { index: index.index } : {}),
+      });
+      continue;
+    }
+
+    if (edit.op === 'create_highlight') {
+      const ref = readRef(edit.ref);
+      if (!ref.ok) return ref;
+      if (refs.has(ref.ref)) return { ok: false, reason: `章节编号重复：${ref.ref}` };
+      const quote = readQuote(edit.quote);
+      if (!quote.ok) return quote;
+      const note = readNote(edit.note);
+      if (!note.ok) return note;
+      const blockIndex = readBlockIndex(edit.blockIndex);
+      if (!blockIndex.ok) return blockIndex;
+      const parent = readParent(edit, 'create');
+      if (!parent.ok) return parent;
+      const index = readIndex(edit.index);
+      if (!index.ok) return index;
+
+      const id = `ref:${ref.ref}`;
+      const placed = placeCreated(nodes, refs, id, 'annotation', parent.parent, index.index);
+      if (!placed.ok) return placed;
+      refs.set(ref.ref, id);
+      steps.push({
+        op: 'create_highlight',
+        ref: ref.ref,
+        quote: quote.quote,
+        note: note.note,
+        blockIndex: blockIndex.blockIndex,
         parent: parent.parent,
         ...(index.index !== undefined ? { index: index.index } : {}),
       });
@@ -286,6 +369,7 @@ export function planMindEdits(
     steps,
     nodes,
     createdCount: steps.filter((step) => step.op === 'create_text').length,
+    highlightCount: steps.filter((step) => step.op === 'create_highlight').length,
     renamedCount: steps.filter((step) => step.op === 'rename_text').length,
     movedCount: steps.filter((step) => step.op === 'move').length,
     deletedCount: steps.filter((step) => step.op === 'delete_text').length,

@@ -153,6 +153,61 @@ describe('planMindEdits', () => {
       reason: '找不到这个节点',
     });
   });
+
+  it('builds a highlight under a new chapter and trims the quote', () => {
+    const plan = planMindEdits(
+      [member(CARD, 'card', null, 0)],
+      [
+        { op: 'create_text', ref: 'c1', text: '第一章' },
+        {
+          op: 'create_highlight',
+          ref: 'h1',
+          parentRef: 'c1',
+          blockIndex: 2,
+          quote: ' 梯度指向上升最快的方向 ',
+          note: ' 方向 ',
+        },
+        { op: 'move', nodeId: CARD, parentRef: 'h1' },
+      ],
+    );
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.createdCount).toBe(1);
+    expect(plan.highlightCount).toBe(1);
+    expect(plan.movedCount).toBe(1);
+    expect(plan.nodes.find((node) => node.id === 'ref:h1')).toMatchObject({
+      kind: 'annotation',
+      parentId: 'ref:c1',
+    });
+    expect(parentOf(plan.nodes, CARD)).toBe('ref:h1');
+    const step = plan.steps.find((item) => item.op === 'create_highlight');
+    expect(step).toMatchObject({
+      ref: 'h1',
+      quote: '梯度指向上升最快的方向',
+      note: '方向',
+      blockIndex: 2,
+    });
+  });
+
+  it('refuses a highlight without a quote, a block, or a fresh ref', () => {
+    expect(planMindEdits([], [{ op: 'create_highlight', ref: 'h1', blockIndex: 1 }])).toEqual({
+      ok: false,
+      reason: '划线原文不能为空',
+    });
+    expect(
+      planMindEdits([], [{ op: 'create_highlight', ref: 'h1', quote: '原文', blockIndex: 0 }]),
+    ).toEqual({ ok: false, reason: '块号不合法' });
+    expect(planMindEdits([], [{ op: 'create_highlight', ref: 'h1', quote: '原文' }])).toEqual({
+      ok: false,
+      reason: '要写明原文在第几块',
+    });
+    expect(
+      planMindEdits([], [
+        { op: 'create_text', ref: 'h1', text: '章' },
+        { op: 'create_highlight', ref: 'h1', quote: '原文', blockIndex: 1 },
+      ]),
+    ).toEqual({ ok: false, reason: '章节编号重复：h1' });
+  });
 });
 
 describe('formatDocumentMind', () => {

@@ -90,6 +90,7 @@ describe('conversationActionLine', () => {
           title: '梯度',
           status: 'applied',
           createdCount: 2,
+          highlightCount: 0,
           renamedCount: 1,
           movedCount: 0,
           deletedCount: 0,

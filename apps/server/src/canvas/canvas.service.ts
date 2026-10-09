@@ -14,14 +14,17 @@ import {
   annotations,
   canvasNodes,
   cards,
+  documents,
   type AnnotationRow,
   type CanvasNodeRow,
 } from '../db/schema.js';
+import { asPmJson } from '../documents/content-json.js';
 import { getOwnedDocument } from '../documents/document.service.js';
 import { AppError } from '../errors.js';
 import { tryIndexAnnotation } from '../retrieval/pipeline.js';
 import { isAnnotationImageKeyFor } from '../annotations/annotation-image-logic.js';
 import { commitCanvasRevision, readCanvasHistoryState } from './canvas-history.js';
+import { locateHighlightQuote } from './mind-highlight-logic.js';
 import {
   planMindEdits,
   type MindEditInput,
@@ -553,16 +556,23 @@ function resolveStoredParent(parent: MindEditParent, refs: ReadonlyMap<string, s
   return id;
 }
 
+type IndexedHighlight = { id: string; quote: string; note: string };
+
 export type MindEditResult =
   | {
       ok: true;
       created: Record<string, string>;
       createdCount: number;
+      highlightCount: number;
       renamedCount: number;
       movedCount: number;
       deletedCount: number;
     }
   | { ok: false; reason: string };
+
+type MindEditWrite =
+  | (Extract<MindEditResult, { ok: true }> & { highlights: IndexedHighlight[] })
+  | Extract<MindEditResult, { ok: false }>;
 
 /**
  * 在一个事务里按顺序改一篇文档的脑图。
@@ -575,14 +585,47 @@ export async function applyDocumentMindEdits(
 ): Promise<MindEditResult> {
   try {
     await getOwnedDocument(userId, documentId);
-    return await inCanvasTransaction(userId, documentId, async (tx) => {
+    const saved = await inCanvasTransaction(userId, documentId, async (tx): Promise<MindEditWrite> => {
       const snapshot = await loadMindSnapshot(tx, userId, documentId);
       const plan = planMindEdits(snapshot, edits);
       if (!plan.ok) return { ok: false, reason: plan.reason };
 
       const refs = new Map<string, string>();
       const created: Record<string, string> = {};
+      const highlights: IndexedHighlight[] = [];
+      let content = asPmJson(null);
+      if (plan.highlightCount > 0) {
+        const [docRow] = await tx
+          .select({ contentJson: documents.contentJson })
+          .from(documents)
+          .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
+          .limit(1);
+        content = asPmJson(docRow?.contentJson);
+      }
       for (const step of plan.steps) {
+        if (step.op === 'create_highlight') {
+          const located = locateHighlightQuote(content, step.blockIndex, step.quote);
+          if (!located.ok) throw new AppError(400, 'VALIDATION_ERROR', located.reason);
+          const parentId = resolveStoredParent(step.parent, refs);
+          const [row] = await tx
+            .insert(annotations)
+            .values({
+              userId,
+              documentId,
+              quote: step.quote,
+              note: step.note,
+              kind: 'text',
+              anchorBlockIndex: step.blockIndex,
+            })
+            .returning();
+          if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
+          refs.set(step.ref, row.id);
+          created[step.ref] = row.id;
+          highlights.push({ id: row.id, quote: step.quote, note: step.note });
+          await placeInTx(tx, userId, documentId, row.id, parentId, step.index);
+          continue;
+        }
+
         if (step.op === 'create_text') {
           const parentId = resolveStoredParent(step.parent, refs);
           const loaded = await loadVisible(tx, userId, documentId);
@@ -665,11 +708,35 @@ export async function applyDocumentMindEdits(
         ok: true as const,
         created,
         createdCount: plan.createdCount,
+        highlightCount: plan.highlightCount,
         renamedCount: plan.renamedCount,
         movedCount: plan.movedCount,
         deletedCount: plan.deletedCount,
+        highlights,
       };
     });
+    if (saved.ok) {
+      for (const item of saved.highlights) {
+        await tryIndexAnnotation({
+          id: item.id,
+          userId,
+          documentId,
+          kind: 'text',
+          quote: item.quote,
+          note: item.note,
+        });
+      }
+      return {
+        ok: true,
+        created: saved.created,
+        createdCount: saved.createdCount,
+        highlightCount: saved.highlightCount,
+        renamedCount: saved.renamedCount,
+        movedCount: saved.movedCount,
+        deletedCount: saved.deletedCount,
+      };
+    }
+    return saved;
   } catch (err) {
     if (err instanceof AppError && err.code === 'DOCUMENT_NOT_FOUND') {
       return { ok: false, reason: '找不到这篇文档' };

@@ -1,4 +1,6 @@
+import { conversationActionSchema, type ConversationNodeRef } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
+import { CONVERSATION_SYSTEM_PROMPT } from './conversation.js';
 import {
   buildConversationPrompt,
   conversationTitle,
@@ -13,7 +15,6 @@ import {
   planMindNodeUpdate,
   wantsCards,
 } from './conversation-logic.js';
-import type { ConversationNodeRef } from '@inwit/dto';
 
 const DOC = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -212,11 +213,56 @@ describe('fallbackReply', () => {
           title: '梯度',
           status: 'applied',
           createdCount: 4,
+          highlightCount: 0,
           renamedCount: 0,
           movedCount: 12,
           deletedCount: 0,
         },
       ]),
     ).toBe('已调整《梯度》的脑图：新建 4 个章节，移动 12 个节点');
+  });
+
+  it('names new highlights separately from text chapters', () => {
+    expect(
+      fallbackReply([
+        {
+          type: 'apply_mind_edits',
+          documentId: DOC,
+          title: '梯度',
+          status: 'applied',
+          createdCount: 1,
+          highlightCount: 3,
+          renamedCount: 0,
+          movedCount: 0,
+          deletedCount: 0,
+        },
+      ]),
+    ).toBe('已调整《梯度》的脑图：新建 1 个章节、3 处划线');
+  });
+});
+
+describe('conversation actions', () => {
+  it('reads an older mind edit that has no highlight count', () => {
+    const parsed = conversationActionSchema.safeParse({
+      type: 'apply_mind_edits',
+      documentId: DOC,
+      title: '梯度',
+      status: 'applied',
+      createdCount: 1,
+      renamedCount: 0,
+      movedCount: 0,
+      deletedCount: 0,
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success || parsed.data.type !== 'apply_mind_edits') return;
+    expect(parsed.data.highlightCount).toBe(0);
+  });
+});
+
+describe('conversation system prompt', () => {
+  it('tells the model to create jumpable highlights', () => {
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('create_highlight');
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('不要说自己不能划线');
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('逐字抄写');
   });
 });

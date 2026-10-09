@@ -72,6 +72,8 @@ export const conversationActionSchema = z.discriminatedUnion('type', [
     status: z.enum(['applied', 'rejected']),
     reason: z.string().optional(),
     createdCount: z.number().int().nonnegative(),
+    /** 本批新建的划线。旧记录没有这个字段，读出来按 0。 */
+    highlightCount: z.number().int().nonnegative().default(0),
     renamedCount: z.number().int().nonnegative(),
     movedCount: z.number().int().nonnegative(),
     deletedCount: z.number().int().nonnegative(),
@@ -84,6 +86,7 @@ export function mindEditSummary(action: {
   status: 'applied' | 'rejected';
   reason?: string | undefined;
   createdCount: number;
+  highlightCount?: number;
   renamedCount: number;
   movedCount: number;
   deletedCount: number;
@@ -93,7 +96,10 @@ export function mindEditSummary(action: {
     return `没能调整《${action.title}》的脑图${reason ? `：${reason}` : ''}`;
   }
   const parts: string[] = [];
-  if (action.createdCount > 0) parts.push(`新建 ${String(action.createdCount)} 个章节`);
+  const created: string[] = [];
+  if (action.createdCount > 0) created.push(`${String(action.createdCount)} 个章节`);
+  if ((action.highlightCount ?? 0) > 0) created.push(`${String(action.highlightCount)} 处划线`);
+  if (created.length > 0) parts.push(`新建 ${created.join('、')}`);
   if (action.renamedCount > 0) parts.push(`改了 ${String(action.renamedCount)} 个章节标题`);
   if (action.movedCount > 0) parts.push(`移动 ${String(action.movedCount)} 个节点`);
   if (action.deletedCount > 0) parts.push(`删除 ${String(action.deletedCount)} 个章节`);
