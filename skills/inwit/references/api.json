@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-03T13:52:33.918Z",
+  "generatedAt": "2026-10-09T10:13:18.866Z",
   "modules": [
     {
       "id": "open",
@@ -9,12 +9,12 @@
     {
       "id": "documents",
       "title": "文档与问答",
-      "count": 26
+      "count": 29
     },
     {
       "id": "cards",
       "title": "卡片",
-      "count": 16
+      "count": 17
     },
     {
       "id": "review",
@@ -24,7 +24,7 @@
     {
       "id": "topics",
       "title": "主题与知识地图",
-      "count": 19
+      "count": 20
     },
     {
       "id": "search",
@@ -54,7 +54,7 @@
     {
       "id": "account",
       "title": "账号与设置",
-      "count": 23
+      "count": 25
     },
     {
       "id": "admin",
@@ -361,8 +361,8 @@
             },
             "quote": {
               "type": "string",
-              "minLength": 1,
-              "maxLength": 20000
+              "maxLength": 20000,
+              "optional": true
             },
             "note": {
               "type": "string",
@@ -374,7 +374,8 @@
               "enum": [
                 "text",
                 "pdf",
-                "media"
+                "media",
+                "note"
               ],
               "optional": true
             },
@@ -424,8 +425,7 @@
             }
           },
           "required": [
-            "documentId",
-            "quote"
+            "documentId"
           ],
           "additionalProperties": false,
           "refined": true
@@ -1260,6 +1260,66 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/cards/:id/links",
+      "module": "cards",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "comment": "手绘关系边：从 :id 连到 input.toCardId。",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "createCardLinkInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "toCardId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "same_concept",
+                "confusable",
+                "prerequisite",
+                "related"
+              ]
+            },
+            "reason": {
+              "type": "string",
+              "optional": true,
+              "refined": true
+            }
+          },
+          "required": [
+            "toCardId",
+            "type"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
       "method": "PUT",
       "path": "/api/cards/:id/map-node",
       "module": "cards",
@@ -1607,6 +1667,45 @@
               "optional": true,
               "default": []
             },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "nodeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "card",
+                      "annotation",
+                      "text",
+                      "image"
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "nodeId",
+                  "kind",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 5,
+              "optional": true
+            },
             "dirtyDocumentIds": {
               "type": "array",
               "items": {
@@ -1728,6 +1827,45 @@
               "maxItems": 5,
               "optional": true,
               "default": []
+            },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "nodeId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "card",
+                      "annotation",
+                      "text",
+                      "image"
+                    ]
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "nodeId",
+                  "kind",
+                  "label"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 5,
+              "optional": true
             },
             "dirtyDocumentIds": {
               "type": "array",
@@ -2082,7 +2220,7 @@
       "status": [
         201
       ],
-      "comment": "在画布上新建文本或图片节点，可以挂到某个节点下面。",
+      "comment": "在画布上新建文本或图片节点，可以挂到某个节点下面。 @deprecated 仅为旧客户端保留。新的文本/图片节点一律走「note 批注 + 落位」 （POST /api/annotations kind='note' → PATCH /api/documents/:id/canvas/:nodeId）， 新代码不要再调用这个端点。",
       "params": {
         "name": "idParamsSchema",
         "origin": "local",
@@ -2255,6 +2393,124 @@
           "additionalProperties": false,
           "refined": true
         }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/:id/canvas/notes",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [
+        201
+      ],
+      "comment": "在脑图上新建一条想法并落位。文本和图片都走这里，好让回滚能一起撤掉这条想法。",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      },
+      "body": {
+        "name": "createCanvasNoteInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "note": {
+              "type": "string",
+              "maxLength": 20000,
+              "optional": true
+            },
+            "imageKey": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "optional": true
+            },
+            "parentId": {
+              "type": "string",
+              "format": "uuid",
+              "optional": true,
+              "nullable": true
+            },
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "optional": true
+            }
+          },
+          "additionalProperties": false,
+          "refined": true
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/:id/canvas/revisions",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "comment": "这篇文档脑图最近的版本。当前结构与最近一版一致时，那一版标为当前。",
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/:id/canvas/revisions/:revisionId/restore",
+      "module": "documents",
+      "auth": "bearer",
+      "status": [],
+      "comment": "把脑图结构恢复成这一版，并另记一版，方便再回到恢复前。",
+      "params": {
+        "name": "revisionParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "revisionId": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id",
+            "revisionId"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid(), revisionId: z.string().uuid() })"
       }
     },
     {
@@ -3467,6 +3723,33 @@
       }
     },
     {
+      "method": "DELETE",
+      "path": "/api/me/access-tokens/:id",
+      "module": "account",
+      "auth": "bearer",
+      "status": [
+        204
+      ],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
       "method": "POST",
       "path": "/api/me/access-tokens/:id/reveal",
       "module": "account",
@@ -3607,6 +3890,37 @@
               "default": 0
             }
           },
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/me/password",
+      "module": "account",
+      "auth": "bearer",
+      "status": [],
+      "body": {
+        "name": "changePasswordInputSchema",
+        "origin": "dto",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "currentPassword": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "newPassword": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "currentPassword",
+            "newPassword"
+          ],
           "additionalProperties": false
         }
       }
@@ -4292,6 +4606,31 @@
     {
       "method": "POST",
       "path": "/api/topics/:id/archive",
+      "module": "topics",
+      "auth": "bearer",
+      "status": [],
+      "params": {
+        "name": "idParamsSchema",
+        "origin": "local",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "source": "z.object({ id: z.string().uuid() })"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/topics/:id/graph",
       "module": "topics",
       "auth": "bearer",
       "status": [],

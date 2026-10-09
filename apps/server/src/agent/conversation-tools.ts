@@ -15,6 +15,7 @@ import {
   formatMindNode,
   planMindNodeUpdate,
 } from './conversation-logic.js';
+import { applyMindEditsTool, readDocumentMindTool } from './conversation-mind-tools.js';
 import { applyMindNodeUpdate, loadMindNodeFacts, mindNodeAllowed } from './conversation-nodes.js';
 import { cardDraftSchema, searchCardsTool, writeCardsTool, type DigestSession } from './tools.js';
 import { memoryLoadTools } from './memory-tools.js';
@@ -24,6 +25,8 @@ export interface ConversationSession {
   dirtyDocumentIds: ReadonlySet<string>;
   /** documentId:nodeId pairs the user attached in this conversation. */
   mindNodeKeys: ReadonlySet<string>;
+  /** Documents this turn may restructure: mentions plus attached nodes. */
+  mindDocumentIds: ReadonlySet<string>;
   allowCards: boolean;
   actions: ConversationAction[];
   writtenCardIds: string[];
@@ -438,5 +441,7 @@ export function conversationTools(session: ConversationSession): AgentTool[] {
     conversationWriteCardsTool(session),
     readMindNodeTool(session),
     updateMindNodeTool(session),
+    readDocumentMindTool(session),
+    applyMindEditsTool(session),
   ];
 }

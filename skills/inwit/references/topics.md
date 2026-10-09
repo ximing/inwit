@@ -2,7 +2,7 @@
 
 # 主题与知识地图
 
-Generated 2026-10-03T13:52:33.918Z. 19 endpoints.
+Generated 2026-10-09T10:13:18.866Z. 20 endpoints.
 
 ### DELETE `/api/map-nodes/:id`
 
@@ -318,6 +318,27 @@ auth=bearer
 ```
 
 ### POST `/api/topics/:id/archive`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+### GET `/api/topics/:id/graph`
 
 auth=bearer
 

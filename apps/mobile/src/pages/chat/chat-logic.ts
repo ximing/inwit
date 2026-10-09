@@ -1,4 +1,4 @@
-import { CONVERSATION_MENTION_MAX, type ConversationAction } from '@inwit/dto';
+import { CONVERSATION_MENTION_MAX, mindEditSummary, type ConversationAction } from '@inwit/dto';
 
 export type ChatInline =
   | { t: 'text'; v: string }
@@ -74,6 +74,9 @@ export function conversationActionLine(
     }
     const reason = action.reason ? `：${action.reason}` : '';
     return { text: `没能修改节点「${action.title}」${reason}`, documentId: action.documentId };
+  }
+  if (action.type === 'apply_mind_edits') {
+    return { text: mindEditSummary(action), documentId: action.documentId };
   }
   return {
     text: `已写入 ${String(action.count)} 张卡片到《${action.title}》`,

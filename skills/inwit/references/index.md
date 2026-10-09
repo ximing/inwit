@@ -2,23 +2,23 @@
 
 # API 模块索引
 
-Generated 2026-10-03T13:52:33.918Z.
+Generated 2026-10-09T10:13:18.866Z.
 
 按意图只读其中一个文件。不要一次打开多个模块，也不要读 `api.json`。
 
 | 模块 | 文件 | 条数 |
 |---|---|---|
 | 开放文档（PAT） | [open.md](./open.md) | 2 |
-| 文档与问答 | [documents.md](./documents.md) | 26 |
-| 卡片 | [cards.md](./cards.md) | 16 |
+| 文档与问答 | [documents.md](./documents.md) | 29 |
+| 卡片 | [cards.md](./cards.md) | 17 |
 | 复习 | [review.md](./review.md) | 8 |
-| 主题与知识地图 | [topics.md](./topics.md) | 19 |
+| 主题与知识地图 | [topics.md](./topics.md) | 20 |
 | 搜索 | [search.md](./search.md) | 1 |
 | 任务与周报 | [jobs.md](./jobs.md) | 11 |
 | 记忆 | [memory.md](./memory.md) | 2 |
 | 批注 | [annotations.md](./annotations.md) | 10 |
 | 媒体资源 | [assets.md](./assets.md) | 6 |
-| 账号与设置 | [account.md](./account.md) | 23 |
+| 账号与设置 | [account.md](./account.md) | 25 |
 | 管理 | [admin.md](./admin.md) | 5 |
 | 内容同步 | [sync.md](./sync.md) | 1 |
 | other | [other.md](./other.md) | 6 |

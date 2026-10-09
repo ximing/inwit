@@ -2,7 +2,7 @@
 
 # 账号与设置
 
-Generated 2026-10-03T13:52:33.918Z. 23 endpoints.
+Generated 2026-10-09T10:13:18.866Z. 25 endpoints.
 
 ### POST `/api/auth/login`
 
@@ -338,6 +338,27 @@ auth=bearer · 201
 }
 ```
 
+### DELETE `/api/me/access-tokens/:id`
+
+auth=bearer · 204
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
 ### POST `/api/me/access-tokens/:id/reveal`
 
 auth=bearer
@@ -467,6 +488,34 @@ auth=bearer
       "default": 0
     }
   },
+  "additionalProperties": false
+}
+```
+
+### POST `/api/me/password`
+
+auth=bearer
+
+- **body** `changePasswordInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "currentPassword": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "newPassword": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    }
+  },
+  "required": [
+    "currentPassword",
+    "newPassword"
+  ],
   "additionalProperties": false
 }
 ```

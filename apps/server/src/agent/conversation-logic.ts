@@ -3,6 +3,7 @@ import {
   CONVERSATION_NODE_KIND_LABELS,
   CONVERSATION_NODE_MAX,
   CONVERSATION_TITLE_MAX,
+  mindEditSummary,
   type ConversationAction,
   type ConversationNodeKind,
   type ConversationNodeRef,
@@ -42,6 +43,20 @@ export function normalizeDocumentIds(
 
 export function mindNodeKey(documentId: string, nodeId: string): string {
   return `${documentId}:${nodeId}`;
+}
+
+/** 本轮可以改脑图的文档：@ 到的，以及本轮加入的节点所属的。 */
+export function mindDocumentIds(
+  mentions: readonly { id: string }[],
+  nodes: readonly { documentId: string }[],
+): string[] {
+  const out: string[] = [];
+  const push = (id: string) => {
+    if (!out.includes(id)) out.push(id);
+  };
+  for (const mention of mentions) push(mention.id);
+  for (const node of nodes) push(node.documentId);
+  return out;
 }
 
 /** First non-empty line, clipped by unicode scalar. Empty source uses the fallback. */
@@ -249,6 +264,7 @@ function actionLine(action: ConversationAction): string {
     if (action.status === 'applied') return `已更新节点「${action.title}」`;
     return `没能修改节点「${action.title}」${action.reason ? `：${action.reason}` : ''}`;
   }
+  if (action.type === 'apply_mind_edits') return mindEditSummary(action);
   return `已写入 ${String(action.count)} 张卡片到《${action.title}》`;
 }
 
@@ -277,6 +293,11 @@ export function buildConversationPrompt(input: {
     input.nodes.length > 0
       ? input.nodes.map((node) => formatMindNode(node)).join('\n\n')
       : '（本轮没有加入脑图节点）';
+  const mindIds = mindDocumentIds(input.mentions, input.nodes);
+  const mindBlock =
+    mindIds.length > 0
+      ? mindIds.map((id) => `- ${id}`).join('\n')
+      : '（本轮没有点名文档，不要调用 read_document_mind 或 apply_mind_edits）';
   const dirty =
     input.dirtyDocumentIds.length > 0 ? input.dirtyDocumentIds.join('、') : '（无）';
   const cards = input.allowCards
@@ -306,6 +327,9 @@ ${mentionBlock}
 
 本轮加入的脑图节点：
 ${nodeBlock}
+
+本轮可以调整脑图的文档：
+${mindBlock}
 
 有未保存修改、不能写入的文档 id：
 ${dirty}

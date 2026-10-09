@@ -2,7 +2,7 @@
 
 # other
 
-Generated 2026-10-03T13:52:33.918Z. 6 endpoints.
+Generated 2026-10-09T10:13:18.866Z. 6 endpoints.
 
 ### GET `/api/conversations`
 
@@ -49,6 +49,45 @@ auth=bearer · 201
       "maxItems": 5,
       "optional": true,
       "default": []
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nodeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "card",
+              "annotation",
+              "text",
+              "image"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "documentId",
+          "nodeId",
+          "kind",
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 5,
+      "optional": true
     },
     "dirtyDocumentIds": {
       "type": "array",
@@ -155,6 +194,45 @@ auth=bearer · 201
       "maxItems": 5,
       "optional": true,
       "default": []
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nodeId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "card",
+              "annotation",
+              "text",
+              "image"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "documentId",
+          "nodeId",
+          "kind",
+          "label"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 5,
+      "optional": true
     },
     "dirtyDocumentIds": {
       "type": "array",

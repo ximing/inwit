@@ -2,7 +2,7 @@
 
 # 卡片
 
-Generated 2026-10-03T13:52:33.918Z. 16 endpoints.
+Generated 2026-10-09T10:13:18.866Z. 17 endpoints.
 
 ### DELETE `/api/card-links/:id`
 
@@ -278,6 +278,61 @@ auth=bearer
   },
   "required": [
     "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/cards/:id/links`
+
+auth=bearer · 201
+
+手绘关系边：从 :id 连到 input.toCardId。
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `createCardLinkInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "toCardId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "same_concept",
+        "confusable",
+        "prerequisite",
+        "related"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "optional": true,
+      "refined": true
+    }
+  },
+  "required": [
+    "toCardId",
+    "type"
   ],
   "additionalProperties": false
 }

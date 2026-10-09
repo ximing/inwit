@@ -82,6 +82,21 @@ describe('conversationActionLine', () => {
         null,
       ).text,
     ).toBe('没能修改节点「梯度」：找不到这个节点');
+    expect(
+      conversationActionLine(
+        {
+          type: 'apply_mind_edits',
+          documentId: DOC,
+          title: '梯度',
+          status: 'applied',
+          createdCount: 2,
+          renamedCount: 1,
+          movedCount: 0,
+          deletedCount: 0,
+        },
+        null,
+      ).text,
+    ).toBe('已调整《梯度》的脑图：新建 2 个章节，改了 1 个章节标题');
   });
 });
 

@@ -24,6 +24,7 @@ import { ClozeText, MasteryDots, MiniCard, cardMasteryLevel, cardNextReviewLabel
 import { DocEngineView, type DocEngineHandle } from '@/doc-engine/DocEngineView';
 import { useDocEngineAssets } from '@/doc-engine/useDocEngineAssets';
 import { groupCardLinks } from '@/lib/card-copy';
+import { formatDateTime } from '@/lib/format';
 import { mapAppHref } from '@/lib/internal-links';
 import { ROUTES } from '@/routes';
 import { EditorPresenceService } from '@/services/editor-presence.service';
@@ -602,6 +603,7 @@ const ReaderContent = observer(function ReaderContent() {
       <MathSheet onConfirm={confirmMath} />
       <LinkSheet onConfirm={confirmLink} onRemove={removeLink} />
       <CanvasActionsSheet onPickImage={pickCanvasImage} />
+      <CanvasHistorySheet />
       <CanvasParentSheet />
       <CanvasTextSheet />
     </SafeAreaView>
@@ -1348,6 +1350,13 @@ const MindMap = observer(function MindMap({
         <Pressable onPress={() => onPickImage(null)} style={styles.mapTool}>
           <Text style={styles.mapToolText}>加图片</Text>
         </Pressable>
+        <Pressable
+          onPress={() => service.openCanvasHistory()}
+          accessibilityLabel="编辑历史"
+          style={styles.mapTool}
+        >
+          <Text style={styles.mapToolText}>历史</Text>
+        </Pressable>
       </View>
       {rows.length === 0 ? (
         <Text style={styles.placeholderText}>还没有可以展开的卡片、批注或节点。</Text>
@@ -1396,6 +1405,66 @@ function CanvasAction({
     </Pressable>
   );
 }
+
+function revisionWhen(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  if (Date.now() - date.getTime() < 60_000) return '刚刚';
+  return formatDateTime(iso);
+}
+
+const CanvasHistorySheet = observer(function CanvasHistorySheet() {
+  const service = useService(ReaderService);
+  const theme = useTheme();
+  return (
+    <BottomSheet
+      visible={service.canvasHistoryOpen}
+      title="编辑历史"
+      onClose={() => service.closeCanvasHistory()}
+    >
+      {service.canvasRevisionsLoading && service.canvasRevisions.length === 0 ? (
+        <Text style={{ color: theme.colors.ink3, fontSize: 14 }}>正在读取…</Text>
+      ) : service.canvasRevisions.length === 0 ? (
+        <Text style={{ color: theme.colors.ink3, fontSize: 14, lineHeight: 20 }}>
+          还没有记录。改动脑图后会记在这里。
+        </Text>
+      ) : (
+        service.canvasRevisions.map((revision) => (
+          <View
+            key={revision.id}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 12,
+              paddingVertical: 10,
+              borderTopWidth: StyleSheet.hairlineWidth,
+              borderTopColor: theme.colors.line,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: theme.colors.ink3, fontSize: 12 }}>{revisionWhen(revision.createdAt)}</Text>
+              <Text style={{ color: theme.colors.ink, fontSize: 15, lineHeight: 21 }}>{revision.summary}</Text>
+            </View>
+            {revision.current ? (
+              <Text style={{ color: theme.colors.accentDeep, fontSize: 14 }}>当前</Text>
+            ) : (
+              <Pressable
+                onPress={() => void service.restoreCanvasRevision(revision.id)}
+                disabled={service.canvasRevisionRestoring !== null}
+                accessibilityLabel={`恢复${revision.summary}`}
+                style={{ minHeight: 36, justifyContent: 'center' }}
+              >
+                <Text style={{ color: theme.colors.ink, fontSize: 15 }}>
+                  {service.canvasRevisionRestoring === revision.id ? '恢复中' : '恢复'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        ))
+      )}
+    </BottomSheet>
+  );
+});
 
 const CanvasActionsSheet = observer(function CanvasActionsSheet({
   onPickImage,

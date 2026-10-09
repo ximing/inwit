@@ -1,5 +1,7 @@
+import type { CanvasRevision } from '@inwit/dto';
 import { CheckCheck, Pause, Play, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { formatDateTime } from '@/lib/format';
 
 /**
  * 画布内搜索。命中数与当前序由父组件算好，这里只管输入与按键。
@@ -158,6 +160,92 @@ export function CanvasMultiBar({
   );
 }
 
+function revisionWhen(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  if (Date.now() - date.getTime() < 60_000) return '刚刚';
+  return formatDateTime(iso);
+}
+
+/** 脑图版本列表。恢复会另记一版，所以还能再回到恢复前。 */
+export function CanvasRevisionList({
+  revisions,
+  loading,
+  restoringId,
+  onRestore,
+  onClose,
+}: {
+  revisions: CanvasRevision[];
+  loading: boolean;
+  restoringId: string | null;
+  onRestore: (id: string) => void;
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (panelRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest('[data-canvas-history-toggle]')) return;
+      onClose();
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('pointerdown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('pointerdown', onPointer);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={panelRef}
+      className="canvas-history"
+      role="dialog"
+      aria-label="脑图编辑历史"
+    >
+      <div className="canvas-history-head">
+        <strong>编辑历史</strong>
+        <span>最近 40 版</span>
+      </div>
+      {loading && revisions.length === 0 ? (
+        <p className="canvas-history-empty">正在读取…</p>
+      ) : revisions.length === 0 ? (
+        <p className="canvas-history-empty">还没有记录。改动脑图后会记在这里。</p>
+      ) : (
+        <ul>
+          {revisions.map((revision) => (
+            <li key={revision.id} className="canvas-history-row">
+              <div>
+                <time dateTime={revision.createdAt}>{revisionWhen(revision.createdAt)}</time>
+                <p>{revision.summary}</p>
+              </div>
+              {revision.current ? (
+                <span className="canvas-history-current">当前</span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={restoringId !== null}
+                  onClick={() => onRestore(revision.id)}
+                >
+                  {restoringId === revision.id ? '恢复中' : '恢复'}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const HELP_SECTIONS: { title: string; rows: [string, string][] }[] = [
   {
     title: '节点',
@@ -179,6 +267,7 @@ const HELP_SECTIONS: { title: string; rows: [string, string][] }[] = [
       ['⌥↑ / ⌥↓', '同级里移动'],
       ['← / →', '折叠 / 展开，父子跳转'],
       ['⌘Z / ⌘Y', '撤销 / 重做'],
+      ['编辑历史', '恢复之前的结构'],
     ],
   },
   {

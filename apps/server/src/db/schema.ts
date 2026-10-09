@@ -50,6 +50,7 @@ import type {
   AnnotationGeometry,
   AnnotationKind,
   CanvasNodeKind,
+  CanvasSnapshot,
   CardAcceptance,
   CardLinkOrigin,
   ConversationAction,
@@ -421,6 +422,33 @@ export const canvasNodes = pgTable(
       columns: [t.parentId],
       foreignColumns: [t.id],
     }).onDelete('set null'),
+  ],
+);
+
+/**
+ * 一篇文档脑图的版本。snapshot 是该次写入之后的画布行，以及当时还在的批注。
+ * 第一笔之前会另存「开始记录之前」。只保留最近 40 版。
+ */
+export const canvasRevisions = pgTable(
+  'canvas_revisions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    documentId: uuid('document_id')
+      .notNull()
+      .references(() => documents.id, { onDelete: 'cascade' }),
+    summary: varchar('summary', { length: 200 }).notNull(),
+    snapshot: jsonb('snapshot').$type<CanvasSnapshot>().notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('idx_canvas_revisions_document_created').on(t.documentId, t.createdAt.desc(), t.id.desc()),
+    check(
+      'canvas_revisions_summary_len_check',
+      sql`char_length(${t.summary}) BETWEEN 1 AND 200`,
+    ),
   ],
 );
 
@@ -1061,6 +1089,8 @@ export type CardRow = typeof cards.$inferSelect;
 export type NewCard = typeof cards.$inferInsert;
 export type CanvasNodeRow = typeof canvasNodes.$inferSelect;
 export type NewCanvasNode = typeof canvasNodes.$inferInsert;
+export type CanvasRevisionRow = typeof canvasRevisions.$inferSelect;
+export type NewCanvasRevision = typeof canvasRevisions.$inferInsert;
 export type CardLinkRow = typeof cardLinks.$inferSelect;
 export type NewCardLink = typeof cardLinks.$inferInsert;
 export type CardQuestionRow = typeof cardQuestions.$inferSelect;

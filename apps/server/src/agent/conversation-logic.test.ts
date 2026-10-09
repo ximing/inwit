@@ -7,6 +7,7 @@ import {
   emptyMindNodeFacts,
   fallbackReply,
   formatMindNode,
+  mindDocumentIds,
   normalizeDocumentIds,
   normalizeNodeRefs,
   planMindNodeUpdate,
@@ -141,6 +142,8 @@ describe('buildConversationPrompt', () => {
     expect(prompt).toContain('不要调用 write_cards');
     expect(prompt).toContain('把第二段改短一点');
     expect(prompt).toContain('本轮没有加入脑图节点');
+    expect(prompt).toContain('本轮可以调整脑图的文档');
+    expect(prompt).toContain(DOC);
   });
 
   it('keeps an earlier node id so a later turn can edit it', () => {
@@ -160,6 +163,15 @@ describe('buildConversationPrompt', () => {
     });
     expect(prompt).toContain(OTHER);
     expect(prompt).toContain('批注「笔记」');
+    expect(prompt).toContain('不要调用 read_document_mind 或 apply_mind_edits');
+  });
+});
+
+describe('mindDocumentIds', () => {
+  it('keeps this turn’s mentions and attached documents, without duplicates', () => {
+    expect(
+      mindDocumentIds([{ id: DOC }, { id: DOC }], [{ documentId: OTHER }, { documentId: DOC }]),
+    ).toEqual([DOC, OTHER]);
   });
 });
 
@@ -189,5 +201,22 @@ describe('fallbackReply', () => {
         },
       ]),
     ).toBe('已更新节点「梯度」');
+  });
+
+  it('summarizes a mind-map edit', () => {
+    expect(
+      fallbackReply([
+        {
+          type: 'apply_mind_edits',
+          documentId: DOC,
+          title: '梯度',
+          status: 'applied',
+          createdCount: 4,
+          renamedCount: 0,
+          movedCount: 12,
+          deletedCount: 0,
+        },
+      ]),
+    ).toBe('已调整《梯度》的脑图：新建 4 个章节，移动 12 个节点');
   });
 });

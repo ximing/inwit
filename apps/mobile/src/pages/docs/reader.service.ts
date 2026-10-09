@@ -6,6 +6,7 @@ import {
   IMAGE_EXCERPT_QUOTE,
   type Annotation,
   type CanvasNode,
+  type CanvasRevision,
   type CardDetail,
   type CardLinksResponse,
   type DocumentCard,
@@ -24,8 +25,11 @@ import {
 } from '@/api/annotations';
 import { presignAsset } from '@/api/assets';
 import {
+  createCanvasNote,
   deleteCanvasNode,
   listCanvasNodes,
+  listCanvasRevisions,
+  restoreCanvasRevision as restoreCanvasRevisionRequest,
   updateCanvasNode,
 } from '@/api/canvas';
 import {
@@ -183,6 +187,11 @@ export class ReaderService extends Service {
   pdfMarquee = false;
   pdfJump: { pageIndex: number; token: number } | null = null;
   canvasNodes: CanvasNode[] = [];
+  canvasRevisions: CanvasRevision[] = [];
+  canvasRevisionsLoading = false;
+  canvasRevisionRestoring: string | null = null;
+  canvasHistoryOpen = false;
+  private canvasRevisionGen = 0;
   viewMode: 'body' | 'map' = 'body';
   canvasText = '';
   engineReady = false;
@@ -471,6 +480,7 @@ export class ReaderService extends Service {
       this.pdfJump = null;
       this.canvasNodes = [];
       this.canvasImageUrls = {};
+      this.closeCanvasHistory();
       this.viewMode = 'body';
       this.canvasText = '';
       this.pendingAnnotationId = null;
@@ -934,23 +944,21 @@ export class ReaderService extends Service {
           return;
         }
         // 新文本节点 = note 批注 + 落位（批注是痕迹层，画布只负责摆放）。
-        const created = await createAnnotation({
-          documentId,
-          kind: 'note',
+        const created = await createCanvasNote(documentId, {
           note: text,
+          parentId: sheet.parentId,
         });
         this.cardWriteGen += 1;
         this.canvasGen += 1;
         if (this.doc?.id === documentId) {
-          this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+          this.annotations = [
+            ...this.annotations.filter((item) => item.id !== created.annotation.id),
+            created.annotation,
+          ];
           this.entityGen += 1;
+          this.upsertCanvasNode(created.node);
         }
-        this.echoDocumentRow(created.documentId, created.updatedAt);
-        // 无父节点也落一条 canvas 根行（与 web 一致），不靠 mergeCanvasForest 兜底。
-        const placed = await updateCanvasNode(documentId, created.id, {
-          parentId: sheet.parentId,
-        });
-        this.upsertCanvasNode(placed);
+        this.echoDocumentRow(created.annotation.documentId, created.annotation.updatedAt);
       });
       this.showToast(sheet.mode === 'edit' ? '已改好' : '已加上');
       this.closeSheet();
@@ -980,21 +988,18 @@ export class ReaderService extends Service {
     try {
       await this.withDetailWrite(async () => {
         // 新图片节点 = 纯图片 note 批注 + 落位。
-        const created = await createAnnotation({
-          documentId,
-          kind: 'note',
-          imageKey,
-        });
+        const created = await createCanvasNote(documentId, { imageKey, parentId });
         this.cardWriteGen += 1;
         this.canvasGen += 1;
         if (this.doc?.id === documentId) {
-          this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
+          this.annotations = [
+            ...this.annotations.filter((item) => item.id !== created.annotation.id),
+            created.annotation,
+          ];
           this.entityGen += 1;
+          this.upsertCanvasNode(created.node);
         }
-        this.echoDocumentRow(created.documentId, created.updatedAt);
-        // 无父节点也落一条 canvas 根行（与 web 一致），不靠 mergeCanvasForest 兜底。
-        const placed = await updateCanvasNode(documentId, created.id, { parentId });
-        this.upsertCanvasNode(placed);
+        this.echoDocumentRow(created.annotation.documentId, created.annotation.updatedAt);
       });
       void this.ensureCanvasImages();
       this.showToast('已加上图片');
@@ -1028,6 +1033,62 @@ export class ReaderService extends Service {
       this.canvasGen += 1;
     }
     if (failed) void this.loadCanvas();
+  }
+
+  openCanvasHistory(): void {
+    this.canvasHistoryOpen = true;
+    void this.loadCanvasRevisions();
+  }
+
+  closeCanvasHistory(): void {
+    this.canvasHistoryOpen = false;
+    this.canvasRevisions = [];
+    this.canvasRevisionsLoading = false;
+    this.canvasRevisionGen += 1;
+  }
+
+  async loadCanvasRevisions(): Promise<void> {
+    const id = this.doc?.id;
+    if (!id) return;
+    const gen = ++this.canvasRevisionGen;
+    this.canvasRevisionsLoading = true;
+    try {
+      const revisions = await listCanvasRevisions(id);
+      if (gen !== this.canvasRevisionGen || this.doc?.id !== id) return;
+      this.canvasRevisions = revisions;
+    } catch (err) {
+      if (gen !== this.canvasRevisionGen) return;
+      this.showToast(errorMessage(err, '历史没读出来'));
+    } finally {
+      if (gen === this.canvasRevisionGen) this.canvasRevisionsLoading = false;
+    }
+  }
+
+  async restoreCanvasRevision(revisionId: string): Promise<void> {
+    if (!this.doc || this.canvasRevisionRestoring) return;
+    const documentId = this.doc.id;
+    this.canvasRevisionRestoring = revisionId;
+    try {
+      await restoreCanvasRevisionRequest(documentId, revisionId);
+      this.cardWriteGen += 1;
+      const gen = this.cardWriteGen;
+      const [detail, canvas, notes] = await Promise.all([
+        getDocument(documentId),
+        listCanvasNodes(documentId),
+        listDocumentAnnotations(documentId),
+      ]);
+      if (!this.doc || this.doc.id !== documentId || this.cardWriteGen !== gen) return;
+      this.doc = { ...this.doc, cards: detail.cards, updatedAt: detail.updatedAt };
+      this.annotations = notes;
+      this.canvasNodes = canvas;
+      this.entityGen += 1;
+      this.showToast('已恢复这一版脑图');
+      await this.loadCanvasRevisions();
+    } catch (err) {
+      this.showToast(errorMessage(err, '没恢复成'));
+    } finally {
+      if (this.canvasRevisionRestoring === revisionId) this.canvasRevisionRestoring = null;
+    }
   }
 
   async loadCanvas(): Promise<void> {
@@ -2237,6 +2298,7 @@ export class ReaderService extends Service {
       this.annotations = [];
       this.canvasNodes = [];
       this.canvasImageUrls = {};
+      this.closeCanvasHistory();
       this.viewMode = 'body';
       this.canvasGen += 1;
       this.linksGen += 1;

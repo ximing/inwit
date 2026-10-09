@@ -1,6 +1,7 @@
 import {
   CONVERSATION_NODE_KIND_LABELS,
   docDisplayTitle,
+  mindEditSummary,
   type ConversationAction,
   type ConversationNodeRef,
   type DocumentListItem,
@@ -69,6 +70,7 @@ function actionView(
       href,
     };
   }
+  if (action.type === 'apply_mind_edits') return { text: mindEditSummary(action), href };
   return { text: `已写入 ${String(action.count)} 张卡片到《${action.title}》`, href };
 }
 

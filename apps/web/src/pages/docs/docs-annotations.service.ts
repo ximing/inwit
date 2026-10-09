@@ -120,6 +120,7 @@ export class DocsAnnotationsService extends Service {
       this.docs.bumpCardWriteGen();
       this.annotations = this.annotations.map((item) => (item.id === id ? updated : item));
       this.docs.echoDocumentRow(updated.documentId, updated.updatedAt);
+      this.docs.noteCanvasRevised();
       return true;
     } catch (err) {
       this.docs.showToast(errorMessage(err, '没改上'));

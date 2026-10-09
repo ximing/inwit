@@ -7,7 +7,13 @@ import {
   loadConversationRun,
   patchConversationDraft,
 } from '../conversations/conversation.service.js';
-import { wantsCards, buildConversationPrompt, fallbackReply, mindNodeKey } from './conversation-logic.js';
+import {
+  wantsCards,
+  buildConversationPrompt,
+  fallbackReply,
+  mindDocumentIds,
+  mindNodeKey,
+} from './conversation-logic.js';
 import {
   applyConversationStream,
   conversationStreamView,
@@ -92,12 +98,19 @@ export const CONVERSATION_SYSTEM_PROMPT = `你是 Inwit 的对话助手。用户
 - 用户明确要求修改某篇已有文档时，调用 update_document，传入修改后的完整 Markdown 正文。只改用户指定的部分，其余内容保持原意。
 - 用户要新写一篇、且没有指定要改的文档时，调用 create_document。
 - 只有用户明确说要做成卡片、切卡或生成卡片时，才调用 write_cards。不要主动切卡，改完正文也不要再消化。
-- 用户可以把脑图节点加入对话。本轮带全文，之前加入的节点在对话里留着 id。讲解直接写在正文里。用户要求修改时调用 update_mind_node；这轮没有正文就先 read_mind_node。
+- 用户可以把脑图节点加入对话。本轮带全文，之前加入的节点在对话里留着 id。讲解直接写在正文里。用户要求修改节点文字时调用 update_mind_node；这轮没有正文就先 read_mind_node。
+- 用户要求在文档脑图里拆章节、建文章脉络，或把卡片归进脉络时：先 read_document 读正文，再 read_document_mind 读当前脑图，然后用 apply_mind_edits 提交一批修改。只能改本轮 @ 的文档，或本轮加入对话的节点所属的文档。
 
 约束：
 - 有未保存修改的文档，update_document 会被拒绝。遇到拒绝就说明原因，不要换一篇偷偷改。
-- 只修改用户加入过对话的节点。卡片改概念，detail 才改例子；批注只改笔记，引文不动；文本节点改文字。图片不能改。不要改题目，不要删除节点。
-- 不要删除或归档文档，不要改复习计划、主题地图或设置。
+- update_mind_node 只改用户加入过对话的节点的文字。卡片改概念，detail 才改例子；批注只改笔记，引文不动；文本节点改文字。图片不能改。不要改题目，不要用它删除节点。
+- 章节就是文本节点，按正文的标题和段落来拆。用户只说建大纲时，只提交 create_text。用户说把卡片归进脉络时，只 move 还没有父节点的卡片。已经有父节点的留着。对不上的卡片留在最外层。没有卡片的章节保留。
+- 用户明确要求重排、改标题或删掉某章时，才 move 已有父子、rename_text、delete_text。delete_text 只删文本章节，子节点回到最外层，不删卡片。
+- 默认不要移动批注和图片。用户点名要挪时才 move。apply_mind_edits 不改卡片正文。
+- 同一批里先 create_text，再用 parentRef 挂到新建章节上。已有节点用 id。挂到最外层时 parentId 为 null。最外层已有卡片时，新章节用 index 0、1、2 排在前面。没点名的节点不要写进 edits。
+- 这轮没有点名的文档，不要读或改它的脑图，请用户 @ 那一篇。
+- 脑图修改会留下版本。用户可以在脑图的编辑历史里恢复，不要为了回滚去重写整棵树。
+- 不要删除或归档文档，不要改复习计划、主题里的知识地图或设置。
 - 不知道就说不知道，不要编造文档内容。`;
 
 export async function processConversation(job: JobRow): Promise<void> {
@@ -124,6 +137,7 @@ export async function processConversation(job: JobRow): Promise<void> {
     userId: job.userId,
     dirtyDocumentIds: new Set(dirtyDocumentIds),
     mindNodeKeys,
+    mindDocumentIds: new Set(mindDocumentIds(run.mentions, run.nodes)),
     allowCards: wantsCards(run.latest),
     actions: [],
     writtenCardIds: [],

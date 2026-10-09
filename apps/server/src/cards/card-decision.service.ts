@@ -22,6 +22,7 @@ import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.j
 import { logger } from '../utils/logger.js';
 import { decideCardAcceptance, normalizeRejectReason } from './card-acceptance-logic.js';
 import { getCard } from './card.service.js';
+import { commitCanvasRevision, readCanvasHistoryState } from '../canvas/canvas-history.js';
 import { detachCanvasMember } from '../canvas/canvas.service.js';
 import { applyOutlineDetach } from './outline.service.js';
 
@@ -408,8 +409,14 @@ export async function rejectCard(userId: string, cardId: string, input: RejectCa
 
       const now = new Date();
       const oldMapNodeId = card.mapNodeId;
+      const before = card.documentId
+        ? await readCanvasHistoryState(tx, userId, card.documentId)
+        : null;
       await applyOutlineDetach(tx, userId, cardId);
       await detachCanvasMember(tx, userId, cardId);
+      if (card.documentId && before) {
+        await commitCanvasRevision(tx, userId, card.documentId, before);
+      }
       const [updated] = await tx
         .update(cards)
         .set({

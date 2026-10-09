@@ -62,6 +62,68 @@ export const setCanvasNodeInputSchema = z
   );
 export type SetCanvasNodeInput = z.infer<typeof setCanvasNodeInputSchema>;
 
+/** 一版脑图里的一行画布。不含卡片正文。 */
+export const canvasSnapshotNodeSchema = z.object({
+  id: z.string().uuid(),
+  kind: canvasNodeKindSchema,
+  cardId: z.string().uuid().nullable(),
+  annotationId: z.string().uuid().nullable(),
+  text: z.string().nullable(),
+  imageKey: z.string().nullable(),
+  parentId: z.string().uuid().nullable(),
+  position: z.number().int().nonnegative(),
+});
+export type CanvasSnapshotNode = z.infer<typeof canvasSnapshotNodeSchema>;
+
+/** 拍快照时还在的批注。恢复会按这份名单把多出来的批注放回回收站。 */
+export const canvasSnapshotAnnotationSchema = z.object({
+  id: z.string().uuid(),
+  note: z.string(),
+  imageKey: z.string().nullable(),
+});
+export type CanvasSnapshotAnnotation = z.infer<typeof canvasSnapshotAnnotationSchema>;
+
+export const canvasSnapshotDocumentSchema = z.object({
+  nodes: z.array(canvasSnapshotNodeSchema),
+  annotations: z.array(canvasSnapshotAnnotationSchema),
+});
+
+/**
+ * 旧版只存画布行数组。新版同时记下当时的批注，
+ * 这样「加文本」产生的想法才能随版本消失或回来。
+ */
+export const canvasSnapshotSchema = z.union([
+  canvasSnapshotDocumentSchema,
+  z.array(canvasSnapshotNodeSchema),
+]);
+export type CanvasSnapshot = z.infer<typeof canvasSnapshotSchema>;
+
+/** 在脑图上新建一条想法，并在同一次写入里挂到指定位置。 */
+export const createCanvasNoteInputSchema = z
+  .object({
+    note: z.string().trim().max(20_000).optional(),
+    imageKey: z.string().trim().min(1).max(512).optional(),
+    parentId: parentIdField,
+    index: indexField,
+  })
+  .refine((value) => Boolean(value.note) || Boolean(value.imageKey))
+  .refine((value) => value.index === undefined || value.parentId !== undefined);
+export type CreateCanvasNoteInput = z.infer<typeof createCanvasNoteInputSchema>;
+
+export const canvasRevisionSchema = z.object({
+  id: z.string().uuid(),
+  summary: z.string(),
+  createdAt: z.string(),
+  /** 这一版就是当前脑图。 */
+  current: z.boolean(),
+});
+export type CanvasRevision = z.infer<typeof canvasRevisionSchema>;
+
+export const canvasRevisionListSchema = z.object({
+  revisions: z.array(canvasRevisionSchema),
+});
+export type CanvasRevisionList = z.infer<typeof canvasRevisionListSchema>;
+
 export type CanvasMember = {
   id: string;
   kind: CanvasNodeKind;

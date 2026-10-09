@@ -528,6 +528,79 @@
 .doc-canvas-tools button:not(:disabled):hover { color: var(--ink); background: var(--bg-sunken); }
 .doc-canvas-tools button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+.canvas-history {
+  position: absolute;
+  right: 10px;
+  bottom: 52px;
+  z-index: 6;
+  width: min(280px, calc(100% - 20px));
+  max-height: min(320px, calc(100% - 70px));
+  overflow: auto;
+  padding: 8px 8px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+.canvas-history-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 6px;
+}
+.canvas-history-head strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.canvas-history-head span,
+.canvas-history-empty {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.canvas-history ul { margin: 0; padding: 0; list-style: none; }
+.canvas-history-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 4px;
+  border-top: 1px solid var(--line-soft);
+}
+.canvas-history-row p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.canvas-history-row time {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.canvas-history-row button {
+  flex: none;
+  height: 24px;
+  margin-top: 2px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.canvas-history-row button:disabled { opacity: 0.45; cursor: default; }
+.canvas-history-row button:not(:disabled):hover { color: var(--ink); background: var(--bg-sunken); }
+.canvas-history-current {
+  flex: none;
+  margin-top: 4px;
+  color: var(--accent-deep);
+  font-size: 12px;
+}
+
 /* 窄栏渐进精简（.card-rail 已是 inline-size 容器）：先藏「?」快捷键按钮与
    文本/图片的文字标签（图标保留）；更窄再藏「适配」（画布菜单「全部适配」与
    ⌘0 仍可达）。精简后仍装不下才退回横向滚动 */

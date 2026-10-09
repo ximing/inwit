@@ -19,6 +19,7 @@ import {
   MessageSquarePlus,
   Pencil,
   Plus,
+  History,
   Redo2,
   Search,
   Trash2,
@@ -58,6 +59,7 @@ import {
   CanvasHelp,
   CanvasMenu,
   CanvasMultiBar,
+  CanvasRevisionList,
   CanvasSearch,
   type CanvasMenuItem,
 } from './canvas-overlays';
@@ -204,7 +206,7 @@ function ghostPath(from: MindBox, to: MindBox): string {
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
 /** 这些控件自己处理点击，不拿来拖节点、也不抢选中。卡片本身是按钮，不在这里。 */
 const NODE_CONTROLS = '.note-op, .canvas-node-op, .canvas-fold, .canvas-node-bar, .canvas-link-dot, .mini-decision, .card-links, a, input, textarea';
-const KEY_CONTROLS = '.doc-canvas-tools, .canvas-fold, .canvas-node-op, .canvas-node-bar, .note-op, textarea, input';
+const KEY_CONTROLS = '.doc-canvas-tools, .canvas-history, .canvas-fold, .canvas-node-op, .canvas-node-bar, .note-op, textarea, input';
 
 export const CardCanvas = observer(function CardCanvas({
   renderCard,
@@ -594,7 +596,7 @@ export const CardCanvas = observer(function CardCanvas({
       if (
         event.target instanceof Element &&
         event.target.closest(
-          '.doc-canvas-tools, .canvas-links-panel, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar',
+          '.doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar',
         )
       ) {
         return;
@@ -784,7 +786,7 @@ export const CardCanvas = observer(function CardCanvas({
       setMenu(null);
       if (!target.closest('.canvas-menu')) return;
     }
-    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-links-panel, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
     if (event.button !== 0 && event.button !== 1) return;
     if (event.button === 1) event.preventDefault();
     stopViewAnim();
@@ -1239,7 +1241,7 @@ export const CardCanvas = observer(function CardCanvas({
   const onStageContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('.doc-canvas-tools, .canvas-links-panel, .canvas-link-editor, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
+    if (target.closest('.doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-link-editor, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
     event.preventDefault();
     const nodeEl = target.closest('.doc-canvas-card');
     const id = nodeEl?.getAttribute('data-node-id') ?? null;
@@ -1364,7 +1366,7 @@ export const CardCanvas = observer(function CardCanvas({
   const onStageDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-links-panel, .doc-canvas-minimap')) return;
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-history, .canvas-links-panel, .doc-canvas-minimap')) return;
     event.preventDefault();
     void addText(null, outlineChildSlots(forest, null).length);
   };
@@ -1895,6 +1897,15 @@ export const CardCanvas = observer(function CardCanvas({
       ) : null}
       {menu ? <CanvasMenu x={menu.x} y={menu.y} items={menuItems} onClose={() => setMenu(null)} /> : null}
       {helpOpen ? <CanvasHelp onClose={() => setHelpOpen(false)} /> : null}
+      {service.canvasRevisionsOpen ? (
+        <CanvasRevisionList
+          revisions={service.canvasRevisions}
+          loading={service.canvasRevisionsLoading}
+          restoringId={service.canvasRevisionRestoring}
+          onRestore={(id) => void service.restoreCanvasRevision(id)}
+          onClose={() => service.closeCanvasRevisions()}
+        />
+      ) : null}
       <div className="doc-canvas-tools">
         <div className="doc-canvas-tools-group">
           <Tip content="撤销">
@@ -1915,6 +1926,18 @@ export const CardCanvas = observer(function CardCanvas({
             onClick={() => void service.redoCanvas()}
           >
             <Redo2 width={13} height={13} strokeWidth={1.8} />
+          </button>
+          </Tip>
+          <Tip content="编辑历史">
+          <button
+            type="button"
+            data-canvas-history-toggle=""
+            aria-label="编辑历史"
+            aria-pressed={service.canvasRevisionsOpen}
+            className={service.canvasRevisionsOpen ? 'is-on' : undefined}
+            onClick={() => service.toggleCanvasRevisions()}
+          >
+            <History width={13} height={13} strokeWidth={1.8} />
           </button>
           </Tip>
         </div>

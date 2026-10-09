@@ -2,7 +2,7 @@
 
 # 文档与问答
 
-Generated 2026-10-03T13:52:33.918Z. 26 endpoints.
+Generated 2026-10-09T10:13:18.866Z. 29 endpoints.
 
 ### POST `/api/chat`
 
@@ -274,7 +274,7 @@ auth=bearer
 
 auth=bearer · 201
 
-在画布上新建文本或图片节点，可以挂到某个节点下面。
+在画布上新建文本或图片节点，可以挂到某个节点下面。 @deprecated 仅为旧客户端保留。新的文本/图片节点一律走「note 批注 + 落位」 （POST /api/annotations kind='note' → PATCH /api/documents/:id/canvas/:nodeId）， 新代码不要再调用这个端点。
 
 - **params** `idParamsSchema` (local)
 ```json
@@ -437,6 +437,113 @@ auth=bearer
   },
   "additionalProperties": false,
   "refined": true
+}
+```
+
+### POST `/api/documents/:id/canvas/notes`
+
+auth=bearer · 201
+
+在脑图上新建一条想法并落位。文本和图片都走这里，好让回滚能一起撤掉这条想法。
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `createCanvasNoteInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "note": {
+      "type": "string",
+      "maxLength": 20000,
+      "optional": true
+    },
+    "imageKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "optional": true
+    },
+    "parentId": {
+      "type": "string",
+      "format": "uuid",
+      "optional": true,
+      "nullable": true
+    },
+    "index": {
+      "type": "integer",
+      "minimum": 0,
+      "optional": true
+    }
+  },
+  "additionalProperties": false,
+  "refined": true
+}
+```
+
+### GET `/api/documents/:id/canvas/revisions`
+
+auth=bearer
+
+这篇文档脑图最近的版本。当前结构与最近一版一致时，那一版标为当前。
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/documents/:id/canvas/revisions/:revisionId/restore`
+
+auth=bearer
+
+把脑图结构恢复成这一版，并另记一版，方便再回到恢复前。
+
+- **params** `revisionParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "revisionId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id",
+    "revisionId"
+  ],
+  "additionalProperties": false
 }
 ```
 

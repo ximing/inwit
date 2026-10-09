@@ -9,6 +9,7 @@ import type {
 import { and, asc, count, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations, documents, type AnnotationRow } from '../db/schema.js';
+import { commitCanvasRevision, readCanvasHistoryState } from '../canvas/canvas-history.js';
 import { detachCanvasMember } from '../canvas/canvas.service.js';
 import { getOwnedDocument } from '../documents/document.service.js';
 import { AppError } from '../errors.js';
@@ -122,15 +123,21 @@ export async function updateAnnotation(
   id: string,
   input: UpdateAnnotationInput,
 ): Promise<Annotation> {
-  await getOwnedAnnotation(userId, id);
-  const [row] = await getDb()
-    .update(annotations)
-    .set({
-      note: input.note,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(annotations.id, id), eq(annotations.userId, userId)))
-    .returning();
+  const existing = await getOwnedAnnotation(userId, id);
+  const [row] = await getDb().transaction(async (tx) => {
+    const before = await readCanvasHistoryState(tx, userId, existing.documentId);
+    const [updated] = await tx
+      .update(annotations)
+      .set({
+        note: input.note,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(annotations.id, id), eq(annotations.userId, userId)))
+      .returning();
+    if (!updated) throw AppError.of(404, 'ANNOTATION_NOT_FOUND');
+    await commitCanvasRevision(tx, userId, existing.documentId, before);
+    return [updated];
+  });
   if (!row) throw AppError.of(404, 'ANNOTATION_NOT_FOUND');
   await tryIndexAnnotation(row);
   return toPublicAnnotation(row);
@@ -142,11 +149,13 @@ export async function archiveAnnotation(userId: string, id: string): Promise<voi
   if (row.deletedAt) return;
   const now = new Date();
   await getDb().transaction(async (tx) => {
+    const before = await readCanvasHistoryState(tx, userId, row.documentId);
     await detachCanvasMember(tx, userId, id);
     await tx
       .update(annotations)
       .set({ deletedAt: now, updatedAt: now })
       .where(and(eq(annotations.id, id), eq(annotations.userId, userId)));
+    await commitCanvasRevision(tx, userId, row.documentId, before);
   });
   await tryDeleteAnnotationFromIndex(id);
 }
@@ -155,11 +164,17 @@ export async function restoreAnnotation(userId: string, id: string): Promise<Ann
   const row = await getOwnedAnnotationAny(userId, id);
   if (!row.deletedAt) return toPublicAnnotation(row);
   const now = new Date();
-  const [restored] = await getDb()
-    .update(annotations)
-    .set({ deletedAt: null, updatedAt: now })
-    .where(and(eq(annotations.id, id), eq(annotations.userId, userId)))
-    .returning();
+  const [restored] = await getDb().transaction(async (tx) => {
+    const before = await readCanvasHistoryState(tx, userId, row.documentId);
+    const [updated] = await tx
+      .update(annotations)
+      .set({ deletedAt: null, updatedAt: now })
+      .where(and(eq(annotations.id, id), eq(annotations.userId, userId)))
+      .returning();
+    if (!updated) throw AppError.of(404, 'ANNOTATION_NOT_FOUND');
+    await commitCanvasRevision(tx, userId, row.documentId, before);
+    return [updated];
+  });
   if (!restored) throw AppError.of(404, 'ANNOTATION_NOT_FOUND');
   await tryIndexAnnotation(restored);
   return toPublicAnnotation(restored);

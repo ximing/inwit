@@ -65,7 +65,42 @@ export const conversationActionSchema = z.discriminatedUnion('type', [
     status: z.enum(['applied', 'rejected']),
     reason: z.string().optional(),
   }),
+  z.object({
+    type: z.literal('apply_mind_edits'),
+    documentId: z.string().uuid(),
+    title: z.string(),
+    status: z.enum(['applied', 'rejected']),
+    reason: z.string().optional(),
+    createdCount: z.number().int().nonnegative(),
+    renamedCount: z.number().int().nonnegative(),
+    movedCount: z.number().int().nonnegative(),
+    deletedCount: z.number().int().nonnegative(),
+  }),
 ]);
+
+/** 对话里展示的脑图调整结果。 */
+export function mindEditSummary(action: {
+  title: string;
+  status: 'applied' | 'rejected';
+  reason?: string | undefined;
+  createdCount: number;
+  renamedCount: number;
+  movedCount: number;
+  deletedCount: number;
+}): string {
+  if (action.status !== 'applied') {
+    const reason = action.reason?.trim() ?? '';
+    return `没能调整《${action.title}》的脑图${reason ? `：${reason}` : ''}`;
+  }
+  const parts: string[] = [];
+  if (action.createdCount > 0) parts.push(`新建 ${String(action.createdCount)} 个章节`);
+  if (action.renamedCount > 0) parts.push(`改了 ${String(action.renamedCount)} 个章节标题`);
+  if (action.movedCount > 0) parts.push(`移动 ${String(action.movedCount)} 个节点`);
+  if (action.deletedCount > 0) parts.push(`删除 ${String(action.deletedCount)} 个章节`);
+  const detail = parts.length > 0 ? `：${parts.join('，')}` : '';
+  return `已调整《${action.title}》的脑图${detail}`;
+}
+
 export type ConversationAction = z.infer<typeof conversationActionSchema>;
 
 export const conversationSchema = z.object({

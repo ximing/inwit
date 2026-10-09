@@ -35,6 +35,7 @@ import { shouldIndexCard } from './card-acceptance-logic.js';
 import { checkNewCardLink } from './card-link-logic.js';
 import { diffCardQuestions, normalizeTags } from './card-logic.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
+import { commitCanvasRevision, readCanvasHistoryState } from '../canvas/canvas-history.js';
 import { detachCanvasMember } from '../canvas/canvas.service.js';
 import { applyOutlineDetach } from './outline.service.js';
 
@@ -380,6 +381,9 @@ export async function archiveCard(userId: string, id: string): Promise<void> {
   if (card.deletedAt) return;
   const now = new Date();
   await getDb().transaction(async (tx) => {
+    const before = card.documentId
+      ? await readCanvasHistoryState(tx, userId, card.documentId)
+      : null;
     await applyOutlineDetach(tx, userId, id);
     await detachCanvasMember(tx, userId, id);
     await tx
@@ -387,6 +391,9 @@ export async function archiveCard(userId: string, id: string): Promise<void> {
       .set({ deletedAt: now, updatedAt: now })
       .where(and(eq(cards.id, id), eq(cards.userId, userId)));
     if (card.mapNodeId) await recalculateMapNodeStatus(card.mapNodeId, tx);
+    if (card.documentId && before) {
+      await commitCanvasRevision(tx, userId, card.documentId, before);
+    }
   });
   await tryDeleteCardFromIndex(id);
 }

@@ -27,6 +27,8 @@ const TOOL_ACTIVITY: Record<string, string> = {
   write_cards: '正在写卡片',
   read_mind_node: '正在阅读节点',
   update_mind_node: '正在修改节点',
+  read_document_mind: '正在阅读脑图',
+  apply_mind_edits: '正在调整脑图',
   search_cards: '正在检索卡片',
   search_user_memories: '正在检索记忆',
   search_memory_collections: '正在检索记忆',

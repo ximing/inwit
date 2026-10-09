@@ -22,6 +22,7 @@ import {
   type PmDocJson,
   type CanvasMember,
   type CanvasNode,
+  type CanvasRevision,
   type CreateCanvasNodeInput,
   type SyncChange,
   mergeCanvasForest,
@@ -40,7 +41,15 @@ import {
   presignAsset,
   signAssetMultipart,
 } from '@/api/assets';
-import { createCanvasNode, deleteCanvasNode, listCanvasNodes, updateCanvasNode } from '@/api/canvas';
+import {
+  createCanvasNode,
+  createCanvasNote,
+  deleteCanvasNode,
+  listCanvasNodes,
+  listCanvasRevisions,
+  restoreCanvasRevision as restoreCanvasRevisionRequest,
+  updateCanvasNode,
+} from '@/api/canvas';
 import {
   acceptCard,
   archiveCard,
@@ -457,6 +466,11 @@ export class DocsService extends Service {
   canvasUploading = false;
   canvasUndo = 0;
   canvasRedo = 0;
+  canvasRevisions: CanvasRevision[] = [];
+  canvasRevisionsOpen = false;
+  canvasRevisionsLoading = false;
+  canvasRevisionRestoring: string | null = null;
+  private canvasRevisionGen = 0;
   private canvasHistory = new CanvasHistory();
   /** 撤销和重做自己再改树时不再记一笔。 */
   private historyOpen = true;
@@ -945,6 +959,7 @@ export class DocsService extends Service {
       this.appliedUrlAnchor = null;
       this.expandedCardIds = [];
       this.resetCanvasHistory();
+      this.closeCanvasRevisionPanel();
     }
     const gen = ++this.docLoadGen;
     if (this.goneNotifiedId === id) this.goneNotifiedId = null;
@@ -974,6 +989,7 @@ export class DocsService extends Service {
       this.doc = null;
       this.annotations = [];
       this.canvasNodes = [];
+      this.closeCanvasRevisionPanel();
     }
   }
 
@@ -991,6 +1007,7 @@ export class DocsService extends Service {
     this.expandedCardIds = [];
     this.appliedUrlAnchor = null;
     this.resetCanvasHistory();
+    this.closeCanvasRevisionPanel();
     this.cardRailOverlayOpen = false;
     this.closeSelectionPop();
     this.finishSelectionPoll();
@@ -1423,6 +1440,76 @@ export class DocsService extends Service {
     this.canvasRedo = this.canvasHistory.redoCount;
   }
 
+  private closeCanvasRevisionPanel(): void {
+    this.canvasRevisionsOpen = false;
+    this.canvasRevisions = [];
+    this.canvasRevisionsLoading = false;
+    this.canvasRevisionRestoring = null;
+    this.canvasRevisionGen += 1;
+  }
+
+  noteCanvasRevised(): void {
+    if (this.canvasRevisionsOpen) void this.reloadCanvasRevisions();
+  }
+
+  toggleCanvasRevisions(): void {
+    if (this.canvasRevisionsOpen) {
+      this.canvasRevisionsOpen = false;
+      return;
+    }
+    this.canvasRevisionsOpen = true;
+    void this.reloadCanvasRevisions();
+  }
+
+  closeCanvasRevisions(): void {
+    this.canvasRevisionsOpen = false;
+  }
+
+  async reloadCanvasRevisions(): Promise<void> {
+    const id = this.doc?.id;
+    if (!id) return;
+    const gen = ++this.canvasRevisionGen;
+    this.canvasRevisionsLoading = true;
+    try {
+      const revisions = await listCanvasRevisions(id);
+      if (gen !== this.canvasRevisionGen || this.doc?.id !== id) return;
+      this.canvasRevisions = revisions;
+    } catch (err) {
+      if (gen !== this.canvasRevisionGen) return;
+      this.showToast(errorMessage(err, '历史没读出来'));
+    } finally {
+      if (gen === this.canvasRevisionGen) this.canvasRevisionsLoading = false;
+    }
+  }
+
+  async restoreCanvasRevision(revisionId: string): Promise<void> {
+    if (!this.doc || this.canvasRevisionRestoring) return;
+    const documentId = this.doc.id;
+    this.canvasRevisionRestoring = revisionId;
+    try {
+      await restoreCanvasRevisionRequest(documentId, revisionId);
+      this.cardWriteGen += 1;
+      const gen = this.cardWriteGen;
+      const [detail, canvas, notes] = await Promise.all([
+        getDocument(documentId),
+        listCanvasNodes(documentId),
+        listDocumentAnnotations(documentId),
+      ]);
+      if (!this.doc || this.doc.id !== documentId || this.cardWriteGen !== gen) return;
+      this.doc = { ...this.doc, cards: detail.cards, updatedAt: detail.updatedAt };
+      this.annotations = notes;
+      this.canvasNodes = canvas;
+      this.editorHost?.ensureEntityMarks(this.doc.cards, this.annotations);
+      this.resetCanvasHistory();
+      this.showToast('已恢复这一版脑图');
+      await this.reloadCanvasRevisions();
+    } catch (err) {
+      this.showToast(errorMessage(err, '没恢复成'));
+    } finally {
+      if (this.canvasRevisionRestoring === revisionId) this.canvasRevisionRestoring = null;
+    }
+  }
+
   private rememberCanvas(undo: CanvasOp, redo: CanvasOp): void {
     if (!this.historyOpen) return;
     this.canvasHistory.push(undo, redo);
@@ -1487,6 +1574,7 @@ export class DocsService extends Service {
         );
       }
       this.echoDocumentRow(updated.documentId, updated.updatedAt);
+      this.noteCanvasRevised();
     } catch (err) {
       if (this.doc && this.cardWriteGen === gen) {
         this.canvasNodes = nodeSnapshot;
@@ -1518,23 +1606,37 @@ export class DocsService extends Service {
   }
 
   /**
-   * 脑图「添加文本节点」：实际是 quiet 创建一条 note 批注再落位，
-   * 撤销/重放走批注 + 摆放的既有 history（place 记录），不为 note 新造类型。
+   * 脑图「添加文本节点」：同一次请求里新建想法并落位，这样编辑历史能把它整段撤掉。
    */
   async addCanvasTextAt(parentId: string | null, index: number): Promise<string | null> {
     if (!this.doc) return null;
-    const created = await this.annotationService.addThought(
-      { documentId: this.doc.id, note: MIND_NEW_TEXT },
-      { quiet: true },
-    );
-    if (!created) return null;
-    await this.placeOnCanvas(created.id, parentId, index);
-    return created.id;
+    const documentId = this.doc.id;
+    try {
+      const created = await createCanvasNote(documentId, {
+        note: MIND_NEW_TEXT,
+        parentId,
+        index,
+      });
+      if (!this.doc || this.doc.id !== documentId) return null;
+      this.cardWriteGen += 1;
+      this.annotations = [
+        ...this.annotations.filter((item) => item.id !== created.annotation.id),
+        created.annotation,
+      ];
+      this.canvasNodes = upsertCanvas(this.canvasNodes, created.node);
+      this.echoDocumentRow(documentId, created.annotation.updatedAt);
+      this.noteCanvasRevised();
+      return created.annotation.id;
+    } catch (err) {
+      this.showToast(errorMessage(err, '没放上去'));
+      return null;
+    }
   }
 
-  /** 脑图「添加图片节点」：上传后 quiet 创建 note 批注（纯图片想法）再落位。 */
+  /** 脑图「添加图片节点」：上传后同一次请求里新建想法并落位。 */
   async addCanvasImage(file: File, parentId: string | null = null): Promise<void> {
     if (!this.doc || this.canvasUploading) return;
+    const documentId = this.doc.id;
     this.canvasUploading = true;
     try {
       const stored = await storeDocAsset(file, canvasAssetApi);
@@ -1545,13 +1647,16 @@ export class DocsService extends Service {
       const imageKey = stored.assetSrc.startsWith('asset:')
         ? stored.assetSrc.slice('asset:'.length)
         : stored.assetSrc;
-      const created = await this.annotationService.addThought(
-        { documentId: this.doc.id, note: '', imageKey },
-        { quiet: true },
-      );
-      if (!created) return;
-      // 与文本节点一致：无父节点也落一条 canvas 根行，不靠 mergeCanvasForest 兜底。
-      await this.placeOnCanvas(created.id, parentId);
+      const created = await createCanvasNote(documentId, { imageKey, parentId });
+      if (!this.doc || this.doc.id !== documentId) return;
+      this.cardWriteGen += 1;
+      this.annotations = [
+        ...this.annotations.filter((item) => item.id !== created.annotation.id),
+        created.annotation,
+      ];
+      this.canvasNodes = upsertCanvas(this.canvasNodes, created.node);
+      this.echoDocumentRow(documentId, created.annotation.updatedAt);
+      this.noteCanvasRevised();
     } catch (err) {
       const fallback = err instanceof AssetUploadError ? err.message : '图片没放上去';
       this.showToast(errorMessage(err, fallback));
@@ -1588,6 +1693,7 @@ export class DocsService extends Service {
         { type: 'edit', id, text: previous },
         { type: 'edit', id, text: trimmed },
       );
+      this.noteCanvasRevised();
       return true;
     } catch (err) {
       if (this.doc && this.cardWriteGen === gen) this.canvasNodes = snapshot;
@@ -1631,6 +1737,7 @@ export class DocsService extends Service {
         },
         { type: 'delete', id },
       );
+      this.noteCanvasRevised();
     } catch (err) {
       if (this.doc && this.cardWriteGen === gen) {
         this.canvasNodes = nodeSnapshot;
@@ -1672,6 +1779,7 @@ export class DocsService extends Service {
           },
         );
       }
+      this.noteCanvasRevised();
       return created;
     } catch (err) {
       if (!this.historyOpen) throw err;
@@ -1818,6 +1926,7 @@ export class DocsService extends Service {
         this.rememberCanvas({ type: 'unarchive', id, card, children }, { type: 'archive', id });
       }
       if (this.historyOpen) this.showToast('已移入回收站，可在设置里恢复');
+      this.noteCanvasRevised();
       return true;
     } catch (err) {
       if (!this.historyOpen) throw err;
@@ -2439,7 +2548,10 @@ export class DocsService extends Service {
       }
       this.doc = detail;
       if (notes) this.annotations = notes;
-      if (canvas) this.canvasNodes = canvas;
+      if (canvas) {
+        this.canvasNodes = canvas;
+        if (this.canvasRevisionsOpen) void this.reloadCanvasRevisions();
+      }
       this.pruneOpenCards();
     }
     if (editor.id === id && !editor.remoteGone) {
