@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hitCardBox, hitMindDrop } from './mindmap-hit';
+import { hitCardBox, hitMindDrop, mindDragCommit } from './mindmap-hit';
 import type { MindBox } from './mindmap-layout';
 
 const boxes: MindBox[] = [
@@ -29,6 +29,27 @@ describe('hitMindDrop with a dragged set', () => {
   it('ignores every node in the dragged group', () => {
     expect(hitMindDrop(boxes, 40, 50, new Set(['a', 'b']))).toEqual({ kind: 'root' });
     expect(hitMindDrop(boxes, 40, 50, new Set(['b']))).toEqual({ kind: 'child', parentId: 'a' });
+  });
+});
+
+describe('mindDragCommit', () => {
+  it('keeps a short slide as a click, even when the drop would leave the tree', () => {
+    expect(mindDragCommit(0, { kind: 'root' })).toBe('click');
+    expect(mindDragCommit(6, { kind: 'root' })).toBe('click');
+    expect(mindDragCommit(19, { kind: 'root' })).toBe('click');
+    expect(mindDragCommit(Number.NaN, { kind: 'root' })).toBe('click');
+  });
+
+  it('does not detach a node that has only moved a little into empty space', () => {
+    expect(mindDragCommit(21, { kind: 'root' })).toBe('cancel');
+    expect(mindDragCommit(79, { kind: 'root' })).toBe('cancel');
+    expect(mindDragCommit(80, { kind: 'root' })).toBe('commit');
+  });
+
+  it('still places onto another node once the drag has started', () => {
+    expect(mindDragCommit(19, { kind: 'child', parentId: 'a' })).toBe('click');
+    expect(mindDragCommit(20, { kind: 'child', parentId: 'a' })).toBe('commit');
+    expect(mindDragCommit(20, { kind: 'before', siblingId: 'b' })).toBe('commit');
   });
 });
 

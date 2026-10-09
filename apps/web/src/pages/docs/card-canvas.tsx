@@ -91,7 +91,7 @@ import {
   type MindCardTodo,
 } from './mindmap-focus';
 import { decideMindGesture, mindDeleteAction, mindNodeChatLabel, type MindIntent } from './mindmap-gesture';
-import { hitCardBox, hitMindDrop, type MindDrop } from './mindmap-hit';
+import { hitCardBox, hitMindDrop, mindDragCommit, type MindDrop } from './mindmap-hit';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
 import { parseQuoteDrag, quoteDropPlace, QUOTE_DRAG_MIME, type QuoteDragPayload } from './mindmap-quote';
 
@@ -888,21 +888,30 @@ export const CardCanvas = observer(function CardCanvas({
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     const dxPx = event.clientX - gesture.originX;
     const dyPx = event.clientY - gesture.originY;
-    if (!gesture.moved && Math.hypot(dxPx, dyPx) < 6) return;
-    gesture.moved = true;
+    const travel = Math.hypot(dxPx, dyPx);
     const rect = viewportRef.current?.getBoundingClientRect();
     const world = worldPoint(event.clientX, event.clientY);
     const group =
       selectedIds.has(gesture.id) && selectedIds.size > 1
         ? new Set(mindTopmostSelected(forest, selectedIds))
         : gesture.id;
+    const drop = hitMindDrop(layout.boxes, world.x, world.y, group);
+    // 近处滑一下仍算点击。拖到空白要更远，才预览「独立成树」。
+    if (mindDragCommit(travel, drop) !== 'commit') {
+      if (gesture.moved) {
+        gesture.moved = false;
+        setDrag(null);
+      }
+      return;
+    }
+    gesture.moved = true;
     setDrag({
       id: gesture.id,
       dx: dxPx / view.zoom,
       dy: dyPx / view.zoom,
       x: rect ? event.clientX - rect.left : 0,
       y: rect ? event.clientY - rect.top : 0,
-      drop: hitMindDrop(layout.boxes, world.x, world.y, group),
+      drop,
     });
     if (rect) {
       const pan = edgeAutoPan(
@@ -927,11 +936,7 @@ export const CardCanvas = observer(function CardCanvas({
     } catch {
       // Already released.
     }
-    if (!gesture.moved) {
-      setDrag(null);
-      return;
-    }
-    if (decideMindGesture({ action: 'drag' }).type === 'ignore') suppressClick.current = true;
+    const travel = Math.hypot(event.clientX - gesture.originX, event.clientY - gesture.originY);
     const world = worldPoint(event.clientX, event.clientY);
     const groupIds =
       selectedIds.has(gesture.id) && selectedIds.size > 1
@@ -944,6 +949,9 @@ export const CardCanvas = observer(function CardCanvas({
       groupIds ? new Set(groupIds) : gesture.id,
     );
     setDrag(null);
+    // 没拖成一次落位时保留点击：选中、点回正文都还在。
+    if (mindDragCommit(travel, drop) !== 'commit') return;
+    if (decideMindGesture({ action: 'drag' }).type === 'ignore') suppressClick.current = true;
     if (groupIds) {
       // 整组拖动：落点换成「整组拿掉后」的下标，任一节点放不下就整组不动。
       const place = placeGroupFromDrop(forest, groupIds, drop);

@@ -10,6 +10,22 @@ export type MindDrop =
 const EDGE = 0.28;
 const GAP = 18;
 
+/** 屏幕像素。没拖开这么远，松手仍是点击。 */
+export const MIND_DRAG_ARM_PX = 20;
+
+/**
+ * 拖到空白处要再远一截，才把节点拆出当前树。
+ * 被拖的节点不算落点，近处一松手就会被当成空白。
+ */
+export const MIND_DRAG_ROOT_PX = 80;
+
+/** 拖动还没到位时不改树。空白处的「独立成树」比挂到别的节点更晚生效。 */
+export function mindDragCommit(travelPx: number, drop: MindDrop): 'click' | 'cancel' | 'commit' {
+  if (!Number.isFinite(travelPx) || travelPx < MIND_DRAG_ARM_PX) return 'click';
+  if (drop.kind === 'root' && travelPx < MIND_DRAG_ROOT_PX) return 'cancel';
+  return 'commit';
+}
+
 /**
  * 节点上沿、下沿是插入线，中间是收成子节点。
  * 节点之间的缝也算插入线，避免掉进缝里被当成拖到空白。
