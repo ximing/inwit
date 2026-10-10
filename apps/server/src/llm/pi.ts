@@ -3,6 +3,7 @@ import {
   createModels,
   createProvider,
   type Api,
+  type ApiKeyAuth,
   type Context,
   type Model,
   type MutableModels,
@@ -33,10 +34,12 @@ const DEFAULT_BASE_URL: Record<LlmProvider, string> = {
 
 const COMPLETE_TIMEOUT_MS = 60_000;
 
-function dummyApiKeyAuth(name: string) {
+/** The request passes the user key as an override. Echo that credential; do not read env. */
+function passthroughApiKeyAuth(name: string): ApiKeyAuth {
   return {
     name,
-    resolve: () => Promise.resolve({ auth: {} }),
+    resolve: ({ credential }) =>
+      Promise.resolve(credential?.key ? { auth: { apiKey: credential.key }, source: name } : undefined),
   };
 }
 
@@ -69,7 +72,7 @@ function openaiCompatProvider(
     id: providerId,
     name: providerId,
     baseUrl,
-    auth: { apiKey: dummyApiKeyAuth(`${providerId} API key`) },
+    auth: { apiKey: passthroughApiKeyAuth(`${providerId} API key`) },
     models: [openaiCompatModel(providerId, modelId, baseUrl)],
     api: openAICompletionsApi(),
   });

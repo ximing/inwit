@@ -124,9 +124,11 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
             model: resolved.model,
             tools: run.tools,
           },
-          shouldStopAfterTurn: () => {
+          finishTurn: (turn) => {
+            // Error and aborted turns are hard exits. Counting them would change the old cap.
+            if (turn.message.stopReason === 'error' || turn.message.stopReason === 'aborted') return;
             turnCount += 1;
-            return turnCount >= maxTurns;
+            if (turnCount >= maxTurns) return { action: 'end' as const };
           },
           toolExecution: 'sequential',
         });
