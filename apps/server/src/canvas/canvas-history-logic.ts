@@ -181,9 +181,15 @@ export function canvasRevisionMatches(
   const liveById = new Map(live.annotations.map((note) => [note.id, note]));
   return stored.annotations.every((note) => {
     const current = liveById.get(note.id);
-    return (
-      current !== undefined && current.note === note.note && current.imageKey === note.imageKey
-    );
+    if (!current || current.note !== note.note || current.imageKey !== note.imageKey) return false;
+    if (note.quote !== undefined && current.quote !== note.quote) return false;
+    if (
+      note.anchorBlockIndex !== undefined &&
+      (current.anchorBlockIndex ?? null) !== note.anchorBlockIndex
+    ) {
+      return false;
+    }
+    return true;
   });
 }
 
@@ -224,7 +230,14 @@ export function describeHistoryChange(
       if (!(afterRows.has(id) && !beforeRows.has(id))) extraMoves += 1;
       continue;
     }
-    if (prev.note !== note.note || prev.imageKey !== note.imageKey) edited += 1;
+    if (
+      prev.note !== note.note ||
+      prev.imageKey !== note.imageKey ||
+      prev.quote !== note.quote ||
+      (prev.anchorBlockIndex ?? null) !== (note.anchorBlockIndex ?? null)
+    ) {
+      edited += 1;
+    }
   }
   for (const id of beforeNotes.keys()) {
     if (afterNotes.has(id)) continue;

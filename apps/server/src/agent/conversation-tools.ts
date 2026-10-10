@@ -8,13 +8,13 @@ import { asPmJson, documentPlainText, markdownToContentJson } from '../documents
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
 import { numberedBlocksFromDoc } from './card-anchor-logic.js';
 import {
-  clipChars,
   documentEditRefusal,
   editRefusalReason,
   editRefusalStatus,
   formatMindNode,
   planMindNodeUpdate,
 } from './conversation-logic.js';
+import { sliceNumberedDocument } from './document-read-logic.js';
 import { applyMindEditsTool, readDocumentMindTool } from './conversation-mind-tools.js';
 import { applyMindNodeUpdate, loadMindNodeFacts, mindNodeAllowed } from './conversation-nodes.js';
 import { cardDraftSchema, searchCardsTool, writeCardsTool, type DigestSession } from './tools.js';
@@ -58,6 +58,7 @@ function digestSession(session: ConversationSession, documentId: string): Digest
 
 const readConversationDocumentSchema = Type.Object({
   documentId: Type.String({ minLength: 1, maxLength: 36 }),
+  fromBlock: Type.Optional(Type.Integer({ minimum: 1, maximum: 100_000 })),
 });
 
 export function readConversationDocumentTool(
@@ -67,7 +68,7 @@ export function readConversationDocumentTool(
     name: 'read_document',
     label: '读取文档',
     description:
-      '读取用户自己的一篇文档，返回标题和编号块。正文过长时会截断。PDF 读的是已经抽出的文字。',
+      '读取用户自己的一篇文档，返回标题和编号块。PDF 读的是已经抽出的文字，不是文件缺页。一次大约 12000 字，停在整块边界。truncated 为真时后面还有，用返回的 nextBlock 作为 fromBlock 再读。unreadPages 是还没读完的页，含 page、下一块 blockIndex 和开头一句。开头一句只用于定位，不能当作划线引文。给后文章节做划线时，先按 unreadPages 跳到那一页，再从编号块里逐字抄标题。前文里仅仅提到后一章的句子不能当那一章的锚点。fromBlock 从 1 起，不写就是从头读。不要逐页把全文读完。',
     parameters: readConversationDocumentSchema,
     execute: async (_id, params) => {
       const [row] = await getDb()
@@ -82,15 +83,23 @@ export function readConversationDocumentTool(
         )
         .limit(1);
       if (!row) return toolResult(JSON.stringify({ ok: false, reason: '找不到这篇文档' }));
-      const { numberedView } = numberedBlocksFromDoc(asPmJson(row.contentJson));
-      const view = clipChars(numberedView, 12_000);
+      const { blocks } = numberedBlocksFromDoc(asPmJson(row.contentJson));
+      const view = sliceNumberedDocument(blocks, {
+        ...(params.fromBlock !== undefined ? { fromBlock: params.fromBlock } : {}),
+      });
       const payload = {
         id: row.id,
         title: displayTitle(row.title),
         fileMime: row.fileMime,
         kind: row.kind,
         numberedView: view.text,
-        truncated: view.clipped,
+        truncated: view.truncated,
+        fromBlock: view.fromBlock,
+        throughBlock: view.throughBlock,
+        nextBlock: view.nextBlock,
+        blockCount: view.blockCount,
+        unreadPages: view.unreadPages,
+        unreadPageCount: view.unreadPageCount,
       };
       return toolResult(JSON.stringify(payload), payload);
     },

@@ -29,6 +29,7 @@ type NoteRow = {
   quote: string;
   note: string;
   imageKey: string | null;
+  anchorBlockIndex: number | null;
   deletedAt: Date | null;
 };
 
@@ -70,6 +71,8 @@ async function readLiveAnnotations(
       id: annotations.id,
       note: annotations.note,
       imageKey: annotations.imageKey,
+      quote: annotations.quote,
+      anchorBlockIndex: annotations.anchorBlockIndex,
     })
     .from(annotations)
     .where(
@@ -84,6 +87,8 @@ async function readLiveAnnotations(
     id: row.id,
     note: row.note,
     imageKey: row.imageKey ?? null,
+    quote: row.quote,
+    anchorBlockIndex: row.anchorBlockIndex ?? null,
   }));
 }
 
@@ -221,6 +226,7 @@ async function loadNotes(
       quote: annotations.quote,
       note: annotations.note,
       imageKey: annotations.imageKey,
+      anchorBlockIndex: annotations.anchorBlockIndex,
       deletedAt: annotations.deletedAt,
     })
     .from(annotations)
@@ -309,12 +315,39 @@ async function applySnapshot(
       const row = byId.get(note.id);
       if (!row) continue;
       const imageKey = note.imageKey ?? null;
-      if (!row.deletedAt && row.note === note.note && (row.imageKey ?? null) === imageKey) continue;
+      const nextQuote = note.quote;
+      const nextAnchor = note.anchorBlockIndex;
+      const quoteSame = nextQuote === undefined || row.quote === nextQuote;
+      const anchorSame =
+        nextAnchor === undefined || (row.anchorBlockIndex ?? null) === nextAnchor;
+      if (
+        !row.deletedAt &&
+        row.note === note.note &&
+        (row.imageKey ?? null) === imageKey &&
+        quoteSame &&
+        anchorSame
+      ) {
+        continue;
+      }
       await db
         .update(annotations)
-        .set({ note: note.note, imageKey, deletedAt: null, updatedAt: now })
+        .set({
+          note: note.note,
+          imageKey,
+          deletedAt: null,
+          updatedAt: now,
+          ...(nextQuote !== undefined ? { quote: nextQuote } : {}),
+          ...(nextAnchor !== undefined ? { anchorBlockIndex: nextAnchor } : {}),
+        })
         .where(and(eq(annotations.id, note.id), eq(annotations.userId, userId)));
-      revived.push({ ...row, note: note.note, imageKey, deletedAt: null });
+      revived.push({
+        ...row,
+        note: note.note,
+        imageKey,
+        deletedAt: null,
+        quote: nextQuote ?? row.quote,
+        anchorBlockIndex: nextAnchor !== undefined ? nextAnchor : row.anchorBlockIndex,
+      });
     }
   }
   const archiveIds = planAnnotationRestore(

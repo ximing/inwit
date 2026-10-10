@@ -38,11 +38,11 @@ export type MindEditInput = {
   ref?: string;
   nodeId?: string;
   text?: string;
-  /** create_highlight：read_document 里「[块 N | …]」的 N。 */
+  /** create_highlight / retarget_highlight：read_document 里「[块 N | …]」的 N。 */
   blockIndex?: number;
-  /** create_highlight：这一块里连续的原文。 */
+  /** create_highlight / retarget_highlight：这一块里连续的原文。 */
   quote?: string;
-  /** create_highlight：脑图上显示的短标题。 */
+  /** create_highlight：脑图上显示的短标题。retarget_highlight 省略则保留原说明。 */
   note?: string;
   parentId?: string | null;
   parentRef?: string;
@@ -62,7 +62,14 @@ export type MindEditStep =
     }
   | { op: 'rename_text'; nodeId: string; text: string }
   | { op: 'move'; nodeId: string; parent: MindEditParent; index?: number }
-  | { op: 'delete_text'; nodeId: string };
+  | { op: 'delete_text'; nodeId: string }
+  | {
+      op: 'retarget_highlight';
+      nodeId: string;
+      quote: string;
+      blockIndex: number;
+      note?: string;
+    };
 
 export type MindEditPlan =
   | {
@@ -75,6 +82,7 @@ export type MindEditPlan =
       renamedCount: number;
       movedCount: number;
       deletedCount: number;
+      retargetedCount: number;
     }
   | { ok: false; reason: string };
 
@@ -108,6 +116,16 @@ function readQuote(quote: string | undefined): { ok: true; quote: string } | { o
 
 function readNote(note: string | undefined): { ok: true; note: string } | { ok: false; reason: string } {
   const trimmed = note?.trim() ?? '';
+  if ([...trimmed].length > MIND_QUOTE_MAX) return { ok: false, reason: '划线说明过长' };
+  return { ok: true, note: trimmed };
+}
+
+/** 省略表示保留原说明。写了就替换，空字符串会清掉说明。 */
+function readRetargetNote(
+  note: string | undefined,
+): { ok: true; note?: string } | { ok: false; reason: string } {
+  if (note === undefined) return { ok: true };
+  const trimmed = note.trim();
   if ([...trimmed].length > MIND_QUOTE_MAX) return { ok: false, reason: '划线说明过长' };
   return { ok: true, note: trimmed };
 }
@@ -347,6 +365,28 @@ export function planMindEdits(
       continue;
     }
 
+    if (edit.op === 'retarget_highlight') {
+      const nodeId = readNodeId(edit.nodeId);
+      if (!nodeId.ok) return nodeId;
+      const quote = readQuote(edit.quote);
+      if (!quote.ok) return quote;
+      const note = readRetargetNote(edit.note);
+      if (!note.ok) return note;
+      const blockIndex = readBlockIndex(edit.blockIndex);
+      if (!blockIndex.ok) return blockIndex;
+      const node = nodes.find((item) => item.id === nodeId.nodeId);
+      if (!node || !original.has(node.id)) return { ok: false, reason: '找不到这个节点' };
+      if (node.kind !== 'annotation') return { ok: false, reason: '只能改划线的锚点' };
+      steps.push({
+        op: 'retarget_highlight',
+        nodeId: node.id,
+        quote: quote.quote,
+        blockIndex: blockIndex.blockIndex,
+        ...(note.note !== undefined ? { note: note.note } : {}),
+      });
+      continue;
+    }
+
     if (edit.op === 'delete_text') {
       const nodeId = readNodeId(edit.nodeId);
       if (!nodeId.ok) return nodeId;
@@ -373,6 +413,7 @@ export function planMindEdits(
     renamedCount: steps.filter((step) => step.op === 'rename_text').length,
     movedCount: steps.filter((step) => step.op === 'move').length,
     deletedCount: steps.filter((step) => step.op === 'delete_text').length,
+    retargetedCount: steps.filter((step) => step.op === 'retarget_highlight').length,
   };
 }
 

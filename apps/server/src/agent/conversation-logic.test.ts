@@ -217,6 +217,7 @@ describe('fallbackReply', () => {
           renamedCount: 0,
           movedCount: 12,
           deletedCount: 0,
+          retargetedCount: 0,
         },
       ]),
     ).toBe('已调整《梯度》的脑图：新建 4 个章节，移动 12 个节点');
@@ -235,9 +236,29 @@ describe('fallbackReply', () => {
           renamedCount: 0,
           movedCount: 0,
           deletedCount: 0,
+          retargetedCount: 0,
         },
       ]),
     ).toBe('已调整《梯度》的脑图：新建 1 个章节、3 处划线');
+  });
+
+  it('names retargeted highlights', () => {
+    expect(
+      fallbackReply([
+        {
+          type: 'apply_mind_edits',
+          documentId: DOC,
+          title: '梯度',
+          status: 'applied',
+          createdCount: 0,
+          highlightCount: 0,
+          renamedCount: 0,
+          movedCount: 0,
+          deletedCount: 0,
+          retargetedCount: 7,
+        },
+      ]),
+    ).toBe('已调整《梯度》的脑图：改了 7 处划线锚点');
   });
 });
 
@@ -256,6 +277,7 @@ describe('conversation actions', () => {
     expect(parsed.success).toBe(true);
     if (!parsed.success || parsed.data.type !== 'apply_mind_edits') return;
     expect(parsed.data.highlightCount).toBe(0);
+    expect(parsed.data.retargetedCount).toBe(0);
   });
 });
 
@@ -264,5 +286,7 @@ describe('conversation system prompt', () => {
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('create_highlight');
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('不要说自己不能划线');
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('逐字抄写');
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('fromBlock');
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('retarget_highlight');
   });
 });

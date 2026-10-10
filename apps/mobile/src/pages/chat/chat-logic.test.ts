@@ -94,6 +94,7 @@ describe('conversationActionLine', () => {
           renamedCount: 1,
           movedCount: 0,
           deletedCount: 0,
+          retargetedCount: 0,
         },
         null,
       ).text,

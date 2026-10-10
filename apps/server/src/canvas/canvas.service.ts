@@ -567,6 +567,7 @@ export type MindEditResult =
       renamedCount: number;
       movedCount: number;
       deletedCount: number;
+      retargetedCount: number;
     }
   | { ok: false; reason: string };
 
@@ -594,7 +595,7 @@ export async function applyDocumentMindEdits(
       const created: Record<string, string> = {};
       const highlights: IndexedHighlight[] = [];
       let content = asPmJson(null);
-      if (plan.highlightCount > 0) {
+      if (plan.highlightCount > 0 || plan.retargetedCount > 0) {
         const [docRow] = await tx
           .select({ contentJson: documents.contentJson })
           .from(documents)
@@ -678,6 +679,32 @@ export async function applyDocumentMindEdits(
           continue;
         }
 
+        if (step.op === 'retarget_highlight') {
+          const located = locateHighlightQuote(content, step.blockIndex, step.quote);
+          if (!located.ok) throw new AppError(400, 'VALIDATION_ERROR', located.reason);
+          const [row] = await tx
+            .update(annotations)
+            .set({
+              quote: step.quote,
+              anchorBlockIndex: step.blockIndex,
+              updatedAt: new Date(),
+              ...(step.note !== undefined ? { note: step.note } : {}),
+            })
+            .where(
+              and(
+                eq(annotations.id, step.nodeId),
+                eq(annotations.userId, userId),
+                eq(annotations.documentId, documentId),
+                eq(annotations.kind, 'text'),
+                isNull(annotations.deletedAt),
+              ),
+            )
+            .returning();
+          if (!row) throw new AppError(400, 'VALIDATION_ERROR', '只能改文字划线的锚点');
+          highlights.push({ id: row.id, quote: row.quote, note: row.note });
+          continue;
+        }
+
         const [existing] = await tx
           .select({ kind: canvasNodes.kind })
           .from(canvasNodes)
@@ -712,6 +739,7 @@ export async function applyDocumentMindEdits(
         renamedCount: plan.renamedCount,
         movedCount: plan.movedCount,
         deletedCount: plan.deletedCount,
+        retargetedCount: plan.retargetedCount,
         highlights,
       };
     });
@@ -734,6 +762,7 @@ export async function applyDocumentMindEdits(
         renamedCount: saved.renamedCount,
         movedCount: saved.movedCount,
         deletedCount: saved.deletedCount,
+        retargetedCount: saved.retargetedCount,
       };
     }
     return saved;

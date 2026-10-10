@@ -208,6 +208,66 @@ describe('planMindEdits', () => {
       ]),
     ).toEqual({ ok: false, reason: '章节编号重复：h1' });
   });
+
+  it('retargets an existing highlight and leaves its place', () => {
+    const plan = planMindEdits(
+      [member(NOTE, 'annotation', CHAPTER, 1)],
+      [
+        {
+          op: 'retarget_highlight',
+          nodeId: NOTE,
+          blockIndex: 4,
+          quote: ' 5 Scheduling ',
+          note: ' §5 ',
+        },
+      ],
+    );
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.retargetedCount).toBe(1);
+    expect(plan.highlightCount).toBe(0);
+    expect(parentOf(plan.nodes, NOTE)).toBe(CHAPTER);
+    expect(plan.steps[0]).toEqual({
+      op: 'retarget_highlight',
+      nodeId: NOTE,
+      blockIndex: 4,
+      quote: '5 Scheduling',
+      note: '§5',
+    });
+  });
+
+  it('keeps the old note when a retarget omits it', () => {
+    const plan = planMindEdits(
+      [member(NOTE, 'annotation', null)],
+      [{ op: 'retarget_highlight', nodeId: NOTE, blockIndex: 2, quote: '原文' }],
+    );
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.steps[0]).toEqual({
+      op: 'retarget_highlight',
+      nodeId: NOTE,
+      blockIndex: 2,
+      quote: '原文',
+    });
+  });
+
+  it('refuses to retarget a chapter or a highlight without a quote', () => {
+    expect(
+      planMindEdits(
+        [member(CHAPTER, 'text', null)],
+        [{ op: 'retarget_highlight', nodeId: CHAPTER, blockIndex: 1, quote: '原文' }],
+      ),
+    ).toEqual({ ok: false, reason: '只能改划线的锚点' });
+    expect(
+      planMindEdits(
+        [member(NOTE, 'annotation', null)],
+        [{ op: 'retarget_highlight', nodeId: NOTE, blockIndex: 1 }],
+      ),
+    ).toEqual({ ok: false, reason: '划线原文不能为空' });
+    expect(
+      planMindEdits([], [{ op: 'retarget_highlight', nodeId: NOTE, blockIndex: 1, quote: '原文' }]),
+    ).toEqual({ ok: false, reason: '找不到这个节点' });
+  });
 });
 
 describe('formatDocumentMind', () => {

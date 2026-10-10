@@ -80,6 +80,9 @@ export const canvasSnapshotAnnotationSchema = z.object({
   id: z.string().uuid(),
   note: z.string(),
   imageKey: z.string().nullable(),
+  /** 旧快照没有引文。恢复时缺了这两个字段就不动锚点。 */
+  quote: z.string().optional(),
+  anchorBlockIndex: z.number().int().nullable().optional(),
 });
 export type CanvasSnapshotAnnotation = z.infer<typeof canvasSnapshotAnnotationSchema>;
 

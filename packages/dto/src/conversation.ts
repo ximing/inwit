@@ -77,6 +77,8 @@ export const conversationActionSchema = z.discriminatedUnion('type', [
     renamedCount: z.number().int().nonnegative(),
     movedCount: z.number().int().nonnegative(),
     deletedCount: z.number().int().nonnegative(),
+    /** 本批改了锚点的划线。旧记录没有这个字段，读出来按 0。 */
+    retargetedCount: z.number().int().nonnegative().default(0),
   }),
 ]);
 
@@ -90,6 +92,7 @@ export function mindEditSummary(action: {
   renamedCount: number;
   movedCount: number;
   deletedCount: number;
+  retargetedCount?: number;
 }): string {
   if (action.status !== 'applied') {
     const reason = action.reason?.trim() ?? '';
@@ -101,6 +104,9 @@ export function mindEditSummary(action: {
   if ((action.highlightCount ?? 0) > 0) created.push(`${String(action.highlightCount)} 处划线`);
   if (created.length > 0) parts.push(`新建 ${created.join('、')}`);
   if (action.renamedCount > 0) parts.push(`改了 ${String(action.renamedCount)} 个章节标题`);
+  if ((action.retargetedCount ?? 0) > 0) {
+    parts.push(`改了 ${String(action.retargetedCount)} 处划线锚点`);
+  }
   if (action.movedCount > 0) parts.push(`移动 ${String(action.movedCount)} 个节点`);
   if (action.deletedCount > 0) parts.push(`删除 ${String(action.deletedCount)} 个章节`);
   const detail = parts.length > 0 ? `：${parts.join('，')}` : '';

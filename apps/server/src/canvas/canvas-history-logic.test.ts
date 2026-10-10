@@ -192,6 +192,23 @@ describe('describeHistoryChange', () => {
       ),
     ).toBe('改了 1 条批注');
   });
+
+  it('describes a quote retarget as an annotation edit', () => {
+    const nodes = [node({ id: NOTE, kind: 'annotation' })];
+    const before = {
+      id: NOTE,
+      note: '§5',
+      imageKey: null as string | null,
+      quote: '路线图',
+      anchorBlockIndex: 2,
+    };
+    expect(
+      describeHistoryChange(
+        { nodes, annotations: [before] },
+        { nodes, annotations: [{ ...before, quote: '5 Scheduling', anchorBlockIndex: 8 }] },
+      ),
+    ).toBe('改了 1 条批注');
+  });
 });
 
 describe('planAnnotationRestore', () => {
@@ -235,6 +252,36 @@ describe('canvasRevisionMatches', () => {
       ),
     ).toBe(false);
   });
+
+  it('ignores a quote the snapshot did not record', () => {
+    expect(
+      canvasRevisionMatches(
+        { nodes, annotations: [{ id: NOTE, note: '想法', imageKey: null }] },
+        {
+          nodes,
+          annotations: [
+            { id: NOTE, note: '想法', imageKey: null, quote: '新引文', anchorBlockIndex: 4 },
+            { id: OTHER, note: '后来的高亮', imageKey: null },
+          ],
+        },
+      ),
+    ).toBe(true);
+  });
+
+  it('is not current when the stored quote differs', () => {
+    expect(
+      canvasRevisionMatches(
+        {
+          nodes,
+          annotations: [{ id: NOTE, note: '想法', imageKey: null, quote: '旧引文', anchorBlockIndex: 1 }],
+        },
+        {
+          nodes,
+          annotations: [{ id: NOTE, note: '想法', imageKey: null, quote: '新引文', anchorBlockIndex: 1 }],
+        },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('canvasSnapshotSchema', () => {
@@ -249,6 +296,11 @@ describe('canvasSnapshotSchema', () => {
       annotations: [{ id: NOTE, note: '想法', imageKey: null }],
     };
     expect(normalizeCanvasSnapshot(canvasSnapshotSchema.parse(document))).toEqual(document);
+    const anchored = {
+      nodes: [row],
+      annotations: [{ id: NOTE, note: '§5', imageKey: null, quote: '5 Scheduling', anchorBlockIndex: 8 }],
+    };
+    expect(normalizeCanvasSnapshot(canvasSnapshotSchema.parse(anchored))).toEqual(anchored);
   });
 });
 
