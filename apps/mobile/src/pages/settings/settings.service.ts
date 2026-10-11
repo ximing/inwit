@@ -5,8 +5,8 @@ import {
   ACCESS_TOKEN_MAX_PER_USER,
   ACCESS_TOKEN_NAME_MAX,
   AVATAR_MAX_BYTES,
-  LLM_PROVIDERS,
   OCR_DEFAULT_MODEL,
+  PROVIDER_MODELS,
   type AccessToken,
   type AccessTokenLog,
   type LlmConfig,
@@ -38,24 +38,6 @@ import {
 import { getOcrConfig, testOcrConfig, upsertOcrConfig } from '@/api/ocr';
 import { AuthService } from '@/services/auth.service';
 import { ToastService } from '@/services/toast.service';
-
-export const PROVIDER_LABELS: Record<LlmProvider, string> = {
-  openai: 'OpenAI',
-  deepseek: 'DeepSeek',
-  claude: 'Claude',
-  zhipu: '智谱',
-  dashscope: '通义百炼',
-};
-
-export const PROVIDER_MODELS: Record<LlmProvider, string> = {
-  openai: 'gpt-4o-mini',
-  deepseek: 'deepseek-chat',
-  claude: 'claude-sonnet-4-5',
-  zhipu: 'glm-4',
-  dashscope: 'qwen-plus',
-};
-
-export const PROVIDERS = LLM_PROVIDERS;
 
 export type TokenPane = 'list' | 'logs';
 

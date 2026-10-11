@@ -281,6 +281,13 @@
       "when": 1791538779247,
       "tag": "0039_many_microbe",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1791652351318,
+      "tag": "0040_loose_serpent_society",
+      "breakpoints": true
     }
   ]
 }

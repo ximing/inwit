@@ -11,7 +11,7 @@ import {
 } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 import { anthropicProvider } from '@earendil-works/pi-ai/providers/anthropic';
-import type { LlmProvider } from '@inwit/dto';
+import { PROVIDER_BASE_URLS, type LlmProvider } from '@inwit/dto';
 import { and, eq } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -24,13 +24,18 @@ import { resolveModelLimits } from './model-limits-logic.js';
 export const DASHSCOPE_COMPATIBLE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 export const DASHSCOPE_FALLBACK_MODEL = 'qwen-plus';
 
-const DEFAULT_BASE_URL: Record<LlmProvider, string> = {
-  openai: 'https://api.openai.com/v1',
-  deepseek: 'https://api.deepseek.com',
-  claude: 'https://api.anthropic.com',
-  zhipu: 'https://open.bigmodel.cn/api/paas/v4',
-  dashscope: DASHSCOPE_COMPATIBLE_BASE_URL,
-};
+/**
+ * Moonshot rejects `max_completion_tokens`, `store`, and the developer role.
+ * Official hosts are detected from the URL; a custom base URL is not, so Kimi always sets this.
+ */
+const KIMI_COMPAT = {
+  supportsStore: false,
+  supportsDeveloperRole: false,
+  supportsReasoningEffort: false,
+  supportsUsageInStreaming: true,
+  maxTokensField: 'max_tokens',
+  supportsStrictMode: false,
+} as const;
 
 const COMPLETE_TIMEOUT_MS = 60_000;
 
@@ -43,7 +48,7 @@ function passthroughApiKeyAuth(name: string): ApiKeyAuth {
   };
 }
 
-function openaiCompatModel(
+export function openaiCompatModel(
   providerId: LlmProvider,
   modelId: string,
   baseUrl: string,
@@ -60,6 +65,7 @@ function openaiCompatModel(
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: limits.contextWindow,
     maxTokens: limits.maxOutputTokens,
+    ...(providerId === 'kimi' ? { compat: KIMI_COMPAT } : {}),
   };
 }
 
@@ -133,7 +139,7 @@ async function resolvedOf(
   source: 'user' | 'system',
   configId: string | null,
 ): Promise<ResolvedModel> {
-  const url = baseUrl && baseUrl.length > 0 ? baseUrl : DEFAULT_BASE_URL[provider];
+  const url = baseUrl && baseUrl.length > 0 ? baseUrl : PROVIDER_BASE_URLS[provider];
   const parsed = assertPublicHttpUrl(url, REQUEST_ENDPOINT_CODES);
   await assertResolvedPublic(parsed.hostname, { codes: REQUEST_ENDPOINT_CODES });
   const piProvider = buildProvider(provider, modelId, url);

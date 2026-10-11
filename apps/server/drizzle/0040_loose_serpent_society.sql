@@ -1,0 +1,2 @@
+ALTER TABLE "llm_configs" DROP CONSTRAINT "llm_configs_provider_check";--> statement-breakpoint
+ALTER TABLE "llm_configs" ADD CONSTRAINT "llm_configs_provider_check" CHECK ("llm_configs"."provider" IN ('openai', 'deepseek', 'claude', 'gemini', 'xai', 'mistral', 'zhipu', 'dashscope', 'kimi', 'minimax', 'doubao', 'groq', 'openrouter'));

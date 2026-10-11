@@ -1,3 +1,9 @@
+import {
+  LLM_PROVIDERS,
+  PROVIDER_BASE_URLS,
+  PROVIDER_LABELS,
+  PROVIDER_MODEL_OPTIONS,
+} from '@inwit/dto';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { router } from 'expo-router';
 import { useEffect, useMemo } from 'react';
@@ -16,11 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StackHeader } from '@/components/stack-header';
 import { confirmAction } from '@/lib/confirm';
 import { useTheme, type ThemeTokens } from '@/theme';
-import {
-  PROVIDER_LABELS,
-  PROVIDERS,
-  SettingsService,
-} from './settings.service';
+import { SettingsService } from './settings.service';
 
 const ModelsContent = observer(function ModelsContent() {
   const service = useService(SettingsService);
@@ -40,7 +42,7 @@ const ModelsContent = observer(function ModelsContent() {
       >
         <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
           <Text style={styles.lede}>
-            自带密钥（BYOK）。完整密钥只在新增时提交一次，列表里只显示掩码。
+            自带密钥（BYOK）。选好供应商会填上推荐模型，Base URL 留空就走官方地址。列表里只显示密钥掩码。
           </Text>
           {service.error ? (
             <Text style={styles.error} accessibilityRole="alert">
@@ -50,7 +52,7 @@ const ModelsContent = observer(function ModelsContent() {
 
           <Text style={styles.label}>供应商</Text>
           <View style={styles.chips}>
-            {PROVIDERS.map((provider) => {
+            {LLM_PROVIDERS.map((provider) => {
               const on = service.provider === provider;
               return (
                 <Pressable
@@ -75,6 +77,22 @@ const ModelsContent = observer(function ModelsContent() {
             placeholderTextColor={theme.colors.ink4}
             autoCapitalize="none"
           />
+          {PROVIDER_MODEL_OPTIONS[service.provider].length > 1 ? (
+            <View style={styles.suggest}>
+              {PROVIDER_MODEL_OPTIONS[service.provider].map((item) => {
+                const on = service.model === item;
+                return (
+                  <Pressable
+                    key={item}
+                    onPress={() => service.setModel(item)}
+                    style={[styles.chip, on && styles.chipOn]}
+                  >
+                    <Text style={[styles.chipText, on && styles.chipTextOn]}>{item}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
           <Text style={styles.label}>API Key</Text>
           <TextInput
             style={styles.input}
@@ -91,7 +109,7 @@ const ModelsContent = observer(function ModelsContent() {
             style={styles.input}
             value={service.baseUrl}
             onChangeText={(value) => service.setBaseUrl(value)}
-            placeholder="https://…"
+            placeholder={PROVIDER_BASE_URLS[service.provider]}
             placeholderTextColor={theme.colors.ink4}
             autoCapitalize="none"
             keyboardType="url"
@@ -201,6 +219,7 @@ function makeStyles(theme: ThemeTokens) {
       color: theme.colors.ink,
       fontSize: 15,
     },
+    suggest: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     chip: {
       height: 30,

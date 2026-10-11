@@ -1,7 +1,15 @@
 import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect, useRef } from 'react';
 import { NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
-import { OCR_DEFAULT_MODEL, docDisplayTitle, type LlmProvider } from '@inwit/dto';
+import {
+  LLM_PROVIDERS,
+  OCR_DEFAULT_MODEL,
+  PROVIDER_BASE_URLS,
+  PROVIDER_LABELS,
+  PROVIDER_MODEL_OPTIONS,
+  docDisplayTitle,
+  type LlmProvider,
+} from '@inwit/dto';
 import { UserAvatar } from '@/components/user-avatar';
 import { Tag } from '@/components/tag';
 import { APP_VERSION } from '@/lib/app-version';
@@ -21,8 +29,6 @@ import { FilesService } from './files.service';
 import {
   ACCESS_TOKEN_MAX_PER_USER,
   ACCESS_TOKEN_NAME_MAX,
-  PROVIDER_LABELS,
-  PROVIDERS,
   SettingsService,
 } from './settings.service';
 
@@ -258,7 +264,9 @@ const SettingsPageContent = observer(function SettingsPageContent() {
         {section === 'models' ? (
         <div className="section" id="models">
           <div className="section-title">模型配置</div>
-          <div className="section-lede">自带密钥（BYOK）。完整密钥只在新增时提交一次，列表里只显示掩码。</div>
+          <div className="section-lede">
+            自带密钥（BYOK）。选好供应商会填上推荐模型，Base URL 留空就走官方地址。列表里只显示密钥掩码。
+          </div>
 
           {service.error ? (
             <p className="banner-error" role="alert">
@@ -281,7 +289,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                 value={service.provider}
                 onChange={(event) => service.setProvider(event.target.value as LlmProvider)}
               >
-                {PROVIDERS.map((provider) => (
+                {LLM_PROVIDERS.map((provider) => (
                   <option key={provider} value={provider}>
                     {PROVIDER_LABELS[provider]}
                   </option>
@@ -294,9 +302,17 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                 id="settings-model"
                 name="model"
                 value={service.model}
+                list={PROVIDER_MODEL_OPTIONS[service.provider].length > 1 ? 'settings-model-options' : undefined}
                 onChange={(event) => service.setModel(event.target.value)}
                 required
               />
+              {PROVIDER_MODEL_OPTIONS[service.provider].length > 1 ? (
+                <datalist id="settings-model-options">
+                  {PROVIDER_MODEL_OPTIONS[service.provider].map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
+              ) : null}
             </div>
             <div className="field">
               <label htmlFor="settings-key">API Key</label>
@@ -317,7 +333,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                 id="settings-base"
                 name="baseUrl"
                 inputMode="url"
-                placeholder="https://…"
+                placeholder={PROVIDER_BASE_URLS[service.provider]}
                 value={service.baseUrl}
                 onChange={(event) => service.setBaseUrl(event.target.value)}
               />

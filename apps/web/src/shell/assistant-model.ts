@@ -1,14 +1,6 @@
-import type { LlmProvider } from '@inwit/dto';
+import { PROVIDER_LABELS, type LlmProvider } from '@inwit/dto';
 
 const STORAGE_KEY = 'inwit-assistant-llm';
-
-const PROVIDER_LABELS: Record<LlmProvider, string> = {
-  openai: 'OpenAI',
-  deepseek: 'DeepSeek',
-  claude: 'Claude',
-  zhipu: '智谱',
-  dashscope: '通义百炼',
-};
 
 export const ASSISTANT_SYSTEM_MODEL_LABEL = '系统 · qwen-plus';
 
