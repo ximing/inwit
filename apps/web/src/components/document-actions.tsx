@@ -3,6 +3,7 @@ import { docDisplayTitle, type DocumentListItem } from '@inwit/dto';
 import { Copy, FolderInput, Pencil, RotateCw, SquareArrowOutUpRight, Trash2 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Select } from './select';
 import { DocumentActionsService, type DocumentChange } from './document-actions.service';
 import './document-actions.css';
 
@@ -44,7 +45,7 @@ const ActionsContent = observer(function ActionsContent({ children }: { children
       if (event.key === 'Tab' && service.dialog) {
         const dialog = dialogRef.current;
         const elements = Array.from(dialog?.querySelectorAll<HTMLElement>(
-          'input:not(:disabled), select:not(:disabled), button:not(:disabled)',
+          'input:not(:disabled), button:not(:disabled)',
         ) ?? []);
         const first = elements[0];
         const last = elements[elements.length - 1];
@@ -134,11 +135,19 @@ const ActionsContent = observer(function ActionsContent({ children }: { children
           <h2>{dialogTitle}</h2>
           <form onSubmit={(event) => { event.preventDefault(); void service.submit(); }}>
             {service.dialog === 'rename' && <label>文档名称<input value={service.title} maxLength={500} required disabled={service.busy} onChange={(event) => { service.title = event.target.value; }} /></label>}
-            {service.dialog === 'move' && <label>目标主题<select value={service.topicId} disabled={service.busy || service.topicsLoading || !service.topicsLoaded} onChange={(event) => { service.topicId = event.target.value; }}>
-              <option value="">不属于任何主题</option>
-              {service.doc?.topicId && !service.topics.some((topic) => topic.id === service.doc?.topicId) && <option value={service.doc.topicId} disabled>{service.doc.topicTitle ?? '当前主题'}（不可选）</option>}
-              {service.topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.title}</option>)}
-            </select>{service.topicsLoading && <span>加载主题中…</span>}</label>}
+            {service.dialog === 'move' && <label>目标主题<Select
+              ariaLabel="目标主题"
+              value={service.topicId}
+              disabled={service.busy || service.topicsLoading || !service.topicsLoaded}
+              options={[
+                { value: '', label: '不属于任何主题' },
+                ...(service.doc?.topicId && !service.topics.some((topic) => topic.id === service.doc?.topicId)
+                  ? [{ value: service.doc.topicId, label: `${service.doc.topicTitle ?? '当前主题'}（不可选）`, disabled: true }]
+                  : []),
+                ...service.topics.map((topic) => ({ value: topic.id, label: topic.title })),
+              ]}
+              onChange={(next) => { service.topicId = next; }}
+            />{service.topicsLoading && <span>加载主题中…</span>}</label>}
             {service.dialog === 'delete' && <p>确定把「{service.doc ? docDisplayTitle(service.doc) : ''}」移入回收站？文档、批注和卡片会被隐藏，30 天内可在设置页恢复。</p>}
             {service.dialog === 'retry' && <p>重新处理「{service.doc ? docDisplayTitle(service.doc) : ''}」。</p>}
             {service.error && <p className="banner-error" role="alert">{service.error}</p>}

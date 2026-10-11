@@ -10,6 +10,7 @@ import {
   docDisplayTitle,
   type LlmProvider,
 } from '@inwit/dto';
+import { Select } from '@/components/select';
 import { UserAvatar } from '@/components/user-avatar';
 import { Tag } from '@/components/tag';
 import { APP_VERSION } from '@/lib/app-version';
@@ -283,18 +284,16 @@ const SettingsPageContent = observer(function SettingsPageContent() {
           >
             <div className="field">
               <label htmlFor="settings-provider">供应商</label>
-              <select
+              <Select
                 id="settings-provider"
-                name="provider"
+                ariaLabel="供应商"
                 value={service.provider}
-                onChange={(event) => service.setProvider(event.target.value as LlmProvider)}
-              >
-                {LLM_PROVIDERS.map((provider) => (
-                  <option key={provider} value={provider}>
-                    {PROVIDER_LABELS[provider]}
-                  </option>
-                ))}
-              </select>
+                options={LLM_PROVIDERS.map((provider) => ({
+                  value: provider,
+                  label: PROVIDER_LABELS[provider],
+                }))}
+                onChange={(next) => service.setProvider(next as LlmProvider)}
+              />
             </div>
             <div className="field">
               <label htmlFor="settings-model">模型</label>

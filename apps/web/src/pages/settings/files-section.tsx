@@ -2,6 +2,7 @@ import { observer, useService } from '@rabjs/react';
 import type { StorageFileKind } from '@inwit/dto';
 import { useEffect } from 'react';
 import { Link } from 'react-router';
+import { Select } from '@/components/select';
 import { Tag } from '@/components/tag';
 import { formatDateTime } from '@/lib/format';
 import { FilesService } from './files.service';
@@ -95,13 +96,15 @@ export const FilesSection = observer(function FilesSection() {
             </label>
             <label className="file-sort">
               排序
-              <select
+              <Select
+                ariaLabel="排序"
                 value={files.sort}
-                onChange={(event) => files.setSort(event.target.value === 'size' ? 'size' : 'modified')}
-              >
-                <option value="modified">最近修改</option>
-                <option value="size">体积从大到小</option>
-              </select>
+                options={[
+                  { value: 'modified', label: '最近修改' },
+                  { value: 'size', label: '体积从大到小' },
+                ]}
+                onChange={(next) => files.setSort(next === 'size' ? 'size' : 'modified')}
+              />
             </label>
             <button type="button" className="btn btn-ghost" onClick={() => files.refresh()}>
               刷新

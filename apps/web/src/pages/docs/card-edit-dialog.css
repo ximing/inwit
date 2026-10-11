@@ -26,7 +26,9 @@
   justify-content: space-between;
   gap: 8px;
 }
-.card-edit-question-head select {
+.card-edit-question-head .select-field { width: auto; }
+.card-edit-question-head .select-trigger {
+  width: auto;
   height: 28px;
   font-size: 12.5px;
   border: 1px solid var(--line);

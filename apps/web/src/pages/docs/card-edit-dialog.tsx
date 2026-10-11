@@ -8,6 +8,7 @@ import {
 import { observer, useService } from '@rabjs/react';
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Select } from '@/components/select';
 import { Tip } from '@/components/tip';
 import { DocsService } from './docs.service';
 
@@ -168,20 +169,17 @@ export const CardEditDialog = observer(function CardEditDialog({
               questions.map((row) => (
                 <div key={row.key} className="card-edit-question">
                   <div className="card-edit-question-head">
-                    <select
+                    <Select
+                      ariaLabel="问题类型"
                       value={row.type}
-                      onChange={(event) =>
-                        patchQuestion(row.key, {
-                          type: event.target.value as CardQuestionType,
-                        })
+                      options={CARD_QUESTION_TYPES.map((type) => ({
+                        value: type,
+                        label: QUESTION_TYPE_LABELS[type],
+                      }))}
+                      onChange={(next) =>
+                        patchQuestion(row.key, { type: next as CardQuestionType })
                       }
-                    >
-                      {CARD_QUESTION_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {QUESTION_TYPE_LABELS[type]}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <Tip content="删除这个问题">
                       <button
                         type="button"
