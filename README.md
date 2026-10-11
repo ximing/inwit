@@ -64,45 +64,36 @@ Inwit 是 **AI First**，同时追求 **纸上学习**。打开后先看到今�
 
 ## 产品长什么样
 
-首页是一张纸。上面是捕捉，下面是今天该回忆的数量、本周复盘，以及最近 Agent 在忙什么。
+一篇文章和它的脑图放在一起读。章节是文本节点，下面挂能点回原文的划线，再挂从这些句子挖出的卡片。点划线，正文滚到那一句；点卡片，能看到概念和复习间隔。
 
 <p align="center">
-  <img src="docs/screenshots/readme/01-today.png" alt="Inwit 首页：捕捉、今日复习与最近动态" width="920" />
+  <img src="docs/screenshots/readme/01-article-map.png" alt="文章与脑图并排：划线回到原句，卡片挂在对应章节下" width="920" />
 </p>
 
-<p align="center"><sub>浅色 · 白日书桌。深色是灯下夜读，同一套纸感。</sub></p>
+<p align="center"><sub>黄底是卡片锚点，下划线是划线。右侧脑图按章节展开。</sub></p>
+
+禅模式收起导航和文档列表，只留正文和脑图。选中一个节点时，对应的句子留在视口里，其余分支让开。
 
 <p align="center">
-  <img src="docs/screenshots/readme/09-today-dark.png" alt="Inwit 首页深色主题" width="920" />
+  <img src="docs/screenshots/readme/02-zen.png" alt="禅模式：只留文章和脑图，选中的划线回到原句" width="920" />
 </p>
 
-文档工作台把阅读、编辑和卡片放在同一个窗格。Agent 切出的原子卡挂在原文锚点上，侧栏可以直接翻看、暂停或改写。
+在对话里 @ 这篇文档，让 Agent 按章节搭脑图：划线必须是原文里的句子，卡片归进对应的章。写入之后，脑图和这一轮的结果都留在页面上。
 
 <p align="center">
-  <img src="docs/screenshots/readme/02-docs.png" alt="文档工作台：原文锚点高亮与侧栏卡片" width="920" />
+  <img src="docs/screenshots/readme/03-agent-mind.png" alt="对话生成脑图：按原文搭章节、划线和卡片" width="920" />
 </p>
 
-复习中心给今日队列、打卡热图和近七日节奏。点进去是翻卡：先自己想，再翻面，三档反馈决定下次出现的时间。
+复习把同一句再问一遍。正面挖掉关键词，翻开后是原文里的那一句，再按忘了、模糊、想起来了打分。间隔由这次结果决定。
 
 <p align="center">
-  <img src="docs/screenshots/readme/03-review-hub.png" alt="复习中心：到期队列、打卡与节奏" width="920" />
+  <img src="docs/screenshots/readme/04-review.png" alt="复习翻面：原文中的答案，以及忘了、模糊、想起来了三档" width="920" />
 </p>
 
-<p align="center">
-  <img src="docs/screenshots/readme/04-review-question.png" alt="复习翻卡：问题面" width="48%" />
-  <img src="docs/screenshots/readme/05-review-answer.png" alt="复习翻卡：答案与三档反馈" width="48%" />
-</p>
-
-主题是一门课的方向。地图由 Agent 维护：已覆盖、学习中、尚未碰到的概念一眼能看见。虚线节点可以让 AI 补。
+这几篇资料收在同一个主题里。图谱按概念分栏：已经有卡片的标成已覆盖，还只有资料的节点可以让 AI 补。
 
 <p align="center">
-  <img src="docs/screenshots/readme/06-topics-map.png" alt="主题知识地图" width="920" />
-</p>
-
-每周会自动写一份复盘：成功率、反复打滑的概念、下一周该补哪块。
-
-<p align="center">
-  <img src="docs/screenshots/readme/08-weekly-report.png" alt="每周学习复盘" width="920" />
+  <img src="docs/screenshots/readme/05-topic.png" alt="主题图谱：已覆盖的概念，以及可以让 AI 补的空白节点" width="920" />
 </p>
 
 ---
@@ -115,16 +106,13 @@ Inwit 把 Agent 当成产品的一部分，而不是外挂聊天窗。配置好�
 |---|---|---|
 | 消化 | 把长内容切成原子卡片（概念 + 例子 + 易混点），出题，挂到知识地图 | 资料入库后 |
 | 问答 | 直接提问，中文回答落成文档，并自动转卡片 | 以问号结尾发送 |
+| 对话 | 对着当前文档搭脑图：拆章节、划线点回原句、把卡片归进对应的章 | 你在对话里 @ 这篇文档 |
 | 主题 | 整理 / 补全知识地图，未归属资料聚成一类时提议开题 | 你点「整理地图」，或后台建议 |
 | 进化 | 反复忘的换讲法、拆小、出混淆对比 | 复习反馈触发 |
 | 周报 | 回忆成功率、建议重学的概念 | 按周自动 |
 | 提取 / 识别 | 从原件抽文本，识别扫描页 | 导入 PDF 等 |
 
-切卡会直接写入，开题要你点头。三档反馈（忘了 / 模糊 / 想起来了）才改间隔。任务页能看见 Agent 在跑什么、失败了什么、用了多少 token。
-
-<p align="center">
-  <img src="docs/screenshots/readme/07-jobs.png" alt="任务队列：消化、问答、进化与用量" width="920" />
-</p>
+切卡会直接写入，开题要你点头。三档反馈（忘了 / 模糊 / 想起来了）才改间隔。对话里对脑图的修改记在这篇文档的历史里，可以自行恢复。任务页能看见 Agent 在跑什么、失败了什么、用了多少 token。
 
 你在用的编码 Agent（Claude、Codex、Cursor……）也可以接入同一份数据：投喂笔记、提问制卡、看今日队列——装一个 skill 即可，见 [编码 Agent](#编码-agent)。对内 Agent 和对外 skill 操作的是同一份数据：你在网页里扔的，Claude 看得到；Claude 投喂的笔记，首页和文档列表立刻出现。
 
@@ -162,10 +150,6 @@ pnpm --filter @inwit/server worker        # 另开一个终端：消化 / 问答
 ```
 
 浏览器打开 [http://localhost:5190](http://localhost:5190)。没有 worker，文档会停在「消化中…」。
-
-<p align="center">
-  <img src="docs/screenshots/readme/00-login.png" alt="登录页" width="560" />
-</p>
 
 ### 桌面端
 
