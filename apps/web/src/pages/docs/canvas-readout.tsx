@@ -1,7 +1,8 @@
 import { IMAGE_EXCERPT_QUOTE } from '@inwit/dto';
-import { X } from 'lucide-react';
+import { Maximize2, Minimize2, X } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ClozeText } from '@/components/reader/mini-card';
+import { Tip } from '@/components/tip';
 import type { LinksPanelAnchor } from './mindmap-focus';
 import { elementIsClamped } from './mindmap-readout';
 
@@ -38,7 +39,7 @@ function visuallyClamped(node: HTMLElement): boolean {
 }
 
 /**
- * 挂在节点里测可见文字有没有被行数截断。按钮绝对定位，不改节点高度。
+ * 挂在节点里测可见文字有没有被行数截断。右上角图标绝对定位，不改节点高度。
  * 卡片还有没画出来的答案时，hiddenBody 为真，不等测量也显示。
  */
 export function ReadoutToggle({
@@ -82,22 +83,28 @@ export function ReadoutToggle({
     <>
       <span ref={probe} hidden />
       {show ? (
-        <button
-          type="button"
-          className={`canvas-readout-toggle${open ? ' is-on' : ''}`}
-          aria-expanded={open}
-          aria-label={open ? '关闭全文' : '查看全文'}
-          style={{ transform: `scale(${1 / (zoom || 1)})` }}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            // 双击会连发两次 click。第二次丢掉，避免刚打开又合上。
-            if (event.detail > 1) return;
-            onToggle();
-          }}
-        >
-          全文
-        </button>
+        <Tip content={open ? '关闭全文' : '查看全文'} side="left">
+          <button
+            type="button"
+            className={`canvas-readout-toggle${open ? ' is-on' : ''}`}
+            aria-expanded={open}
+            aria-label={open ? '关闭全文' : '查看全文'}
+            style={{ transform: `scale(${1 / (zoom || 1)})` }}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              // 双击会连发两次 click。第二次丢掉，避免刚打开又合上。
+              if (event.detail > 1) return;
+              onToggle();
+            }}
+          >
+            {open ? (
+              <Minimize2 width={13} height={13} strokeWidth={1.8} />
+            ) : (
+              <Maximize2 width={13} height={13} strokeWidth={1.8} />
+            )}
+          </button>
+        </Tip>
       ) : null}
     </>
   );

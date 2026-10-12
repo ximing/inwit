@@ -200,33 +200,50 @@
   cursor: pointer;
 }
 .canvas-links-head button:hover { color: var(--ink); background: var(--bg-sunken); }
-/* 全文：挂在节点底边外侧，不计入节点高度，脑图不因此重排。 */
+/* 全文：右上角的展开图标，绝对定位，不计入节点高度。 */
 .canvas-readout-toggle {
   position: absolute;
-  left: 50%;
-  bottom: -2px;
-  translate: -50% 100%;
-  z-index: 4;
-  height: 18px;
-  padding: 0 7px;
+  top: 4px;
+  right: 4px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--surface);
-  color: var(--accent-deep);
-  font-size: 11px;
-  line-height: 1;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink-3);
   cursor: pointer;
   box-shadow: var(--shadow-1);
-  transform-origin: center top;
+  transform-origin: top right;
 }
 .canvas-readout-toggle.is-on {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--bg);
 }
-.canvas-readout-toggle:hover { border-color: var(--accent-line); }
+.canvas-readout-toggle:hover {
+  color: var(--accent-deep);
+  border-color: var(--accent-line);
+  background: var(--surface);
+}
 .canvas-readout-toggle.is-on:hover { color: var(--bg); border-color: var(--accent); }
 .canvas-readout-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* 文本节点的删除也在右上角，有全文时让到左边。 */
+.doc-canvas-card:has(.canvas-readout-toggle) .canvas-node-op {
+  right: 30px;
+}
+.doc-canvas-card:has(.canvas-readout-toggle) .canvas-node.is-text .canvas-node-text {
+  padding-right: 46px;
+}
+/* 图标占住右上角，题面和摘录让出这一小块，避免字压在按钮下面。 */
+.doc-canvas-card:has(.canvas-readout-toggle) .mini-q,
+.doc-canvas-card:has(.canvas-readout-toggle) .canvas-node-quote,
+.doc-canvas-card:has(.canvas-readout-toggle) .canvas-node-note {
+  padding-right: 16px;
+}
 /* 全文浮层：屏幕坐标，内部滚动，不参与脑图布局。 */
 .canvas-readout {
   position: absolute;
