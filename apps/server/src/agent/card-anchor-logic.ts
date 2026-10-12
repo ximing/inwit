@@ -1,4 +1,4 @@
-import { blocksFromPmJSON, locateQuote, type DocBlock, type PmJson } from '@inwit/doc-schema';
+import { blocksFromPmJSON, findQuoteHits, locateQuote, type DocBlock, type PmJson } from '@inwit/doc-schema';
 
 export type CardAnchorFields = {
   anchorText: string;
@@ -30,6 +30,7 @@ export function resolveQuoteAnchor(
   contentJson: PmJson,
   blockIndex: number | null | undefined,
   quote: string,
+  options?: { recover?: boolean },
 ): CardAnchorFields {
   const anchorText = quote.trim();
   if (anchorText.length === 0) {
@@ -37,15 +38,26 @@ export function resolveQuoteAnchor(
   }
   const index =
     typeof blockIndex === 'number' && Number.isFinite(blockIndex) ? Math.round(blockIndex) : null;
-  if (index === null || index < 1) {
-    return { anchorText, anchorBlockIndex: null };
+  if (index != null && index >= 1) {
+    try {
+      if (locateQuote(contentJson, index, anchorText)) {
+        return { anchorText, anchorBlockIndex: index };
+      }
+    } catch {
+      // 指定块解析失败时，recover 仍可以在全文里找唯一的一处。
+    }
   }
-  try {
-    const located = locateQuote(contentJson, index, anchorText);
-    return { anchorText, anchorBlockIndex: located ? index : null };
-  } catch {
-    return { anchorText, anchorBlockIndex: null };
+  if (options?.recover) {
+    try {
+      const hits = findQuoteHits(contentJson, anchorText);
+      if (hits.length === 1) {
+        return { anchorText, anchorBlockIndex: hits[0]?.blockIndex ?? null };
+      }
+    } catch {
+      // 全文也解析不了时保留摘录、不记块号。
+    }
   }
+  return { anchorText, anchorBlockIndex: null };
 }
 
 /** 划词产卡：每张卡继承用户提交的 (blockIndex, quote)，agent 不自行定位。 */

@@ -70,6 +70,25 @@ describe('resolveQuoteAnchor (write_cards → 卡片行锚字段)', () => {
       anchorBlockIndex: null,
     });
   });
+
+  it('recover：块号错了但摘录只出现一次时，改记到那一块', () => {
+    expect(resolveQuoteAnchor(SOURCE, 1, '参数几乎不再更新', { recover: true })).toEqual({
+      anchorText: '参数几乎不再更新',
+      anchorBlockIndex: 3,
+    });
+    expect(resolveQuoteAnchor(SOURCE, 9, '梯度消失', { recover: true })).toEqual({
+      anchorText: '梯度消失',
+      anchorBlockIndex: 1,
+    });
+  });
+
+  it('recover 遇到两处相同摘录时不猜', () => {
+    const twice = doc(p('梯度消失'), p('还有一处梯度消失'));
+    expect(resolveQuoteAnchor(twice, 9, '梯度消失', { recover: true })).toEqual({
+      anchorText: '梯度消失',
+      anchorBlockIndex: null,
+    });
+  });
 });
 
 describe('inheritSelectionAnchor (划词产卡锚继承)', () => {

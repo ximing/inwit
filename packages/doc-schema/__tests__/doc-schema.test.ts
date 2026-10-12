@@ -6,7 +6,9 @@ import {
   blocksFromPmJSON,
   findEntityAnchors,
   getHeadlessSchema,
+  findQuoteHits,
   locateQuote,
+  locateQuoteInDocument,
   pmJsonToText,
   stripEntityAnchors,
   thematicBreaksToPageBreaks,
@@ -117,6 +119,24 @@ describe('locateQuote', () => {
     expect(locateQuote(source, 1, 'missing')).toBeNull();
     expect(locateQuote(source, 9, 'hello')).toBeNull();
     expect(locateQuote(source, 1, '')).toBeNull();
+  });
+
+  it('finds a quote that the recorded block missed when it occurs once', () => {
+    expect(locateQuoteInDocument(source, 'second block', 1)).toEqual({
+      blockIndex: 2,
+      range: posOf(source, 'second block'),
+    });
+    expect(findQuoteHits(source, 'second').map((hit) => hit.blockIndex)).toEqual([2]);
+  });
+
+  it('keeps the recorded block when it still contains the quote', () => {
+    expect(locateQuoteInDocument(source, 'hello', 1)?.blockIndex).toBe(1);
+  });
+
+  it('picks the hit closest to the recorded block when the quote repeats', () => {
+    const repeated = doc(p(t('hello')), p(t('middle')), p(t('hello again')));
+    expect(locateQuoteInDocument(repeated, 'hello', 4)?.blockIndex).toBe(3);
+    expect(locateQuoteInDocument(repeated, 'hello', null)).toBeNull();
   });
 
   it('maps a formula quote onto the math atom', () => {

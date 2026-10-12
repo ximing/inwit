@@ -345,6 +345,7 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
                 asPmJson(document.contentJson),
                 draft.blockIndex,
                 draft.quote,
+                { recover: true },
               );
               anchorText = resolved.anchorText;
               anchorBlockIndex = resolved.anchorBlockIndex;

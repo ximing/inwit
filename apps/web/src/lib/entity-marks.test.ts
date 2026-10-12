@@ -73,6 +73,20 @@ describe('isLostTextEntity', () => {
     ).toBe(false);
   });
 
+  it('is not lost when the quote survives in another block and the recorded index is empty', () => {
+    expect(
+      isLostTextEntity(source, {
+        id: CARD_ID,
+        kind: 'card',
+        quote: 'second block',
+        blockIndex: null,
+      }),
+    ).toBe(false);
+    expect(
+      missingTextEntities(source, [{ id: CARD_ID, anchorText: 'second block', anchorBlockIndex: null }], []),
+    ).toEqual([{ kind: 'card', id: CARD_ID, blockIndex: null, quote: 'second block' }]);
+  });
+
   it('is not lost for pdf annotations or image excerpts', () => {
     expect(
       isLostTextEntity(source, {

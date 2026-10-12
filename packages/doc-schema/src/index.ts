@@ -1,6 +1,7 @@
 export { applyEntityAnchor, findEntityAnchors, stripEntityAnchors } from './anchors.js';
 export { blocksFromPmJSON, pmJsonToText } from './blocks.js';
-export { locateQuote } from './locate.js';
+export { findQuoteHits, locateQuote, locateQuoteInDocument } from './locate.js';
+export type { LocatedQuote } from './locate.js';
 export { thematicBreaksToPageBreaks } from './page-breaks.js';
 export { AnnotationMark } from './schema/annotation-mark.js';
 export { CardAnchorMark } from './schema/card-anchor-mark.js';

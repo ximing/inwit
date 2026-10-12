@@ -1,6 +1,7 @@
 /**
  * 文档脑图。平移、缩放的世界坐标里自动布局，节点不记住坐标。
  * 单击选中，卡片和批注同时把左侧正文滚到锚点；空格或双击进入编辑。
+ * 放不下的文字在节点底部有「全文」，浮层阅读，不改变节点高度。
  * Tab 加子节点，Enter 加兄弟节点，Delete / Backspace 删除选中节点，⌘] / ⌘[ 缩进提升。
  * 双击空白新建文本节点。选中卡片时脉络以浮层锚在节点旁，
  * 本文内的关联画成虚线边；选中后无关节点弱化，小地图帮助定位。
@@ -47,6 +48,7 @@ import { DialogService } from '@/services/dialog.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { AssistantService } from '@/shell/assistant.service';
 import { CanvasFreeNode, CanvasNoteNode } from './canvas-nodes';
+import { CanvasReadout, ReadoutToggle, type MindReadout } from './canvas-readout';
 import { useCardLinks } from './card-link-list';
 import {
   CanvasLinkEditor,
@@ -91,6 +93,7 @@ import {
   type MindCardTodo,
 } from './mindmap-focus';
 import { decideMindGesture, mindDeleteAction, mindNodeChatLabel, type MindIntent } from './mindmap-gesture';
+import { cardHidesBody, readoutPanelSize } from './mindmap-readout';
 import { hitCardBox, hitMindDrop, mindDragCommit, type MindDrop } from './mindmap-hit';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
 import { parseQuoteDrag, quoteDropPlace, QUOTE_DRAG_MIME, type QuoteDragPayload } from './mindmap-quote';
@@ -206,8 +209,8 @@ function ghostPath(from: MindBox, to: MindBox): string {
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
 /** 这些控件自己处理点击，不拿来拖节点、也不抢选中。卡片本身是按钮，不在这里。 */
-const NODE_CONTROLS = '.note-op, .canvas-node-op, .canvas-fold, .canvas-node-bar, .canvas-link-dot, .mini-decision, .card-links, a, input, textarea';
-const KEY_CONTROLS = '.doc-canvas-tools, .canvas-history, .canvas-fold, .canvas-node-op, .canvas-node-bar, .note-op, textarea, input';
+const NODE_CONTROLS = '.note-op, .canvas-node-op, .canvas-fold, .canvas-node-bar, .canvas-link-dot, .canvas-readout-toggle, .mini-decision, .card-links, a, input, textarea';
+const KEY_CONTROLS = '.doc-canvas-tools, .canvas-history, .canvas-fold, .canvas-node-op, .canvas-node-bar, .canvas-readout, .canvas-readout-toggle, .note-op, textarea, input';
 
 export const CardCanvas = observer(function CardCanvas({
   renderCard,
@@ -246,6 +249,8 @@ export const CardCanvas = observer(function CardCanvas({
   const setSelectedId = (id: string | null) =>
     setSelectedIds(id ? new Set([id]) : new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** 全文浮层。只在内容放不下时打开，不参与布局。 */
+  const [readoutId, setReadoutId] = useState<string | null>(null);
   /** 脉络浮层被手动关掉的卡片；再选回这张卡时不自动重开，工具条可以开。 */
   const [linksOff, setLinksOff] = useState<string | null>(null);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
@@ -339,6 +344,7 @@ export const CardCanvas = observer(function CardCanvas({
     setFolded(new Set(docId ? loadFolds(docId) : []));
     setSelectedId(null);
     setEditingId(null);
+    setReadoutId(null);
     setLinksOff(null);
     setTodoOnly(false);
     setSearchOpen(false);
@@ -363,6 +369,11 @@ export const CardCanvas = observer(function CardCanvas({
     () => forest.filter((member) => !hidden.has(member.id)),
     [forest, hidden],
   );
+  useEffect(() => {
+    if (!readoutId) return;
+    const shown = visible.some((member) => member.id === readoutId);
+    if (recall || editingId === readoutId || readoutId !== selectedId || !shown) setReadoutId(null);
+  }, [readoutId, selectedId, recall, editingId, visible]);
   const childCount = useMemo(() => {
     const map = new Map<string, number>();
     for (const member of forest) {
@@ -394,6 +405,7 @@ export const CardCanvas = observer(function CardCanvas({
     setPeekId(null);
     setRevealAll(false);
     setEditingId(null);
+    setReadoutId(null);
     setMenu(null);
   };
   const noteById = useMemo(
@@ -446,9 +458,13 @@ export const CardCanvas = observer(function CardCanvas({
     () => (selectedId ? mindRelated(forest, selectedId) : null),
     [forest, selectedId],
   );
-  /** 选中卡片且没被手动关掉时，脉络浮层开着。默写模式下不看脉络。 */
+  /** 选中卡片且没被手动关掉时，脉络浮层开着。默写模式和全文浮层打开时不看脉络。 */
   const linksCardId =
-    !recall && selectedId && cardById.has(selectedId) && linksOff !== selectedId
+    !recall &&
+    readoutId !== selectedId &&
+    selectedId &&
+    cardById.has(selectedId) &&
+    linksOff !== selectedId
       ? selectedId
       : null;
   const { links: selectedLinks } = useCardLinks(linksCardId, linksTick);
@@ -597,7 +613,7 @@ export const CardCanvas = observer(function CardCanvas({
       if (
         event.target instanceof Element &&
         event.target.closest(
-          '.doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar',
+          '.doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-readout, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar',
         )
       ) {
         return;
@@ -748,6 +764,7 @@ export const CardCanvas = observer(function CardCanvas({
       if (document.activeElement instanceof HTMLTextAreaElement) document.activeElement.blur();
       setSelectedId(null);
       setEditingId(null);
+      setReadoutId(null);
       setPeekId(null);
       return;
     }
@@ -756,6 +773,7 @@ export const CardCanvas = observer(function CardCanvas({
     const previous = selectedRef.current;
     selectedRef.current = id;
     setSelectedId(id);
+    if (readoutId !== id) setReadoutId(null);
     if (intent.type === 'select') {
       // 同上：点别的节点也是 pointerdown 先行，先让在编辑的节点提交。
       if (document.activeElement instanceof HTMLTextAreaElement) document.activeElement.blur();
@@ -767,13 +785,44 @@ export const CardCanvas = observer(function CardCanvas({
       return;
     }
     if (intent.editor === 'inline-text' || intent.editor === 'inline-note') {
+      setReadoutId(null);
       setEditingId(id);
       return;
     }
     if (intent.editor === 'card-dialog') {
+      setReadoutId(null);
       setEditingId(null);
       service.openCardEdit(id);
     }
+  };
+
+  const toggleReadout = (id: string) => {
+    if (readoutId === id) {
+      setReadoutId(null);
+      viewportRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    const member = forest.find((item) => item.id === id);
+    if (!member) return;
+    applyMind(
+      id,
+      decideMindGesture({
+        action: 'click',
+        kind: member.kind,
+        repeat: selectedRef.current === id,
+      }),
+    );
+    setReadoutId(id);
+  };
+
+  const editFromReadout = (id: string) => {
+    const member = forest.find((item) => item.id === id);
+    if (!member || member.kind === 'image') return;
+    setReadoutId(null);
+    setSelectedIds(new Set([id]));
+    selectedRef.current = id;
+    if (member.kind === 'card') service.openCardEdit(id);
+    else setEditingId(id);
   };
 
   const stagePoint = (event: { clientX: number; clientY: number }) => {
@@ -790,7 +839,7 @@ export const CardCanvas = observer(function CardCanvas({
       setMenu(null);
       if (!target.closest('.canvas-menu')) return;
     }
-    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-readout, .canvas-link-editor, .canvas-node-bar, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
     if (event.button !== 0 && event.button !== 1) return;
     if (event.button === 1) event.preventDefault();
     stopViewAnim();
@@ -1089,6 +1138,12 @@ export const CardCanvas = observer(function CardCanvas({
       toggleRecall();
       return;
     }
+    if (event.key === 'Escape' && readoutId && editingId === null) {
+      event.preventDefault();
+      event.stopPropagation();
+      setReadoutId(null);
+      return;
+    }
     if (target.closest(KEY_CONTROLS)) return;
     if (!selectedId) return;
     if (event.key === 'Escape') {
@@ -1253,7 +1308,7 @@ export const CardCanvas = observer(function CardCanvas({
   const onStageContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('.doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-link-editor, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
+    if (target.closest('.doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-readout, .canvas-link-editor, .doc-canvas-minimap, .canvas-menu, .canvas-search, .canvas-help, .canvas-multi-bar')) return;
     event.preventDefault();
     const nodeEl = target.closest('.doc-canvas-card');
     const id = nodeEl?.getAttribute('data-node-id') ?? null;
@@ -1378,7 +1433,7 @@ export const CardCanvas = observer(function CardCanvas({
   const onStageDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-history, .canvas-links-panel, .doc-canvas-minimap')) return;
+    if (target.closest('.doc-canvas-card, .doc-canvas-tools, .canvas-history, .canvas-links-panel, .canvas-readout, .doc-canvas-minimap')) return;
     event.preventDefault();
     void addText(null, outlineChildSlots(forest, null).length);
   };
@@ -1683,6 +1738,23 @@ export const CardCanvas = observer(function CardCanvas({
                   onCloseEdit={() => setEditingId((current) => (current === member.id ? null : current))}
                 />
               ) : null}
+              {!recall && editingId !== member.id && member.kind !== 'image' ? (
+                <ReadoutToggle
+                  hiddenBody={
+                    card ? cardHidesBody(card, service.expandedCardIds.includes(card.id)) : false
+                  }
+                  watch={
+                    card
+                      ? `${card.concept}\n${card.example}\n${card.confusionPoint}\n${card.questions.map((item) => `${item.question}\n${item.answer}`).join('\n')}`
+                      : note
+                        ? `${note.quote}\n${note.note}`
+                        : (stored?.text ?? '')
+                  }
+                  open={readoutId === member.id}
+                  zoom={view.zoom}
+                  onToggle={() => toggleReadout(member.id)}
+                />
+              ) : null}
               {count > 0 ? (
                 <button
                   type="button"
@@ -1849,6 +1921,42 @@ export const CardCanvas = observer(function CardCanvas({
                 })}
                 refreshKey={linksTick}
                 onClose={() => setLinksOff(linksCardId)}
+              />
+            );
+          })()
+        : null}
+      {readoutId && !recall && stageSize.width > 0
+        ? (() => {
+            const box = boxById.get(readoutId);
+            const member = visible.find((item) => item.id === readoutId);
+            if (!box || !member || member.kind === 'image') return null;
+            const readoutCard = member.kind === 'card' ? cardById.get(member.id) : undefined;
+            const readoutNote = member.kind === 'annotation' ? noteById.get(member.id) : undefined;
+            const readoutText = nodeById.get(member.id)?.text ?? '';
+            let content: MindReadout | null = null;
+            if (readoutCard) {
+              content = {
+                kind: 'card',
+                concept: readoutCard.concept,
+                example: readoutCard.example,
+                confusionPoint: readoutCard.confusionPoint,
+                questions: readoutCard.questions,
+              };
+            } else if (readoutNote && (readoutNote.quote.trim() || readoutNote.note.trim())) {
+              content = { kind: 'annotation', quote: readoutNote.quote, note: readoutNote.note };
+            } else if (member.kind === 'text' && readoutText.trim()) {
+              content = { kind: 'text', text: readoutText };
+            }
+            if (!content) return null;
+            const panel = readoutPanelSize(stageSize);
+            return (
+              <CanvasReadout
+                content={content}
+                anchor={linksPanelAnchor(box, view, stageSize, panel)}
+                width={panel.width}
+                maxHeight={panel.height}
+                onClose={() => setReadoutId(null)}
+                onEdit={() => editFromReadout(readoutId)}
               />
             );
           })()

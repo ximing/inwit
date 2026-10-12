@@ -251,6 +251,7 @@ const HELP_SECTIONS: { title: string; rows: [string, string][] }[] = [
     title: '节点',
     rows: [
       ['单击', '选中；再点不取消'],
+      ['全文', '阅读被截断的内容'],
       ['空格 / 双击', '编辑'],
       ['Tab', '加子节点'],
       ['Enter', '加兄弟节点'],

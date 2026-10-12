@@ -1,7 +1,8 @@
 import {
   blocksFromPmJSON,
   findEntityAnchors,
-  locateQuote,
+  findQuoteHits,
+  locateQuoteInDocument,
   type AnchorKind,
   type PmJson,
 } from '@inwit/doc-schema';
@@ -37,9 +38,15 @@ export type AnnotationAnchorInput = {
 export type MissingAnchor = {
   kind: AnchorKind;
   id: string;
-  blockIndex: number;
+  /** 记下的块号。为空时补标记会在全文里找唯一的一处。 */
+  blockIndex: number | null;
   quote: string;
 };
+
+function preferredBlock(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || value < 1) return null;
+  return Math.round(value);
+}
 
 export type DocEditorHost = {
   getJSON: () => PmDocJson;
@@ -118,20 +125,26 @@ export function missingTextEntities(
   for (const card of cards) {
     if (have.has(card.id)) continue;
     const quote = card.anchorText?.trim() ?? '';
-    const blockIndex = card.anchorBlockIndex;
     if (!quote || quote === IMAGE_EXCERPT_QUOTE) continue;
-    if (blockIndex == null || !Number.isFinite(blockIndex) || blockIndex < 1) continue;
-    missing.push({ kind: 'card', id: card.id, blockIndex, quote });
+    missing.push({
+      kind: 'card',
+      id: card.id,
+      blockIndex: preferredBlock(card.anchorBlockIndex),
+      quote,
+    });
   }
 
   for (const note of notes) {
     if (have.has(note.id)) continue;
     if (note.kind && note.kind !== 'text') continue;
     const quote = note.quote.trim();
-    const blockIndex = note.anchorBlockIndex;
     if (!quote || quote === IMAGE_EXCERPT_QUOTE) continue;
-    if (blockIndex == null || !Number.isFinite(blockIndex) || blockIndex < 1) continue;
-    missing.push({ kind: 'annotation', id: note.id, blockIndex, quote });
+    missing.push({
+      kind: 'annotation',
+      id: note.id,
+      blockIndex: preferredBlock(note.anchorBlockIndex),
+      quote,
+    });
   }
 
   return missing;
@@ -156,9 +169,8 @@ export function isLostTextEntity(
   if (presentIds(json).has(entity.id)) return false;
   const quote = entity.quote?.trim() ?? '';
   if (!quote || isExcerptQuote(quote)) return true;
-  if (entity.blockIndex == null || entity.blockIndex < 1) return true;
   try {
-    return locateQuote(json, entity.blockIndex, quote) === null;
+    return findQuoteHits(json, quote).length === 0;
   } catch {
     return true;
   }
@@ -221,8 +233,9 @@ export function ensureEntityMarksOnEditor(
   let changed = false;
 
   for (const item of missing) {
-    const range = locateQuote(json, item.blockIndex, item.quote);
-    if (!range) continue;
+    const located = locateQuoteInDocument(json, item.quote, item.blockIndex);
+    if (!located) continue;
+    const range = located.range;
     if (item.kind === 'card') {
       if (!cardType) continue;
       const ids = cardIdsInRange(tr.doc, range.from, range.to);

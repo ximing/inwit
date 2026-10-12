@@ -200,6 +200,122 @@
   cursor: pointer;
 }
 .canvas-links-head button:hover { color: var(--ink); background: var(--bg-sunken); }
+/* 全文：挂在节点底边外侧，不计入节点高度，脑图不因此重排。 */
+.canvas-readout-toggle {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  translate: -50% 100%;
+  z-index: 4;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent-deep);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-1);
+  transform-origin: center top;
+}
+.canvas-readout-toggle.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+.canvas-readout-toggle:hover { border-color: var(--accent-line); }
+.canvas-readout-toggle.is-on:hover { color: var(--bg); border-color: var(--accent); }
+.canvas-readout-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* 全文浮层：屏幕坐标，内部滚动，不参与脑图布局。 */
+.canvas-readout {
+  position: absolute;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  max-height: min(480px, 70vh);
+  overflow: hidden;
+  padding: 10px 12px 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-2);
+  color: var(--ink);
+  cursor: auto;
+  user-select: text;
+  animation: canvas-links-in 160ms ease;
+}
+.canvas-readout-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+.canvas-readout-head button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.canvas-readout-head button:hover { color: var(--ink); background: var(--bg-sunken); }
+.canvas-readout-head button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.canvas-readout-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.canvas-readout-kicker {
+  margin: 10px 0 2px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-4);
+}
+.canvas-readout-body > .canvas-readout-kicker:first-child,
+.canvas-readout-body > div:first-child .canvas-readout-kicker:first-child {
+  margin-top: 0;
+}
+.canvas-readout-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.canvas-readout-foot {
+  display: flex;
+  justify-content: flex-end;
+  flex: none;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.canvas-readout-foot button {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent-deep);
+  font-size: 12px;
+  cursor: pointer;
+}
+.canvas-readout-foot button:hover { background: var(--accent-soft); }
+.canvas-readout-foot button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .canvas-links-panel .card-links { margin-top: 0; }
 .canvas-links-panel .card-links-title { display: none; }
 .doc-canvas-insert {
@@ -884,7 +1000,8 @@
 @media (prefers-reduced-motion: reduce) {
   .doc-canvas-card { transition: none; }
   .doc-canvas-edges path { transition: none; }
-  .canvas-links-panel { animation: none; }
+  .canvas-links-panel,
+  .canvas-readout { animation: none; }
   .canvas-link-editor { animation: none; }
   .canvas-link-dot { transition: none; }
 }

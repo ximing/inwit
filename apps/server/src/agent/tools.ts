@@ -127,7 +127,9 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
       const proposed = session.cardAcceptance === 'proposed';
       for (const draft of params.cards) {
         const now = new Date();
-        const resolved = resolveQuoteAnchor(contentJson, draft.blockIndex, draft.quote);
+        const resolved = resolveQuoteAnchor(contentJson, draft.blockIndex, draft.quote, {
+          recover: true,
+        });
         const [row] = await getDb()
           .insert(cards)
           .values({
