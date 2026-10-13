@@ -1,6 +1,20 @@
 import { inlineTextOf, loadPmDoc } from './pm.js';
 import type { DocBlock, PmJson } from './types.js';
 
+const MEDIA_NODE_TYPES = new Set(['image', 'video']);
+
+/** Picture and video nodes have no plain text, but they are still document content. */
+export function pmJsonHasMedia(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const node = value as { type?: unknown; content?: unknown };
+  if (typeof node.type === 'string' && MEDIA_NODE_TYPES.has(node.type)) return true;
+  if (!Array.isArray(node.content)) return false;
+  for (const child of node.content) {
+    if (pmJsonHasMedia(child)) return true;
+  }
+  return false;
+}
+
 export function blocksFromPmJSON(doc: PmJson): DocBlock[] {
   const pm = loadPmDoc(doc);
   const blocks: DocBlock[] = [];

@@ -9,9 +9,9 @@ import {
   VitalEntity,
 } from '@inwit/doc-schema';
 import { codeBlockNodeView } from '@inwit/doc-schema/code-block-view';
+import { createDocImage } from '@inwit/doc-schema/image-view';
 import { mergeAttributes, Node, type AnyExtension, type NodeViewRendererProps } from '@tiptap/core';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
@@ -46,56 +46,6 @@ export type CreateDocExtensionsOpts = {
 function attrString(node: ProseMirrorNode, key: string): string {
   const value = node.attrs[key];
   return typeof value === 'string' ? value : '';
-}
-
-function createUploadedImage(assetUrls: AssetUrlsService) {
-  return Image.extend({
-    addNodeView() {
-      return ({ node }: NodeViewRendererProps): NodeView => {
-        let current = node;
-        const img = document.createElement('img');
-        img.className = 'doc-image';
-        img.draggable = false;
-
-        const sync = (): void => {
-          const src = attrString(current, 'src');
-          const alt = attrString(current, 'alt');
-          const title = attrString(current, 'title');
-          if (alt) img.alt = alt;
-          else img.removeAttribute('alt');
-          if (title) img.title = title;
-          else img.removeAttribute('title');
-
-          const url = src ? assetUrls.urlFor(src) : null;
-          if (url) {
-            if (img.getAttribute('src') !== url) img.src = url;
-          } else if (img.hasAttribute('src')) {
-            img.removeAttribute('src');
-          }
-          if (src) void assetUrls.ensure([src]);
-        };
-
-        const unsub = assetUrls.subscribe(sync);
-        sync();
-        return {
-          dom: img,
-          update: (updated: ProseMirrorNode) => {
-            if (updated.type !== current.type) return false;
-            current = updated;
-            sync();
-            return true;
-          },
-          destroy: () => {
-            unsub();
-          },
-          ignoreMutation: () => true,
-        };
-      };
-    },
-  }).configure({
-    inline: true,
-    allowBase64: false,
-  });
 }
 
 function createVideoNode(assetUrls: AssetUrlsService) {
@@ -227,7 +177,7 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
     TableRow,
     TableHeader,
     TableCell,
-    createUploadedImage(opts.assetUrls),
+    createDocImage(opts.assetUrls),
     createVideoNode(opts.assetUrls),
     TaskList,
     TaskItem.configure({ nested: true }),

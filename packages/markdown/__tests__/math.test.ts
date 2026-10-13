@@ -13,6 +13,45 @@ describe('math markdown', () => {
     expect(serializePmJSONToMarkdown(parseMarkdownToPmJSON(serializePmJSONToMarkdown(pm)))).toBe(md);
   });
 
+  it('reads model display math \\[ \\boxed{} \\] and inline \\( \\)', () => {
+    const boxed = '\\[ \\boxed{ 复杂任务的组织、依赖、并发、资源和失败管理 } \\]\n';
+    const pm = parseMarkdownToPmJSON(boxed);
+    expect(pm.content).toEqual([
+      {
+        type: 'blockMath',
+        attrs: { latex: '\\boxed{ 复杂任务的组织、依赖、并发、资源和失败管理 }' },
+      },
+    ]);
+    expect(parseMarkdownToPmJSON(serializePmJSONToMarkdown(pm))).toEqual(pm);
+
+    const multiline = parseMarkdownToPmJSON('\\[\n\\boxed{a+b}\n\\]\n');
+    expect(multiline.content?.[0]).toMatchObject({
+      type: 'blockMath',
+      attrs: { latex: '\\boxed{a+b}' },
+    });
+
+    const mixed = parseMarkdownToPmJSON('结论是 \\[ \\boxed{x^2} \\] 如上。\n\n行内 \\(E=mc^2\\) 结束。\n');
+    expect(JSON.stringify(mixed)).toContain('"latex":"\\\\boxed{x^2}"');
+    expect(JSON.stringify(mixed)).toContain('"latex":"E=mc^2"');
+    expect(mixed.content?.some((node) => node.type === 'blockMath')).toBe(false);
+
+    const fenced = parseMarkdownToPmJSON('```\n\\[ \\boxed{a} \\]\n```\n');
+    expect(JSON.stringify(fenced)).not.toContain('blockMath');
+    expect(JSON.stringify(fenced)).toContain('\\\\[ \\\\boxed{a} \\\\]');
+
+    const literal = parseMarkdownToPmJSON('字面 \\\\[x\\\\]。\n');
+    expect(JSON.stringify(literal)).not.toContain('Math');
+
+    // A multiline formula that shares its lines with prose becomes its own
+    // display block. The prose on those lines stays in the surrounding paragraphs.
+    const wrapped = parseMarkdownToPmJSON('前文 \\[\n\\boxed{a}\n\\] 后文\n');
+    expect(wrapped.content?.some((node) => node.type === 'blockMath' && node.attrs?.latex === '\\boxed{a}')).toBe(true);
+    const wrappedText = JSON.stringify(wrapped);
+    expect(wrappedText).toContain('前文');
+    expect(wrappedText).toContain('后文');
+    expect(wrappedText).not.toContain('"latex":"后文"');
+  });
+
   it('keeps a price as text and escapes the dollar on the way out', () => {
     const pm = parseMarkdownToPmJSON('售价 $100。\n');
     expect(JSON.stringify(pm)).not.toContain('inlineMath');

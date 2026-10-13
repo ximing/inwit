@@ -176,6 +176,23 @@
   border-radius: 999px;
   padding: 1px 8px;
 }
+.assistant-msg-selection {
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border: 0;
+  border-left: 2px solid var(--line);
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.assistant-msg-selection span {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
 .assistant-pending,
 .assistant-failed p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
 .assistant-pending { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }

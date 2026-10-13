@@ -6,6 +6,7 @@ import {
   type Conversation,
   type ConversationDetail,
   type ConversationNodeRef,
+  type ConversationSelection,
 } from '@inwit/dto';
 import { getDocument } from '@/api/documents';
 import { ApiError, errorMessage } from '@/api/client';
@@ -157,6 +158,40 @@ export class AssistantService extends Service {
         return;
       }
       if (!quiet) this.error = errorMessage(err, '打不开这段对话');
+    }
+  }
+
+  /**
+   * Open a new sidebar conversation for one highlighted passage and run the prompt.
+   * Leaves the current conversation in place when the request fails.
+   */
+  async askAboutHighlight(input: {
+    prompt: string;
+    documentId: string;
+    selection: ConversationSelection;
+    llmConfigId?: string | null;
+  }): Promise<boolean> {
+    const trimmed = input.prompt.trim();
+    if (!trimmed) return false;
+    this.error = null;
+    try {
+      const detail = await createConversation({
+        text: trimmed,
+        documentIds: [input.documentId].slice(0, CONVERSATION_MENTION_MAX),
+        selection: input.selection,
+        dirtyDocumentIds: this.dirtyIds(),
+        ...(input.llmConfigId ? { llmConfigId: input.llmConfigId } : {}),
+      });
+      this.current = detail;
+      this.nodes = [];
+      this.historyOpen = false;
+      writeStored(detail.id);
+      void this.loadList();
+      this.watch();
+      return true;
+    } catch (err) {
+      this.error = errorMessage(err, '没送出去');
+      return false;
     }
   }
 

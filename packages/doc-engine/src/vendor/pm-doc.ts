@@ -1,4 +1,4 @@
-import { pmJsonToText, type PmJson } from '@inwit/doc-schema';
+import { pmJsonHasMedia, pmJsonToText, type PmJson } from '@inwit/doc-schema';
 import { EMPTY_PM_DOC, type PmDocJson } from '@inwit/dto';
 
 export function asPmJson(value: unknown): PmDocJson {
@@ -17,6 +17,7 @@ export function asSchemaJson(value: unknown): PmJson {
 }
 
 export function isBlankPmDoc(value: unknown): boolean {
+  if (pmJsonHasMedia(value)) return false;
   try {
     return pmJsonToText(asSchemaJson(value)).replaceAll('\u200b', '').trim().length === 0;
   } catch {

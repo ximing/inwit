@@ -13,6 +13,17 @@ describe('isBlankPmDoc', () => {
       }),
     ).toBe(true);
     expect(isBlankPmDoc(textToPmDoc('正文'))).toBe(false);
+    expect(
+      isBlankPmDoc({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'image', attrs: { src: 'asset:pic', alt: null, width: 480, height: 240 } }],
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 });
 

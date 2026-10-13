@@ -8,8 +8,10 @@ import {
   editRefusalStatus,
   emptyMindNodeFacts,
   fallbackReply,
+  formatConversationHighlight,
   formatMindNode,
   mindDocumentIds,
+  normalizeConversationSelection,
   normalizeDocumentIds,
   normalizeNodeRefs,
   planMindNodeUpdate,
@@ -166,6 +168,78 @@ describe('buildConversationPrompt', () => {
     expect(prompt).toContain('批注「笔记」');
     expect(prompt).toContain('不要调用 read_document_mind 或 apply_mind_edits');
   });
+
+  it('puts the highlighted passage, its place, and the article into this turn', () => {
+    const prompt = buildConversationPrompt({
+      mentions: [{ id: DOC, title: '梯度' }],
+      nodes: [],
+      dirtyDocumentIds: [],
+      allowCards: false,
+      earlier: [
+        {
+          role: 'user',
+          content: '先看这句',
+          selection: {
+            documentId: DOC,
+            quote: '梯度指向增长最快的方向',
+            blockIndex: 4,
+            from: 12,
+            to: 28,
+          },
+        },
+      ],
+      selection: {
+        title: '梯度',
+        selection: {
+          documentId: DOC,
+          quote: '沿着梯度下降',
+          blockIndex: 6,
+          pageIndex: 1,
+        },
+      },
+      latest: '这句在说什么',
+    });
+    expect(prompt).toContain('本轮划线：');
+    expect(prompt).toContain('《梯度》');
+    expect(prompt).toContain(DOC);
+    expect(prompt).toContain('第 2 页');
+    expect(prompt).toContain('第 6 块');
+    expect(prompt).toContain('沿着梯度下降');
+    expect(prompt).toContain('这句在说什么');
+    expect(prompt).toContain('（划线：第 4 块，字符 12–28 「梯度指向增长最快的方向」）');
+  });
+});
+
+describe('normalizeConversationSelection', () => {
+  it('drops a half-open range and keeps a complete one', () => {
+    expect(
+      normalizeConversationSelection({
+        documentId: DOC,
+        quote: '  原文  ',
+        from: 3,
+      }),
+    ).toEqual({ documentId: DOC, quote: '原文' });
+    expect(
+      normalizeConversationSelection({
+        documentId: DOC,
+        quote: '原文',
+        from: 3,
+        to: 8,
+        blockIndex: 2,
+      }),
+    ).toEqual({ documentId: DOC, quote: '原文', from: 3, to: 8, blockIndex: 2 });
+  });
+});
+
+describe('formatConversationHighlight', () => {
+  it('numbers a PDF page from zero and keeps the block index', () => {
+    expect(
+      formatConversationHighlight({
+        title: '梯度',
+        selection: { documentId: DOC, quote: '原文', pageIndex: 0, blockIndex: 3 },
+      }),
+    ).toContain('位置：第 1 页，第 3 块');
+  });
 });
 
 describe('mindDocumentIds', () => {
@@ -288,5 +362,6 @@ describe('conversation system prompt', () => {
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('逐字抄写');
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('fromBlock');
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('retarget_highlight');
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('本轮如果带了划线');
   });
 });

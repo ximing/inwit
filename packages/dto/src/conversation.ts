@@ -7,6 +7,8 @@ export const CONVERSATION_MENTION_MAX = 5;
 export const CONVERSATION_NODE_MAX = 5;
 export const CONVERSATION_TEXT_MAX = 20_000;
 export const CONVERSATION_TITLE_MAX = 24;
+/** Highlight quote attached to one conversation turn. */
+export const CONVERSATION_SELECTION_QUOTE_MAX = 8_000;
 
 export const CONVERSATION_NODE_KIND_LABELS: Record<CanvasNodeKind, string> = {
   card: '卡片',
@@ -37,6 +39,21 @@ export const conversationNodeRefSchema = z.object({
   label: z.string().trim().min(1).max(80),
 });
 export type ConversationNodeRef = z.infer<typeof conversationNodeRefSchema>;
+
+/**
+ * A passage the user highlighted when starting a turn.
+ * `blockIndex` is 1-based in the article. `pageIndex` is the 0-based PDF page.
+ * `from` / `to` are ProseMirror positions when the editor had them.
+ */
+export const conversationSelectionSchema = z.object({
+  documentId: z.string().uuid(),
+  quote: z.string().trim().min(1).max(CONVERSATION_SELECTION_QUOTE_MAX),
+  blockIndex: z.number().int().positive().optional(),
+  from: z.number().int().nonnegative().optional(),
+  to: z.number().int().positive().optional(),
+  pageIndex: z.number().int().nonnegative().optional(),
+});
+export type ConversationSelection = z.infer<typeof conversationSelectionSchema>;
 
 export const conversationActionSchema = z.discriminatedUnion('type', [
   z.object({
@@ -134,6 +151,8 @@ export const conversationMessageSchema = z.object({
   activity: z.string().nullable().default(null),
   documents: z.array(conversationDocumentRefSchema),
   nodes: z.array(conversationNodeRefSchema).default([]),
+  /** Passage highlighted for this turn. Null on assistant rows and older messages. */
+  selection: conversationSelectionSchema.nullable().default(null),
   actions: z.array(conversationActionSchema),
   status: conversationMessageStatusSchema,
   failReason: z.string().nullable(),
@@ -161,6 +180,8 @@ export const sendConversationInputSchema = z.object({
   documentIds: z.array(z.string().uuid()).max(CONVERSATION_MENTION_MAX).default([]),
   /** Mind-map nodes attached from the canvas. Omitted means none. */
   nodes: z.array(conversationNodeRefSchema).max(CONVERSATION_NODE_MAX).optional(),
+  /** Article passage highlighted for this turn. Omitted means none. */
+  selection: conversationSelectionSchema.optional(),
   dirtyDocumentIds: z.array(z.string().uuid()).max(8).default([]),
   /** Use this saved model for the turn. Omitted means the user's default. */
   llmConfigId: z.string().uuid().optional(),

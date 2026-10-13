@@ -36,7 +36,16 @@ function collectText(node: unknown): string {
   return n.content.map(collectText).join('');
 }
 
+function hasMedia(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as PmNode;
+  if (n.type === 'image' || n.type === 'video') return true;
+  if (!Array.isArray(n.content)) return false;
+  return n.content.some((child) => hasMedia(child));
+}
+
 export function isBlankPmDoc(value: unknown): boolean {
+  if (hasMedia(value)) return false;
   try {
     return collectText(value).replaceAll('\u200b', '').trim().length === 0;
   } catch {

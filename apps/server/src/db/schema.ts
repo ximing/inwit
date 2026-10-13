@@ -55,6 +55,7 @@ import type {
   CardLinkOrigin,
   ConversationAction,
   ConversationNodeRef,
+  ConversationSelection,
   CardLinkType,
   CardQuestionType,
   CardSource,
@@ -824,6 +825,8 @@ export const agentMessages = pgTable(
       .$type<ConversationNodeRef[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    /** Highlight attached to a user turn. Null on assistant rows and older messages. */
+    selection: jsonb('selection').$type<ConversationSelection | null>(),
     actions: jsonb('actions').$type<ConversationAction[]>().notNull().default(sql`'[]'::jsonb`),
     status: varchar('status', { length: 16 })
       .$type<'pending' | 'done' | 'failed'>()

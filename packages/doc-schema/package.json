@@ -16,6 +16,11 @@
       "import": "./dist/schema/code-block-view.js",
       "default": "./dist/schema/code-block-view.js"
     },
+    "./image-view": {
+      "types": "./src/schema/image-view.ts",
+      "import": "./dist/schema/image-view.js",
+      "default": "./dist/schema/image-view.js"
+    },
     "./math-html": {
       "types": "./src/schema/math-html.ts",
       "import": "./dist/schema/math-html.js",

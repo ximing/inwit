@@ -2,11 +2,13 @@ import {
   CONVERSATION_MENTION_MAX,
   CONVERSATION_NODE_KIND_LABELS,
   CONVERSATION_NODE_MAX,
+  CONVERSATION_SELECTION_QUOTE_MAX,
   CONVERSATION_TITLE_MAX,
   mindEditSummary,
   type ConversationAction,
   type ConversationNodeKind,
   type ConversationNodeRef,
+  type ConversationSelection,
 } from '@inwit/dto';
 
 const UUID_RE =
@@ -26,6 +28,51 @@ export function clipChars(text: string, max: number): { text: string; clipped: b
 export function conversationTitle(text: string, max = CONVERSATION_TITLE_MAX): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   return clipChars(flat, max).text.replace(/…$/, '');
+}
+
+/** Drop a half-open range and keep the quote inside the stored cap. */
+export function normalizeConversationSelection(selection: ConversationSelection): ConversationSelection {
+  const quote = [...selection.quote.trim()].slice(0, CONVERSATION_SELECTION_QUOTE_MAX).join('');
+  const hasRange =
+    selection.from != null && selection.to != null && selection.to > selection.from;
+  return {
+    documentId: selection.documentId,
+    quote,
+    ...(selection.blockIndex != null ? { blockIndex: selection.blockIndex } : {}),
+    ...(hasRange ? { from: selection.from, to: selection.to } : {}),
+    ...(selection.pageIndex != null ? { pageIndex: selection.pageIndex } : {}),
+  };
+}
+
+/** Human place of a highlight: PDF page is shown 1-based, block index stays 1-based. */
+export function conversationSelectionPlace(
+  selection: Pick<ConversationSelection, 'blockIndex' | 'pageIndex' | 'from' | 'to'>,
+): string {
+  const parts: string[] = [];
+  if (selection.pageIndex != null) parts.push(`第 ${String(selection.pageIndex + 1)} 页`);
+  if (selection.blockIndex != null) parts.push(`第 ${String(selection.blockIndex)} 块`);
+  if (selection.from != null && selection.to != null) {
+    parts.push(`字符 ${String(selection.from)}–${String(selection.to)}`);
+  }
+  return parts.join('，');
+}
+
+export function formatConversationHighlight(input: {
+  title: string;
+  selection: ConversationSelection;
+}): string {
+  const place = conversationSelectionPlace(input.selection);
+  const quote = clipChars(input.selection.quote.trim(), 4000);
+  const where = place.length > 0 ? `位置：${place}\n` : '';
+  return `文档：《${input.title}》（${input.selection.documentId}）\n${where}原文：\n${quote.text}${quote.clipped ? '（已截断）' : ''}`;
+}
+
+function highlightHistoryLine(selection: ConversationSelection | null | undefined): string {
+  if (!selection) return '';
+  const place = conversationSelectionPlace(selection);
+  const quote = clipChars(selection.quote.trim(), 80);
+  const where = place.length > 0 ? `${place} ` : '';
+  return `\n（划线：${where}「${quote.text}」）`;
 }
 
 export function normalizeDocumentIds(
@@ -282,7 +329,9 @@ export function buildConversationPrompt(input: {
     role: 'user' | 'assistant';
     content: string;
     nodes?: readonly ConversationNodeRef[];
+    selection?: ConversationSelection | null;
   }[];
+  selection?: { title: string; selection: ConversationSelection } | null;
   latest: string;
 }): string {
   const mentionBlock =
@@ -318,10 +367,14 @@ export function buildConversationPrompt(input: {
               )
               .join('、');
             const nodeLine = attached ? `\n（加入的节点：${attached}）` : '';
-            return `${who}：${body.text}${body.clipped ? '（已截断）' : ''}${nodeLine}`;
+            return `${who}：${body.text}${body.clipped ? '（已截断）' : ''}${nodeLine}${highlightHistoryLine(message.selection)}`;
           })
           .join('\n\n');
   const latest = clipChars(input.latest.trim(), 8000);
+  const highlight = input.selection
+    ? formatConversationHighlight(input.selection)
+    : '';
+  const highlightBlock = highlight.length > 0 ? `\n本轮划线：\n${highlight}\n` : '';
   return `本轮 @ 到的文档：
 ${mentionBlock}
 
@@ -335,7 +388,7 @@ ${mindBlock}
 ${dirty}
 
 ${cards}
-
+${highlightBlock}
 之前的对话：
 ${history}
 

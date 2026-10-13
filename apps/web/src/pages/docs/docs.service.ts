@@ -338,7 +338,7 @@ export class DocsService extends Service {
   selectionCardCountAtStart = 0;
   selectionJobId: string | null = null;
   selectionPop: {
-    kind: 'annotate' | 'card';
+    kind: 'annotate' | 'card' | 'ask';
     text: string;
     left: number;
     top: number;
@@ -1215,7 +1215,7 @@ export class DocsService extends Service {
   }
 
   openSelectionPop(input: {
-    kind: 'annotate' | 'card';
+    kind: 'annotate' | 'card' | 'ask';
     text: string;
     left: number;
     top: number;

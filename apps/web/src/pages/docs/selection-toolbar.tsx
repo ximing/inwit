@@ -1,6 +1,6 @@
-import { IMAGE_EXCERPT_QUOTE, type AnnotationGeometry } from '@inwit/dto';
+import { CONVERSATION_TEXT_MAX, IMAGE_EXCERPT_QUOTE, type AnnotationGeometry } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
-import { Copy, GripVertical, Highlighter, Sparkles, SquarePlus } from 'lucide-react';
+import { Copy, GripVertical, Highlighter, MessageSquarePlus, Sparkles, SquarePlus } from 'lucide-react';
 import {
   useEffect,
   useLayoutEffect,
@@ -13,7 +13,11 @@ import {
 import { createPortal } from 'react-dom';
 import { Tip } from '@/components/tip';
 import type { TextSelectionAnchor } from '@/lib/entity-marks';
+import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
 import { UiPrefsService } from '@/services/ui-prefs.service';
+import { readAssistantModelId } from '@/shell/assistant-model';
+import { highlightSelection } from '@/shell/assistant-selection';
+import { AssistantService } from '@/shell/assistant.service';
 import { DocsService } from './docs.service';
 import { encodeQuoteDrag, QUOTE_DRAG_MIME, type QuoteDragExtra } from './mindmap-quote';
 
@@ -120,7 +124,7 @@ export const SelectionActions = observer(function SelectionActions({
     event.dataTransfer.effectAllowed = 'copy';
   };
 
-  const openPop = (kind: 'annotate' | 'card') => {
+  const openPop = (kind: 'annotate' | 'card' | 'ask') => {
     if (!documentId) return;
     const rect = getRect();
     const anchor = resolveAnchor();
@@ -183,16 +187,26 @@ export const SelectionActions = observer(function SelectionActions({
       >
         {digesting ? '消化中…' : <Sparkles width={15} height={15} strokeWidth={2} />}
       </ToolIcon>
+      <ToolIcon
+        label={locked ? '保存后再问' : text.trim().length === 0 ? '先选中文字' : '问 AI'}
+        disabled={locked || text.trim().length === 0}
+        onAction={() => openPop('ask')}
+      >
+        <MessageSquarePlus width={15} height={15} strokeWidth={2} />
+      </ToolIcon>
     </>
   );
 });
 
 export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
   const service = useService(DocsService);
+  const assistant = useService(AssistantService);
+  const prefs = useService(UiPrefsService);
   const pop = service.selectionPop;
   const [note, setNote] = useState('');
   const [concept, setConcept] = useState('');
   const [example, setExample] = useState('');
+  const [prompt, setPrompt] = useState('');
   const [saving, setSaving] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: 12, top: 12 });
@@ -208,6 +222,7 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
     setNote('');
     setConcept('');
     setExample(pop.text);
+    setPrompt('');
     setSaving(false);
   }, [pop]);
 
@@ -293,12 +308,43 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
     if (ok) service.closeSelectionPop();
   };
 
+  const sendAsk = async () => {
+    if (!pop || pop.kind !== 'ask' || saving) return;
+    const text = prompt.trim();
+    if (!text) return;
+    setSaving(true);
+    const storedModel = readAssistantModelId();
+    const llmConfigId = storedModel && /^[0-9a-f-]{36}$/i.test(storedModel) ? storedModel : null;
+    const ok = await assistant.askAboutHighlight({
+      prompt: text,
+      documentId: pop.documentId,
+      selection: highlightSelection({
+        documentId: pop.documentId,
+        quote: pop.text,
+        blockIndex: pop.blockIndex,
+        from: pop.from,
+        to: pop.to,
+        pageIndex: pop.pdf?.pageIndex,
+      }),
+      llmConfigId,
+    });
+    setSaving(false);
+    if (!ok) {
+      service.showToast(assistant.error ?? '没送出去');
+      return;
+    }
+    prefs.setAssistantCollapsed(false);
+    service.closeSelectionPop();
+  };
+
+  const popLabel = pop.kind === 'annotate' ? '划线批注' : pop.kind === 'card' ? '写卡片' : '问 AI';
+
   return createPortal(
     <div
       ref={boxRef}
       className="sel-pop"
       role="dialog"
-      aria-label={pop.kind === 'annotate' ? '划线批注' : '写卡片'}
+      aria-label={popLabel}
       style={{ left: pos.left, top: pos.top }}
     >
       <p className="sel-pop-quote">{pop.text}</p>
@@ -326,6 +372,43 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
             </button>
           </div>
         </>
+      ) : pop.kind === 'ask' ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void sendAsk();
+          }}
+        >
+          <textarea
+            autoFocus
+            rows={3}
+            placeholder="就这段提问…"
+            aria-label="提问"
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            maxLength={CONVERSATION_TEXT_MAX}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.shiftKey) return;
+              if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
+              event.preventDefault();
+              runAfterImeEnter(event.nativeEvent, () => {
+                void sendAsk();
+              });
+            }}
+          />
+          <div className="sel-pop-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => service.closeSelectionPop()}>
+              取消
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={saving || prompt.trim().length === 0}
+            >
+              {saving ? '发送中…' : '发送'}
+            </button>
+          </div>
+        </form>
       ) : (
         <>
           <input

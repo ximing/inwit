@@ -29,6 +29,8 @@ describe('llm provider catalog', () => {
     expect(model.compat?.maxTokensField).toBe('max_tokens');
     expect(model.compat?.supportsStore).toBe(false);
     expect(model.compat?.supportsDeveloperRole).toBe(false);
+    expect(model.contextWindow).toBe(1_048_576);
+    expect(model.maxTokens).toBe(131_072);
   });
 
   it('leaves other providers to URL auto-detect', () => {

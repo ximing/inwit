@@ -288,6 +288,13 @@
       "when": 1791652351318,
       "tag": "0040_loose_serpent_society",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791889933114,
+      "tag": "0041_agent_message_selection",
+      "breakpoints": true
     }
   ]
 }

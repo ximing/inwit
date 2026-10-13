@@ -27,6 +27,7 @@ import {
   assistantWidthFromDrag,
   assistantWidthFromKey,
 } from '@/services/ui-prefs-logic';
+import { highlightPlaceLabel } from './assistant-selection';
 import { AssistantMarkdown } from './assistant-markdown-view';
 import {
   ASSISTANT_SYSTEM_MODEL_LABEL,
@@ -363,6 +364,12 @@ export const AssistantRail = observer(function AssistantRail() {
                         <span key={node.nodeId}>{nodeChipLabel(node)}</span>
                       ))}
                     </p>
+                  ) : null}
+                  {message.selection ? (
+                    <blockquote className="assistant-msg-selection">
+                      <span>{highlightPlaceLabel(message.selection)}</span>
+                      {message.selection.quote}
+                    </blockquote>
                   ) : null}
                   {message.role === 'assistant' && message.thinking ? (
                     <div className="assistant-thinking">

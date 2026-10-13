@@ -9,6 +9,7 @@ import {
   findQuoteHits,
   locateQuote,
   locateQuoteInDocument,
+  pmJsonHasMedia,
   pmJsonToText,
   stripEntityAnchors,
   thematicBreaksToPageBreaks,
@@ -93,6 +94,22 @@ describe('pmJsonToText', () => {
         '',
       ].join('\n\n'),
     );
+  });
+});
+
+describe('pmJsonHasMedia', () => {
+  it('finds an image nested in a paragraph and ignores plain text', () => {
+    expect(pmJsonHasMedia(doc({ type: 'paragraph', content: [{ type: 'text', text: '正文' }] }))).toBe(
+      false,
+    );
+    expect(
+      pmJsonHasMedia(
+        doc({
+          type: 'paragraph',
+          content: [{ type: 'image', attrs: { src: 'asset:pic', width: 480, height: 240 } }],
+        }),
+      ),
+    ).toBe(true);
   });
 });
 

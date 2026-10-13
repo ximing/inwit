@@ -120,12 +120,16 @@ export const DocMathematics = Extension.create<{ katexOutput: 'html' | 'mathml' 
 
   addExtensions() {
     const output = this.options.katexOutput;
+    // Model answers put Chinese inside `\boxed{}`. KaTeX can draw that text;
+    // the default strict mode only warns once per character.
+    const strict = (code: string): 'ignore' | 'warn' =>
+      code === 'unicodeTextInMathMode' ? 'ignore' : 'warn';
     return [
       DocBlockMath.configure({
-        katexOptions: { throwOnError: false, displayMode: true, output },
+        katexOptions: { throwOnError: false, displayMode: true, output, strict },
       }),
       DocInlineMath.configure({
-        katexOptions: { throwOnError: false, displayMode: false, output },
+        katexOptions: { throwOnError: false, displayMode: false, output, strict },
       }),
     ];
   },

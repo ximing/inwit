@@ -5,6 +5,7 @@ import remarkParse from 'remark-parse';
 import remarkStringify, { type Options as StringifyOptions } from 'remark-stringify';
 import { unified } from 'unified';
 import { handleImage } from './asset-destination.js';
+import { normalizeLatexMathDelimiters } from './latex-delimiters.js';
 import { remarkVitalEntity } from './remark-vital-entity.js';
 import { normalizeTrailingNewlines } from './tokens.js';
 import type { MdastRoot, PmNode } from './types.js';
@@ -31,7 +32,7 @@ export function parseMarkdownToMdast(md: string): MdastRoot {
     .use(remarkDirective)
     .use(remarkVitalEntity)
     .use(remarkMath)
-    .parse(md);
+    .parse(normalizeLatexMathDelimiters(md));
 }
 
 export function serializeMdastToMarkdown(tree: MdastRoot): string {

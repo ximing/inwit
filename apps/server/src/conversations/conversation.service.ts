@@ -5,10 +5,16 @@ import type {
   ConversationDocumentRef,
   ConversationMessage,
   ConversationNodeRef,
+  ConversationSelection,
   RetryConversationInput,
   SendConversationInput,
 } from '@inwit/dto';
-import { conversationActionSchema, conversationJobPayloadSchema, conversationNodeRefSchema } from '@inwit/dto';
+import {
+  conversationActionSchema,
+  conversationJobPayloadSchema,
+  conversationNodeRefSchema,
+  conversationSelectionSchema,
+} from '@inwit/dto';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { enqueueJob } from '../jobs/enqueue.js';
 import { getDb } from '../db/index.js';
@@ -21,7 +27,13 @@ import {
   type JobRow,
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
-import { clipReason, conversationTitle, normalizeDocumentIds, normalizeNodeRefs } from '../agent/conversation-logic.js';
+import {
+  clipReason,
+  conversationTitle,
+  normalizeConversationSelection,
+  normalizeDocumentIds,
+  normalizeNodeRefs,
+} from '../agent/conversation-logic.js';
 import { loadMindNodeFacts, ownedNodeRefs } from '../agent/conversation-nodes.js';
 import { assertOwnedLlmConfig } from '../llm/llm.service.js';
 import { resolveModelFor } from '../llm/pi.js';
@@ -55,6 +67,12 @@ function readNodeRefs(value: unknown): ConversationNodeRef[] {
     if (parsed.success) refs.push(parsed.data);
   }
   return refs;
+}
+
+function readSelection(value: unknown): ConversationSelection | null {
+  if (value == null) return null;
+  const parsed = conversationSelectionSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }
 
 function toConversation(row: AgentConversationRow): Conversation {
@@ -94,6 +112,7 @@ function toMessage(row: AgentMessageRow, titles: Map<string, string>): Conversat
     activity: row.activity,
     documents: documentRefs(documentIds, titles),
     nodes: readNodeRefs(row.nodeRefs),
+    selection: readSelection(row.selection),
     actions: readActions(row.actions),
     status: row.status,
     failReason: row.failReason,
@@ -181,7 +200,15 @@ export async function sendConversationMessage(
   conversationId: string | null,
   input: SendConversationInput,
 ): Promise<ConversationDetail> {
-  const documentIds = await keepOwned(userId, normalizeDocumentIds(input.documentIds));
+  const selection = input.selection ? normalizeConversationSelection(input.selection) : null;
+  if (selection) {
+    const ownedSelection = await keepOwned(userId, [selection.documentId]);
+    if (ownedSelection.length === 0) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
+  }
+  const documentIds = await keepOwned(
+    userId,
+    normalizeDocumentIds(selection ? [selection.documentId, ...input.documentIds] : input.documentIds),
+  );
   const nodeFacts = await loadMindNodeFacts(userId, normalizeNodeRefs(input.nodes ?? []));
   const nodeRefs = ownedNodeRefs(nodeFacts);
   const dirtyDocumentIds = normalizeDocumentIds(input.dirtyDocumentIds, 8);
@@ -235,6 +262,7 @@ export async function sendConversationMessage(
       content: text,
       documentIds,
       nodeRefs,
+      selection,
       actions: [],
       status: 'done',
       createdAt: now,
@@ -441,7 +469,13 @@ export async function failConversationMessage(job: JobRow, reason: string): Prom
 export async function loadConversationRun(userId: string, conversationId: string, messageId: string): Promise<{
   mentions: { id: string; title: string }[];
   nodes: Awaited<ReturnType<typeof loadMindNodeFacts>>;
-  earlier: { role: 'user' | 'assistant'; content: string; nodes: ConversationNodeRef[] }[];
+  earlier: {
+    role: 'user' | 'assistant';
+    content: string;
+    nodes: ConversationNodeRef[];
+    selection: ConversationSelection | null;
+  }[];
+  selection: { title: string; selection: ConversationSelection } | null;
   latest: string;
 } | null> {
   const [assistant] = await getDb()
@@ -476,11 +510,19 @@ export async function loadConversationRun(userId: string, conversationId: string
       role: row.role,
       content: row.content,
       nodes: row.role === 'user' ? readNodeRefs(row.nodeRefs) : [],
+      selection: row.role === 'user' ? readSelection(row.selection) : null,
     }));
+  const latestSelection = readSelection(latestUser.selection);
   return {
     mentions: documentRefs(mentionIds, titles),
     nodes,
     earlier,
+    selection: latestSelection
+      ? {
+          title: titles.get(latestSelection.documentId) ?? '未命名文档',
+          selection: latestSelection,
+        }
+      : null,
     latest: latestUser.content,
   };
 }

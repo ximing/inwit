@@ -18,6 +18,15 @@ export const GLM5_MODEL_LIMITS: ModelLimits = {
   maxOutputTokens: 131_072,
 };
 
+/**
+ * kimi-k3: 1,048,576 context. Thinking is always on and shares the output budget.
+ * Official default max output is 131,072; the 1M ceiling is the context window, not each reply.
+ */
+export const KIMI_K3_MODEL_LIMITS: ModelLimits = {
+  contextWindow: 1_048_576,
+  maxOutputTokens: 131_072,
+};
+
 /** Current qwen-plus / qwen-flash: 1,000,000 context, 32,768 max output. */
 export const QWEN_PLUS_LIMITS: ModelLimits = {
   contextWindow: 1_000_000,
@@ -61,5 +70,6 @@ function qwenLimits(id: string): ModelLimits | null {
 export function resolveModelLimits(modelId: string): ModelLimits {
   const id = normalizeModelId(modelId);
   if (id.startsWith('glm-5')) return GLM5_MODEL_LIMITS;
+  if (id === 'kimi-k3') return KIMI_K3_MODEL_LIMITS;
   return qwenLimits(id) ?? DEFAULT_MODEL_LIMITS;
 }

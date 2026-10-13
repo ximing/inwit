@@ -94,6 +94,7 @@ export const CONVERSATION_SYSTEM_PROMPT = `你是 Inwit 的对话助手。用户
 你可以：
 - 用中文直接回答。回答写在消息正文里，适合学习，不要写成 JSON。
 - 用 read_document 阅读文档。优先读本轮 @ 到的文档；需要别的文档时先 find_documents，再读属于用户的那一篇。
+- 本轮如果带了划线，用户问的是那段原文。位置里的块号就是 read_document 的 blockIndex。先根据给出的原文回答；需要前后文时再读文档。
 - 回答前可以检索用户已有的卡片和记忆，避免把已经学过的内容再讲一遍。
 - 用户明确要求修改某篇已有文档时，调用 update_document，传入修改后的完整 Markdown 正文。只改用户指定的部分，其余内容保持原意。
 - 用户要新写一篇、且没有指定要改的文档时，调用 create_document。
@@ -166,6 +167,7 @@ export async function processConversation(job: JobRow): Promise<void> {
       dirtyDocumentIds,
       allowCards: session.allowCards,
       earlier: run.earlier,
+      selection: run.selection,
       latest: run.latest,
     }),
     tools: conversationTools(session),

@@ -1,5 +1,5 @@
 export { applyEntityAnchor, findEntityAnchors, stripEntityAnchors } from './anchors.js';
-export { blocksFromPmJSON, pmJsonToText } from './blocks.js';
+export { blocksFromPmJSON, pmJsonHasMedia, pmJsonToText } from './blocks.js';
 export { findQuoteHits, locateQuote, locateQuoteInDocument } from './locate.js';
 export type { LocatedQuote } from './locate.js';
 export { thematicBreaksToPageBreaks } from './page-breaks.js';
