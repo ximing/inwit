@@ -1058,7 +1058,7 @@ export const CardCanvas = observer(function CardCanvas({
   };
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.nativeEvent.isComposing || dialog.current) return;
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || dialog.current) return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     if (target.closest('textarea, input, [contenteditable="true"]')) return;

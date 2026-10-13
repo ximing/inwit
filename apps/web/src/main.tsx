@@ -10,7 +10,10 @@ import { ThemeService } from '@/services/theme.service';
 import { EditorPresenceService } from '@/services/editor-presence.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { RouteLoadService } from '@/shell/route-load.service';
+import { installImeEnterGuard } from '@/lib/ime-enter';
 import '@/style-entry.css';
+
+installImeEnterGuard();
 
 register(AuthService);
 register(DialogService);

@@ -10,6 +10,7 @@ import {
   locationWantsSearchFocus,
   searchHotkeyHint,
 } from './search-hotkey';
+import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
 import { SearchService } from './search.service';
 
 export const SearchPalette = observer(function SearchPalette() {
@@ -96,7 +97,8 @@ export const SearchPalette = observer(function SearchPalette() {
             aria-keyshortcuts="Meta+K Control+K"
             onChange={(event) => search.setQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.nativeEvent.isComposing) return;
+              const native = event.nativeEvent;
+              if (native.isComposing || native.keyCode === 229 || event.key === 'Process') return;
               if (event.key === 'Escape') {
                 event.preventDefault();
                 event.stopPropagation();
@@ -115,12 +117,14 @@ export const SearchPalette = observer(function SearchPalette() {
                 return;
               }
               if (event.key !== 'Enter') return;
+              if (imeBlocksEnterFromEvent(native)) return;
               event.preventDefault();
-              const hit = openHits[search.activeIndex];
-              if (!hit?.href) return;
-              const href = hit.href;
-              void navigate(href);
-              search.closeSurface();
+              const href = openHits[search.activeIndex]?.href;
+              if (!href) return;
+              runAfterImeEnter(native, () => {
+                void navigate(href);
+                search.closeSurface();
+              });
             }}
           />
           <span className="search-palette-esc" aria-hidden>

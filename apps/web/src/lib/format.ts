@@ -115,8 +115,9 @@ export function isModEnterHotkey(event: {
   metaKey: boolean;
   ctrlKey: boolean;
   isComposing?: boolean;
+  keyCode?: number;
 }): boolean {
-  if (event.isComposing) return false;
+  if (event.isComposing || event.key === 'Process' || event.keyCode === 229) return false;
   return event.key === 'Enter' && (event.metaKey || event.ctrlKey);
 }
 

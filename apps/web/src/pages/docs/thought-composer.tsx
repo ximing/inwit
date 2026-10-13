@@ -2,6 +2,7 @@ import { observer, useService } from '@rabjs/react';
 import { ImagePlus, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Tip } from '@/components/tip';
+import { imeBlocksEnterFromEvent } from '@/lib/ime-enter';
 import { DocsService } from './docs.service';
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
@@ -77,6 +78,7 @@ export const ThoughtComposer = observer(function ThoughtComposer({
         maxLength={20_000}
         onChange={(event) => setNote(event.target.value)}
         onKeyDown={(event) => {
+          if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
           if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
             event.preventDefault();
             void submit();

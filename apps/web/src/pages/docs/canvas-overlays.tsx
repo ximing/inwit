@@ -2,6 +2,7 @@ import type { CanvasRevision } from '@inwit/dto';
 import { CheckCheck, Pause, Play, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { formatDateTime } from '@/lib/format';
+import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
 
 /**
  * 画布内搜索。命中数与当前序由父组件算好，这里只管输入与按键。
@@ -39,9 +40,13 @@ export function CanvasSearch({
         onKeyDown={(event) => {
           event.stopPropagation();
           if (event.key === 'Enter') {
+            if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
             event.preventDefault();
-            if (event.shiftKey) onPrev();
-            else onNext();
+            const backward = event.shiftKey;
+            runAfterImeEnter(event.nativeEvent, () => {
+              if (backward) onPrev();
+              else onNext();
+            });
           } else if (event.key === 'Escape') {
             event.preventDefault();
             onClose();

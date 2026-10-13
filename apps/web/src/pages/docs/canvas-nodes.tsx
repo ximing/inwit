@@ -6,6 +6,7 @@ import { PresignedThumb, usePresignedImage } from '@/components/presigned-thumb'
 import { Tip } from '@/components/tip';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { DialogService } from '@/services/dialog.service';
+import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
 import { DocsService } from './docs.service';
 import { MIND_NEW_TEXT } from './mindmap-edit';
 import { mindDraftAfter, mindDraftDirty, mindDraftKeyCommand } from './mindmap-gesture';
@@ -127,6 +128,8 @@ export const CanvasNoteNode = observer(function CanvasNoteNode({
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
+            const native = event.nativeEvent;
+            if (event.key === 'Enter' && imeBlocksEnterFromEvent(native)) return;
             const command = mindDraftKeyCommand(
               event.key,
               event.metaKey || event.ctrlKey,
@@ -148,7 +151,12 @@ export const CanvasNoteNode = observer(function CanvasNoteNode({
               return;
             }
             event.preventDefault();
-            event.currentTarget.blur();
+            const area = event.currentTarget;
+            if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+              runAfterImeEnter(native, () => area.blur());
+              return;
+            }
+            area.blur();
           }}
         />
       ) : item.note.trim() ? (
@@ -240,6 +248,8 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
+            const native = event.nativeEvent;
+            if (event.key === 'Enter' && imeBlocksEnterFromEvent(native)) return;
             const command = mindDraftKeyCommand(
               event.key,
               event.metaKey || event.ctrlKey,
@@ -261,7 +271,12 @@ export const CanvasFreeNode = observer(function CanvasFreeNode({
               return;
             }
             event.preventDefault();
-            event.currentTarget.blur();
+            const area = event.currentTarget;
+            if (event.key === 'Enter' && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
+              runAfterImeEnter(native, () => area.blur());
+              return;
+            }
+            area.blur();
           }}
         />
       ) : null}

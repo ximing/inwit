@@ -4,6 +4,7 @@ import { observer, useService } from '@rabjs/react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Tip } from '@/components/tip';
+import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
 import { PdfPaneService } from '../pdf-pane.service';
 import { searchResultLabel } from './chrome-logic.js';
 
@@ -74,10 +75,15 @@ export const PdfSearchBar = observer(function PdfSearchBar({ documentId }: { doc
                 return;
               }
               if (event.key !== 'Enter') return;
+              if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
               event.preventDefault();
-              if (!search.provides) return;
-              if (event.shiftKey) search.provides.previousResult();
-              else if (hasHits) search.provides.nextResult();
+              const provides = search.provides;
+              const backward = event.shiftKey;
+              if (!provides) return;
+              runAfterImeEnter(event.nativeEvent, () => {
+                if (backward) provides.previousResult();
+                else if (hasHits) provides.nextResult();
+              });
             }}
           />
           <span className="pdf-search-count" aria-live="polite">

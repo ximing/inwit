@@ -303,7 +303,7 @@ export const TopicCanvas = observer(function TopicCanvas() {
           if (panGesture.current?.pointerId === event.pointerId) panGesture.current = null;
         }}
         onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
+          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
           const target = event.target;
           if (!(target instanceof Element)) return;
           if (target.closest('textarea, input, [contenteditable="true"]')) return;

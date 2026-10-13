@@ -17,6 +17,7 @@ import { Link, useLocation, useSearchParams } from 'react-router';
 import { listDocuments } from '@/api/documents';
 import { searchQuery } from '@/api/search';
 import { formatRelativeTime } from '@/lib/format';
+import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
 import { docsPath, ROUTES, topicDocPath } from '@/routes';
 import { EditorPresenceService } from '@/services/editor-presence.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
@@ -479,16 +480,19 @@ export const AssistantRail = observer(function AssistantRail() {
                 syncQuery(value, event.target.selectionStart ?? value.length);
               }}
               onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing || event.key === 'Process') return;
                 if (event.key === 'Escape' && query !== null) {
+                  if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                   event.preventDefault();
                   setQuery(null);
                   return;
                 }
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
+                if (event.key !== 'Enter' || event.shiftKey) return;
+                // 组字确认的回车不上屏前不发送；compositionend 落到同一轮时也取消。
+                if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
+                event.preventDefault();
+                runAfterImeEnter(event.nativeEvent, () => {
                   void submit();
-                }
+                });
               }}
               onClick={(event) => syncQuery(draft, event.currentTarget.selectionStart ?? draft.length)}
             />

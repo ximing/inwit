@@ -280,8 +280,23 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
       activeIndex = keep >= 0 ? keep : 0;
       renderList(true);
     });
+    let composing = false;
+    let compositionEndedAt = 0;
+    field.addEventListener('compositionstart', () => {
+      composing = true;
+    });
+    field.addEventListener('compositionend', (event) => {
+      composing = false;
+      compositionEndedAt = event.timeStamp;
+    });
     field.addEventListener('keydown', (event) => {
-      if (event.isComposing) return;
+      const imeEnter =
+        event.key === 'Enter' &&
+        (event.isComposing ||
+          event.keyCode === 229 ||
+          composing ||
+          (compositionEndedAt !== 0 && Math.abs(event.timeStamp - compositionEndedAt) < 50));
+      if (event.isComposing || event.keyCode === 229 || imeEnter) return;
       const now = visibleChoices();
       if (event.key === 'ArrowDown') {
         event.preventDefault();
@@ -297,8 +312,15 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
         scrollActive();
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        const item = now[activeIndex];
-        if (item) commit(item.value);
+        const stamp = event.timeStamp;
+        const choices = now;
+        const index = activeIndex;
+        setTimeout(() => {
+          if (composing) return;
+          if (compositionEndedAt !== 0 && Math.abs(stamp - compositionEndedAt) < 50) return;
+          const item = choices[index];
+          if (item) commit(item.value);
+        }, 0);
       } else if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();

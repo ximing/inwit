@@ -5,6 +5,7 @@ import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect, useRef } from 'react';
 import { isModEnterHotkey } from '@/lib/format';
+import { imeBlocksEnterFromEvent } from '@/lib/ime-enter';
 
 /** 页面 service 用来在发送时读取/清空编辑器内容。 */
 export type CaptureEditorHandle = {
@@ -55,7 +56,7 @@ export function CaptureEditor({
     editorProps: {
       attributes: { class: 'capture-editor-body' },
       handleKeyDown: (_view, event) => {
-        if (isModEnterHotkey(event)) {
+        if (isModEnterHotkey(event) && !imeBlocksEnterFromEvent(event)) {
           onSubmitRef.current();
           return true;
         }

@@ -16,6 +16,7 @@ import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';
 import { prefetchDocument } from '@/lib/document-prefetch';
 import { formatRelativeTime } from '@/lib/format';
+import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
 import { CaptureEditor } from '@/components/capture/capture-editor';
 import { ROUTES, topicPath } from '@/routes';
 
@@ -167,10 +168,12 @@ const TopicList = observer(function TopicList({ selectedId }: { selectedId: stri
               disabled={service.$model.createNewTopic.loading}
               onChange={(event) => service.setNewTitle(event.target.value)}
               onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing) return;
                 if (event.key === 'Enter') {
+                  if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
                   event.preventDefault();
-                  void submitNew();
+                  runAfterImeEnter(event.nativeEvent, () => {
+                    void submitNew();
+                  });
                 }
                 if (event.key === 'Escape') service.closeNewTopic();
               }}
@@ -348,10 +351,13 @@ const TopicPane = observer(function TopicPane({ topicId }: { topicId: string }) 
                 onChange={(event) => service.setDraftTitle(event.target.value)}
                 onBlur={() => void service.commitEdit()}
                 onKeyDown={(event) => {
-                  if (event.nativeEvent.isComposing) return;
                   if (event.key === 'Enter') {
+                    if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
                     event.preventDefault();
-                    void service.commitEdit();
+                    runAfterImeEnter(event.nativeEvent, () => {
+                      void service.commitEdit();
+                    });
+                    return;
                   }
                   if (event.key === 'Escape') {
                     event.preventDefault();
@@ -386,10 +392,13 @@ const TopicPane = observer(function TopicPane({ topicId }: { topicId: string }) 
                 onChange={(event) => service.setDraftGoal(event.target.value)}
                 onBlur={() => void service.commitEdit()}
                 onKeyDown={(event) => {
-                  if (event.nativeEvent.isComposing) return;
                   if (event.key === 'Enter') {
+                    if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
                     event.preventDefault();
-                    void service.commitEdit();
+                    runAfterImeEnter(event.nativeEvent, () => {
+                      void service.commitEdit();
+                    });
+                    return;
                   }
                   if (event.key === 'Escape') {
                     event.preventDefault();
