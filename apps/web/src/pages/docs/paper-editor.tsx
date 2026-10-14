@@ -401,7 +401,15 @@ export const PaperEditor = observer(function PaperEditor({
     const keep = preserveViewport;
     const previousTop = scroller instanceof HTMLElement ? scroller.scrollTop : 0;
     // emitUpdate would mark a normalized document dirty and drop the open-document refresh.
-    editor.commands.setContent(contentFromSeed(seedDoc), { emitUpdate: false });
+    // This load must stay out of the undo stack, or the first 撤销 reverts the opened document.
+    editor
+      .chain()
+      .command(({ tr }) => {
+        tr.setMeta('addToHistory', false);
+        return true;
+      })
+      .setContent(contentFromSeed(seedDoc), { emitUpdate: false })
+      .run();
     if (!keep) editor.commands.focus('start', { scrollIntoView: false });
     ensureEntityMarksOnEditor(editor, cardsRef.current, annotationsRef.current);
     const pinScroll = () => {

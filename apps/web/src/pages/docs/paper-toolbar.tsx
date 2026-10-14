@@ -18,9 +18,13 @@ import {
   ListOrdered,
   Minus,
   Quote,
+  Redo2,
+  RemoveFormatting,
   Sigma,
   Strikethrough,
   Table as TableIcon,
+  Undo2,
+  Workflow,
 } from 'lucide-react';
 import { type MouseEvent, type ReactNode } from 'react';
 import { Tip } from '@/components/tip';
@@ -81,7 +85,34 @@ type PaperMarks = {
   link: boolean;
   table: boolean;
   textAlign: TextAlign;
+  canUndo: boolean;
+  canRedo: boolean;
 };
+
+/** Formatting marks. Card anchors and annotations stay. */
+const FORMAT_MARKS = [
+  'bold',
+  'italic',
+  'strike',
+  'code',
+  'link',
+  'underline',
+  'subscript',
+  'superscript',
+] as const;
+
+const BLOCK_FORMATS = new Set([
+  'heading',
+  'blockquote',
+  'bulletList',
+  'orderedList',
+  'taskList',
+  'listItem',
+  'taskItem',
+  'codeBlock',
+]);
+
+const MERMAID_SOURCE = 'flowchart TD\n  A[开始] --> B[结束]';
 
 function currentTextAlign(editor: Editor): TextAlign {
   if (editor.isActive({ textAlign: 'center' })) return 'center';
@@ -112,7 +143,78 @@ function paperMarksOf(editor: Editor): PaperMarks {
     link: editor.isActive('link'),
     table: editor.isActive('table'),
     textAlign: currentTextAlign(editor),
+    canUndo: editor.can().undo(),
+    canRedo: editor.can().redo(),
   };
+}
+
+function ancestorHasBlockFormat(pos: Editor['state']['selection']['$from']): boolean {
+  for (let depth = pos.depth; depth > 0; depth -= 1) {
+    if (BLOCK_FORMATS.has(pos.node(depth).type.name)) return true;
+  }
+  return false;
+}
+
+function blockStructureActive(editor: Editor): boolean {
+  const { selection } = editor.state;
+  if (ancestorHasBlockFormat(selection.$from) || ancestorHasBlockFormat(selection.$to)) return true;
+  if (selection.empty) return false;
+  let found = false;
+  editor.state.doc.nodesBetween(selection.from, selection.to, (node) => {
+    if (BLOCK_FORMATS.has(node.type.name)) found = true;
+  });
+  return found;
+}
+
+function clearFormatting(editor: Editor): void {
+  const chain = editor.chain().focus();
+  chain.command(({ tr, state }) => {
+    const { selection } = state;
+    const ranges = selection.empty
+      ? [{ from: selection.$from.start(), to: selection.$from.end() }]
+      : selection.ranges.map((range) => ({ from: range.$from.pos, to: range.$to.pos }));
+    for (const name of FORMAT_MARKS) {
+      const type = state.schema.marks[name];
+      if (!type) continue;
+      for (const range of ranges) {
+        if (range.from < range.to) tr.removeMark(range.from, range.to, type);
+      }
+      tr.removeStoredMark(type);
+    }
+    return true;
+  });
+  if (editor.isActive({ textAlign: 'center' }) || editor.isActive({ textAlign: 'right' })) {
+    chain.unsetTextAlign();
+  }
+  if (blockStructureActive(editor)) chain.clearNodes();
+  chain.run();
+}
+
+function codeBlockDepth(editor: Editor): number {
+  const { $from } = editor.state.selection;
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    if ($from.node(depth).type.name === 'codeBlock') return depth;
+  }
+  return $from.depth;
+}
+
+function insertMermaid(editor: Editor): void {
+  const block = {
+    type: 'codeBlock',
+    attrs: { language: 'mermaid' },
+    content: [{ type: 'text', text: MERMAID_SOURCE }],
+  };
+  const { $from } = editor.state.selection;
+  // A code block cannot contain another block. A list item must keep its paragraph.
+  if (editor.isActive('codeBlock')) {
+    editor.chain().focus().insertContentAt($from.after(codeBlockDepth(editor)), block).run();
+    return;
+  }
+  if (editor.isActive('listItem') || editor.isActive('taskItem')) {
+    editor.chain().focus().insertContentAt($from.after($from.depth), block).run();
+    return;
+  }
+  editor.chain().focus().insertContent(block).run();
 }
 
 export function PaperToolbar({
@@ -144,6 +246,23 @@ export function PaperToolbar({
       <div className="paper-toolbar-inner" role="toolbar" aria-label="编辑工具">
         <EditorToolButton
           variant="paper"
+          label="撤销"
+          disabled={!active.canUndo}
+          onAction={() => editor.chain().focus().undo().run()}
+        >
+          <Undo2 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
+        </EditorToolButton>
+        <EditorToolButton
+          variant="paper"
+          label="重做"
+          disabled={!active.canRedo}
+          onAction={() => editor.chain().focus().redo().run()}
+        >
+          <Redo2 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
+        </EditorToolButton>
+        <span className="paper-tool-sep" />
+        <EditorToolButton
+          variant="paper"
           label="粗体"
           active={active.bold}
           onAction={() => editor.chain().focus().toggleBold().run()}
@@ -165,6 +284,9 @@ export function PaperToolbar({
           onAction={() => editor.chain().focus().toggleStrike().run()}
         >
           <Strikethrough width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
+        </EditorToolButton>
+        <EditorToolButton variant="paper" label="清除格式" onAction={() => clearFormatting(editor)}>
+          <RemoveFormatting width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
         </EditorToolButton>
         <span className="paper-tool-sep" />
         <EditorToolButton
@@ -291,6 +413,9 @@ export function PaperToolbar({
         </EditorToolButton>
         <EditorToolButton variant="paper" label="公式" onAction={onInsertMath}>
           <Sigma width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
+        </EditorToolButton>
+        <EditorToolButton variant="paper" label="Mermaid" onAction={() => insertMermaid(editor)}>
+          <Workflow width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
         </EditorToolButton>
         {uploading ? (
           <span className="paper-tool is-wide" aria-live="polite">
