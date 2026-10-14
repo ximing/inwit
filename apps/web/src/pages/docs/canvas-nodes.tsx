@@ -173,7 +173,7 @@ const CanvasImage = observer(function CanvasImage({ imageKey }: { imageKey: stri
   useEffect(() => {
     void assets.ensure([src]);
   }, [assets, src]);
-  return url ? <img src={url} alt="" /> : <span className="canvas-node-pending">图片</span>;
+  return url ? <img src={url} alt="" draggable={false} /> : <span className="canvas-node-pending">图片</span>;
 });
 
 export const CanvasFreeNode = observer(function CanvasFreeNode({

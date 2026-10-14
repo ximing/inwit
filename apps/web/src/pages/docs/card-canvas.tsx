@@ -95,6 +95,14 @@ import {
 import { decideMindGesture, mindDeleteAction, mindNodeChatLabel, type MindIntent } from './mindmap-gesture';
 import { cardHidesBody, readoutPanelSize } from './mindmap-readout';
 import { hitCardBox, hitMindDrop, mindDragCommit, type MindDrop } from './mindmap-hit';
+import {
+  bindPointerSession,
+  pointerDragReleased,
+  pointerEventIdentity,
+  pointerReleasePoint,
+  type PointerSession,
+  type PointerSessionEvent,
+} from './pointer-session';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
 import { parseQuoteDrag, quoteDropPlace, QUOTE_DRAG_MIME, type QuoteDragPayload } from './mindmap-quote';
 
@@ -142,6 +150,7 @@ function SizedNode({
   onPointerDown,
   onPointerMove,
   onPointerUp,
+  onPointerCancel,
   onClickCapture,
   onDoubleClick,
   children,
@@ -153,6 +162,7 @@ function SizedNode({
   onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onPointerCancel: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onClickCapture: (event: MouseEvent<HTMLDivElement>) => void;
   onDoubleClick: (event: MouseEvent<HTMLDivElement>) => void;
   children: ReactNode;
@@ -178,7 +188,7 @@ function SizedNode({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerCancel={onPointerCancel}
       onClickCapture={onClickCapture}
       onDoubleClick={onDoubleClick}
       onDragStart={(event) => event.preventDefault()}
@@ -231,7 +241,10 @@ export const CardCanvas = observer(function CardCanvas({
     pointerId: number;
     originX: number;
     originY: number;
+    lastX: number;
+    lastY: number;
     moved: boolean;
+    captureEl: Element | null;
   } | null>(null);
   const panGesture = useRef<{
     pointerId: number;
@@ -239,6 +252,7 @@ export const CardCanvas = observer(function CardCanvas({
     originY: number;
     panX: number;
     panY: number;
+    captureEl: Element | null;
   } | null>(null);
   const [sizes, setSizes] = useState<Record<string, { w: number; h: number }>>({});
   const [view, setView] = useState({ panX: 28, panY: 28, zoom: 1 });
@@ -291,6 +305,7 @@ export const CardCanvas = observer(function CardCanvas({
     pointerId: number;
     originX: number;
     originY: number;
+    captureEl: Element | null;
   } | null>(null);
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selectedId;
@@ -698,6 +713,35 @@ export const CardCanvas = observer(function CardCanvas({
     service.clearScrollAnnotation();
   }, [service, service.scrollAnnotationId, forest, folded, centerOn]);
 
+  /** 手绘关系边的指针。状态里的 linkDraft 只存落点预览。 */
+  const linkGesture = useRef<{
+    pointerId: number;
+    fromId: string;
+    lastX: number;
+    lastY: number;
+    captureEl: Element | null;
+  } | null>(null);
+  const consumedPointer = useRef(new WeakSet<Event>());
+  /** 这次手势里是否见过按钮按下。没见过就不要用 buttons===0 结束，避免误伤按住时也报 0 的浏览器。 */
+  const sawPointerButton = useRef(false);
+  const stopSession = useRef<(() => void) | null>(null);
+  const pointerRouter = useRef<PointerSession>({
+    move() {},
+    up() {},
+    cancel() {},
+    blur() {},
+  });
+  useEffect(() => {
+    return () => {
+      stopSession.current?.();
+      stopSession.current = null;
+      dragGesture.current = null;
+      panGesture.current = null;
+      marqueeGesture.current = null;
+      linkGesture.current = null;
+    };
+  }, []);
+
   const reveal = (id: string) => {
     setFolded((prev) => {
       if (!prev.has(id)) return prev;
@@ -832,6 +876,154 @@ export const CardCanvas = observer(function CardCanvas({
       : { x: 0, y: 0 };
   };
 
+  const stopListening = () => {
+    const stop = stopSession.current;
+    stopSession.current = null;
+    stop?.();
+  };
+
+  const releaseCapture = (el: Element | null, pointerId: number) => {
+    if (!el) return;
+    try {
+      if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+    } catch {
+      // Already released, or the pointer is no longer active.
+    }
+  };
+
+  const takePointer = (event: PointerSessionEvent) => {
+    const native = pointerEventIdentity(event);
+    if (consumedPointer.current.has(native)) return false;
+    consumedPointer.current.add(native);
+    return true;
+  };
+
+  /** 把按下期间最后的位置落成一次拖动。短滑仍是点击。 */
+  const finishNodeDrag = (clientX: number, clientY: number, pointerId: number) => {
+    const gesture = dragGesture.current;
+    if (!gesture || gesture.pointerId !== pointerId) return;
+    dragGesture.current = null;
+    stopListening();
+    releaseCapture(gesture.captureEl, pointerId);
+    const travel = Math.hypot(clientX - gesture.originX, clientY - gesture.originY);
+    const world = worldPoint(clientX, clientY);
+    const groupIds =
+      selectedIds.has(gesture.id) && selectedIds.size > 1
+        ? mindTopmostSelected(forest, selectedIds)
+        : null;
+    const drop = hitMindDrop(
+      layout.boxes,
+      world.x,
+      world.y,
+      groupIds ? new Set(groupIds) : gesture.id,
+    );
+    setDrag(null);
+    // 没拖成一次落位时保留点击：选中、点回正文都还在。
+    if (mindDragCommit(travel, drop) !== 'commit') return;
+    if (decideMindGesture({ action: 'drag' }).type === 'ignore') suppressClick.current = true;
+    if (groupIds) {
+      // 整组拖动：落点换成「整组拿掉后」的下标，任一节点放不下就整组不动。
+      const place = placeGroupFromDrop(forest, groupIds, drop);
+      if (!place) return;
+      const verdict = planGroupPlace(forest, groupIds, place);
+      if (!verdict.ok) {
+        service.showToast(verdict.reason === 'depth' ? '层级太深了' : '不能放到这里');
+        return;
+      }
+      if (verdict.unchanged) return;
+      if (drop.kind === 'child') reveal(drop.parentId);
+      groupIds.forEach((id, index) => {
+        void service.placeOnCanvas(id, place.parentId, place.index + index);
+      });
+      return;
+    }
+    const place = placeFromDrop(forest, gesture.id, drop);
+    const plan = place ? planOutlinePlace(forest, gesture.id, place.parentId, place.index) : null;
+    if (!place || !plan?.ok || plan.unchanged) return;
+    if (drop.kind === 'child') reveal(drop.parentId);
+    void service.placeOnCanvas(gesture.id, place.parentId, place.index);
+  };
+
+  const finishView = (pointerId: number) => {
+    const box = marqueeGesture.current;
+    const pan = panGesture.current;
+    if (box?.pointerId !== pointerId && pan?.pointerId !== pointerId) return;
+    const captureEl = box?.pointerId === pointerId ? box.captureEl : (pan?.captureEl ?? null);
+    if (box?.pointerId === pointerId) marqueeGesture.current = null;
+    if (pan?.pointerId === pointerId) panGesture.current = null;
+    stopListening();
+    releaseCapture(captureEl, pointerId);
+    if (box?.pointerId !== pointerId) return;
+    const rect = marquee;
+    setMarquee(null);
+    if (rect && rect.w > 4 && rect.h > 4) {
+      const a = {
+        x: (rect.x - viewRef.current.panX) / viewRef.current.zoom,
+        y: (rect.y - viewRef.current.panY) / viewRef.current.zoom,
+      };
+      const b = {
+        x: (rect.x + rect.w - viewRef.current.panX) / viewRef.current.zoom,
+        y: (rect.y + rect.h - viewRef.current.panY) / viewRef.current.zoom,
+      };
+      const hits = mindMarqueeHits(layout.boxes, a, b);
+      setSelectedIds((prev) => new Set([...prev, ...hits]));
+    }
+  };
+
+  const cancelLink = () => {
+    const link = linkGesture.current;
+    linkGesture.current = null;
+    if (link) releaseCapture(link.captureEl, link.pointerId);
+    stopListening();
+    setLinkDraft(null);
+  };
+
+  const finishLink = (clientX: number, clientY: number, pointerId: number) => {
+    const link = linkGesture.current;
+    if (!link || link.pointerId !== pointerId) return;
+    linkGesture.current = null;
+    stopListening();
+    releaseCapture(link.captureEl, pointerId);
+    const world = worldPoint(clientX, clientY);
+    const target = hitCardBox(layout.boxes, world.x, world.y, link.fromId, cardIdSet);
+    setLinkDraft(null);
+    if (!target) return;
+    const point = stagePoint({ clientX, clientY });
+    setLinkEditor({ fromId: link.fromId, toId: target, x: point.x, y: point.y });
+  };
+
+  const releaseHeldPointer = (pointerId: number, event: PointerSessionEvent | null) => {
+    const drag = dragGesture.current;
+    if (drag?.pointerId === pointerId) {
+      const point = event
+        ? pointerReleasePoint(event, { x: drag.lastX, y: drag.lastY })
+        : { x: drag.lastX, y: drag.lastY };
+      finishNodeDrag(point.x, point.y, pointerId);
+    } else if (
+      panGesture.current?.pointerId === pointerId ||
+      marqueeGesture.current?.pointerId === pointerId
+    ) {
+      finishView(pointerId);
+    } else if (linkGesture.current?.pointerId === pointerId) {
+      const link = linkGesture.current;
+      const point = event
+        ? pointerReleasePoint(event, { x: link.lastX, y: link.lastY })
+        : { x: link.lastX, y: link.lastY };
+      finishLink(point.x, point.y, pointerId);
+    }
+    stopListening();
+  };
+
+  /**
+   * 先结束上一次没收到抬起的手势，再听这次指针。
+   * 必须在写入新手势之前调用，否则会把刚按下的这次立刻落掉。
+   */
+  const armPointer = (pointerId: number) => {
+    if (stopSession.current) pointerRouter.current.blur();
+    sawPointerButton.current = false;
+    stopSession.current = bindPointerSession(window, pointerId, pointerRouter);
+  };
+
   const onViewportPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -846,24 +1038,32 @@ export const CardCanvas = observer(function CardCanvas({
     if (event.button === 0 && event.shiftKey) {
       // Shift+拖空白：框选。起点用舞台坐标，松手时换成世界坐标算命中。
       const point = stagePoint(event);
-      marqueeGesture.current = { pointerId: event.pointerId, originX: point.x, originY: point.y };
+      armPointer(event.pointerId);
+      marqueeGesture.current = {
+        pointerId: event.pointerId,
+        originX: point.x,
+        originY: point.y,
+        captureEl: event.currentTarget,
+      };
       setMarquee({ x: point.x, y: point.y, w: 0, h: 0 });
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
     applyMind('', decideMindGesture({ action: 'empty' }));
+    armPointer(event.pointerId);
     panGesture.current = {
       pointerId: event.pointerId,
       originX: event.clientX,
       originY: event.clientY,
       panX: view.panX,
       panY: view.panY,
+      captureEl: event.currentTarget,
     };
     userMoved.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
-  const onViewportPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onViewportPointerMove = (event: PointerSessionEvent) => {
     const box = marqueeGesture.current;
     if (box && box.pointerId === event.pointerId) {
       const point = stagePoint(event);
@@ -884,30 +1084,6 @@ export const CardCanvas = observer(function CardCanvas({
     }));
   };
 
-  const endPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const box = marqueeGesture.current;
-    if (box && box.pointerId === event.pointerId) {
-      marqueeGesture.current = null;
-      const rect = marquee;
-      setMarquee(null);
-      if (rect && rect.w > 4 && rect.h > 4) {
-        const a = {
-          x: (rect.x - viewRef.current.panX) / viewRef.current.zoom,
-          y: (rect.y - viewRef.current.panY) / viewRef.current.zoom,
-        };
-        const b = {
-          x: (rect.x + rect.w - viewRef.current.panX) / viewRef.current.zoom,
-          y: (rect.y + rect.h - viewRef.current.panY) / viewRef.current.zoom,
-        };
-        const hits = mindMarqueeHits(layout.boxes, a, b);
-        setSelectedIds((prev) => new Set([...prev, ...hits]));
-      }
-      return;
-    }
-    if (panGesture.current?.pointerId !== event.pointerId) return;
-    panGesture.current = null;
-  };
-
   const onNodePointerDown = (cardId: string, event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.target;
@@ -918,23 +1094,29 @@ export const CardCanvas = observer(function CardCanvas({
     event.stopPropagation();
     // 默写模式下不拖节点，点击仍走 onClickCapture 的选中/偷看。
     if (recall) return;
+    armPointer(event.pointerId);
     dragGesture.current = {
       id: cardId,
       pointerId: event.pointerId,
       originX: event.clientX,
       originY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
       moved: false,
+      captureEl: event.currentTarget,
     };
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
-      // Capture can fail for a synthetic pointer; moves on this node still count.
+      // Capture can fail for a synthetic pointer; the window listener still ends the drag.
     }
   };
 
-  const onNodePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+  const onNodePointerMove = (event: PointerSessionEvent) => {
     const gesture = dragGesture.current;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
+    gesture.lastX = event.clientX;
+    gesture.lastY = event.clientY;
     const dxPx = event.clientX - gesture.originX;
     const dyPx = event.clientY - gesture.originY;
     const travel = Math.hypot(dxPx, dyPx);
@@ -972,56 +1154,6 @@ export const CardCanvas = observer(function CardCanvas({
         setView((prev) => ({ ...prev, panX: prev.panX + pan.dx, panY: prev.panY + pan.dy }));
       }
     }
-  };
-
-  const onNodePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const gesture = dragGesture.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
-    dragGesture.current = null;
-    try {
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-    } catch {
-      // Already released.
-    }
-    const travel = Math.hypot(event.clientX - gesture.originX, event.clientY - gesture.originY);
-    const world = worldPoint(event.clientX, event.clientY);
-    const groupIds =
-      selectedIds.has(gesture.id) && selectedIds.size > 1
-        ? mindTopmostSelected(forest, selectedIds)
-        : null;
-    const drop = hitMindDrop(
-      layout.boxes,
-      world.x,
-      world.y,
-      groupIds ? new Set(groupIds) : gesture.id,
-    );
-    setDrag(null);
-    // 没拖成一次落位时保留点击：选中、点回正文都还在。
-    if (mindDragCommit(travel, drop) !== 'commit') return;
-    if (decideMindGesture({ action: 'drag' }).type === 'ignore') suppressClick.current = true;
-    if (groupIds) {
-      // 整组拖动：落点换成「整组拿掉后」的下标，任一节点放不下就整组不动。
-      const place = placeGroupFromDrop(forest, groupIds, drop);
-      if (!place) return;
-      const verdict = planGroupPlace(forest, groupIds, place);
-      if (!verdict.ok) {
-        service.showToast(verdict.reason === 'depth' ? '层级太深了' : '不能放到这里');
-        return;
-      }
-      if (verdict.unchanged) return;
-      if (drop.kind === 'child') reveal(drop.parentId);
-      groupIds.forEach((id, index) => {
-        void service.placeOnCanvas(id, place.parentId, place.index + index);
-      });
-      return;
-    }
-    const place = placeFromDrop(forest, gesture.id, drop);
-    const plan = place ? planOutlinePlace(forest, gesture.id, place.parentId, place.index) : null;
-    if (!place || !plan?.ok || plan.unchanged) return;
-    if (drop.kind === 'child') reveal(drop.parentId);
-    void service.placeOnCanvas(gesture.id, place.parentId, place.index);
   };
 
   const zoomBy = (factor: number) => {
@@ -1491,17 +1623,28 @@ export const CardCanvas = observer(function CardCanvas({
     if (event.button !== 0) return;
     event.stopPropagation();
     event.preventDefault();
+    armPointer(event.pointerId);
+    linkGesture.current = {
+      pointerId: event.pointerId,
+      fromId,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      captureEl: event.currentTarget,
+    };
     const world = worldPoint(event.clientX, event.clientY);
     setLinkDraft({ fromId, x: world.x, y: world.y, hoverId: null });
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {
-      // Capture can fail for a synthetic pointer.
+      // Capture can fail for a synthetic pointer; the window listener still ends the stroke.
     }
   };
 
-  const onLinkDotMove = (fromId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (linkDraft?.fromId !== fromId) return;
+  const onLinkDotMove = (fromId: string, event: PointerSessionEvent) => {
+    const link = linkGesture.current;
+    if (!link || link.pointerId !== event.pointerId || link.fromId !== fromId) return;
+    link.lastX = event.clientX;
+    link.lastY = event.clientY;
     const world = worldPoint(event.clientX, event.clientY);
     setLinkDraft({
       fromId,
@@ -1511,16 +1654,41 @@ export const CardCanvas = observer(function CardCanvas({
     });
   };
 
-  /** 松开：落在另一张卡片上弹出类型选择，落在空白或非卡片节点上取消。 */
-  const onLinkDotUp = (fromId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (linkDraft?.fromId !== fromId) return;
-    event.stopPropagation();
-    const world = worldPoint(event.clientX, event.clientY);
-    const target = hitCardBox(layout.boxes, world.x, world.y, fromId, cardIdSet);
-    setLinkDraft(null);
-    if (!target) return;
-    const point = stagePoint(event);
-    setLinkEditor({ fromId, toId: target, x: point.x, y: point.y });
+  pointerRouter.current = {
+    move(event) {
+      if (!takePointer(event)) return;
+      const id = event.pointerId;
+      if (event.buttons !== 0) sawPointerButton.current = true;
+      else if (pointerDragReleased(event.pointerType, event.buttons, sawPointerButton.current)) {
+        releaseHeldPointer(id, event);
+        return;
+      }
+      if (dragGesture.current?.pointerId === id) onNodePointerMove(event);
+      else if (panGesture.current?.pointerId === id || marqueeGesture.current?.pointerId === id) {
+        onViewportPointerMove(event);
+      } else if (linkGesture.current?.pointerId === id) onLinkDotMove(linkGesture.current.fromId, event);
+    },
+    up(event) {
+      if (!takePointer(event)) return;
+      releaseHeldPointer(event.pointerId, event);
+    },
+    cancel(event) {
+      if (!takePointer(event)) return;
+      // 关系边被取消时不落线。节点拖动和画布平移把取消当成在最后位置松开。
+      if (linkGesture.current?.pointerId === event.pointerId) {
+        cancelLink();
+        return;
+      }
+      releaseHeldPointer(event.pointerId, event);
+    },
+    blur() {
+      const drag = dragGesture.current;
+      if (drag) finishNodeDrag(drag.lastX, drag.lastY, drag.pointerId);
+      else if (panGesture.current) finishView(panGesture.current.pointerId);
+      else if (marqueeGesture.current) finishView(marqueeGesture.current.pointerId);
+      else if (linkGesture.current) cancelLink();
+      stopListening();
+    },
   };
 
   const saveLink = async (type: CardLinkType, reason: string) => {
@@ -1564,9 +1732,9 @@ export const CardCanvas = observer(function CardCanvas({
           backgroundPosition: `${view.panX}px ${view.panY}px`,
         }}
         onPointerDown={onViewportPointerDown}
-        onPointerMove={onViewportPointerMove}
-        onPointerUp={endPan}
-        onPointerCancel={endPan}
+        onPointerMove={(event) => pointerRouter.current.move(event)}
+        onPointerUp={(event) => pointerRouter.current.up(event)}
+        onPointerCancel={(event) => pointerRouter.current.cancel(event)}
         onKeyDown={onKeyDown}
         onDoubleClick={onStageDoubleClick}
         onContextMenu={onStageContextMenu}
@@ -1675,8 +1843,9 @@ export const CardCanvas = observer(function CardCanvas({
               }}
               onSize={onSize}
               onPointerDown={(event) => onNodePointerDown(member.id, event)}
-              onPointerMove={onNodePointerMove}
-              onPointerUp={onNodePointerUp}
+              onPointerMove={(event) => pointerRouter.current.move(event)}
+              onPointerUp={(event) => pointerRouter.current.up(event)}
+              onPointerCancel={(event) => pointerRouter.current.cancel(event)}
               onClickCapture={(event) => {
                 if (suppressClick.current) {
                   suppressClick.current = false;
@@ -1789,9 +1958,9 @@ export const CardCanvas = observer(function CardCanvas({
                   className="canvas-link-dot"
                   aria-label="拖到另一张卡，建立关联"
                   onPointerDown={(event) => onLinkDotDown(member.id, event)}
-                  onPointerMove={(event) => onLinkDotMove(member.id, event)}
-                  onPointerUp={(event) => onLinkDotUp(member.id, event)}
-                  onPointerCancel={() => setLinkDraft(null)}
+                  onPointerMove={(event) => pointerRouter.current.move(event)}
+                  onPointerUp={(event) => pointerRouter.current.up(event)}
+                  onPointerCancel={(event) => pointerRouter.current.cancel(event)}
                 />
               ) : null}
               {selectedId === member.id && !dragging && !recall ? (

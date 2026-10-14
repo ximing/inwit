@@ -54,6 +54,11 @@
   cursor: grab;
   touch-action: none;
 }
+/* 图片默认可被拖成浏览器幽灵图，并触发 pointercancel，节点会粘在鼠标上。 */
+.doc-canvas-card img {
+  -webkit-user-drag: none;
+  user-select: none;
+}
 .doc-canvas-card.is-dragging {
   z-index: 5;
   cursor: grabbing;

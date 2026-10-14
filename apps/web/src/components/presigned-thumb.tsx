@@ -24,5 +24,6 @@ export function PresignedThumb({
   onError?: () => void;
 }) {
   if (!url) return null;
-  return <img className={className} src={url} alt="" onError={onError} />;
+  // draggable 默认 true。原生拖图片会取消指针，脑图节点就收不到抬起。
+  return <img className={className} src={url} alt="" draggable={false} onError={onError} />;
 }
