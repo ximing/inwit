@@ -28,6 +28,12 @@ const ASSET_SRC =
 
 const MIME_ATTR = /^[^\s"'{}]+$/;
 
+function isMermaidFence(lang: string | null | undefined): boolean {
+  if (typeof lang !== 'string') return false;
+  const key = lang.trim().toLowerCase();
+  return key === 'mermaid' || key === 'mmd';
+}
+
 /** Allow `asset:` object keys and http(s) URLs; drop everything else (including `/api/v1/uploads/`). */
 export function safeMediaSrc(url: string): string | null {
   if (ASSET_SRC.test(url)) return url;
@@ -186,11 +192,12 @@ function flowToPm(node: BlockContent | RootContent): PmNode | null {
     case 'list':
       return listToPm(node);
     case 'code': {
+      const content = node.value === '' ? [] : [textNode(node.value, [])];
+      if (isMermaidFence(node.lang)) return withContent('mermaid', content, { view: 'render' });
       const attrs =
         node.lang !== null && node.lang !== undefined && node.lang !== ''
           ? { language: node.lang }
           : undefined;
-      const content = node.value === '' ? [] : [textNode(node.value, [])];
       return withContent('codeBlock', content, attrs);
     }
     case 'blockquote':
@@ -423,14 +430,20 @@ function pmFlow(node: PmNode): BlockContent | null {
       };
       return list;
     }
+    case 'mermaid':
     case 'codeBlock': {
-      const language = node.attrs?.language;
       const text = asPmNodes(node.content)
         .map((c) => c.text ?? '')
         .join('');
+      const language =
+        node.type === 'mermaid'
+          ? 'mermaid'
+          : typeof node.attrs?.language === 'string'
+            ? node.attrs.language
+            : null;
       const code: Code = {
         type: 'code',
-        lang: typeof language === 'string' ? language : null,
+        lang: language,
         value: text,
       };
       return code;

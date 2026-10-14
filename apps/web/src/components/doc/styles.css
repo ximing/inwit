@@ -292,14 +292,68 @@
   color: var(--ink-4);
   font-size: 12px;
 }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-block {
+  container-type: inline-size;
+  margin: 0 0 10px;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) > .doc-mermaid-block:first-child { margin-top: 0; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) > .doc-mermaid-block:last-child { margin-bottom: 0; }
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-modes {
+  display: inline-flex;
+  gap: 2px;
+  margin: 0 0 6px;
+  padding: 2px;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  user-select: none;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-mode {
+  margin: 0;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-mode.is-on {
+  background: var(--surface);
+  color: var(--ink);
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-mode:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-body > pre {
+  margin: 0;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-body > pre[hidden] {
+  display: none;
+}
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-block.is-split .doc-mermaid-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 10px;
+  align-items: start;
+}
+@container (max-width: 520px) {
+  :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-block.is-split .doc-mermaid-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid {
-  margin: 8px 0 0;
+  margin: 0;
+  padding: 8px;
+  background: var(--bg-sunken);
+  border-radius: var(--r-sm);
+  min-width: 0;
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid[hidden] {
   display: none;
-}
-:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-code.is-drawn:not(.is-editing) .doc-mermaid {
-  margin-top: 0;
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-stage {
   overflow-x: auto;
@@ -308,6 +362,7 @@
   display: block;
   max-width: 100%;
   height: auto;
+  margin: 0 auto;
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) .doc-mermaid-status {
   margin: 0;

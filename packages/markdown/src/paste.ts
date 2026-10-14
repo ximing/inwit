@@ -151,7 +151,7 @@ function softenDocument(blocks: PmNode[]): PmNode[] {
 }
 
 function softenNode(node: PmNode, inCode: boolean): PmNode | null {
-  const code = inCode || node.type === 'codeBlock';
+  const code = inCode || node.type === 'codeBlock' || node.type === 'mermaid';
   if (node.type === 'text') {
     if (!node.text) return null;
     if (code || !node.text.includes('\n')) return node;

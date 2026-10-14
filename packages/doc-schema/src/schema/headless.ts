@@ -9,6 +9,7 @@ import StarterKit from '@tiptap/starter-kit';
 import type { Schema } from 'prosemirror-model';
 import { AnnotationMark } from './annotation-mark.js';
 import { CardAnchorMark } from './card-anchor-mark.js';
+import { MermaidBlock } from './mermaid-block.js';
 import { PageBreak } from './page-break.js';
 import { createDocMathExtensions } from './math.js';
 import { createTextAlignExtension } from './text-align.js';
@@ -36,6 +37,7 @@ export function getHeadlessExtensions(): AnyExtension[] {
     Subscript,
     Superscript,
     PageBreak,
+    MermaidBlock,
     AnnotationMark,
     CardAnchorMark,
     Video,

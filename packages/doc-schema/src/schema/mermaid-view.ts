@@ -1,5 +1,4 @@
 import type { MermaidConfig } from 'mermaid';
-import { isMermaidLanguage } from './code-language.js';
 import { mermaidSvgLooksUnsafe } from './mermaid.js';
 
 export type MermaidPaintState = 'off' | 'empty' | 'loading' | 'drawn' | 'error';
@@ -7,8 +6,8 @@ export type MermaidPaintState = 'off' | 'empty' | 'loading' | 'drawn' | 'error';
 export type MermaidFrame = {
   figure: HTMLElement;
   state: () => MermaidPaintState;
-  /** Draw or clear the diagram for the current code block. */
-  sync: (source: string, language: unknown, editable: boolean) => void;
+  /** Draw `source`, or clear the figure when it is empty. `debounce` waits while the source is being typed. */
+  sync: (source: string, options?: { debounce?: boolean }) => void;
   destroy: () => void;
 };
 
@@ -184,8 +183,8 @@ function nextRenderId(): string {
 }
 
 /**
- * Live preview for a `mermaid` code block.
- * `onChange` runs after the async draw settles so the host can show or hide the source.
+ * Live diagram for a mermaid block.
+ * `onChange` runs after the async draw settles.
  * Click handlers from Mermaid are not bound; `securityLevel: 'strict'` stays on.
  */
 export function createMermaidFrame(onChange: () => void): MermaidFrame {
@@ -230,14 +229,9 @@ export function createMermaidFrame(onChange: () => void): MermaidFrame {
     lastKey = '';
   };
 
-  const showLoading = (editable: boolean): void => {
+  const showLoading = (): void => {
     if (stage.childElementCount > 0) return;
     setState('loading');
-    if (editable) {
-      figure.hidden = true;
-      status.hidden = true;
-      return;
-    }
     status.hidden = false;
     status.textContent = '正在绘制…';
     status.removeAttribute('title');
@@ -295,15 +289,7 @@ export function createMermaidFrame(onChange: () => void): MermaidFrame {
     }
   };
 
-  const sync = (source: string, language: unknown, editable: boolean): void => {
-    if (!isMermaidLanguage(language)) {
-      if (paintState !== 'off') {
-        cancel();
-        setState('off');
-        hideFigure();
-      }
-      return;
-    }
+  const sync = (source: string, options?: { debounce?: boolean }): void => {
     if (!source.trim()) {
       if (paintState !== 'empty') {
         cancel();
@@ -317,13 +303,13 @@ export function createMermaidFrame(onChange: () => void): MermaidFrame {
     if (key === lastKey && (paintState === 'drawn' || paintState === 'error')) return;
     if (key === pendingKey) return;
     pendingKey = key;
-    showLoading(editable);
+    showLoading();
     if (timer !== null) clearTimeout(timer);
     const token = ++generation;
     timer = setTimeout(() => {
       timer = null;
       void draw(token, source, theme, key);
-    }, editable ? 280 : 0);
+    }, options?.debounce ? 280 : 0);
   };
 
   const onTheme = (): void => {

@@ -16,6 +16,11 @@
       "import": "./dist/schema/code-block-view.js",
       "default": "./dist/schema/code-block-view.js"
     },
+    "./mermaid-block-view": {
+      "types": "./src/schema/mermaid-block-view.ts",
+      "import": "./dist/schema/mermaid-block-view.js",
+      "default": "./dist/schema/mermaid-block-view.js"
+    },
     "./image-view": {
       "types": "./src/schema/image-view.ts",
       "import": "./dist/schema/image-view.js",

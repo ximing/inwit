@@ -104,6 +104,46 @@ describe('markdownPasteTransaction', () => {
     expect(next?.doc.child(2).textContent).toBe('llo');
   });
 
+  it('places the caret after a pasted mermaid diagram', () => {
+    const start = editor({ type: 'doc', content: [{ type: 'paragraph' }] });
+    const next = pasted(start, '```mermaid\nflowchart LR\n  A-->B\n```\n');
+    expect(next?.doc.child(0).type.name).toBe('mermaid');
+    expect(next?.doc.child(0).attrs.view).toBe('render');
+    expect(next?.doc.child(0).textContent).toBe('flowchart LR\n  A-->B');
+    expect(next?.doc.child(1).type.name).toBe('paragraph');
+    expect(next?.doc.childCount).toBe(2);
+    expect(next?.selection.$from.parent.type.name).toBe('paragraph');
+  });
+
+  it('pastes an mmd fence as a mermaid block and leaves the caret outside', () => {
+    const start = editor({ type: 'doc', content: [{ type: 'paragraph' }] });
+    const next = pasted(start, '```mmd\ngraph TD\n  P-->Q\n```\n');
+    expect(next?.doc.child(0).type.name).toBe('mermaid');
+    expect(next?.doc.child(0).attrs.view).toBe('render');
+    expect(next?.selection.$from.parent.type.name).toBe('paragraph');
+  });
+
+  it('keeps a typescript fence as a code block', () => {
+    const start = editor({ type: 'doc', content: [{ type: 'paragraph' }] });
+    const next = pasted(start, '```ts\nconst n = 1;\n```\n');
+    expect(next?.doc.child(0).type.name).toBe('codeBlock');
+    expect(next?.doc.child(0).attrs.language).toBe('ts');
+  });
+
+  it('inserts a mermaid fence into a paragraph without leaving the caret in the diagram', () => {
+    const start = editor(
+      { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'hello' }] }] },
+      3,
+    );
+    const next = pasted(start, '```mermaid\nflowchart TD\n  A-->B\n```');
+    expect(next?.doc.child(0).textContent).toBe('he');
+    expect(next?.doc.child(1).type.name).toBe('mermaid');
+    expect(next?.doc.child(1).attrs.view).toBe('render');
+    expect(next?.doc.child(2).textContent).toBe('llo');
+    expect(next?.doc.childCount).toBe(3);
+    expect(next?.selection.$from.parent.type.name).not.toBe('mermaid');
+  });
+
   it('inserts a list and a horizontal rule', () => {
     const start = editor({ type: 'doc', content: [{ type: 'paragraph' }] });
     const list = pasted(start, '- 一\n- 二');

@@ -23,6 +23,8 @@ export {
   resolveCodeLanguage,
 } from './schema/code-language.js';
 export type { CodeLanguageChoice } from './schema/code-language.js';
+export { MermaidBlock, mermaidViewOf } from './schema/mermaid-block.js';
+export type { MermaidViewMode } from './schema/mermaid-block.js';
 export { PageBreak } from './schema/page-break.js';
 export { Video } from './schema/video.js';
 export { VitalEntity } from './schema/vital-entity.js';

@@ -1,5 +1,6 @@
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
+import { NodeSelection } from '@tiptap/pm/state';
 import '@tiptap/extension-text-align';
 import {
   AlignCenter,
@@ -110,6 +111,7 @@ const BLOCK_FORMATS = new Set([
   'listItem',
   'taskItem',
   'codeBlock',
+  'mermaid',
 ]);
 
 const MERMAID_SOURCE = 'flowchart TD\n  A[开始] --> B[结束]';
@@ -190,24 +192,34 @@ function clearFormatting(editor: Editor): void {
   chain.run();
 }
 
-function codeBlockDepth(editor: Editor): number {
+function hostBlockDepth(editor: Editor): number | null {
   const { $from } = editor.state.selection;
   for (let depth = $from.depth; depth > 0; depth -= 1) {
-    if ($from.node(depth).type.name === 'codeBlock') return depth;
+    const name = $from.node(depth).type.name;
+    if (name === 'codeBlock' || name === 'mermaid') return depth;
   }
-  return $from.depth;
+  return null;
 }
 
 function insertMermaid(editor: Editor): void {
   const block = {
-    type: 'codeBlock',
-    attrs: { language: 'mermaid' },
+    type: 'mermaid',
+    attrs: { view: 'split' },
     content: [{ type: 'text', text: MERMAID_SOURCE }],
   };
-  const { $from } = editor.state.selection;
-  // A code block cannot contain another block. A list item must keep its paragraph.
-  if (editor.isActive('codeBlock')) {
-    editor.chain().focus().insertContentAt($from.after(codeBlockDepth(editor)), block).run();
+  const { selection } = editor.state;
+  if (
+    selection instanceof NodeSelection &&
+    (selection.node.type.name === 'codeBlock' || selection.node.type.name === 'mermaid')
+  ) {
+    editor.chain().focus().insertContentAt(selection.to, block).run();
+    return;
+  }
+  const { $from } = selection;
+  const host = hostBlockDepth(editor);
+  // A code or mermaid block cannot contain another block. A list item must keep its paragraph.
+  if (host !== null) {
+    editor.chain().focus().insertContentAt($from.after(host), block).run();
     return;
   }
   if (editor.isActive('listItem') || editor.isActive('taskItem')) {

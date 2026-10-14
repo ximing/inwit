@@ -4,11 +4,13 @@ import {
   CardAnchorMark,
   createDocMathExtensions,
   createTextAlignExtension,
+  MermaidBlock,
   PageBreak,
   registerDocCodeAliases,
   VitalEntity,
 } from '@inwit/doc-schema';
 import { codeBlockNodeView } from '@inwit/doc-schema/code-block-view';
+import { mermaidBlockNodeView } from '@inwit/doc-schema/mermaid-block-view';
 import { createDocImage } from '@inwit/doc-schema/image-view';
 import { mergeAttributes, Node, type AnyExtension, type NodeViewRendererProps } from '@tiptap/core';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
@@ -31,6 +33,12 @@ registerDocCodeAliases(lowlight);
 const DocCodeBlock = CodeBlockLowlight.extend({
   addNodeView() {
     return codeBlockNodeView;
+  },
+});
+
+const DocMermaid = MermaidBlock.extend({
+  addNodeView() {
+    return mermaidBlockNodeView;
   },
 });
 
@@ -173,6 +181,7 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
       },
     }),
     DocCodeBlock.configure({ lowlight }),
+    DocMermaid,
     Table.configure({ resizable: false }),
     TableRow,
     TableHeader,

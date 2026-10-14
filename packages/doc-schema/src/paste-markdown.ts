@@ -1,6 +1,6 @@
 import { markdownPasteBlocks } from '@inwit/markdown';
 import { Fragment, Slice, type Node } from '@tiptap/pm/model';
-import { TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 
 type PasteView = {
   state: EditorState;
@@ -51,6 +51,8 @@ export function markdownPasteTransaction(
 
   try {
     insertBlocks(tr, nodes);
+    // A mermaid block in render mode hides its source. Leave the caret after it.
+    exitPastedMermaid(tr);
     tr.doc.check();
   } catch {
     return null;
@@ -82,6 +84,35 @@ function sliceForBlocks(nodes: Node[]): Slice {
   }
   const openEdge = (node: Node | undefined) => (node?.type.name === 'paragraph' ? 1 : 0);
   return new Slice(Fragment.from(nodes), openEdge(nodes[0]), openEdge(nodes[nodes.length - 1]));
+}
+
+function exitPastedMermaid(tr: Transaction): void {
+  const { $from } = tr.selection;
+  let depth = 0;
+  for (let level = $from.depth; level > 0; level -= 1) {
+    if ($from.node(level).type.name === 'mermaid') {
+      depth = level;
+      break;
+    }
+  }
+  if (depth === 0) return;
+
+  const after = $from.after(depth);
+  const $after = tr.doc.resolve(after);
+  const following = $after.nodeAfter;
+  if (following?.isTextblock && following.type.spec.code !== true) {
+    tr.setSelection(TextSelection.near($after));
+    return;
+  }
+
+  const paragraph = tr.doc.type.schema.nodes.paragraph;
+  if (paragraph && $after.parent.canReplaceWith($after.index(), $after.index(), paragraph)) {
+    tr.insert(after, paragraph.create());
+    tr.setSelection(TextSelection.near(tr.doc.resolve(after + 1)));
+    return;
+  }
+
+  tr.setSelection(NodeSelection.create(tr.doc, $from.before(depth)));
 }
 
 function selectionInCode(selection: EditorState['selection']): boolean {

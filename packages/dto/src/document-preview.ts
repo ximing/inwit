@@ -22,6 +22,7 @@ const PM_BLOCK_TYPES = new Set([
   'heading',
   'blockquote',
   'codeBlock',
+  'mermaid',
   'listItem',
   'taskItem',
   'tableCell',
