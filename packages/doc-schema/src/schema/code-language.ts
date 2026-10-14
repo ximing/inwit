@@ -3,9 +3,13 @@ export type CodeLanguageChoice = {
   label: string;
 };
 
-/** Highlight.js ids registered by lowlight's common bundle, in picker order. */
+/**
+ * Picker order. `mermaid` is drawn as a diagram and highlighted as plain text.
+ * The other ids are highlight.js languages from lowlight's common bundle.
+ */
 export const CODE_LANGUAGES = [
   { id: 'plaintext', label: '纯文本' },
+  { id: 'mermaid', label: 'Mermaid' },
   { id: 'javascript', label: 'JavaScript' },
   { id: 'typescript', label: 'TypeScript' },
   { id: 'python', label: 'Python' },
@@ -84,7 +88,17 @@ const ALIASES: Record<string, string> = {
   pl: 'perl',
   gql: 'graphql',
   mk: 'makefile',
+  mmd: 'mermaid',
 };
+
+const MERMAID_LANGUAGES = new Set(['mermaid']);
+
+/** `mermaid` and the `mmd` fence alias. */
+export function isMermaidLanguage(language: unknown): boolean {
+  if (typeof language !== 'string') return false;
+  const resolved = resolveCodeLanguage(language);
+  return resolved !== null && MERMAID_LANGUAGES.has(resolved);
+}
 
 /** Canonical highlight id, the original token when unknown, or null when empty. */
 export function resolveCodeLanguage(language: string): string | null {
@@ -113,7 +127,7 @@ export function registerDocCodeAliases(lowlight: CodeAliasHost): void {
     javascript: ['node', 'javascriptreact'],
     typescript: ['typescriptreact'],
     xml: ['htm'],
-    plaintext: ['plain'],
+    plaintext: ['plain', 'mermaid', 'mmd'],
     objectivec: ['objective-c'],
   });
 }

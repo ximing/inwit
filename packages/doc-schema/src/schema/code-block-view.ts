@@ -5,8 +5,10 @@ import {
   codeLanguageChoices,
   codeLanguageValue,
   filterCodeLanguageChoices,
+  isMermaidLanguage,
   type CodeLanguageChoice,
 } from './code-language.js';
+import { createMermaidFrame } from './mermaid-view.js';
 
 function readPos(getPos: NodeViewRendererProps['getPos']): number | null {
   if (typeof getPos !== 'function') return null;
@@ -70,7 +72,9 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
   const code = document.createElement('code');
   bar.append(trigger, name);
   pre.append(code);
-  wrapper.append(bar, pre);
+  let sync = (): void => {};
+  const mermaid = createMermaidFrame(() => sync());
+  wrapper.append(bar, pre, mermaid.figure);
 
   let menu: HTMLDivElement | null = null;
   let filter: HTMLInputElement | null = null;
@@ -370,7 +374,7 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
     }
   });
 
-  const sync = (): void => {
+  sync = (): void => {
     const editable = editor.isEditable;
     const stored = current.attrs.language;
     const value = codeLanguageValue(stored);
@@ -378,11 +382,18 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
     triggerLabel.textContent = label;
     trigger.setAttribute('aria-label', `代码语言：${label}`);
     name.textContent = label;
+    mermaid.sync(current.textContent, stored, editable);
+    const mermaidOn = isMermaidLanguage(stored);
+    const paint = mermaid.state();
+    const collapseSource = mermaidOn && !editable && (paint === 'drawn' || paint === 'loading');
     trigger.hidden = !editable;
-    name.hidden = editable || value === '';
-    bar.hidden = !editable && value === '';
+    name.hidden = editable || value === '' || collapseSource;
+    bar.hidden = (!editable && value === '') || collapseSource;
     wrapper.classList.toggle('is-editing', editable);
     wrapper.classList.toggle('is-bare', bar.hidden);
+    wrapper.classList.toggle('is-mermaid', mermaidOn);
+    wrapper.classList.toggle('is-drawn', mermaidOn && paint === 'drawn');
+    pre.hidden = collapseSource;
     const raw = storedLanguage(current);
     if (raw) wrapper.dataset.language = raw;
     else delete wrapper.dataset.language;
@@ -408,7 +419,9 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
     },
     stopEvent(event) {
       const target = event.target;
-      return target instanceof Element && target.closest('.doc-code-lang') !== null;
+      return (
+        target instanceof Element && target.closest('.doc-code-lang, .doc-mermaid') !== null
+      );
     },
     ignoreMutation(mutation) {
       if (mutation.type === 'selection') return false;
@@ -417,6 +430,7 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
     },
     destroy() {
       closeMenu(false);
+      mermaid.destroy();
       editor.off('transaction', onEditor);
       editor.off('update', onEditor);
     },

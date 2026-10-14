@@ -359,6 +359,30 @@ body.is-native .harness { display: none; }
   color: var(--ink-4);
   font-size: 14px;
 }
+.doc-view .ProseMirror .doc-mermaid {
+  margin: 8px 0 0;
+}
+.doc-view .ProseMirror .doc-mermaid[hidden] {
+  display: none;
+}
+.doc-view .ProseMirror .doc-code.is-drawn:not(.is-editing) .doc-mermaid {
+  margin-top: 0;
+}
+.doc-view .ProseMirror .doc-mermaid-stage {
+  overflow-x: auto;
+}
+.doc-view .ProseMirror .doc-mermaid-stage svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.doc-view .ProseMirror .doc-mermaid-status {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.4;
+}
 
 .doc-view .ProseMirror .tableWrapper {
   display: block;

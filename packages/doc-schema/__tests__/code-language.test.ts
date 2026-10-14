@@ -4,6 +4,7 @@ import {
   codeLanguageChoices,
   codeLanguageValue,
   filterCodeLanguageChoices,
+  isMermaidLanguage,
   resolveCodeLanguage,
 } from '../src/schema/code-language.js';
 
@@ -23,6 +24,8 @@ describe('resolveCodeLanguage', () => {
     expect(resolveCodeLanguage('shell')).toBe('shell');
     expect(resolveCodeLanguage('md')).toBe('markdown');
     expect(resolveCodeLanguage('rs')).toBe('rust');
+    expect(resolveCodeLanguage('mmd')).toBe('mermaid');
+    expect(resolveCodeLanguage('Mermaid')).toBe('mermaid');
   });
 
   it('keeps canonical ids and unknown languages', () => {
@@ -63,5 +66,16 @@ describe('codeLanguageChoices', () => {
     expect(filterCodeLanguageChoices(choices, '纯').map((item) => item.label)).toEqual(['纯文本']);
     expect(filterCodeLanguageChoices(choices, 'HASKELL').map((item) => item.value)).toEqual(['haskell']);
     expect(filterCodeLanguageChoices(choices, 'zzz')).toEqual([]);
+    expect(filterCodeLanguageChoices(choices, 'mmd').map((item) => item.value)).toEqual(['mermaid']);
+  });
+});
+
+describe('isMermaidLanguage', () => {
+  it('accepts the mermaid fence and its alias', () => {
+    expect(isMermaidLanguage('mermaid')).toBe(true);
+    expect(isMermaidLanguage(' mmd ')).toBe(true);
+    expect(isMermaidLanguage('javascript')).toBe(false);
+    expect(isMermaidLanguage(null)).toBe(false);
+    expect(isMermaidLanguage('')).toBe(false);
   });
 });
