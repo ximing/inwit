@@ -5,6 +5,40 @@ import { DialogService } from '@/services/dialog.service';
 
 const FOCUSABLE = 'input:not(:disabled), button:not(:disabled)';
 
+type ScrollAnchor = { el: HTMLElement; top: number; left: number };
+
+/** Scrollable ancestors of the element that opened the dialog. */
+function scrollAnchors(start: Element | null): ScrollAnchor[] {
+  const anchors: ScrollAnchor[] = [];
+  for (let node = start instanceof HTMLElement ? start : null; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    const scrolls = /(auto|scroll|overlay)/.test(`${style.overflowY} ${style.overflowX}`);
+    if (!scrolls) continue;
+    anchors.push({ el: node, top: node.scrollTop, left: node.scrollLeft });
+  }
+  return anchors;
+}
+
+function restoreCaret(previous: HTMLElement, saved: Range | null): void {
+  if (!saved || !saved.startContainer.isConnected || !previous.contains(saved.startContainer)) return;
+  const selection = document.getSelection();
+  if (!selection) return;
+  selection.removeAllRanges();
+  try {
+    selection.addRange(saved);
+  } catch {
+    // The editor replaced that text node while the dialog was open.
+  }
+}
+
+function restoreScroll(anchors: ScrollAnchor[]): void {
+  for (const anchor of anchors) {
+    if (!anchor.el.isConnected) continue;
+    anchor.el.scrollTop = anchor.top;
+    anchor.el.scrollLeft = anchor.left;
+  }
+}
+
 export const AppDialog = observer(function AppDialog() {
   const dialog = useService(DialogService);
   const current = dialog.current;
@@ -13,6 +47,17 @@ export const AppDialog = observer(function AppDialog() {
   useLayoutEffect(() => {
     if (!current) return;
     const previous = document.activeElement;
+    const selection = document.getSelection();
+    const savedRange =
+      previous instanceof HTMLElement &&
+      selection &&
+      selection.rangeCount > 0 &&
+      selection.anchorNode &&
+      previous.contains(selection.anchorNode)
+        ? selection.getRangeAt(0).cloneRange()
+        : null;
+    // Captured before the dialog takes focus. Closing focuses this element again.
+    const anchors = scrollAnchors(previous instanceof Element ? previous : null);
     const panel = panelRef.current;
     const focusTarget =
       current.kind === 'prompt'
@@ -46,7 +91,12 @@ export const AppDialog = observer(function AppDialog() {
     document.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('keydown', onKey, true);
-      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+      if (!(previous instanceof HTMLElement) || !previous.isConnected) return;
+      // A tall contenteditable scrolls its pane to the top when focused, and the caret jumps to the start.
+      previous.focus({ preventScroll: true });
+      restoreCaret(previous, savedRange);
+      restoreScroll(anchors);
+      requestAnimationFrame(() => restoreScroll(anchors));
     };
   }, [current, dialog]);
 

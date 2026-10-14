@@ -67,6 +67,36 @@ function contentFromSeed(seedDoc: unknown | null) {
   return json;
 }
 
+type PaneScrollHold = { el: HTMLElement; top: number };
+
+function capturePaneScrollFrom(root: HTMLElement): PaneScrollHold | null {
+  const el = root.closest('.pane-scroll');
+  if (!(el instanceof HTMLElement)) return null;
+  return { el, top: el.scrollTop };
+}
+
+/** Dialog close focuses the editor and TipTap then scrolls the caret. Put both back. */
+function holdPaneScroll(editor: Editor, hold: PaneScrollHold | null): void {
+  if (!hold) return;
+  const selection = editor.state.selection;
+  const pin = () => {
+    if (editor.isDestroyed || !hold.el.isConnected) return;
+    if (!editor.state.selection.eq(selection)) {
+      try {
+        editor.view.dispatch(editor.state.tr.setSelection(selection));
+      } catch {
+        // A later edit replaced the document.
+      }
+    }
+    hold.el.scrollTop = hold.top;
+  };
+  pin();
+  requestAnimationFrame(() => {
+    pin();
+    requestAnimationFrame(pin);
+  });
+}
+
 type PaperEditorProps = {
   seedKey: string;
   seedDoc: unknown | null;
@@ -303,18 +333,20 @@ export const PaperEditor = observer(function PaperEditor({
         spellcheck: 'false',
       },
       transformPasted: (slice) => stripEntityMarksFromSlice(slice),
-      handleClickOn: (_view, _pos, node, nodePos, event) => {
+      handleClickOn: (view, _pos, node, nodePos, event) => {
         if (node.type.name !== 'inlineMath' && node.type.name !== 'blockMath') return false;
         event.preventDefault();
         const latex = typeof node.attrs.latex === 'string' ? node.attrs.latex : '';
         const kind = node.type.name === 'blockMath' ? 'block' : 'inline';
+        const hold = capturePaneScrollFrom(view.dom);
         void dialog
           .prompt('留空则删除公式', latex, { title: '编辑公式', placeholder: 'E=mc^2' })
           .then((value) => {
             if (value === null) return;
             const instance = editorRef.current;
-            if (!instance) return;
+            if (!instance || instance.isDestroyed) return;
             updateMathLatex(instance, nodePos, kind, value);
+            holdPaneScroll(instance, hold);
           });
         return true;
       },
@@ -451,14 +483,16 @@ export const PaperEditor = observer(function PaperEditor({
   };
 
   const insertMath = () => {
+    const hold = capturePaneScrollFrom(editor.view.dom);
     void dialog
       .prompt('输入 LaTeX。换行，或用 $$ 包住，会单独成段。', '', {
         title: '公式',
         placeholder: 'E=mc^2',
       })
       .then((value) => {
-        if (value === null || !editor) return;
+        if (value === null || editor.isDestroyed) return;
         insertMathLatex(editor, value);
+        holdPaneScroll(editor, hold);
       });
   };
 
