@@ -8,7 +8,10 @@ import {
 import type { MindDrop } from './mindmap-hit';
 import type { MindPlace } from './mindmap-edit';
 
-/** 正文选区拖到脑图时的 dataTransfer 类型。 */
+/**
+ * 引文拖放负载的序列化类型。
+ * 落点改由指针跟踪完成（见 quote-drag.ts），不再写进 dataTransfer。
+ */
 export const QUOTE_DRAG_MIME = 'application/x-inwit-quote';
 
 /** 落成批注节点需要的锚点信息，与选区浮层批注一致。 */

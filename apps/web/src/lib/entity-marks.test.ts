@@ -48,6 +48,20 @@ describe('missingTextEntities', () => {
       ),
     ).toEqual([]);
   });
+
+  it('treats outline notes as text underlines but still skips pdf/note kinds', () => {
+    expect(
+      missingTextEntities(
+        source,
+        [],
+        [
+          { id: NOTE_ID, kind: 'outline', quote: 'second', anchorBlockIndex: 2 },
+          { id: '33333333-3333-4333-8333-333333333333', kind: 'pdf', quote: 'second', anchorBlockIndex: 2 },
+          { id: '44444444-4444-4444-8444-444444444444', kind: 'note', quote: '', anchorBlockIndex: 1 },
+        ],
+      ),
+    ).toEqual([{ kind: 'annotation', id: NOTE_ID, blockIndex: 2, quote: 'second' }]);
+  });
 });
 
 describe('isLostTextEntity', () => {
@@ -104,6 +118,27 @@ describe('isLostTextEntity', () => {
         hasImage: true,
       }),
     ).toBe(false);
+  });
+
+  it('tracks outline annotations like text ones', () => {
+    expect(
+      isLostTextEntity(source, {
+        id: NOTE_ID,
+        kind: 'annotation',
+        annotationKind: 'outline',
+        quote: 'second block',
+        blockIndex: 2,
+      }),
+    ).toBe(false);
+    expect(
+      isLostTextEntity(source, {
+        id: NOTE_ID,
+        kind: 'annotation',
+        annotationKind: 'outline',
+        quote: 'not in the doc',
+        blockIndex: 1,
+      }),
+    ).toBe(true);
   });
 });
 

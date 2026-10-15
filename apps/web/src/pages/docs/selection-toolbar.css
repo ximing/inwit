@@ -50,9 +50,38 @@
   font-weight: 500;
   letter-spacing: 0.02em;
 }
-/* 拖到脑图的把手。 */
-.float-tool.is-quote-drag { cursor: grab; }
-.float-tool.is-quote-drag:active { cursor: grabbing; }
+/* 拖到脑图的把手。图标不单独吃指针，避免拖成一张 SVG。 */
+.float-tool.is-quote-drag { cursor: grab; touch-action: none; }
+.float-tool.is-quote-drag svg { pointer-events: none; }
+html.is-quote-dragging,
+html.is-quote-dragging * { cursor: grabbing !important; }
+.quote-drag-ghost {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+  transform: translate(16px, 18px);
+  max-width: 240px;
+  padding: 6px 10px 7px;
+  border-radius: 10px;
+  background: #2a251f;
+  color: #f7f1e8;
+  box-shadow: 0 8px 24px rgba(42, 37, 31, 0.28), 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+.quote-drag-ghost-kicker {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(247, 241, 232, 0.62);
+}
+.quote-drag-ghost-quote {
+  display: -webkit-box;
+  margin-top: 1px;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
 .float-tool-sep {
   width: 1px;
   height: 16px;
@@ -60,8 +89,10 @@
   margin: 0 4px;
 }
 .float-tool svg { width: 15px; height: 15px; }
-html[data-theme='dark'] .float-toolbar {
+html[data-theme='dark'] .float-toolbar,
+html[data-theme='dark'] .quote-drag-ghost {
   --float-bg: #3a342c;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
+html[data-theme='dark'] .quote-drag-ghost { background: #3a342c; }

@@ -6,8 +6,8 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -19,7 +19,8 @@ import { readAssistantModelId } from '@/shell/assistant-model';
 import { highlightSelection } from '@/shell/assistant-selection';
 import { AssistantService } from '@/shell/assistant.service';
 import { DocsService } from './docs.service';
-import { encodeQuoteDrag, QUOTE_DRAG_MIME, type QuoteDragExtra } from './mindmap-quote';
+import { type QuoteDragExtra } from './mindmap-quote';
+import { beginQuoteDrag, isQuoteDragActive } from './quote-drag';
 
 export type SelRect = { left: number; top: number; bottom: number };
 
@@ -110,18 +111,16 @@ export const SelectionActions = observer(function SelectionActions({
     };
   };
 
-  const onQuoteDragStart = (event: ReactDragEvent<HTMLSpanElement>) => {
-    if (!documentId) return;
-    event.dataTransfer.setData(
-      QUOTE_DRAG_MIME,
-      encodeQuoteDrag({
-        documentId,
-        quote: clip(text, 20_000),
-        extra: quoteDragExtra(),
-      }),
-    );
-    event.dataTransfer.setData('text/plain', text);
-    event.dataTransfer.effectAllowed = 'copy';
+  const onQuotePointerDown = (event: ReactPointerEvent<HTMLSpanElement>) => {
+    if (event.button !== 0 || !documentId) return;
+    // 拦住默认动作，选区才不会在读锚点之前塌掉。引文和锚点在这一刻记下来。
+    event.preventDefault();
+    event.stopPropagation();
+    beginQuoteDrag(event.nativeEvent, {
+      documentId,
+      quote: clip(text, 20_000),
+      extra: quoteDragExtra(),
+    });
   };
 
   const openPop = (kind: 'annotate' | 'card' | 'ask') => {
@@ -155,8 +154,7 @@ export const SelectionActions = observer(function SelectionActions({
             role="button"
             tabIndex={-1}
             aria-label="拖到脑图，落成批注节点"
-            draggable
-            onDragStart={onQuoteDragStart}
+            onPointerDownCapture={onQuotePointerDown}
           >
             <GripVertical width={15} height={15} strokeWidth={2} />
           </span>
@@ -459,13 +457,13 @@ export const ReadSelectionToolbar = observer(function ReadSelectionToolbar() {
 
   useEffect(() => {
     const hide = () => {
-      if (holdRef.current) return;
+      if (holdRef.current || isQuoteDragActive()) return;
       if (service.selectionPop) return;
       if (service.selectionDigesting && posRef.current) return;
       setPos(null);
     };
     const update = () => {
-      if (holdRef.current) return;
+      if (holdRef.current || isQuoteDragActive()) return;
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
         hide();

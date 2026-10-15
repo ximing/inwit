@@ -35,12 +35,12 @@ import {
   useMemo,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Tip } from '@/components/tip';
 import { createCardLink } from '@/api/cards';
 import { errorMessage } from '@/api/client';
@@ -104,7 +104,14 @@ import {
   type PointerSessionEvent,
 } from './pointer-session';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
-import { parseQuoteDrag, quoteDropPlace, QUOTE_DRAG_MIME, type QuoteDragPayload } from './mindmap-quote';
+import { quoteDropPlace, type QuoteDragPayload } from './mindmap-quote';
+import {
+  pointerInsideRect,
+  quoteDragLabel,
+  quoteDropCaption,
+  registerQuoteDropTarget,
+  type QuoteDragPreview,
+} from './quote-drag';
 
 const NODE_W = 232;
 const NODE_H = 96;
@@ -284,6 +291,12 @@ export const CardCanvas = observer(function CardCanvas({
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   /** 正文选区拖引文进来时的落点预览（drop 是世界坐标判定，x/y 是舞台坐标）。 */
   const [quoteDrag, setQuoteDrag] = useState<{ x: number; y: number; drop: MindDrop } | null>(null);
+  /** 跟指针走的引文幽灵（视口坐标）。 */
+  const [quoteGhost, setQuoteGhost] = useState<{ x: number; y: number; quote: string; caption: string } | null>(
+    null,
+  );
+  /** 新批注进布局之后再把它移到视口里。 */
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   /** 手绘关系边：起点卡 + 指针世界坐标；松开落在卡片上时转成 linkEditor。 */
   const [linkDraft, setLinkDraft] = useState<{
     fromId: string;
@@ -467,6 +480,8 @@ export const CardCanvas = observer(function CardCanvas({
     [visible, hidden, sizes],
   );
   const boxById = useMemo(() => new Map(layout.boxes.map((box) => [box.id, box])), [layout.boxes]);
+  const layoutRef = useRef(layout.boxes);
+  layoutRef.current = layout.boxes;
 
   /** 选中节点的祖先链加子树；其余节点与连线弱化。 */
   const related = useMemo(
@@ -712,6 +727,14 @@ export const CardCanvas = observer(function CardCanvas({
     centerOn(id);
     service.clearScrollAnnotation();
   }, [service, service.scrollAnnotationId, forest, folded, centerOn]);
+
+  useEffect(() => {
+    if (!focusNodeId) return;
+    if (!forest.some((member) => member.id === focusNodeId)) return;
+    if (!boxById.has(focusNodeId)) return;
+    centerOn(focusNodeId);
+    setFocusNodeId(null);
+  }, [focusNodeId, forest, boxById, centerOn]);
 
   /** 手绘关系边的指针。状态里的 linkDraft 只存落点预览。 */
   const linkGesture = useRef<{
@@ -1570,39 +1593,7 @@ export const CardCanvas = observer(function CardCanvas({
     void addText(null, outlineChildSlots(forest, null).length);
   };
 
-  /** 正文选区拖引文进来：和拖节点同一套落点判定与提示。 */
-  const onStageDragOver = (event: ReactDragEvent<HTMLDivElement>) => {
-    if (!event.dataTransfer.types.includes(QUOTE_DRAG_MIME)) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    const rect = viewportRef.current?.getBoundingClientRect();
-    const world = worldPoint(event.clientX, event.clientY);
-    setQuoteDrag({
-      x: rect ? event.clientX - rect.left : 0,
-      y: rect ? event.clientY - rect.top : 0,
-      drop: hitMindDrop(layout.boxes, world.x, world.y, ''),
-    });
-  };
-
-  const onStageDragLeave = (event: ReactDragEvent<HTMLDivElement>) => {
-    const next = event.relatedTarget;
-    if (next instanceof Node && event.currentTarget.contains(next)) return;
-    setQuoteDrag(null);
-  };
-
-  const onStageDrop = (event: ReactDragEvent<HTMLDivElement>) => {
-    const raw = event.dataTransfer.getData(QUOTE_DRAG_MIME);
-    setQuoteDrag(null);
-    if (!raw) return;
-    event.preventDefault();
-    const payload = parseQuoteDrag(raw);
-    if (!payload || !docId || payload.documentId !== docId) return;
-    const world = worldPoint(event.clientX, event.clientY);
-    const drop = hitMindDrop(layout.boxes, world.x, world.y, '');
-    void dropQuoteOnCanvas(payload, drop);
-  };
-
-  /** 引文落成批注节点：先以根身份进画布，再按落点挂到目标位置。 */
+  /** 引文落成批注节点：先以根身份进画布，再按落点挂到目标位置，最后把节点移进视口。 */
   const dropQuoteOnCanvas = async (payload: QuoteDragPayload, drop: MindDrop) => {
     const place = quoteDropPlace(forest, drop);
     const id = await service.addCanvasQuoteAnnotation(
@@ -1612,11 +1603,88 @@ export const CardCanvas = observer(function CardCanvas({
     );
     if (!id) return;
     setSelectedId(id);
-    // 落点不合法（或拖到空白）时保持独立成树。
-    if (!place) return;
-    if (place.parentId) reveal(place.parentId);
-    void service.placeOnCanvas(id, place.parentId, place.index);
+    try {
+      // 落点不合法（或拖到空白）时保持独立成树。落位失败也把批注留在画布上。
+      if (place) {
+        if (place.parentId) {
+          reveal(place.parentId);
+          revealFolded(place.parentId);
+        }
+        await service.placeOnCanvas(id, place.parentId, place.index);
+      }
+    } catch {
+      // placeOnCanvas 已经回滚落位，并在打开历史时提示。
+    } finally {
+      setFocusNodeId(id);
+    }
   };
+
+  const quoteDragApi = useRef({
+    contains: (_x: number, _y: number): boolean => false,
+    hit: (_x: number, _y: number): MindDrop => ({ kind: 'root' }),
+    preview: (_preview: QuoteDragPreview | null, _drop: MindDrop | null) => {},
+    drop: (_payload: QuoteDragPayload, _drop: MindDrop) => {},
+  });
+  quoteDragApi.current = {
+    contains(x, y) {
+      return pointerInsideRect(viewportRef.current?.getBoundingClientRect() ?? null, x, y);
+    },
+    hit(x, y) {
+      const rect = viewportRef.current?.getBoundingClientRect();
+      const viewNow = viewRef.current;
+      if (!rect) return { kind: 'root' };
+      return hitMindDrop(
+        layoutRef.current,
+        (x - rect.left - viewNow.panX) / viewNow.zoom,
+        (y - rect.top - viewNow.panY) / viewNow.zoom,
+        '',
+      );
+    },
+    preview(preview, drop) {
+      if (!preview) {
+        setQuoteGhost(null);
+        setQuoteDrag(null);
+        return;
+      }
+      setQuoteGhost({
+        x: preview.x,
+        y: preview.y,
+        quote: preview.payload.quote,
+        caption: quoteDropCaption(drop),
+      });
+      if (!drop) {
+        setQuoteDrag(null);
+        return;
+      }
+      const rect = viewportRef.current?.getBoundingClientRect();
+      setQuoteDrag({
+        x: rect ? preview.x - rect.left : 0,
+        y: rect ? preview.y - rect.top : 0,
+        drop,
+      });
+      if (!rect) return;
+      const pan = edgeAutoPan(
+        { x: preview.x - rect.left, y: preview.y - rect.top },
+        { width: rect.width, height: rect.height },
+      );
+      if (!pan) return;
+      userMoved.current = true;
+      setView((prev) => ({ ...prev, panX: prev.panX + pan.dx, panY: prev.panY + pan.dy }));
+    },
+    drop(payload, drop) {
+      if (!docId || payload.documentId !== docId) return;
+      void dropQuoteOnCanvas(payload, drop);
+    },
+  };
+
+  useEffect(() => {
+    return registerQuoteDropTarget({
+      contains: (x, y) => quoteDragApi.current.contains(x, y),
+      hit: (x, y) => quoteDragApi.current.hit(x, y),
+      preview: (preview, drop) => quoteDragApi.current.preview(preview, drop),
+      drop: (payload, drop) => quoteDragApi.current.drop(payload, drop),
+    });
+  }, []);
 
   /** 连线把手按下：开始手绘关系边（卡片节点才有把手）。 */
   const onLinkDotDown = (fromId: string, event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -1738,9 +1806,6 @@ export const CardCanvas = observer(function CardCanvas({
         onKeyDown={onKeyDown}
         onDoubleClick={onStageDoubleClick}
         onContextMenu={onStageContextMenu}
-        onDragOver={onStageDragOver}
-        onDragLeave={onStageDragLeave}
-        onDrop={onStageDrop}
       >
       <div
         className="doc-canvas-world"
@@ -2157,21 +2222,19 @@ export const CardCanvas = observer(function CardCanvas({
           {hint.text}
         </div>
       ) : null}
-      {quoteDrag ? (
-        <div
-          className="doc-canvas-hint"
-          style={{ left: quoteDrag.x, top: quoteDrag.y }}
-          role="status"
-        >
-          {quoteDrag.drop.kind === 'child'
-            ? '落为子节点'
-            : quoteDrag.drop.kind === 'before'
-              ? '排在前面'
-              : quoteDrag.drop.kind === 'after'
-                ? '排在后面'
-                : '独立成树'}
-        </div>
-      ) : null}
+      {quoteGhost
+        ? createPortal(
+            <div
+              className="quote-drag-ghost"
+              style={{ left: quoteGhost.x, top: quoteGhost.y }}
+              role="status"
+            >
+              <span className="quote-drag-ghost-kicker">{quoteGhost.caption}</span>
+              <span className="quote-drag-ghost-quote">{quoteDragLabel(quoteGhost.quote)}</span>
+            </div>,
+            document.body,
+          )
+        : null}
       {selectedIds.size > 1 && !recall ? (
         <CanvasMultiBar
           count={selectedIds.size}

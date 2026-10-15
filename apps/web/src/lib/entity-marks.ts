@@ -140,7 +140,8 @@ export function missingTextEntities(
 
   for (const note of notes) {
     if (have.has(note.id)) continue;
-    if (note.kind && note.kind !== 'text') continue;
+    // outline（消化大纲）与 text 一样是正文划线，需要补锚点。
+    if (note.kind && note.kind !== 'text' && note.kind !== 'outline') continue;
     const quote = note.quote.trim();
     if (!quote || quote === IMAGE_EXCERPT_QUOTE) continue;
     missing.push({
@@ -165,7 +166,12 @@ export function isLostTextEntity(
     hasImage?: boolean;
   },
 ): boolean {
-  if (entity.kind === 'annotation' && entity.annotationKind && entity.annotationKind !== 'text') {
+  if (
+    entity.kind === 'annotation' &&
+    entity.annotationKind &&
+    entity.annotationKind !== 'text' &&
+    entity.annotationKind !== 'outline'
+  ) {
     return false;
   }
   if (entity.hasImage) return false;
