@@ -390,6 +390,11 @@ export class JobsService extends Service {
       this.noteJobEcho(job);
       this.syncPolling();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        await Promise.all([this.loadQueue(), this.loadHistory(), this.loadRecent()]);
+        this.syncPolling();
+        return;
+      }
       this.error = errorMessage(err, '取消失败');
     } finally {
       this.cancellingId = null;

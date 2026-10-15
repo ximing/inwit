@@ -5,6 +5,7 @@ import {
   CONVERSATION_SELECTION_QUOTE_MAX,
   CONVERSATION_TITLE_MAX,
   mindEditSummary,
+  topicAdjustSummary,
   type ConversationAction,
   type ConversationNodeKind,
   type ConversationNodeRef,
@@ -312,6 +313,7 @@ function actionLine(action: ConversationAction): string {
     return `没能修改节点「${action.title}」${action.reason ? `：${action.reason}` : ''}`;
   }
   if (action.type === 'apply_mind_edits') return mindEditSummary(action);
+  if (action.type === 'adjust_topic') return topicAdjustSummary(action);
   return `已写入 ${String(action.count)} 张卡片到《${action.title}》`;
 }
 

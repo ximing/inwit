@@ -10,6 +10,7 @@ import { jobs, type JobRow } from '../db/schema.js';
 import { failConversationMessage } from '../conversations/conversation.service.js';
 import { markDocumentFailed, pipelineDocumentId } from '../documents/document-status.js';
 import { logger } from '../utils/logger.js';
+import { CANCEL_REASON } from './cancel.js';
 import { heartbeatJob } from './heartbeat.js';
 import { processJob } from './processors.js';
 import { backoffMs, failureDisposition, RescheduleJobError } from './queue-logic.js';
@@ -19,8 +20,6 @@ export { enqueueJob, type EnqueueJobInput, type JobWriter } from './enqueue.js';
 export { RescheduleJobError };
 
 export const BACKOFF_MS = [2_000, 8_000, 32_000] as const;
-
-const CANCEL_REASON = 'cancelled';
 
 export async function claimDueJobs(now = new Date(), limit = config.WORKER_CLAIM_LIMIT): Promise<JobRow[]> {
   if (limit <= 0) return [];

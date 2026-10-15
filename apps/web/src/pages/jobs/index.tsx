@@ -243,6 +243,14 @@ const RunningList = observer(function RunningList() {
             <div className="job-side">
               <div className="job-dur">{formatElapsedSec(job.startedElapsedSec ?? 0)}</div>
               <div className="job-sub">{`第 ${String(Math.max(1, job.attempts))} 次尝试`}</div>
+              <button
+                type="button"
+                className="btn btn-ghost job-stop"
+                disabled={service.cancellingId === job.id}
+                onClick={() => void service.cancel(job.id)}
+              >
+                {service.cancellingId === job.id ? '停止中…' : '停止'}
+              </button>
             </div>
           </div>
         </div>

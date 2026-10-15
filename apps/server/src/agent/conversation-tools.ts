@@ -16,6 +16,7 @@ import {
 } from './conversation-logic.js';
 import { sliceNumberedDocument } from './document-read-logic.js';
 import { applyMindEditsTool, readDocumentMindTool } from './conversation-mind-tools.js';
+import { conversationTopicTools } from './conversation-topic-tools.js';
 import { applyMindNodeUpdate, loadMindNodeFacts, mindNodeAllowed } from './conversation-nodes.js';
 import { cardDraftSchema, searchCardsTool, writeCardsTool, type DigestSession } from './tools.js';
 import { memoryLoadTools } from './memory-tools.js';
@@ -445,6 +446,7 @@ export function conversationTools(session: ConversationSession): AgentTool[] {
     search,
     readConversationDocumentTool(session),
     findDocumentsTool(session),
+    ...conversationTopicTools(session),
     updateDocumentTool(session),
     createConversationDocumentTool(session),
     conversationWriteCardsTool(session),

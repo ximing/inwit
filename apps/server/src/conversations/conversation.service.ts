@@ -16,6 +16,7 @@ import {
   conversationSelectionSchema,
 } from '@inwit/dto';
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { CANCEL_REASON, markConversationJobsCancelled } from '../jobs/cancel.js';
 import { enqueueJob } from '../jobs/enqueue.js';
 import { getDb } from '../db/index.js';
 import {
@@ -443,6 +444,66 @@ export async function completeConversationMessage(input: {
       .set({ updatedAt: now })
       .where(eq(agentConversations.id, input.conversationId));
   });
+}
+
+/** Keeps tool chips from a turn that stopped or failed before the reply was sealed. */
+export async function keepConversationActions(input: {
+  userId: string;
+  conversationId: string;
+  messageId: string;
+  actions: ConversationAction[];
+}): Promise<void> {
+  if (input.actions.length === 0) return;
+  await getDb()
+    .update(agentMessages)
+    .set({ actions: input.actions })
+    .where(
+      and(
+        eq(agentMessages.id, input.messageId),
+        eq(agentMessages.conversationId, input.conversationId),
+        eq(agentMessages.userId, input.userId),
+        inArray(agentMessages.status, ['pending', 'failed']),
+      ),
+    );
+}
+
+/**
+ * Stops the pending assistant reply. Already-written documents, cards, and
+ * topic edits stay. The call is safe to repeat once the reply has left pending.
+ */
+export async function stopConversation(userId: string, conversationId: string): Promise<ConversationDetail> {
+  await ownedConversation(userId, conversationId);
+  const [pending] = await getDb()
+    .select({ id: agentMessages.id })
+    .from(agentMessages)
+    .where(
+      and(
+        eq(agentMessages.conversationId, conversationId),
+        eq(agentMessages.userId, userId),
+        eq(agentMessages.role, 'assistant'),
+        eq(agentMessages.status, 'pending'),
+      ),
+    )
+    .orderBy(desc(agentMessages.createdAt), desc(agentMessages.id))
+    .limit(1);
+  if (!pending) return detailOf(userId, conversationId);
+  await markConversationJobsCancelled(userId, conversationId, pending.id);
+  await getDb()
+    .update(agentMessages)
+    .set({
+      status: 'failed',
+      activity: null,
+      failReason: clipReason(CANCEL_REASON),
+    })
+    .where(
+      and(
+        eq(agentMessages.id, pending.id),
+        eq(agentMessages.conversationId, conversationId),
+        eq(agentMessages.userId, userId),
+        eq(agentMessages.status, 'pending'),
+      ),
+    );
+  return detailOf(userId, conversationId);
 }
 
 export async function failConversationMessage(job: JobRow, reason: string): Promise<void> {

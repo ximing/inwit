@@ -42,7 +42,7 @@ export const ERROR_MESSAGES = {
   JOB_NOT_FOUND: '任务不存在',
   JOB_NOT_RETRYABLE: '只有失败的任务可以重试',
   ORGANIZE_JOB_IN_PROGRESS: '已经有一条记忆整理在排队或进行中',
-  JOB_NOT_CANCELABLE: '只有等待中的任务可以取消',
+  JOB_NOT_CANCELABLE: '这个任务已经结束',
   CARD_NOT_FOUND: '卡片不存在',
   CARD_OUTLINE_INVALID: '不能这样摆放卡片（会成环、层级过深，或不在同一篇文档）',
   CANVAS_NODE_INVALID: '不能这样摆放（会成环、层级过深，或不在这一篇里）',

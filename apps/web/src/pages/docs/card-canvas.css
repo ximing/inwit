@@ -614,7 +614,7 @@
 .doc-canvas-tools {
   position: absolute;
   right: 10px;
-  bottom: 10px;
+  top: 10px;
   z-index: 4;
   display: flex;
   align-items: center;
@@ -669,7 +669,7 @@
 .canvas-history {
   position: absolute;
   right: 10px;
-  bottom: 52px;
+  top: 52px;
   z-index: 6;
   width: min(280px, calc(100% - 20px));
   max-height: min(320px, calc(100% - 70px));
@@ -749,7 +749,7 @@
 @container card-rail (max-width: 430px) {
   .doc-canvas-tools .is-fit { display: none; }
 }
-/* 超窄：四组收成右下角两列。绝对定位且宽度不定时，折行 flex 会收成一组一行。
+/* 超窄：四组收成右上角两列。绝对定位且宽度不定时，折行 flex 会收成一组一行。
    列用 max-content，文字不折行，避免「待办 / 默写」被挤成竖排。 */
 @container card-rail (max-width: 300px) {
   .doc-canvas-tools {
@@ -778,10 +778,10 @@
   }
 }
 
-/* 画布内搜索：顶部居中浮条。 */
+/* 画布内搜索：顶栏操作条下方居中，避免和操作条叠在一起。 */
 .canvas-search {
   position: absolute;
-  top: 10px;
+  top: 52px;
   left: 50%;
   translate: -50% 0;
   z-index: 8;
@@ -825,6 +825,21 @@
   cursor: pointer;
 }
 .canvas-search button:hover { color: var(--ink); background: var(--bg-sunken); }
+/* 搜索和编辑历史同时打开时，历史列表再往下让一档。 */
+.canvas-search ~ .canvas-history {
+  top: 92px;
+  max-height: min(320px, calc(100% - 110px));
+}
+/* 两列操作条约 60px 高，搜索和历史要落到它下面。写在基础定位之后，否则会被盖掉。 */
+@container card-rail (max-width: 300px) {
+  .canvas-search,
+  .canvas-history { top: 78px; }
+  .canvas-history { max-height: min(320px, calc(100% - 96px)); }
+  .canvas-search ~ .canvas-history {
+    top: 116px;
+    max-height: min(320px, calc(100% - 134px));
+  }
+}
 
 /* 右键菜单。 */
 .canvas-menu {
@@ -857,7 +872,7 @@
 .canvas-menu button.is-danger:hover { background: var(--accent-soft); }
 .canvas-menu button:disabled { opacity: 0.45; cursor: default; }
 
-/* 多选批量操作条：底部居中。 */
+/* 多选批量操作条：底部居中。窄画布上会压住左下角小地图，有小地图时抬高。 */
 .canvas-multi-bar {
   position: absolute;
   left: 50%;
@@ -898,6 +913,9 @@
 .canvas-multi-bar button:hover { color: var(--ink); background: var(--bg-sunken); }
 .canvas-multi-bar button.is-danger { color: var(--accent-deep); }
 .canvas-multi-bar button.is-danger:hover { background: var(--accent-soft); }
+@container card-rail (max-width: 780px) {
+  .doc-canvas-minimap ~ .canvas-multi-bar { bottom: 130px; }
+}
 
 /* 快捷键速查。 */
 .canvas-help {

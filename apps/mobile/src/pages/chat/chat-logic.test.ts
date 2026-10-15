@@ -62,7 +62,7 @@ describe('conversationActionLine', () => {
     ).toBe('没能修改《笔记》：太长');
     expect(
       conversationActionLine({ type: 'create_document', documentId: OTHER, title: '新页' }, null),
-    ).toEqual({ text: '已新建《新页》', documentId: OTHER });
+    ).toEqual({ text: '已新建《新页》', documentId: OTHER, topicId: null });
     expect(
       conversationActionLine(
         { type: 'write_cards', documentId: DOC, title: '笔记', count: 3 },

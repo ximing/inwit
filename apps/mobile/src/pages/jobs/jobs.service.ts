@@ -1,6 +1,6 @@
 import { Service } from '@rabjs/react';
 import type { AgentExecution, Job, JobQueue, JobQueueCounts, JobStatus, JobType, JobUsage } from '@inwit/dto';
-import { errorMessage } from '@/api/client';
+import { ApiError, errorMessage } from '@/api/client';
 import { cancelJob, getJobQueue, getJobUsage, listJobExecutions, listJobs, retryJob } from '@/api/jobs';
 import { formatTimeHm } from '@/lib/format';
 import { consumeEchoes } from '@/lib/sync-echo';
@@ -340,6 +340,11 @@ export class JobsService extends Service {
       await Promise.all([this.loadQueue(), this.loadHistory()]);
       this.syncPolling();
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        await Promise.all([this.loadQueue(), this.loadHistory()]);
+        this.syncPolling();
+        return;
+      }
       this.error = errorMessage(err, '取消失败');
     } finally {
       this.cancellingId = null;

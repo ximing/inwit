@@ -817,6 +817,7 @@ button.related-card {
 .topic-canvas {
   height: min(74vh, 860px);
   margin: 0 16px 16px;
+  container: topic-canvas / inline-size;
 }
 .topic-canvas-empty {
   display: grid;
@@ -905,6 +906,16 @@ button.related-card {
 .topic-canvas-legend i.is-rel-pre { border-color: var(--gold); }
 .topic-canvas-legend i.is-rel-rel { border-color: var(--ink-3); }
 .topic-canvas-legend i.is-rel-same { border-color: var(--green); }
+/* 操作条改到右上后，窄图里图例继续占左上会叠住它。落到左下；有小地图时抬到地图上方。 */
+@container topic-canvas (max-width: 640px) {
+  .topic-canvas-legend {
+    top: auto;
+    bottom: 10px;
+    max-width: calc(100% - 20px);
+    flex-wrap: wrap;
+  }
+  .doc-canvas-minimap + .topic-canvas-legend { bottom: 130px; }
+}
 .topic-canvas-zoom {
   min-width: 40px;
   text-align: center;

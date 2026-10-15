@@ -4,6 +4,7 @@ import type { JobRow } from '../db/schema.js';
 import { logger } from '../utils/logger.js';
 import {
   completeConversationMessage,
+  keepConversationActions,
   loadConversationRun,
   patchConversationDraft,
 } from '../conversations/conversation.service.js';
@@ -101,6 +102,7 @@ export const CONVERSATION_SYSTEM_PROMPT = `你是 Inwit 的对话助手。用户
 - 只有用户明确说要做成卡片、切卡或生成卡片时，才调用 write_cards。不要主动切卡，改完正文也不要再消化。
 - 用户可以把脑图节点加入对话。本轮带全文，之前加入的节点在对话里留着 id。讲解直接写在正文里。用户要求修改节点文字时调用 update_mind_node；这轮没有正文就先 read_mind_node。
 - 用户要求在文档脑图里拆章节、建文章脉络，或把卡片归进脉络时：先 read_document 读正文。返回 truncated 时，用 fromBlock 跳到 unreadPages 里要划线的那一页，不要逐页读完整篇。然后再 read_document_mind 读当前脑图，用 apply_mind_edits 提交一批修改。能点回原文的脉络用 create_highlight。只能改本轮 @ 的文档，或本轮加入对话的节点所属的文档。
+- 用户明确要求新建主题、改标题或目标、把文档归入或移出主题，或调整主题的知识地图时：先 list_topics 或 read_topic，再调用 adjust_topic。只改用户点名的主题、文档和节点。不要删除或归档主题。
 
 约束：
 - 有未保存修改的文档，update_document 会被拒绝。遇到拒绝就说明原因，不要换一篇偷偷改。
@@ -113,7 +115,7 @@ export const CONVERSATION_SYSTEM_PROMPT = `你是 Inwit 的对话助手。用户
 - 同一批里先写父节点，再用 parentRef 挂到本批更早的 ref 上。已有节点用 id。挂到最外层时 parentId 为 null。最外层已有卡片时，新节点用 index 0、1、2 排在前面。没点名的节点不要写进 edits。
 - 这轮没有点名的文档，不要读或改它的脑图，请用户 @ 那一篇。
 - 脑图修改会留下版本。用户可以在脑图的编辑历史里恢复，不要为了回滚去重写整棵树。
-- 不要删除或归档文档，不要改复习计划、主题里的知识地图或设置。
+- 不要删除或归档文档，不要改复习计划或设置。
 - 不知道就说不知道，不要编造文档内容。`;
 
 export async function processConversation(job: JobRow): Promise<void> {
@@ -157,38 +159,56 @@ export async function processConversation(job: JobRow): Promise<void> {
     }),
   );
 
-  await runAgentJob({
-    job,
-    agentType: 'conversation',
-    systemPrompt: CONVERSATION_SYSTEM_PROMPT,
-    userPrompt: buildConversationPrompt({
-      mentions: run.mentions,
-      nodes: run.nodes,
-      dirtyDocumentIds,
-      allowCards: session.allowCards,
-      earlier: run.earlier,
-      selection: run.selection,
-      latest: run.latest,
-    }),
-    tools: conversationTools(session),
-    maxTurns: 12,
-    onEvent: (event) => draft.push(event),
-    verify: async ({ agent }) => {
-      const view = await draft.finish();
-      const text = extractAssistantText(agent.state.messages);
-      const reply = text || fallbackReply(session.actions);
-      if (!reply) throw new Error('回答是空的');
-      await completeConversationMessage({
+  try {
+    await runAgentJob({
+      job,
+      agentType: 'conversation',
+      systemPrompt: CONVERSATION_SYSTEM_PROMPT,
+      userPrompt: buildConversationPrompt({
+        mentions: run.mentions,
+        nodes: run.nodes,
+        dirtyDocumentIds,
+        allowCards: session.allowCards,
+        earlier: run.earlier,
+        selection: run.selection,
+        latest: run.latest,
+      }),
+      tools: conversationTools(session),
+      maxTurns: 12,
+      onEvent: (event) => draft.push(event),
+      verify: async ({ agent }) => {
+        const view = await draft.finish();
+        const text = extractAssistantText(agent.state.messages);
+        const reply = text || fallbackReply(session.actions);
+        if (!reply) throw new Error('回答是空的');
+        await completeConversationMessage({
+          userId: job.userId,
+          conversationId,
+          messageId: assistantMessageId,
+          content: reply,
+          thinking: view.thinking,
+          actions: session.actions,
+        });
+        return `actions=${String(session.actions.length)}`;
+      },
+      nudgePrompt: '请用中文直接告诉用户结果。如果已经改过文档，说明改了哪一篇。',
+      ...(llmConfigId ? { llmConfigId } : {}),
+    });
+  } catch (err) {
+    try {
+      await draft.finish();
+      await keepConversationActions({
         userId: job.userId,
         conversationId,
         messageId: assistantMessageId,
-        content: reply,
-        thinking: view.thinking,
         actions: session.actions,
       });
-      return `actions=${String(session.actions.length)}`;
-    },
-    nudgePrompt: '请用中文直接告诉用户结果。如果已经改过文档，说明改了哪一篇。',
-    ...(llmConfigId ? { llmConfigId } : {}),
-  });
+    } catch (settleErr) {
+      logger.warn('conversation.stop_settle_failed', {
+        jobId: job.id,
+        error: settleErr instanceof Error ? settleErr.message : String(settleErr),
+      });
+    }
+    throw err;
+  }
 }

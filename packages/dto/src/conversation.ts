@@ -97,6 +97,26 @@ export const conversationActionSchema = z.discriminatedUnion('type', [
     /** 本批改了锚点的划线。旧记录没有这个字段，读出来按 0。 */
     retargetedCount: z.number().int().nonnegative().default(0),
   }),
+  z.object({
+    type: z.literal('adjust_topic'),
+    topicId: z.string().uuid().nullable(),
+    title: z.string(),
+    status: z.enum(['applied', 'rejected']),
+    reason: z.string().optional(),
+    created: z.boolean().default(false),
+    titleChanged: z.boolean().default(false),
+    goalChanged: z.boolean().default(false),
+    assignedCount: z.number().int().nonnegative().default(0),
+    unassignedCount: z.number().int().nonnegative().default(0),
+    createdNodeCount: z.number().int().nonnegative().default(0),
+    renamedNodeCount: z.number().int().nonnegative().default(0),
+    movedNodeCount: z.number().int().nonnegative().default(0),
+    deletedNodeCount: z.number().int().nonnegative().default(0),
+    placedDocumentCount: z.number().int().nonnegative().default(0),
+    placedCardCount: z.number().int().nonnegative().default(0),
+    clearedDocumentCount: z.number().int().nonnegative().default(0),
+    clearedCardCount: z.number().int().nonnegative().default(0),
+  }),
 ]);
 
 /** 对话里展示的脑图调整结果。 */
@@ -128,6 +148,58 @@ export function mindEditSummary(action: {
   if (action.deletedCount > 0) parts.push(`删除 ${String(action.deletedCount)} 个章节`);
   const detail = parts.length > 0 ? `：${parts.join('，')}` : '';
   return `已调整《${action.title}》的脑图${detail}`;
+}
+
+/** 对话里展示的主题调整结果。 */
+export function topicAdjustSummary(action: {
+  title: string;
+  status: 'applied' | 'rejected';
+  reason?: string | undefined;
+  created?: boolean;
+  titleChanged?: boolean;
+  goalChanged?: boolean;
+  assignedCount?: number;
+  unassignedCount?: number;
+  createdNodeCount?: number;
+  renamedNodeCount?: number;
+  movedNodeCount?: number;
+  deletedNodeCount?: number;
+  placedDocumentCount?: number;
+  placedCardCount?: number;
+  clearedDocumentCount?: number;
+  clearedCardCount?: number;
+}): string {
+  const name = action.title.trim() || '主题';
+  if (action.status !== 'applied') {
+    const reason = action.reason?.trim() ?? '';
+    return `没能调整主题「${name}」${reason ? `：${reason}` : ''}`;
+  }
+  const parts: string[] = [];
+  if (action.titleChanged) parts.push('改了标题');
+  if (action.goalChanged) parts.push('改了目标');
+  const assigned = action.assignedCount ?? 0;
+  const unassigned = action.unassignedCount ?? 0;
+  const createdNodes = action.createdNodeCount ?? 0;
+  const renamed = action.renamedNodeCount ?? 0;
+  const moved = action.movedNodeCount ?? 0;
+  const deleted = action.deletedNodeCount ?? 0;
+  const placedDocs = action.placedDocumentCount ?? 0;
+  const placedCards = action.placedCardCount ?? 0;
+  const clearedDocs = action.clearedDocumentCount ?? 0;
+  const clearedCards = action.clearedCardCount ?? 0;
+  if (assigned > 0) parts.push(`归入 ${String(assigned)} 篇`);
+  if (unassigned > 0) parts.push(`移出 ${String(unassigned)} 篇`);
+  if (createdNodes > 0) parts.push(`新建 ${String(createdNodes)} 个节点`);
+  if (renamed > 0) parts.push(`改了 ${String(renamed)} 个节点`);
+  if (moved > 0) parts.push(`移动 ${String(moved)} 个节点`);
+  if (deleted > 0) parts.push(`删除 ${String(deleted)} 个节点`);
+  if (placedDocs > 0) parts.push(`挂上 ${String(placedDocs)} 篇资料`);
+  if (placedCards > 0) parts.push(`挂上 ${String(placedCards)} 张卡片`);
+  if (clearedDocs > 0) parts.push(`取下 ${String(clearedDocs)} 篇资料`);
+  if (clearedCards > 0) parts.push(`取下 ${String(clearedCards)} 张卡片`);
+  const detail = parts.length > 0 ? `：${parts.join('，')}` : '';
+  if (action.created) return `已新建主题「${name}」${detail}`;
+  return `已调整主题「${name}」${detail}`;
 }
 
 export type ConversationAction = z.infer<typeof conversationActionSchema>;

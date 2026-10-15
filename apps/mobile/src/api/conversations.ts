@@ -25,6 +25,10 @@ export function deleteConversation(id: string): Promise<void> {
   return request<void>(`/api/conversations/${id}`, { method: 'DELETE' });
 }
 
+export function stopConversation(id: string): Promise<ConversationDetail> {
+  return request<ConversationDetail>(`/api/conversations/${id}/stop`, { method: 'POST' });
+}
+
 export function sendConversationMessage(
   id: string,
   input: SendConversationInput,

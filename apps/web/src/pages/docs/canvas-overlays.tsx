@@ -112,7 +112,7 @@ export function CanvasMenu({
 }
 
 /**
- * 多选时的批量操作条，浮在舞台底部中央。
+ * 多选时的批量操作条，浮在舞台底部中央。窄画布上若小地图也在，会抬到它上方。
  */
 export function CanvasMultiBar({
   count,

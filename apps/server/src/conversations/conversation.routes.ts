@@ -12,6 +12,7 @@ import {
   listConversations,
   retryConversationMessage,
   sendConversationMessage,
+  stopConversation,
 } from './conversation.service.js';
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
@@ -38,6 +39,11 @@ export function registerConversationRoutes(app: FastifyInstance): void {
   app.get('/api/conversations/:id', auth, async (req) => {
     const { id } = idParamsSchema.parse(req.params);
     return getConversation(requireUser(req).id, id);
+  });
+
+  app.post('/api/conversations/:id/stop', auth, async (req) => {
+    const { id } = idParamsSchema.parse(req.params);
+    return stopConversation(requireUser(req).id, id);
   });
 
   app.delete('/api/conversations/:id', auth, async (req, reply) => {

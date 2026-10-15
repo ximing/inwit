@@ -17,6 +17,7 @@ import {
   listConversations,
   retryConversationMessage,
   sendConversationMessage,
+  stopConversation,
 } from '@/api/conversations';
 import { DialogService } from '@/services/dialog.service';
 import { EditorPresenceService } from '@/services/editor-presence.service';
@@ -53,7 +54,9 @@ export class AssistantService extends Service {
   nodes: ConversationNodeRef[] = [];
   /** Bumps when a node is attached so the compose box can take focus. */
   composeFocus = 0;
+  stopping = false;
   private listTicket = 0;
+  private viewTicket = 0;
   private openTicket = 0;
   private contextTicket = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -227,6 +230,25 @@ export class AssistantService extends Service {
     }
   }
 
+  async stop(): Promise<void> {
+    if (!this.current || !this.busy || this.stopping) return;
+    const ticket = ++this.viewTicket;
+    const id = this.current.id;
+    this.stopping = true;
+    this.error = null;
+    try {
+      const detail = await stopConversation(id);
+      if (ticket !== this.viewTicket || this.current?.id !== id) return;
+      this.current = detail;
+      this.watch();
+    } catch (err) {
+      if (ticket !== this.viewTicket || this.current?.id !== id) return;
+      this.error = errorMessage(err, '没能停下来');
+    } finally {
+      if (ticket === this.viewTicket) this.stopping = false;
+    }
+  }
+
   async retry(messageId: string, llmConfigId: string | null = null): Promise<void> {
     if (!this.current || this.busy) return;
     this.error = null;
@@ -296,14 +318,16 @@ export class AssistantService extends Service {
   }
 
   private async refresh(id: string): Promise<void> {
+    const ticket = this.viewTicket;
     if (this.current?.id !== id) return;
     try {
       const detail = await getConversation(id);
-      if (this.current?.id !== id) return;
+      if (ticket !== this.viewTicket || this.current?.id !== id) return;
       this.current = detail;
     } catch {
       // The next tick tries again while a reply is still pending.
     }
+    if (ticket !== this.viewTicket) return;
     this.watch();
   }
 

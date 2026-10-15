@@ -17,6 +17,8 @@ export { AgentTerminalError } from './terminal-error.js';
 
 const RUN_TIMEOUT_MS = 600_000;
 const HEARTBEAT_MS = 15_000;
+/** How often a running agent notices that its job left 'running'. */
+const CANCEL_PROBE_MS = 1_000;
 const DEFAULT_MAX_TURNS = 24;
 const CLOSING_TAIL_MAX = 300;
 
@@ -199,11 +201,16 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
         });
 
         let cancelled = false;
+        let sinceHeartbeat = HEARTBEAT_MS;
         const heartbeat = setInterval(() => {
-          void heartbeatJob(job.id);
-          // Cooperative cancellation: deleting a document (or a manual job
-          // cancel) flips the row out of 'running'; abort the agent instead
-          // of burning model calls on output nobody can use.
+          sinceHeartbeat += CANCEL_PROBE_MS;
+          if (sinceHeartbeat >= HEARTBEAT_MS) {
+            sinceHeartbeat = 0;
+            void heartbeatJob(job.id);
+          }
+          // Cooperative cancellation: deleting a document (or a manual stop)
+          // flips the row out of 'running'. Abort instead of spending more
+          // model calls. The probe is faster than the heartbeat write.
           void isJobRunning(job.id).then((running) => {
             if (!running && !cancelled) {
               cancelled = true;
@@ -211,7 +218,7 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
               agent.abort();
             }
           });
-        }, HEARTBEAT_MS);
+        }, CANCEL_PROBE_MS);
         heartbeat.unref();
         const runPrompt = async (prompt: string) => {
           const timer = setTimeout(() => {

@@ -333,6 +333,29 @@ describe('fallbackReply', () => {
         },
       ]),
     ).toBe('已调整《梯度》的脑图：改了 7 处划线锚点');
+    expect(
+      fallbackReply([
+        {
+          type: 'adjust_topic',
+          topicId: DOC,
+          title: '线性代数',
+          status: 'applied',
+          created: true,
+          titleChanged: false,
+          goalChanged: false,
+          assignedCount: 1,
+          unassignedCount: 0,
+          createdNodeCount: 0,
+          renamedNodeCount: 0,
+          movedNodeCount: 0,
+          deletedNodeCount: 0,
+          placedDocumentCount: 0,
+          placedCardCount: 0,
+          clearedDocumentCount: 0,
+          clearedCardCount: 0,
+        },
+      ]),
+    ).toBe('已新建主题「线性代数」：归入 1 篇');
   });
 });
 
@@ -353,6 +376,20 @@ describe('conversation actions', () => {
     expect(parsed.data.highlightCount).toBe(0);
     expect(parsed.data.retargetedCount).toBe(0);
   });
+
+  it('reads a topic adjustment that omits the zero counts', () => {
+    const parsed = conversationActionSchema.safeParse({
+      type: 'adjust_topic',
+      topicId: DOC,
+      title: '线性代数',
+      status: 'applied',
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success || parsed.data.type !== 'adjust_topic') return;
+    expect(parsed.data.created).toBe(false);
+    expect(parsed.data.assignedCount).toBe(0);
+    expect(parsed.data.clearedCardCount).toBe(0);
+  });
 });
 
 describe('conversation system prompt', () => {
@@ -363,5 +400,13 @@ describe('conversation system prompt', () => {
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('fromBlock');
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('retarget_highlight');
     expect(CONVERSATION_SYSTEM_PROMPT).toContain('本轮如果带了划线');
+  });
+
+  it('lets the sidebar adjust topics when the user asks', () => {
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('adjust_topic');
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('list_topics');
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('read_topic');
+    expect(CONVERSATION_SYSTEM_PROMPT).toContain('不要删除或归档主题');
+    expect(CONVERSATION_SYSTEM_PROMPT).not.toContain('主题里的知识地图或设置');
   });
 });

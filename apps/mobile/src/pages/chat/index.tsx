@@ -19,7 +19,7 @@ import { BottomSheet } from '@/components/bottom-sheet';
 import { StackHeader } from '@/components/stack-header';
 import { confirmAction } from '@/lib/confirm';
 import { formatRelativeTime } from '@/lib/format';
-import { docPath } from '@/routes';
+import { docPath, ROUTES } from '@/routes';
 import { EditorPresenceService } from '@/services/editor-presence.service';
 import { useTheme, type ThemeTokens } from '@/theme';
 import { conversationActionLine, messageBodyKind, pendingStatusLine } from './chat-logic';
@@ -102,11 +102,17 @@ const ChatContent = observer(function ChatContent() {
                         action,
                         presence.bodyDirty ? presence.documentId : null,
                       );
+                      const href = line.topicId
+                        ? `/topics/${line.topicId}`
+                        : line.documentId
+                          ? docPath(line.documentId)
+                          : ROUTES.topics;
+                      const key =
+                        action.type === 'adjust_topic'
+                          ? `topic-${action.topicId ?? 'none'}-${String(index)}`
+                          : `${action.documentId}-${String(index)}`;
                       return (
-                        <Pressable
-                          key={`${action.documentId}-${String(index)}`}
-                          onPress={() => router.push(docPath(line.documentId))}
-                        >
+                        <Pressable key={key} onPress={() => router.push(href)}>
                           <Text style={styles.action}>{line.text}</Text>
                         </Pressable>
                       );
@@ -114,7 +120,11 @@ const ChatContent = observer(function ChatContent() {
                     {message.status === 'failed' ? (
                       <Pressable onPress={() => void service.retry(message.id)}>
                         <Text style={styles.link}>
-                          {message.failReason ? `没答上：${message.failReason} · 重试` : '重试'}
+                          {message.failReason === '已停止'
+                            ? '已停止 · 重试'
+                            : message.failReason
+                              ? `没答上：${message.failReason} · 重试`
+                              : '重试'}
                         </Text>
                       </Pressable>
                     ) : null}
@@ -162,11 +172,13 @@ const ChatContent = observer(function ChatContent() {
               <Text style={styles.link}>{service.modelLabel}</Text>
             </Pressable>
             <Pressable
-              onPress={() => void service.send()}
-              disabled={service.busy || service.draft.trim().length === 0}
+              onPress={() => void (service.busy ? service.stop() : service.send())}
+              disabled={service.stopping || (!service.busy && service.draft.trim().length === 0)}
               style={styles.send}
             >
-              <Text style={styles.sendText}>{service.busy ? '等待' : '发送'}</Text>
+              <Text style={styles.sendText}>
+                {service.stopping ? '停止中…' : service.busy ? '停止' : '发送'}
+              </Text>
             </Pressable>
           </View>
         </View>

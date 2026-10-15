@@ -186,6 +186,7 @@
 .job-name.is-queue { font-size: 13.5px; }
 .job-desc { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .job-side { text-align: right; flex: none; }
+.job-stop { margin-top: 8px; }
 .job-dur { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .job-sub { font-size: 11.5px; color: var(--ink-4); margin-top: 2px; }
 

@@ -12,6 +12,7 @@ import {
 } from '../db/schema.js';
 import { isUniqueViolation } from '../db/pg.js';
 import { AppError } from '../errors.js';
+import { failConversationMessage } from '../conversations/conversation.service.js';
 import { pipelineDocumentId, resetDocumentPipeline } from '../documents/document-status.js';
 import { endOfLocalDay, startOfLocalDay, startOfLocalDayDaysAgo } from '../utils/date.js';
 import {
@@ -26,7 +27,7 @@ import {
   type JobRelated,
   type JobRelatedMaps,
 } from './job-view.js';
-import { CANCEL_REASON } from './queue.js';
+import { CANCEL_REASON, markJobCancelled } from './cancel.js';
 
 export function toPublicJob(row: JobRow, related?: JobRelated): Job {
   const payload = publicJobPayload(row.type, row.payload);
@@ -305,19 +306,10 @@ export async function retryJob(userId: string, id: string): Promise<Job> {
 
 export async function cancelJob(userId: string, id: string): Promise<Job> {
   await getOwned(userId, id);
-  const now = new Date();
-  // Running jobs settle cooperatively: the worker's heartbeat probe notices
+  // Running jobs settle cooperatively: the worker's status probe notices
   // the row left 'running' and aborts the agent (see run-agent-job.ts).
-  const [row] = await getDb()
-    .update(jobs)
-    .set({
-      status: 'failed',
-      lastError: CANCEL_REASON,
-      finishedAt: now,
-      updatedAt: now,
-    })
-    .where(and(eq(jobs.id, id), eq(jobs.userId, userId), inArray(jobs.status, ['pending', 'running'])))
-    .returning();
+  const row = await markJobCancelled(userId, id);
   if (!row) throw AppError.of(409, 'JOB_NOT_CANCELABLE');
+  if (row.type === 'conversation') await failConversationMessage(row, CANCEL_REASON);
   return toHydratedJob(userId, row);
 }

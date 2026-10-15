@@ -2,6 +2,7 @@ import {
   CONVERSATION_NODE_KIND_LABELS,
   docDisplayTitle,
   mindEditSummary,
+  topicAdjustSummary,
   type ConversationAction,
   type ConversationNodeRef,
   type DocumentListItem,
@@ -18,7 +19,7 @@ import { listDocuments } from '@/api/documents';
 import { searchQuery } from '@/api/search';
 import { formatRelativeTime } from '@/lib/format';
 import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
-import { docsPath, ROUTES, topicDocPath } from '@/routes';
+import { docsPath, ROUTES, topicDocPath, topicPath } from '@/routes';
 import { EditorPresenceService } from '@/services/editor-presence.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import {
@@ -42,11 +43,22 @@ const MENTION_CAP = 5;
 
 type Mention = { id: string; title: string };
 
+function actionKey(action: ConversationAction, index: number): string {
+  if (action.type === 'adjust_topic') return `topic-${action.topicId ?? 'none'}-${String(index)}`;
+  return `${action.documentId}-${String(index)}`;
+}
+
 function actionView(
   action: ConversationAction,
   dirtyId: string | null,
   hrefFor: (documentId: string) => string,
 ): { text: string; href: string } {
+  if (action.type === 'adjust_topic') {
+    return {
+      text: topicAdjustSummary(action),
+      href: action.topicId ? topicPath(action.topicId) : ROUTES.topics,
+    };
+  }
   const href = hrefFor(action.documentId);
   if (action.type === 'update_document') {
     if (action.status === 'blocked_dirty') {
@@ -219,6 +231,10 @@ export const AssistantRail = observer(function AssistantRail() {
   }
 
   async function submit(): Promise<void> {
+    if (service.busy) {
+      await service.stop();
+      return;
+    }
     if (query !== null && results[0] && chips.length < MENTION_CAP) {
       choose(results[0]);
       return;
@@ -413,7 +429,7 @@ export const AssistantRail = observer(function AssistantRail() {
                       {message.actions.map((action, index) => {
                         const view = actionView(action, presence.documentId, hrefFor);
                         return (
-                          <li key={`${action.documentId}-${String(index)}`}>
+                          <li key={actionKey(action, index)}>
                             <Link to={view.href}>{view.text}</Link>
                           </li>
                         );
@@ -542,8 +558,12 @@ export const AssistantRail = observer(function AssistantRail() {
                   }}
                 />
               </Tip>
-              <button type="submit" className="btn btn-primary" disabled={service.busy || draft.trim().length === 0}>
-                发送
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={service.stopping || (!service.busy && draft.trim().length === 0)}
+              >
+                {service.stopping ? '停止中…' : service.busy ? '停止' : '发送'}
               </button>
             </div>
           </div>

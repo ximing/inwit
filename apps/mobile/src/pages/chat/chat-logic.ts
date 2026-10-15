@@ -1,4 +1,9 @@
-import { CONVERSATION_MENTION_MAX, mindEditSummary, type ConversationAction } from '@inwit/dto';
+import {
+  CONVERSATION_MENTION_MAX,
+  mindEditSummary,
+  topicAdjustSummary,
+  type ConversationAction,
+} from '@inwit/dto';
 
 export type ChatInline =
   | { t: 'text'; v: string }
@@ -48,39 +53,52 @@ export function dirtyDocumentIds(documentId: string | null, bodyDirty: boolean):
 export function conversationActionLine(
   action: ConversationAction,
   dirtyDocumentId: string | null,
-): { text: string; documentId: string } {
+): { text: string; documentId: string | null; topicId: string | null } {
+  if (action.type === 'adjust_topic') {
+    return { text: topicAdjustSummary(action), documentId: null, topicId: action.topicId };
+  }
   if (action.type === 'update_document') {
     if (action.status === 'blocked_dirty') {
-      return { text: `《${action.title}》有未保存的修改，这次没有写入`, documentId: action.documentId };
+      return {
+        text: `《${action.title}》有未保存的修改，这次没有写入`,
+        documentId: action.documentId,
+        topicId: null,
+      };
     }
     if (action.status === 'applied' && dirtyDocumentId === action.documentId) {
       return {
         text: `《${action.title}》已写入，但这边还有未保存的修改，正文仍是你的草稿`,
         documentId: action.documentId,
+        topicId: null,
       };
     }
     if (action.status === 'applied') {
-      return { text: `已更新《${action.title}》`, documentId: action.documentId };
+      return { text: `已更新《${action.title}》`, documentId: action.documentId, topicId: null };
     }
     const reason = action.reason ? `：${action.reason}` : '';
-    return { text: `没能修改《${action.title}》${reason}`, documentId: action.documentId };
+    return { text: `没能修改《${action.title}》${reason}`, documentId: action.documentId, topicId: null };
   }
   if (action.type === 'create_document') {
-    return { text: `已新建《${action.title}》`, documentId: action.documentId };
+    return { text: `已新建《${action.title}》`, documentId: action.documentId, topicId: null };
   }
   if (action.type === 'update_mind_node') {
     if (action.status === 'applied') {
-      return { text: `已更新节点「${action.title}」`, documentId: action.documentId };
+      return { text: `已更新节点「${action.title}」`, documentId: action.documentId, topicId: null };
     }
     const reason = action.reason ? `：${action.reason}` : '';
-    return { text: `没能修改节点「${action.title}」${reason}`, documentId: action.documentId };
+    return {
+      text: `没能修改节点「${action.title}」${reason}`,
+      documentId: action.documentId,
+      topicId: null,
+    };
   }
   if (action.type === 'apply_mind_edits') {
-    return { text: mindEditSummary(action), documentId: action.documentId };
+    return { text: mindEditSummary(action), documentId: action.documentId, topicId: null };
   }
   return {
     text: `已写入 ${String(action.count)} 张卡片到《${action.title}》`,
     documentId: action.documentId,
+    topicId: null,
   };
 }
 

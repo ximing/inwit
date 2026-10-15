@@ -56,6 +56,9 @@ describe('conversation stream', () => {
     expect(toolActivity('update_mind_node')).toBe('正在修改节点');
     expect(toolActivity('read_document_mind')).toBe('正在阅读脑图');
     expect(toolActivity('apply_mind_edits')).toBe('正在调整脑图');
+    expect(toolActivity('list_topics')).toBe('正在查找主题');
+    expect(toolActivity('read_topic')).toBe('正在阅读主题');
+    expect(toolActivity('adjust_topic')).toBe('正在调整主题');
     expect(toolActivity('something_else')).toBe('正在调用工具');
   });
 });

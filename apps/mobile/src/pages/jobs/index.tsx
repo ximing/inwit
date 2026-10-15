@@ -118,6 +118,15 @@ const JobsContent = observer(function JobsContent() {
                   {formatElapsedSec(job.startedElapsedSec ?? 0)} · 第{' '}
                   {Math.max(1, job.attempts)} 次尝试
                 </Text>
+                <Pressable
+                  disabled={service.cancellingId === job.id}
+                  onPress={() => void service.cancel(job.id)}
+                  style={styles.ghostBtn}
+                >
+                  <Text style={styles.ghostText}>
+                    {service.cancellingId === job.id ? '停止中…' : '停止'}
+                  </Text>
+                </Pressable>
               </View>
             ))}
           </>
