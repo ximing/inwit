@@ -1,6 +1,6 @@
 # 概念与关系：技术方案
 
-日期：2026-10-15。版本：v2（文章学习工作区与双视图）。状态：设计提案，未实现；下述新增表、接口与文件均为计划。
+日期：2026-10-15。版本：v3（双视图方案及 SubAgent 审查修订）。状态：设计提案，未实现；下述新增表、接口与文件均为计划。
 
 关联：[需求方案](01-requirements.md) · [开发任务计划](03-development-tasks.md)
 
@@ -15,7 +15,7 @@
 | 卡片带 documentId、topicId、concept 文本及锚点 | `apps/server/src/db/schema.ts` 的 cards | concept 字段是卡片文本，不改名、不改语义 |
 | cardLinks 类型为 same_concept/confusable/prerequisite/related | `packages/dto/src/card.ts` | 不足以承载任意领域谓词、来源及语境 |
 | 题型为 cloze/compare/judge，排期按 cardId | `packages/dto/src/card.ts`、reviewStates、review.service.ts | 新知识目标关联普通练习卡，复用 SM-2 |
-| reviewStates 已有 suspendedAt | `apps/server/src/db/schema.ts` | 内容变更、归档可以暂停练习 |
+| reviewStates 已有 suspendedAt | `apps/server/src/db/schema.ts` | 保留为手动暂停；知识阻断独立建模，不复用此字段 |
 | Agent 经 runAgentJob，队列分发在 processors | `agent/run-agent-job.ts`、`jobs/queue.ts` | 复用执行审计、模型选择、心跳及任务重试 |
 | 对话已有专用工具和写入权限判断 | `agent/conversation-tools.ts` | 新工具只请求生成候选，正式保存走明确确认接口 |
 | Web 与移动端使用共享 DTO | 各 package.json 与 review service | 新字段可选、现有响应不破坏 |
@@ -88,17 +88,45 @@ flowchart LR
 
 ### 3.3 卡片导航关联与主要练习绑定
 
-`concept_practice_bindings`：id、userId、topicId、conceptId?、relationId?、cardId(unique)、exerciseKind(recall/compare/scenario)、targetVersion、needsRefresh、createdAt。目标恰一非空；同一有效目标同一 exerciseKind 唯一。首版每种题型一个默认练习，重试返回已有项。
+`concept_practice_bindings`：id、userId、topicId、conceptId?、relationId?、cardId、questionId、exerciseKind(recall/compare/scenario)、targetVersion、needsRefresh、resumeRequired、epochId(UUID)、startedAt、endedAt?、createdAt。目标恰一非空；仅 endedAt 为空的活动绑定参与 cardId 唯一、同目标同题型唯一约束。解绑设置 endedAt，不物理删除，历史绑定仍用于解释反馈。refresh 创建新的 epochId 并更新 startedAt，历史日志保留旧 epoch。
 
-`card_knowledge_links` 允许同卡多个导航目标；`concept_practice_bindings.cardId` 唯一使同卡至多一个主要练习目标。关联关系卡时可以通过端点解析其涉及概念，无需复制导航行。主要目标的绑定同时保证对应导航链接存在；删除主要目标链接须先解除练习绑定。单纯导航关联不使该目标继承反馈，不因次要关联变化暂停整张卡。
+`card_knowledge_links` 是多对多导航，活动 binding 则使同卡至多一个主要练习目标。主要目标保证对应导航链接存在；删除该导航链接前须解除主绑定。单纯导航关联不计分，不因次要目标变更暂停整张卡。
 
-新增 `bindExistingConceptPractice(userId, input)`：校验现有 cardId 的所有权、未删除/未拒绝状态和所选题型/题目可兼容，展示当前题面答案让用户确认后绑定。不改 card_questions、review_states 或 review_logs。已有主绑定不同则409；目标同题型已有另一张卡则返回冲突供用户选择，不悄悄替换。不在队列的卡仅绑定不入队，另走显式加入流程；暂停卡保留暂停状态。未绑定卡可只建立导航链接。
+**首版选题固定为当前实际第一题。** `bindExistingConceptPractice(userId,input)` 读取按 `(createdAt,id)` 稳定排序的首个 CardQuestion，客户端确认该 questionId、题型及题面版本。仅允许此题与 exerciseKind 映射兼容：recall→cloze、compare→compare、scenario→judge。不能选择第二题作为主练习目标，不能把 questions[0] 的反馈归给第二题。无题卡可建立导航链接，但须先显式补题才能绑定。保留其他题目，不增加按题调度；排期仍按 cardId。
 
-新建的一条绑定对应一张普通 Card 和一条 CardQuestion。已有卡保留已有题目结构，不为绑定而删除其他题目。映射 recall→cloze、compare→compare、scenario→judge；判定题必须包含命题和解释，回忆题遵守现有挖空格式，所有生成题须在预览中可修改。Card.concept 保存可读的知识陈述，Card.example 保存答案/例子，关联 question 为正式题面与答案。documentId 优先使用有效主出处，没有则为空；新卡默认 mapNodeId 与 outlineParentId 留空；用户可通过既有脑图挂载操作将同一 cardId 放入当前文章的合法位置，不复制卡片、不自动重排。已有卡片保留原有文章和脑图归属，不能为适应新视图改写。
+绑定校验所有权、未删除/未拒绝状态与目标版本；保留卡片原有题面、文章/脑图归属、排期、暂停和历史。不在队列的卡仅绑定不入队。已绑定其他目标或同目标同题型已有另一卡返回409，用户显式选择而不静默替换。任何题目删除、修改、重排入口（含旧接口与 Agent）都必须使该卡 reviewRevision 递增；活动绑定首题的题面/答案变化、删除或身份/类型不再匹配时设置needsRefresh阻断复习，要求重新确认；受控refresh事务除外。不能偷偷改练习题或继续沿用旧epoch计分。
 
-默认练习在独立服务事务中创建 cards、card_questions、review_states 和 binding；须核对现有卡片创建服务的副作用，采用同事务写入能力，不能先创建卡片再补绑定。只保存概念不调用卡片创建。新 review DTO 可追加可选 `knowledgeTarget` 摘要，旧客户端忽略也能看普通文本题。
+新建绑定仍创建一张普通 Card 和一条 CardQuestion，questionId 就是该首题；Card.concept 为可读知识陈述，example 为答案/例子，正式题面和答案在 question。documentId 优先选有效主出处，无则空；mapNodeId/outlineParentId 默认空。用户可把同一 cardId 挂到本文合法脑图位置，不复制、不自动重排。cards、questions、review_states、binding 与主导航链接在同一事务中保存，只收录知识不建卡。
 
-内容修订递增 version，并暂停绑定练习、标记 needsRefresh；概念的 name/sense/definition 变化也会使相邻关系 version 递增并暂停其练习。只追加出处或 notes 不改变已确认语义，不触发重置。显式 refresh 保存用户确认的新题面与答案，更新 targetVersion、清除 needsRefresh，重置 SM-2 初始学习状态；review_logs 保留。暂停后拒绝陈旧界面的反馈。状态展示直接来自相关练习反馈及到期时间，不计算未经验证的知识掌握分。
+refresh 必须携带 bindingId、questionId、expectedTargetVersion、expectedReviewRevision、用户确认的题面和答案；只更新绑定的首题，其他题目不变。校验目标与主题未归档、首题身份仍匹配，在同一事务中更新题目、targetVersion、reviewRevision、epochId，清除 needsRefresh 并重置该卡 SM-2 初始学习参数，保留全部 review_logs 和用户手动暂停状态。
+
+### 3.4 复习资格、暂停与恢复
+
+沿用 `review_states.suspendedAt` **只表达用户手动暂停**；知识生命周期不再写这个字段。新卡与已有状态迁移不把原有暂停误判为知识原因。活动 binding 的阻断由以下独立条件决定：
+
+- needsRefresh：目标语义变化或首题不再匹配；需更新题目/重新确认。
+- 目标、任一关系端点或主题归档：动态阻断，不允许恢复。
+- resumeRequired：归档发生时设 true；目标恢复后仍需用户显式恢复练习。归档与恢复、语义变更在事务中锁定受影响卡片并轮换 reviewRevision。
+
+有效入队/反馈条件：卡片有效且已创建 review_state、用户未手动暂停、无上述知识阻断；有活动绑定时还须questionId仍为兼容首题。统一 `getReviewEligibility` 被队列、反馈、旧 resume、绑定 resume 和 refresh 使用。概念的 name/sense/definition 变化使相邻关系版本递增并标记关联练习 needsRefresh；仅追加出处/notes 不变更语义版本。
+
+| 动作 | 作用 | 保留内容 |
+| --- | --- | --- |
+| 旧卡片“恢复复习” | 无知识阻断时仅清用户暂停；有知识阻断则拒绝并返回明确原因，不能越过阻断入队 | 题目、间隔、历史 |
+| 恢复知识/主题 | 解除对象归档状态，不清 resumeRequired | 原排期、手动暂停 |
+| POST binding resume | 要求对象有效、无需refresh；仅清 resumeRequired | ease/reps/interval/dueAt及手动暂停；过期dueAt可正常入队 |
+| refresh | 更新首题、清needsRefresh、开启新epoch、重置学习参数；不清其他暂停原因 | 其他题目、历史、手动暂停、resumeRequired |
+| 解除主绑定 | endedAt终止知识阻断与计分；递增reviewRevision，不改变用户暂停或原排期 | 普通卡、题目、历史、导航关联；界面说明有效普通卡可能重新入队 |
+
+### 3.5 反馈版本与知识表现归属
+
+增加 `cards.reviewRevision`（nullable整数）。null 为从未受新协议管理的旧卡；首次绑定（含新建练习）置1，之后题目/答案或呈现内容变更、绑定/解绑、refresh、归档/恢复均递增，解除绑定后不退回null。练习资格变化与反馈写入通过同一卡片行锁串行化，所有变更入口遵守此锁，避免检查后变更的竞态。
+
+支持新协议的客户端请求今日队列携带 `reviewProtocol=2`；每张受管理卡返回首题及服务端签名 reviewToken，包含 userId/cardId/questionId/reviewRevision、活动bindingId/epochId/targetVersion（无则null），不包含答案。反馈提交 `{feedback,reviewToken,requestId}`；事务内锁卡，验签并核对当前版本、活动绑定、目标版本和资格。即使“暂停→refresh→恢复”已完成，旧token仍返回409 `review_content_changed`，不写日志、不改排期；客户端重新加载题目并要求重新回忆。requestId 幂等返回原结果，不能重复记分。
+
+旧客户端未声明协议能力时，队列排除 reviewRevision 非null 的卡；若提交此前缓存的受管理卡反馈且无token，返回409 `review_client_upgrade_required`。**旧客户端从未受管理的普通卡继续按旧协议复习；受管理卡须用升级客户端。** Web与移动端首版都补最小协议2的请求/回传和错误提示，不要求移动端增加概念编辑UI。绑定后即使解绑也保留新协议要求，避免旧缓存再次污染排期。knowledgeTarget 仍为可选展示字段，但不能把可忽略字段视为版本保护。
+
+`review_logs` 增加可空 bindingId、epochId、targetVersion、questionId、reviewRevision；旧日志全部为空，不回填。服务端接受反馈时根据当前有效绑定填写，不信任客户端自报归属。知识详情的最近反馈/练习结果仅查询当前活动 bindingId+epochId+targetVersion；绑定前、其他目标、旧版本的反馈仅留在卡片历史。解绑A再绑B创建新binding/epoch，B显示“未练习”，卡片到期时间可沿用但不等于B已掌握。首版不支持将旧反馈追认到新目标，不虚构知识掌握分。
 
 ## 4. 核心接口与事务
 
@@ -107,7 +135,8 @@ flowchart LR
 | 方法与路径 | 输入 / 结果 |
 | --- | --- |
 | GET `/api/topics/:id/concepts` | q、cursor、limit(默认50，最大100)；返回分页概念 |
-| GET `/api/topics/:id/concept-graph` | focusId?、documentId?、cursor?；每页最多50节点，边只含本页已返回端点，带可继续展开信息 |
+| GET `/api/topics/:id/concept-graph` | focusId?、documentId?、cursor?；返回种子/邻居节点页及graphRevision，不以页内边代表完整关系 |
+| POST `/api/topics/:id/concept-graph/view` | documentId?、nodeIds(最多50)、expectedGraphRevision、edgeCursor?；按显式节点集合返回完整关系分页，见4.2 |
 | GET `/api/concepts/:id` | 概念、分页相邻关系、证据、练习摘要 |
 | POST `/api/topics/:id/concepts` | name、aliases、sense、definition、example、evidence；返回概念 |
 | PATCH `/api/concepts/:id` | expectedVersion + 可编辑字段；冲突409 |
@@ -123,7 +152,10 @@ flowchart LR
 | POST `/api/concept-batches/:id/discard` | ready→discarded；不删除正式内容 |
 | POST `/api/concept-practice-proposals` | targetKind、targetId、exerciseKind；202 `{proposalId,jobId}`；返回 proposalId/jobId，通过建议详情接口取题目，无卡片写入 |
 | POST `/api/concept-practices` | targetKind、targetId、expectedVersion、exerciseKind、question、answer、requestId；创建或返回 binding/card |
-| POST `/api/concept-practices/:id/refresh` | expectedVersion、question、answer；更新并重置该练习 |
+| POST `/api/concept-practices/:id/refresh` | questionId、expectedTargetVersion、expectedReviewRevision、question、answer；更新首题及新epoch，保留用户暂停 |
+| POST `/api/concept-practices/:id/resume` | expectedReviewRevision；只解除归档后的显式恢复门槛，不重置排期、不清手动暂停 |
+| GET `/api/review/today` | 增加可选reviewProtocol=2；受管理卡下发reviewToken，否则只返回普通未受管理卡 |
+| POST `/api/review/:cardId/feedback` | 扩展reviewToken、requestId；受管理卡强制验版本和复习资格 |
 
 生成任务的取消复用现有 job 取消入口，后端将批次标为 cancelled；重试通过创建批次接口产生新 batch，并可带 retryOfBatchId 用于追踪。requestId 对用户和操作范围唯一，重复请求且 body 一致返回原响应，body 不同返回409；使用数据库幂等记录，不只依赖前端禁用按钮。
 
@@ -145,11 +177,21 @@ flowchart LR
 | POST `/api/concept-notes`、PATCH `/api/concept-notes/:id` | 目标、documentId、text；更新携带 expectedVersion，限定本文编辑范围 |
 | GET/POST `/api/cards/:id/knowledge-links` | 读取或建立导航目标；POST 验证目标归属 |
 | DELETE `/api/cards/:id/knowledge-links/:linkId` | 解除导航链接；存在主要练习绑定时409提示先解除 |
-| POST `/api/concept-practices/bind-existing` | cardId、targetKind、targetId、expectedVersion、exerciseKind；确认后绑定，不改排期 |
-| DELETE `/api/concept-practices/:id` | 解除主要练习目标，保留卡片、现有排期、历史及导航关联 |
+| POST `/api/concept-practices/bind-existing` | cardId、questionId、expectedReviewRevision、targetKind、targetId、expectedVersion、exerciseKind；只绑定当前首题，不改排期 |
+| DELETE `/api/concept-practices/:id` | 终止活动绑定并轮换reviewRevision，保留卡片、现有排期、历史及导航关联，见3.4 |
 | GET `/api/documents/:id/knowledge-locations?topicId=...&targetKind=...&targetId=...` | 返回当前文章匹配 cardId/annotationId/画布节点引用及来源状态，多处分别列出 |
 
 解析联动位置时只接受已有真实脑图挂载与可验证原文锚点；没有脑图节点时返回 evidence-only，客户端展示摘录/定位原文而非伪造节点。目标与文章均独立鉴权。人工 bundle、批次 commit 与 refs 写入使用同一事务；主题入口无 documentId 时不创建文章引用。本文视图可读全部已授权主题范围，但一次编辑、生成与联动固定一个显式 topicId。
+
+### 4.2 局部图的节点与边加载协议
+
+50节点是**当前可见局部画布**上限，也是节点单页上限，不是主题知识总量。客户端可以缓存多页节点；当前可见集合超过上限时用户选择切换焦点或替换部分节点，不静默丢节点。索引可访问全量知识。
+
+节点分页只负责发现节点及邻居数量，不声称关系已完整。每次可见nodeIds改变，客户端 POST graph/view 传入完整可见集合（最多50）与范围；后端返回该集合内所有符合范围的关系，按关系id稳定排序、每页最多100边，带nextEdgeCursor。同一集合的关系加载至cursor为空才标完整；尚在加载时显示“关系加载中”，不能显示“无关系”。A来自第一页、B来自第二页，只要两者一起可见，查询必定包含A→B；环的边按相同规则返回，不依赖节点分页归属。
+
+`topics.conceptGraphRevision` 为新增递增整数，任何影响概念/关系可见性、语义或document refs的变更都在同事务内递增；只改练习反馈不递增。节点查询返回revision，边查询要求expectedGraphRevision。边cursor绑定user/topic/document范围、排序后的nodeIds哈希、revision和lastRelationId；不匹配返回409 `graph_view_changed`，客户端重取数据并保留当前相机/可用焦点。每次请求使用一致数据库快照读取revision和边；多页期间变更由revision冲突暴露，不混合两个版本。跨页A→B和A→B→C→A均须测试。
+
+本文知识接口列表仍可分页，但图显示必须使用这一view协议，并遵守document_knowledge_refs范围；不能因两个端点在本文就纳入其他文章独有的边。邻居展开先更新可见集合再查询关系，可见集合外的边仅作邻居数量提示。
 
 ## 5. Agent 管线
 
@@ -200,7 +242,7 @@ flowchart LR
 
 highlight 不写对方 selectedId、viewport、expandedIds 或 filters；隐藏/未加载目标显示计数。locate 为用户显式动作，多个位置先选择；然后分页加载、临时清除阻挡过滤/展开路径、平移并保留合理缩放，保存之前快照供返回。联动不同时改变两图相机。证据失效只显示说明与摘录。
 
-概念图首版 React+SVG，按一般有向图布局，不能复用脑图的单父层级布局；循环边正确绘制。最多50节点局部展示，支持分页和邻居展开，索引可访问全部数据。`layoutConceptGraph(nodes, edges, previousPositions?)` 尽量稳定旧位置；关系标签可点、键盘可达。关系图/索引各自保留状态。局部关系浮层是后续可选 renderer，不改变知识结构。
+概念图首版 React+SVG，按一般有向图布局，不能复用脑图的单父层级布局；循环边正确绘制。最多50节点当前画布，节点分页缓存与边集合查询遵守4.2；关系分页完成前显示加载状态，支持邻居展开，索引可访问全部数据。`layoutConceptGraph(nodes, edges, previousPositions?)` 尽量稳定旧位置；关系标签可点、键盘可达。关系图/索引各自保留状态。局部关系浮层是后续可选 renderer，不改变知识结构。
 
 ### 6.4 加载与同步
 
@@ -210,11 +252,11 @@ highlight 不写对方 selectedId、viewport、expandedIds 或 filters；隐藏/
 
 ## 7. 兼容、发布与验证
 
-迁移仅增表、增可选 DTO 字段和 job/agent 枚举检查约束，不改旧 cards.concept，不回填推断知识，不复写旧复习历史。迁移编号由生成器按开发时最新顺序确定。新增表随用户/主题硬删除清理，来源文档删除只断开来源；删除绑定不删除 review_logs。
+迁移增表、topics.conceptGraphRevision、cards.reviewRevision、review_logs可空归属字段、DTO及 job/agent 枚举检查约束，不改旧 cards.concept，不回填推断知识，不复写旧复习历史。迁移编号由生成器按开发时最新顺序确定。新增表随用户/主题硬删除清理，来源文档删除只断开来源；删除绑定不删除 review_logs。
 
-特性开关 `CONCEPTS_ENABLED` 默认 false，关闭时隐藏新入口并拒绝新写入/入队；不破坏已存在普通练习卡的复习。发布顺序：迁移 → 支持新任务类型的 server/worker → Web → 小范围开关。滚动部署时所有 worker 支持新类型后才开放生成。回退优先关闭入口和新任务生产，保留数据及具备新枚举兼容的服务，避免回退到无法识别历史任务的旧 worker。
+特性开关 `CONCEPTS_ENABLED` 默认 false，关闭时隐藏新入口并拒绝新写入/入队；普通未受管理卡继续复习；已受管理卡无论开关状态仍保留版本和资格校验。发布顺序：迁移 → 支持新任务类型和复习协议2的 server/worker → Web及移动端最小协议升级 → 小范围开关。滚动部署时所有 worker 支持新类型后才开放生成。回退优先关闭入口和新任务生产，保留数据及具备新枚举兼容的服务，避免回退到无法识别历史任务的旧 worker。
 
-验证覆盖：纯逻辑（规范化、去重、引用、图布局）、真实 Postgres 事务/权限/幂等、队列失败取消、Agent 固定夹具、前端异步竞态、真实浏览器完整链路、旧客户端文本复习。模型人工样本评审与确定性自动测试分开；不能以一次模型输出成功代替验证。
+验证覆盖：纯逻辑（规范化、去重、引用、图布局）、真实 Postgres 事务/权限/幂等、队列失败取消、Agent 固定夹具、前端异步竞态、真实浏览器完整链路、旧客户端普通卡复习、受管理卡的旧端排除与缓存反馈拒绝。模型人工样本评审与确定性自动测试分开；不能以一次模型输出成功代替验证。
 
 ## 8. 主要取舍
 

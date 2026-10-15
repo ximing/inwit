@@ -105,6 +105,11 @@ body.is-native .harness { display: none; }
 .doc-view .ProseMirror ::selection {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
+.doc-view .ProseMirror span[style*='background-color'] {
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 
 .doc-view .ProseMirror > :first-child { margin-top: 0; }
 .doc-view .ProseMirror > :last-child { margin-bottom: 0; }

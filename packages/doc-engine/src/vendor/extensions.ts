@@ -2,6 +2,7 @@ import {
   AnnotationMark,
   CardAnchorMark,
   createDocMathExtensions,
+  createDocTextStyleExtensions,
   createTextAlignExtension,
   MermaidBlock,
   PageBreak,
@@ -193,6 +194,7 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
     AnnotationMark,
     CardAnchorMark,
     createTextAlignExtension(),
+    ...createDocTextStyleExtensions(),
     ...createDocMathExtensions({ output: 'mathml' }),
     Placeholder.configure({
       placeholder: opts.placeholder ?? DEFAULT_PLACEHOLDER,

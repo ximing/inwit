@@ -3,6 +3,7 @@ import {
   AnnotationMark,
   CardAnchorMark,
   createDocMathExtensions,
+  createDocTextStyleExtensions,
   createTextAlignExtension,
   MermaidBlock,
   PageBreak,
@@ -198,6 +199,7 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
     AnnotationMark,
     CardAnchorMark,
     createTextAlignExtension(),
+    ...createDocTextStyleExtensions(),
     ...createDocMathExtensions(),
     DocFind,
   ];

@@ -1,6 +1,6 @@
 # 概念与关系开发任务计划
 
-版本：v2（2026-10-15，文章学习工作区与双视图）。
+版本：v3（2026-10-15，双视图方案及 SubAgent 审查修订）。
 
 > 执行说明：本文件仅为开发计划，本次不执行。未来获得开发指令后使用 superpowers:executing-plans 逐任务执行；如用户明确选择委派，再使用 superpowers:subagent-driven-development。步骤以复选框跟踪，不预先标记完成。
 
@@ -15,7 +15,7 @@
 ## 全局约束
 
 - 仅在得到后续开发指令后执行；本次不修改业务代码、不迁移、不部署。
-- Web/桌面完成新体验；移动端保留普通文本练习兼容，新 UI 后续安排。
+- Web/桌面完成新体验；移动端首版升级复习协议2但不增加概念专用UI；旧客户端仅领取普通未受管理卡。
 - 概念与关系先保存、练习显式加入；生成结果必须经预览确认才成为正式知识。
 - 默认5–12个概念、最多20条关系；硬上限30概念/60关系；总文本最多60,000 Unicode字符，分片目标8,000字符。
 - 候选推断关系默认不选；用户确认后保留 inferred 标记。
@@ -25,7 +25,10 @@
 - 每项任务完成自己的测试与自检；提交仅包含本任务文件。未来执行如需 commit，应遵循当时的分支和用户要求，不将下列清单视为本次提交授权。
 
 - 文章工作区支持 outline/concepts/compare；脑图和概念图保持独立结构，概念图允许合法多节点环。
-- 同一学习卡在脑图、知识详情和复习中共用 cardId；多个导航关联至多一个主要练习目标。
+- 同一学习卡在脑图、知识详情和复习中共用 cardId；多个导航关联至多一个主要练习目标，首版固定绑定实际首题。
+- 手动暂停与知识阻断独立；普通恢复不绕过资格校验。受管理卡强制reviewToken，解绑后仍保留版本保护。
+- 知识表现只计当前binding/epoch/targetVersion的新反馈，不继承旧卡历史。
+- 当前画布最多50节点，边按完整可见集合独立分页，不能因节点跨页漏边。
 - 默认联动只高亮；显式定位才改变对方视口/展开状态，支持返回定位前状态。
 - 独立保存正文、两图、详情、布局、候选及表单状态；业务同步不重置视口、不覆盖输入。
 - 脑图局部关系浮层仅作方案验证和后续扩展；首版不实现完整混合图。
@@ -95,7 +98,7 @@
 
 **文件：** 新增三个 DTO 文件；修改 `packages/dto/src/index.ts`、`job.ts`、`agent.ts`（实际 job DTO 名称在开工时核对）、`apps/server/src/db/schema.ts`；新增 Drizzle 自动编号迁移及配套元数据。新增 `apps/server/src/concepts/concept-schema.test.ts`。
 
-**接口：** 产出 Concept、ConceptRelation、ConceptEvidence、ConceptBatch、ConceptDraft、CommitConceptBatchInput、ConceptPracticeBinding 及对应 Zod schema；补充 DocumentKnowledgeRef、ConceptNote、CardKnowledgeLink、KnowledgeLocation 契约；字段以技术方案为准。新增正式表、notes、batches、bindings、document_knowledge_refs、card_knowledge_links、幂等记录及练习建议结果存储。
+**接口：** 产出 Concept、ConceptRelation、ConceptEvidence、ConceptBatch、ConceptDraft、CommitConceptBatchInput、ConceptPracticeBinding 及对应 Zod schema；补充 DocumentKnowledgeRef、ConceptNote、CardKnowledgeLink、KnowledgeLocation 契约；字段以技术方案为准。新增正式表、notes、batches、bindings、document_knowledge_refs、card_knowledge_links、幂等记录及练习建议结果存储；增加topic图版本、card复习版本和review_logs可空绑定归属字段；绑定含questionId/epochId/endedAt/resumeRequired。
 
 - [ ] 编写 schema 测试：第31个概念/第61条边拒绝；引用联合类型不能混用；字符串限制按 Unicode 字符；练习目标必须恰一非空。
 - [ ] 在隔离测试库验证复合外键：跨用户/跨主题端点拒绝、自环拒绝、关系身份唯一、来源 documentId 删除置空；文档引用/卡片导航链接目标恰一、重复唯一、同用户隔离。
@@ -113,8 +116,8 @@
 
 - [ ] 编写身份测试：空白/大小写规范化保留原展示名；同名不同 sense 可建两条；别名只推荐不直接合并；关系语境不同保持两条。
 - [ ] 编写真实 DB 事务测试：手动新建两端及关系任一步失败全部回滚；重复 bundle requestId 返回同一结果；不同 body 同 key 返回409。
-- [ ] 实现 CRUD、版本冲突409、归属404、软归档、图分页及名称/别名检索；复合端点约束不只依赖前端。
-- [ ] 编写路由测试：归档主题拒绝写入；分页最多100列表/50图节点；返回边两端均可见，外部邻居有展开提示。
+- [ ] 实现 CRUD、版本冲突409、归属404、软归档、节点分页、显式可见集合的边分页及名称/别名检索；复合端点约束不只依赖前端。
+- [ ] 编写路由测试：归档主题拒绝写入；分页最多100列表/50图节点；图/view按完整可见nodeIds返回边，外部邻居有展开提示。补第一页A/第二页B的A→B及跨页环，验证100边分页完整；节点范围或graphRevision改变时旧cursor返回409。
 - [ ] 运行 `pnpm --filter @inwit/server test -- src/concepts/concept-identity.test.ts src/concepts/concept.service.test.ts src/concepts/concept.routes.test.ts`，所有上述断言通过。
 
 ## T3：正文快照、证据核验与来源跳转
@@ -163,22 +166,27 @@
 
 ## T6：练习绑定、智能出题与旧复习接入
 
-**文件：** 新增 `concept-practice.service.ts`、`concept-practice.service.test.ts`、`agent/concept-practice.ts` 及测试；修改 `review/review.service.ts`、`concept.service.ts`、`jobs/processors.ts`、相关 DTO/路由。
+**文件：** 新增 `concept-practice.service.ts`、`concept-practice.service.test.ts`、`agent/concept-practice.ts` 及测试；修改 `review/review.service.ts`、`review/review.routes.ts`、卡片编辑/题目修改/恢复入口、`concept.service.ts`、`jobs/processors.ts`、相关 DTO/路由；新增 `review/review-token.ts`、`review/review-token.test.ts`。
 
 **消费：** T1 Practice DTO；T2/3 已确认知识和出处；现有 card_questions/review_states。
 
-**产出：** `bindExistingConceptPractice(userId, input)`、卡片导航链接CRUD，以及 `createConceptPractice(userId, input): Promise<ConceptPracticeBinding>`、`refreshConceptPractice(userId, bindingId, input): Promise<ConceptPracticeBinding>`、`processConceptPractice(job): Promise<void>`、`invalidateConceptPractices(tx, target): Promise<void>`。
+**产出：** `bindExistingConceptPractice(userId, input)`、卡片导航链接CRUD，以及 `getReviewEligibility(userId,cardId)`、`resumeConceptPractice(userId,bindingId,input)` 和 `createConceptPractice(userId, input): Promise<ConceptPracticeBinding>`、`refreshConceptPractice(userId, bindingId, input): Promise<ConceptPracticeBinding>`、`processConceptPractice(job): Promise<void>`、`invalidateConceptPractices(tx, target): Promise<void>`。
 
-- [ ] 测试仅收录知识时 cards/review_states 数量不变；创建练习事务中四表要么全成功要么无写入。
+- [ ] 测试仅收录知识时 cards/review_states 数量不变；创建练习事务中cards、questions、review_states、bindings、导航链接要么全成功要么无写入。
 - [ ] 测试同目标同 exerciseKind 重复加入返回已有卡；模型题面只是建议，确认前没有练习；无AI可手写题面加入。
 - [ ] 实现 recall/compare/scenario 到 cloze/compare/judge 的一致映射、可读 Card 文本和可选 knowledgeTarget；新增练习入队沿用现有初始排期。
 - [ ] 测试概念定义练习和相邻关系练习的反馈互不改写；同一个目标的不同题型独立排期。
 - [ ] 新增 `card-knowledge.service.ts` 和测试，支持同卡多个导航目标；主要练习目标唯一，跨用户拒绝，同用户跨文章来源不改卡片topicId。
 - [ ] 显式绑定已有脑图卡，断言 cardId、题目、原有排期/暂停、历史及脑图归属完全不变；未入队卡不自动入队。同目标同题型冲突和同卡不同主目标返回409。
 - [ ] 同卡两个导航目标只有主目标计分；解除绑定保留卡及历史；删除主要导航链接要求先解除主绑定。新建卡显式挂脑图复用已有挂载流程，不复制卡。
-- [ ] 接入目标语义变化/归档导致的暂停；概念重命名导致相邻关系练习失效；追加证据不失效。旧界面继续提交暂停练习应拒绝。
-- [ ] 实现 refresh 原子更新题面答案并重置学习状态，保留 review_logs；暂停及恢复行为与手动暂停不混淆。
-- [ ] 运行 `pnpm --filter @inwit/server test -- src/concepts/concept-practice.service.test.ts src/agent/concept-practice.test.ts src/review/review.routes.test.ts src/review/review-logic.test.ts`，旧复习回归通过。
+- [ ] 接入知识阻断needsRefresh/resumeRequired及动态归档校验，不把它们写入手动suspendedAt。队列、反馈、旧resume、refresh和绑定resume共用资格函数；所有变化按卡片行锁串行化。
+- [ ] 测试旧resume不能绕过失效/归档；原先手动暂停→知识更新→refresh后仍手动暂停；仅归档后恢复保留ease/reps/interval/dueAt，过期dueAt正常入队；解绑解除知识阻断但不清手动暂停。
+- [ ] 固定绑定首个(createdAt,id)排序题目并存questionId，题型不符拒绝。refresh仅更新此题，其他题不变；旧接口/Agent修改首题题面/答案或删除/重排首题轮换reviewRevision并标needsRefresh，受控refresh除外。
+- [ ] 实现refresh原子更新首题、targetVersion、reviewRevision、epochId并重置学习参数，保留review_logs、手动暂停和resumeRequired。
+- [ ] 实现受管理卡reviewRevision与签名reviewToken；反馈携requestId幂等验证当前题目/绑定/版本/资格。测试A旧题→B更新并refresh→A提交返回409且日志/排期不变；重复requestId只记一次。
+- [ ] 活动绑定使用部分唯一约束，解绑设置endedAt；日志写当前bindingId/epochId/targetVersion/questionId/reviewRevision。测试绑定前、旧版本、解绑A后改绑B的历史不计入B，原卡排期保留。
+- [ ] 实现reviewProtocol=2能力判定；旧队列排除reviewRevision非null卡，缓存无token反馈拒绝；解绑后仍保持版本保护；普通null版本卡继续兼容。
+- [ ] 运行 `pnpm --filter @inwit/server test -- src/concepts/concept-practice.service.test.ts src/agent/concept-practice.test.ts src/review/review.routes.test.ts src/review/review-logic.test.ts src/review/review-token.test.ts`，普通卡旧协议与受管理卡新协议回归通过。
 
 ## T7a：本文知识范围、说明与位置解析
 
@@ -215,7 +223,7 @@
 
 **产出：** `layoutConceptGraph(nodes,edges,previousPositions?): ConceptGraphLayout`；主题概念入口；可定位 conceptId/relationId 的地址参数；共同图组件用于正式图和候选图。
 
-- [ ] 编写图数据测试：方向与谓词一致、只渲染完整端点关系、50节点分页继续展开、空图可创建。布局至少保证节点不重叠、标签不压节点；合法多节点环可显示，新数据保留已有位置，不触发fit-all。
+- [ ] 编写图数据测试：方向与谓词一致、只渲染完整端点关系、50节点可见集合切换/邻居展开、独立边分页、空图可创建；关系完整加载前不显示无关系。布局至少保证节点不重叠、标签不压节点；合法多节点环可显示，新数据保留已有位置，不触发fit-all。
 - [ ] 实现关系图/索引切换、邻居聚焦、本文过滤、名称别名搜索、推断与复习过滤；图上可选概念和关系。
 - [ ] 实现侧栏解释、例子、语境、来源和练习摘要；已有概念中「添加关联概念」、方向预览和归档影响说明。
 - [ ] 接入出处解析，成功后沿用主题托管文章路由；失效/来源删除展示快照，不能静默跳错句。
@@ -249,7 +257,7 @@
 
 ## T9：练习预览、每日复习和返回上下文
 
-**文件：** 新增 `features/concepts/concept-practice-dialog.tsx`、`concept-practice.service.ts` 及测试；修改 `pages/review/review.service.ts`、`pages/review/index.tsx`（子组件按实际位置接入）、关系/概念详情。
+**文件：** 新增 `features/concepts/concept-practice-dialog.tsx`、`concept-practice.service.ts` 及测试；修改 `pages/review/review.service.ts`、`pages/review/index.tsx`（子组件按实际位置接入）、关系/概念详情；修改 `apps/web/src/api/review.ts`、`apps/mobile/src/api/review.ts` 和移动复习Service/会话逻辑，完成最小协议升级。
 
 **消费：** T6 题目建议、确认、refresh；T8a/T8b工作区与返回状态；既有每日队列和三档反馈。
 
@@ -258,8 +266,10 @@
 - [ ] 测试仅点击打开练习对话框不入队，确认后入队；重复点击已有练习展示已有卡；模型失败允许手填。
 - [ ] 实现题面答案编辑、目标版本展示和新旧题对比；needsRefresh 练习默认暂停并给「更新练习」入口。
 - [ ] 实现复习知识目标来源标签；揭晓前不显示关系答案；翻面后可看来源并返回，不跳过题也不重复提交反馈。
-- [ ] 测试定义与关系的不同反馈独立展示；没有练习时显示未加入，不把有出处显示成已掌握。
-- [ ] 运行 `pnpm --filter @inwit/web test -- src/features/concepts/concept-practice.service.test.ts src/pages/review/review.service.test.ts`；检查移动端旧文本题型可正常展示及反馈。
+- [ ] 测试定义与关系的不同反馈独立展示；没有练习时显示未加入；当前epoch无记录显示未练习，旧卡到期时间不当作新目标掌握证据。
+- [ ] Web/移动请求reviewProtocol=2，保存并回传原题reviewToken与requestId；409内容变化时废弃旧答案、重新取题要求回忆，不自动重放评分。
+- [ ] 展示全部阻断原因，提供不重置进度的绑定resume；refresh和普通手动恢复分别执行，不能清掉其他暂停原因。
+- [ ] 运行 `pnpm --filter @inwit/web test -- src/features/concepts/concept-practice.service.test.ts src/pages/review/review.service.test.ts`；验证升级移动端新token反馈、旧客户端普通卡反馈和受管理卡排除；不得宣称旧客户端可无条件反馈受管理卡。
 
 ## T10：跨页面同步、生命周期与发布开关
 
@@ -272,7 +282,7 @@
 - [ ] 测试开关关闭时不显示入口，不接受新生成和写入；既有普通练习继续可复习。
 - [ ] 实现概念、关系、证据、本文引用、notes、卡片导航链接及绑定变化的同步失效；只刷新业务数据，不重置视口/过滤、不覆盖未保存输入；事件不携带越权数据。
 - [ ] 测试删除来源文档不删知识，失效跳转可见；归档主题暂停其绑定练习并禁止新生成；删除主题按产品已有语义清理新增领域数据。
-- [ ] 测试多个标签页目标更新后旧反馈被拒绝；页面收到事件刷新，不能因过期缓存错误恢复已暂停练习。
+- [ ] 测试多个标签页目标更新并已refresh完成后旧反馈仍被拒绝；页面收到事件刷新，不能因过期缓存错误恢复已暂停练习。
 - [ ] 运行 `pnpm --filter @inwit/server test -- src/sync/sync-trigger.contract.test.ts src/concepts/concept-lifecycle.test.ts` 及新增前端 sync 测试，所有生命周期断言通过。
 
 ## T11：端到端验收与发布准备
@@ -285,9 +295,11 @@
 - [ ] 在对照模式验证两个图同时可见，选择只高亮，定位/返回可恢复；脑图卡复用后ID和历史唯一，合法带环图正确展示。
 - [ ] 验证从主题及直接进入同一文章、刷新、两标签、窗口尺寸变化、追加节点、正文变更和焦点删除；状态恢复且返回路径正确。
 - [ ] 验证本文补充与共享定义分离、移除本文引用不损坏其他文章、候选及手工未保存编辑在当前标签刷新后恢复。
+- [ ] 执行五项审查回归：旧resume不绕阻断、多题仅绑定首题、refresh后旧token拒绝、改绑B不继承A反馈、跨节点页关系和环完整。
+- [ ] 模拟无协议参数旧端及缓存反馈，验证普通卡兼容与受管理卡拒绝；升级移动端协议2可正常复习。
 - [ ] 执行无AI手动创建和手写练习；确保基础能力不依赖模型。
 - [ ] 执行原文变化、两个标签重复确认、任务取消、worker终态失败、同名异义和推断确认用例。
-- [ ] 核对需求 A1–A19 全部有验收证据；人工审阅样本的关系方向与事实支持，记录模型、样本长度、修改原因，不记录密钥。
+- [ ] 核对需求 A1–A25 全部有验收证据；人工审阅样本的关系方向与事实支持，记录模型、样本长度、修改原因，不记录密钥。
 - [ ] 运行 `pnpm --filter @inwit/dto build`、`pnpm --filter @inwit/server typecheck`、`pnpm --filter @inwit/web typecheck`、server/web 的 `test` 与 `build`；DTO 波及移动端时运行移动端现有 typecheck 命令（先核对 package.json）。所有失败需解释并解决，不能把计划中的命令写成已通过。
 - [ ] 验证迁移与关闭开关的回退流程；确认所有 worker 已支持新 job 类型后才安排开放入口。
 - [ ] 完成任务评审与最终变更检查，再单独进入部署流程；本计划不包含执行部署授权。
@@ -300,14 +312,27 @@
 | R2 选段梳理 | T4、T5、T7 | A2、A3 |
 | R3 当前文章智能生成 | T3–T5、T7 | A2、A4、A5、A9–A11 |
 | R4 手工维护 | T2、T6、T8、T10 | A1、A5、A12 |
-| R5 关系阅读 | T2、T3、T8 | A6、A8 |
-| R6 定期复习 | T6、T9、T10 | A7、A8、A12 |
+| R5 关系阅读 | T2、T3、T8 | A6、A8、A24 |
+| R6 定期复习 | T6、T9、T10 | A7、A8、A12、A20–A23、A25 |
 | R7 双视图工作区 | T0、T8、T8a | A13、A19 |
 | R8 本文语境 | T2、T4、T7a、T7 | A18、A19 |
 | R9 共享卡与联动 | T6、T7a、T8b | A14、A15 |
 | R10 连续状态 | T8a、T8b、T9、T10 | A16、A17 |
-| 权限与兼容 | T1–T6、T10、T11 | A9、A10、A12 |
+| 权限与兼容 | T1–T6、T9–T11 | A9、A10、A12、A25 |
 
 ## 完成定义
 
 代码、迁移、类型和必要回归通过；人工浏览器验证覆盖完整闭环；旧卡片/图谱/复习兼容；生成与确认、收录与练习的边界可观察；无静默截断、越权和重复写入；每个失败路径都有可恢复的界面；双视图不抢焦点、联动不循环、卡片不复制、本文说明不覆盖共享知识，状态连续性验收通过。所有任务目前均未开始。
+
+
+## SubAgent 审查修订映射
+
+| 问题 | 技术契约 | 实现及验收 |
+| --- | --- | --- |
+| P1 旧恢复绕过知识暂停 | 技术3.4：手动暂停与知识阻断独立、统一资格校验 | T6/T9/T10，A20 |
+| P2 多题绑定目标不明 | 技术3.3：仅绑定实际首题，稳定questionId | T6/T9，A21 |
+| P2 refresh后迟到反馈 | 技术3.5：reviewRevision/token及旧端能力门槛 | T6/T9/T10，A22/A25 |
+| P2 改绑继承错误表现 | 技术3.5：binding/epoch/version归属 | T6/T9，A23 |
+| P2 跨页关系遗漏 | 技术4.2：显式可见节点集合＋独立边分页 | T2/T8，A24 |
+
+本轮为文档修订，以上测试仍是未来开发任务，尚未执行。

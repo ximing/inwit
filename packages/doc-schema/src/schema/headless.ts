@@ -13,6 +13,7 @@ import { MermaidBlock } from './mermaid-block.js';
 import { PageBreak } from './page-break.js';
 import { createDocMathExtensions } from './math.js';
 import { createTextAlignExtension } from './text-align.js';
+import { createDocTextStyleExtensions } from './text-style.js';
 import { Video } from './video.js';
 import { VitalEntity } from './vital-entity.js';
 
@@ -43,6 +44,7 @@ export function getHeadlessExtensions(): AnyExtension[] {
     Video,
     VitalEntity,
     createTextAlignExtension(),
+    ...createDocTextStyleExtensions(),
     ...createDocMathExtensions(),
   ];
 }

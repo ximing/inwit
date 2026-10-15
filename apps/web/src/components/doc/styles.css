@@ -39,6 +39,11 @@
   margin: 18px 0 6px;
 }
 
+:is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) span[style*='background-color'] {
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) p { margin: 0 0 10px; }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) p:empty { display: none; }
 

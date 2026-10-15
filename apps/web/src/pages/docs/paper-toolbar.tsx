@@ -2,15 +2,13 @@ import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import { NodeSelection } from '@tiptap/pm/state';
 import '@tiptap/extension-text-align';
+import '@tiptap/extension-text-style';
 import {
-  AlignCenter,
-  AlignLeft,
-  AlignRight,
+  Baseline,
   Bold,
   Code,
   Film,
-  Heading1,
-  Heading2,
+  Highlighter,
   ImageIcon,
   Italic,
   Link as LinkIcon,
@@ -28,7 +26,15 @@ import {
   Undo2,
   Workflow,
 } from 'lucide-react';
-import { type MouseEvent, type ReactNode } from 'react';
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { Tip } from '@/components/tip';
 import { selectionAnchorFromEditor } from '@/lib/entity-marks';
 import { SelectionActions } from './selection-toolbar';
@@ -59,7 +65,7 @@ export function EditorToolButton({
         aria-label={label}
         aria-pressed={active}
         disabled={disabled}
-        onMouseDown={(event: MouseEvent<HTMLButtonElement>) => {
+        onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
           event.preventDefault();
           if (disabled) return;
           onAction();
@@ -72,13 +78,13 @@ export function EditorToolButton({
 }
 
 type TextAlign = 'left' | 'center' | 'right';
+type HeadingValue = 'p' | '1' | '2' | '3' | '4' | '5' | '6';
 
 type PaperMarks = {
   bold: boolean;
   italic: boolean;
   strike: boolean;
-  heading1: boolean;
-  heading2: boolean;
+  heading: HeadingValue;
   blockquote: boolean;
   bulletList: boolean;
   orderedList: boolean;
@@ -87,6 +93,9 @@ type PaperMarks = {
   link: boolean;
   table: boolean;
   textAlign: TextAlign;
+  fontSize: string;
+  color: string;
+  backgroundColor: string;
   canUndo: boolean;
   canRedo: boolean;
 };
@@ -101,7 +110,61 @@ const FORMAT_MARKS = [
   'underline',
   'subscript',
   'superscript',
+  'textStyle',
 ] as const;
+
+const HEADING_OPTIONS: { value: HeadingValue; label: string }[] = [
+  { value: 'p', label: '正文' },
+  { value: '1', label: 'H1' },
+  { value: '2', label: 'H2' },
+  { value: '3', label: 'H3' },
+  { value: '4', label: 'H4' },
+  { value: '5', label: 'H5' },
+  { value: '6', label: 'H6' },
+];
+
+const ALIGN_OPTIONS: { value: TextAlign; label: string }[] = [
+  { value: 'left', label: '居左' },
+  { value: 'center', label: '居中' },
+  { value: 'right', label: '居右' },
+];
+
+const FONT_SIZE_OPTIONS = [
+  { value: '', label: '默认' },
+  { value: '12px', label: '12' },
+  { value: '13px', label: '13' },
+  { value: '14px', label: '14' },
+  { value: '15px', label: '15' },
+  { value: '16px', label: '16' },
+  { value: '18px', label: '18' },
+  { value: '20px', label: '20' },
+  { value: '22px', label: '22' },
+  { value: '24px', label: '24' },
+  { value: '28px', label: '28' },
+  { value: '32px', label: '32' },
+  { value: '36px', label: '36' },
+];
+
+const TEXT_COLORS = [
+  { label: '赤', value: '#b3402a' },
+  { label: '赭', value: '#9a6232' },
+  { label: '绿', value: '#2f7d4a' },
+  { label: '蓝', value: '#2a5f9e' },
+  { label: '紫', value: '#6a4c93' },
+  { label: '墨', value: '#221d16' },
+  { label: '灰', value: '#6f675c' },
+] as const;
+
+const BACKGROUND_COLORS = [
+  { label: '黄', value: '#f6e7a8' },
+  { label: '绿', value: '#d7efd4' },
+  { label: '蓝', value: '#d6e6f7' },
+  { label: '粉', value: '#f8d6d0' },
+  { label: '紫', value: '#e7dff6' },
+  { label: '灰', value: '#ece7df' },
+] as const;
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 const BLOCK_FORMATS = new Set([
   'heading',
@@ -123,6 +186,62 @@ function currentTextAlign(editor: Editor): TextAlign {
   return 'left';
 }
 
+function currentHeading(editor: Editor): HeadingValue {
+  for (const level of [1, 2, 3, 4, 5, 6] as const) {
+    if (editor.isActive('heading', { level })) return String(level) as HeadingValue;
+  }
+  return 'p';
+}
+
+function styleAttr(editor: Editor, key: 'color' | 'fontSize' | 'backgroundColor'): string {
+  const value = editor.getAttributes('textStyle')[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function fontSizeOptions(current: string): { value: string; label: string }[] {
+  if (!current || FONT_SIZE_OPTIONS.some((item) => item.value === current)) return FONT_SIZE_OPTIONS;
+  const label = current.endsWith('px') ? current.slice(0, -2) : current;
+  return [{ value: current, label }, ...FONT_SIZE_OPTIONS];
+}
+
+function applyHeading(editor: Editor, value: string): void {
+  const chain = editor.chain().focus();
+  if (value === 'p') {
+    chain.setParagraph().run();
+    return;
+  }
+  const level = Number(value);
+  if (level < 1 || level > 6) return;
+  chain.setHeading({ level: level as 1 | 2 | 3 | 4 | 5 | 6 }).run();
+}
+
+function applyFontSize(editor: Editor, value: string): void {
+  const chain = editor.chain().focus();
+  if (!value) {
+    chain.unsetFontSize().run();
+    return;
+  }
+  chain.setFontSize(value).run();
+}
+
+function applyColor(editor: Editor, value: string | null): void {
+  const chain = editor.chain().focus();
+  if (!value) {
+    chain.unsetColor().run();
+    return;
+  }
+  chain.setColor(value).run();
+}
+
+function applyBackground(editor: Editor, value: string | null): void {
+  const chain = editor.chain().focus();
+  if (!value) {
+    chain.unsetBackgroundColor().run();
+    return;
+  }
+  chain.setBackgroundColor(value).run();
+}
+
 function setTextAlign(editor: Editor, align: TextAlign): void {
   if (align === 'left') {
     editor.chain().focus().unsetTextAlign().run();
@@ -136,8 +255,7 @@ function paperMarksOf(editor: Editor): PaperMarks {
     bold: editor.isActive('bold'),
     italic: editor.isActive('italic'),
     strike: editor.isActive('strike'),
-    heading1: editor.isActive('heading', { level: 1 }),
-    heading2: editor.isActive('heading', { level: 2 }),
+    heading: currentHeading(editor),
     blockquote: editor.isActive('blockquote'),
     bulletList: editor.isActive('bulletList'),
     orderedList: editor.isActive('orderedList'),
@@ -146,6 +264,9 @@ function paperMarksOf(editor: Editor): PaperMarks {
     link: editor.isActive('link'),
     table: editor.isActive('table'),
     textAlign: currentTextAlign(editor),
+    fontSize: styleAttr(editor, 'fontSize'),
+    color: styleAttr(editor, 'color'),
+    backgroundColor: styleAttr(editor, 'backgroundColor'),
     canUndo: editor.can().undo(),
     canRedo: editor.can().redo(),
   };
@@ -230,6 +351,206 @@ function insertMermaid(editor: Editor): void {
   editor.chain().focus().insertContent(block).run();
 }
 
+function PaperToolSelect({
+  label,
+  value,
+  options,
+  readValue,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  /** Editor state after the command, so a rejected change does not stick in the control. */
+  readValue: () => string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Tip content={label}>
+      <select
+        className="paper-tool-select"
+        aria-label={label}
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          const applied = readValue();
+          if (event.target.value !== applied) event.target.value = applied;
+        }}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </Tip>
+  );
+}
+
+function colorInputValue(value: string, fallback: string): string {
+  return HEX_COLOR.test(value) ? value : fallback;
+}
+
+function PaperColorControl({
+  label,
+  clearLabel,
+  icon,
+  value,
+  fallback,
+  colors,
+  open,
+  onOpenChange,
+  onPick,
+}: {
+  label: string;
+  clearLabel: string;
+  icon: ReactNode;
+  value: string;
+  fallback: string;
+  colors: readonly { label: string; value: string }[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onPick: (value: string | null) => void;
+}) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    const place = () => {
+      const anchor = buttonRef.current;
+      const pop = popRef.current;
+      if (!anchor || !pop) return;
+      const rect = anchor.getBoundingClientRect();
+      const width = pop.offsetWidth;
+      const height = pop.offsetHeight;
+      let left = rect.left;
+      let top = rect.bottom + 6;
+      const maxLeft = window.innerWidth - width - 8;
+      if (left > maxLeft) left = Math.max(8, maxLeft);
+      if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 6);
+      setPos((current) =>
+        current && current.top === top && current.left === left ? current : { top, left },
+      );
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: globalThis.MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (popRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      if (target instanceof Element && target.closest('.paper-color-tool')) return;
+      onOpenChange(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      onOpenChange(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onOpenChange, open]);
+
+  return (
+    <>
+      <Tip content={label}>
+        <button
+          ref={buttonRef}
+          type="button"
+          className={`paper-tool paper-color-tool${open ? ' is-on' : ''}`}
+          aria-label={label}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onOpenChange(!open);
+          }}
+        >
+          {icon}
+          <span
+            className={`paper-color-bar${value ? '' : ' is-empty'}`}
+            style={value ? { background: value } : undefined}
+          />
+        </button>
+      </Tip>
+      {open
+        ? createPortal(
+            <div
+              ref={popRef}
+              className="paper-color-pop"
+              role="dialog"
+              aria-label={label}
+              style={{
+                top: pos?.top ?? 0,
+                left: pos?.left ?? 0,
+                visibility: pos ? 'visible' : 'hidden',
+              }}
+              onMouseDown={(event) => {
+                if (event.target instanceof HTMLInputElement) return;
+                event.preventDefault();
+              }}
+            >
+              <div className="paper-color-swatches">
+                {colors.map((color) => (
+                  <button
+                    key={color.value}
+                    type="button"
+                    className={`paper-color-swatch${
+                      value.toLowerCase() === color.value.toLowerCase() ? ' is-on' : ''
+                    }`}
+                    style={{ background: color.value }}
+                    aria-label={color.label}
+                    aria-pressed={value.toLowerCase() === color.value.toLowerCase()}
+                    onClick={() => {
+                      onPick(color.value);
+                      onOpenChange(false);
+                    }}
+                  />
+                ))}
+              </div>
+              <label className="paper-color-custom">
+                自定义
+                <input
+                  className="paper-color-input"
+                  type="color"
+                  aria-label={`${label}自定义`}
+                  value={colorInputValue(value, fallback)}
+                  onChange={(event) => onPick(event.target.value)}
+                />
+              </label>
+              <button
+                type="button"
+                className={`paper-color-clear${value ? '' : ' is-on'}`}
+                onClick={() => {
+                  onPick(null);
+                  onOpenChange(false);
+                }}
+              >
+                {clearLabel}
+              </button>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 export function PaperToolbar({
   editor,
   uploading,
@@ -257,6 +578,7 @@ export function PaperToolbar({
     editor,
     selector: ({ editor: instance }) => paperMarksOf(instance),
   });
+  const [styleMenu, setStyleMenu] = useState<null | 'color' | 'background'>(null);
 
   return (
     <div className="paper-toolbar">
@@ -302,51 +624,53 @@ export function PaperToolbar({
         >
           <Strikethrough width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
         </EditorToolButton>
+        <PaperToolSelect
+          label="字号"
+          value={active.fontSize}
+          options={fontSizeOptions(active.fontSize)}
+          readValue={() => styleAttr(editor, 'fontSize')}
+          onChange={(value) => applyFontSize(editor, value)}
+        />
+        <PaperColorControl
+          label="字体颜色"
+          clearLabel="默认"
+          icon={<Baseline width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
+          value={active.color}
+          fallback="#221d16"
+          colors={TEXT_COLORS}
+          open={styleMenu === 'color'}
+          onOpenChange={(open) => setStyleMenu(open ? 'color' : null)}
+          onPick={(value) => applyColor(editor, value)}
+        />
+        <PaperColorControl
+          label="字体背景色"
+          clearLabel="无"
+          icon={<Highlighter width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
+          value={active.backgroundColor}
+          fallback="#f6e7a8"
+          colors={BACKGROUND_COLORS}
+          open={styleMenu === 'background'}
+          onOpenChange={(open) => setStyleMenu(open ? 'background' : null)}
+          onPick={(value) => applyBackground(editor, value)}
+        />
         <EditorToolButton variant="paper" label="清除格式" onAction={() => clearFormatting(editor)}>
           <RemoveFormatting width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
         </EditorToolButton>
         <span className="paper-tool-sep" />
-        <EditorToolButton
-          variant="paper"
-          label="居左"
-          active={active.textAlign === 'left'}
-          onAction={() => setTextAlign(editor, 'left')}
-        >
-          <AlignLeft width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="居中"
-          active={active.textAlign === 'center'}
-          onAction={() => setTextAlign(editor, 'center')}
-        >
-          <AlignCenter width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="居右"
-          active={active.textAlign === 'right'}
-          onAction={() => setTextAlign(editor, 'right')}
-        >
-          <AlignRight width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <span className="paper-tool-sep" />
-        <EditorToolButton
-          variant="paper"
-          label="一级标题"
-          active={active.heading1}
-          onAction={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        >
-          <Heading1 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="二级标题"
-          active={active.heading2}
-          onAction={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        >
-          <Heading2 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
+        <PaperToolSelect
+          label="对齐"
+          value={active.textAlign}
+          options={ALIGN_OPTIONS}
+          readValue={() => currentTextAlign(editor)}
+          onChange={(value) => setTextAlign(editor, value as TextAlign)}
+        />
+        <PaperToolSelect
+          label="标题"
+          value={active.heading}
+          options={HEADING_OPTIONS}
+          readValue={() => currentHeading(editor)}
+          onChange={(value) => applyHeading(editor, value)}
+        />
         <EditorToolButton
           variant="paper"
           label="引用"
