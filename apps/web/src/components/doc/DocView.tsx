@@ -12,6 +12,7 @@ import {
 import { asPmJson } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { AnchorHighlight } from '@/pages/docs/anchor-highlight';
+import { DocFindController } from '@/pages/docs/doc-find-bar';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { createDocExtensions } from './extensions';
 
@@ -64,6 +65,7 @@ export const DocView = observer(function DocView({
   onAnnotationClick,
   bindHost,
   className,
+  enableFind = false,
 }: {
   source: unknown;
   cards?: DocumentCard[];
@@ -75,6 +77,8 @@ export const DocView = observer(function DocView({
   onAnnotationClick?: (ids: string[]) => void;
   bindHost?: (host: DocEditorHost | null) => void;
   className?: string;
+  /** 阅读态正文才接查找。回答摘录和周报不接。 */
+  enableFind?: boolean;
 }) {
   const assetUrls = useService(AssetUrlsService);
   const navigate = useNavigate();
@@ -181,6 +185,7 @@ export const DocView = observer(function DocView({
   return (
     <div className={rootClass} onClick={onClick}>
       {editor ? <EditorContent editor={editor} /> : null}
+      {enableFind && editor ? <DocFindController editor={editor} editable={false} /> : null}
     </div>
   );
 });

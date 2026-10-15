@@ -1,11 +1,13 @@
 import { observer, useService } from '@rabjs/react';
-import { Lightbulb, Maximize2, Minimize2, X } from 'lucide-react';
+import { Lightbulb, Maximize2, Minimize2, Search, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { Tip } from '@/components/tip';
 import { formatRelativeTime } from '@/lib/format';
 import { documentReturnTarget } from '@/routes';
 import { UiPrefsService, type DocMode } from '@/services/ui-prefs.service';
+import { DocFindService } from './doc-find.service';
 import { DocsService } from './docs.service';
+import { findSeedFromSelection } from './find-replace-logic';
 import { EditorService } from './editor.service';
 import { TopicPicker } from './topic-picker';
 
@@ -50,6 +52,7 @@ export const DocTopRow = observer(function DocTopRow({
 }) {
   const service = useService(DocsService);
   const editor = useService(EditorService);
+  const find = useService(DocFindService);
   const prefs = useService(UiPrefsService);
   const navigate = useNavigate();
   const location = useLocation();
@@ -103,6 +106,29 @@ export const DocTopRow = observer(function DocTopRow({
           </>
         ) : null}
         {showMode ? <ModeSwitch /> : null}
+        {!editing && !hideModeSwitch ? (
+          <Tip content="查找">
+            <button
+              type="button"
+              className={`doc-fab-zen${find.open ? ' is-on' : ''}`}
+              aria-label="查找"
+              aria-pressed={find.open}
+              onClick={() => {
+                const current = find.editor;
+                const seed = current
+                  ? findSeedFromSelection(
+                      current.state.doc,
+                      current.state.selection.from,
+                      current.state.selection.to,
+                    )
+                  : null;
+                find.showFind(seed);
+              }}
+            >
+              <Search width={13} height={13} strokeWidth={1.8} />
+            </button>
+          </Tip>
+        ) : null}
         <span className="divider" />
         {!editing && docId ? (
           <Tip content="记一条想法（N）">

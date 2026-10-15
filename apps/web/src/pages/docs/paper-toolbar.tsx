@@ -21,6 +21,7 @@ import {
   Quote,
   Redo2,
   RemoveFormatting,
+  Search,
   Sigma,
   Strikethrough,
   Table as TableIcon,
@@ -238,6 +239,8 @@ export function PaperToolbar({
   onPickVideo,
   onToggleTable,
   onInsertMath,
+  onFind,
+  findOpen,
 }: {
   editor: Editor;
   uploading: boolean;
@@ -247,6 +250,8 @@ export function PaperToolbar({
   onPickVideo: () => void;
   onToggleTable: () => void;
   onInsertMath: () => void;
+  onFind: () => void;
+  findOpen: boolean;
 }) {
   const active = useEditorState({
     editor,
@@ -428,6 +433,10 @@ export function PaperToolbar({
         </EditorToolButton>
         <EditorToolButton variant="paper" label="Mermaid" onAction={() => insertMermaid(editor)}>
           <Workflow width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
+        </EditorToolButton>
+        <span className="paper-tool-sep" />
+        <EditorToolButton variant="paper" label="查找" active={findOpen} onAction={onFind}>
+          <Search width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
         </EditorToolButton>
         {uploading ? (
           <span className="paper-tool is-wide" aria-live="polite">

@@ -21,14 +21,18 @@
   padding-top: 0;
 }
 
-/* 扁平工具行：不成药丸；工具行下面一条分线 */
-.paper-toolbar {
+/* 工具行和查找条一起吸在题区下面，查找展开时不盖住正文 */
+.paper-sticky {
   position: sticky;
   /* 钉在吸顶的题区顶行（30+14=44）+ 标题输入框（39+8=47）下面 */
   top: 91px;
   z-index: 6;
   background: var(--bg);
   margin: 0 0 14px;
+}
+/* 扁平工具行：不成药丸；工具行下面一条分线 */
+.paper-toolbar {
+  position: static;
   padding: 6px 0;
   border-bottom: 1px solid var(--line-soft);
 }
@@ -144,5 +148,109 @@ html[data-theme='dark'] .title-input::placeholder { color: var(--ink-3); font-we
   .paper { --paper-hang: 0px; padding: var(--write-gap) 20px 32px; margin-inline: 0; }
   /* 窄屏页头不吸顶，标题和工具行回到普通文档流 */
   .title-input { position: static; padding-bottom: 0; margin-bottom: 8px; }
-  .paper-toolbar { top: 0; }
+  .paper-sticky { position: static; }
+}
+
+/* 文档内查找 / 替换。命中用阅读高亮色，当前一处用强调色 */
+.doc-find {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0 2px;
+}
+.doc-find-panel {
+  width: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+.doc-find-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.doc-find-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.doc-find-input::placeholder { color: var(--ink-4); }
+.doc-find-input:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
+}
+.doc-find-input[type='search']::-webkit-search-cancel-button,
+.doc-find-input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.doc-find-count {
+  flex: none;
+  min-width: 3.6em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.doc-find-icon,
+.doc-find-text {
+  flex: none;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.doc-find-icon {
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.doc-find-text {
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.doc-find-icon:hover:not(:disabled),
+.doc-find-text:hover:not(:disabled) {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.doc-find-icon.is-on {
+  background: var(--bg-sunken);
+  color: var(--accent);
+}
+.doc-find-icon:disabled,
+.doc-find-text:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.doc-find-icon:focus-visible,
+.doc-find-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.ProseMirror .doc-find-hit {
+  background: var(--hl);
+  border-radius: 2px;
+}
+.ProseMirror .doc-find-hit.is-current {
+  background: var(--accent-soft);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }

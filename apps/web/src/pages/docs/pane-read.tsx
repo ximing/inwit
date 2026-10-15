@@ -13,6 +13,7 @@ import { textToPmDoc } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { documentReturnTarget } from '@/routes';
 import { CardRail } from './card-rail';
+import { DocFindBar } from './doc-find-bar';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
 import { DocTopRow } from './doc-toprow';
@@ -79,6 +80,7 @@ export const PaneRead = observer(function PaneRead() {
   if (!doc) return null;
 
   const isPdf = doc.fileMime === 'application/pdf';
+  const bodyBlank = isBlankPmDoc(doc.contentJson);
   const isReport = agentDocumentMetaLabel(doc.source, doc.title, doc.kind) === AGENT_DOC_LABEL_REPORT;
   const stage = service.stageFor(doc);
   const emptyHint =
@@ -119,6 +121,7 @@ export const PaneRead = observer(function PaneRead() {
                   source={doc.source}
                   contentJson={doc.contentJson}
                 />
+                <DocFindBar editable={false} />
               </div>
 
               <article className="paper">
@@ -126,11 +129,12 @@ export const PaneRead = observer(function PaneRead() {
                 {doc.source === 'chat' && doc.answer ? (
                   <aside className="doc-answer">
                     <p className="doc-answer-kicker">AI 回答</p>
-                    <DocView source={textToPmDoc(doc.answer)} />
+                    <DocView source={textToPmDoc(doc.answer)} enableFind={bodyBlank} />
                   </aside>
                 ) : null}
-                {!isBlankPmDoc(doc.contentJson) ? (
+                {!bodyBlank ? (
                   <DocView
+                    enableFind
                     source={doc.contentJson}
                     cards={doc.cards}
                     annotations={service.annotations}

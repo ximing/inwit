@@ -10,6 +10,7 @@ import { AssetUrlsService } from '@/services/asset-urls.service';
 import { UiPrefsService } from '@/services/ui-prefs.service';
 import { CardEditDialog } from './card-edit-dialog';
 import { cardRailMode } from './card-rail-mode';
+import { DocFindService } from './doc-find.service';
 import { DocsAnnotationsService } from './docs-annotations.service';
 import { DocsImportService } from './docs-import.service';
 import { DocsService } from './docs.service';
@@ -345,4 +346,5 @@ export const DocsPage = bindServices(DocsPageContent, [
   EditorService,
   SearchService,
   AssetUrlsService,
+  DocFindService,
 ]);

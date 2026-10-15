@@ -33,6 +33,9 @@ import {
   rehostMediaSrc,
   rehostPastedHtml,
 } from './paste-media-logic';
+import { DocFindBar, DocFindController } from './doc-find-bar';
+import { DocFindService } from './doc-find.service';
+import { findSeedFromSelection } from './find-replace-logic';
 import { PaperToolbar, SelectionFormatBar } from './paper-toolbar';
 import {
   AssetUploadError,
@@ -131,6 +134,7 @@ export const PaperEditor = observer(function PaperEditor({
 }: PaperEditorProps) {
   const assetUrls = useService(AssetUrlsService);
   const dialog = useService(DialogService);
+  const find = useService(DocFindService);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
   const onAnchorClickRef = useRef(onAnchorClick);
@@ -523,16 +527,24 @@ export const PaperEditor = observer(function PaperEditor({
           {uploadNotice.text}
         </p>
       ) : null}
-      <PaperToolbar
-        editor={editor}
-        uploading={uploading}
-        canInsertMedia={canInsertMedia}
-        onInsertLink={insertLink}
-        onPickImage={() => imageInputRef.current?.click()}
-        onPickVideo={() => videoInputRef.current?.click()}
-        onToggleTable={toggleTable}
-        onInsertMath={insertMath}
-      />
+      <div className="paper-sticky">
+        <PaperToolbar
+          editor={editor}
+          uploading={uploading}
+          canInsertMedia={canInsertMedia}
+          onInsertLink={insertLink}
+          onPickImage={() => imageInputRef.current?.click()}
+          onPickVideo={() => videoInputRef.current?.click()}
+          onToggleTable={toggleTable}
+          onInsertMath={insertMath}
+          findOpen={find.open}
+          onFind={() => {
+            const { from, to } = editor.state.selection;
+            find.showFind(findSeedFromSelection(editor.state.doc, from, to));
+          }}
+        />
+        <DocFindBar editor={editor} editable />
+      </div>
       <BubbleMenu
         editor={editor}
         className="float-toolbar"
@@ -574,6 +586,7 @@ export const PaperEditor = observer(function PaperEditor({
         onChange={onPickFiles}
       />
       <EditorContent editor={editor} />
+      <DocFindController editor={editor} editable />
     </div>
   );
 });
