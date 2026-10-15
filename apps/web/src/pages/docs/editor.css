@@ -91,8 +91,10 @@
 }
 .paper-tool-select {
   flex: none;
-  height: 28px;
   width: 4.6rem;
+}
+.paper-tool-select .select-trigger {
+  height: 28px;
   margin: 0;
   padding: 0 2px 0 6px;
   border: none;
@@ -104,11 +106,11 @@
   line-height: 1;
   cursor: pointer;
 }
-.paper-tool-select:hover {
+.paper-tool-select .select-trigger:hover {
   background-color: var(--bg-sunken);
   color: var(--ink);
 }
-.paper-tool-select:focus-visible {
+.paper-tool-select .select-trigger:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }

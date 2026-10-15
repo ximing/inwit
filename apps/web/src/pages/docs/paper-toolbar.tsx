@@ -35,6 +35,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { Select } from '@/components/select';
 import { Tip } from '@/components/tip';
 import { selectionAnchorFromEditor } from '@/lib/entity-marks';
 import { SelectionActions } from './selection-toolbar';
@@ -355,34 +356,22 @@ function PaperToolSelect({
   label,
   value,
   options,
-  readValue,
   onChange,
 }: {
   label: string;
   value: string;
   options: { value: string; label: string }[];
-  /** Editor state after the command, so a rejected change does not stick in the control. */
-  readValue: () => string;
   onChange: (value: string) => void;
 }) {
   return (
     <Tip content={label}>
-      <select
+      <Select
         className="paper-tool-select"
-        aria-label={label}
+        ariaLabel={label}
         value={value}
-        onChange={(event) => {
-          onChange(event.target.value);
-          const applied = readValue();
-          if (event.target.value !== applied) event.target.value = applied;
-        }}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        options={options}
+        onChange={onChange}
+      />
     </Tip>
   );
 }
@@ -628,7 +617,6 @@ export function PaperToolbar({
           label="字号"
           value={active.fontSize}
           options={fontSizeOptions(active.fontSize)}
-          readValue={() => styleAttr(editor, 'fontSize')}
           onChange={(value) => applyFontSize(editor, value)}
         />
         <PaperColorControl
@@ -661,14 +649,12 @@ export function PaperToolbar({
           label="对齐"
           value={active.textAlign}
           options={ALIGN_OPTIONS}
-          readValue={() => currentTextAlign(editor)}
           onChange={(value) => setTextAlign(editor, value as TextAlign)}
         />
         <PaperToolSelect
           label="标题"
           value={active.heading}
           options={HEADING_OPTIONS}
-          readValue={() => currentHeading(editor)}
           onChange={(value) => applyHeading(editor, value)}
         />
         <EditorToolButton
