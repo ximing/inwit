@@ -556,7 +556,7 @@ function resolveStoredParent(parent: MindEditParent, refs: ReadonlyMap<string, s
   return id;
 }
 
-type IndexedHighlight = { id: string; quote: string; note: string };
+type IndexedHighlight = { id: string; quote: string; note: string; kind: 'text' | 'outline' };
 
 export type MindEditResult =
   | {
@@ -615,14 +615,14 @@ export async function applyDocumentMindEdits(
               documentId,
               quote: step.quote,
               note: step.note,
-              kind: 'text',
+              kind: step.kind ?? 'text',
               anchorBlockIndex: step.blockIndex,
             })
             .returning();
           if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
           refs.set(step.ref, row.id);
           created[step.ref] = row.id;
-          highlights.push({ id: row.id, quote: step.quote, note: step.note });
+          highlights.push({ id: row.id, quote: step.quote, note: step.note, kind: step.kind ?? 'text' });
           await placeInTx(tx, userId, documentId, row.id, parentId, step.index);
           continue;
         }
@@ -701,7 +701,7 @@ export async function applyDocumentMindEdits(
             )
             .returning();
           if (!row) throw new AppError(400, 'VALIDATION_ERROR', '只能改文字划线的锚点');
-          highlights.push({ id: row.id, quote: row.quote, note: row.note });
+          highlights.push({ id: row.id, quote: row.quote, note: row.note, kind: 'text' });
           continue;
         }
 
@@ -745,6 +745,8 @@ export async function applyDocumentMindEdits(
     });
     if (saved.ok) {
       for (const item of saved.highlights) {
+        // outline 大纲节点不进检索索引。
+        if (item.kind === 'outline') continue;
         await tryIndexAnnotation({
           id: item.id,
           userId,

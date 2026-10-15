@@ -6,7 +6,7 @@ import {
   type SearchQuery,
   type SearchResult,
 } from '@inwit/dto';
-import { and, desc, eq, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { acceptedCard } from '../cards/accepted-card.js';
 import { toPublicCardBase } from '../cards/card.mapper.js';
 import { config } from '../config.js';
@@ -99,6 +99,7 @@ async function searchAnnotationIdsIlike(
         eq(annotations.userId, userId),
         isNull(annotations.deletedAt),
         isNull(documents.deletedAt),
+        ne(annotations.kind, 'outline'),
         topicEq(documents.topicId, topicId),
         or(ilike(annotations.note, pattern), ilike(annotations.quote, pattern)),
       ),

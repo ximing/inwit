@@ -116,7 +116,7 @@ const ActionsContent = observer(function ActionsContent({ children }: { children
     event.preventDefault();
     buttons[next]?.focus();
   };
-  const dialogTitle = service.dialog === 'rename' ? '重命名文档' : service.dialog === 'move' ? '移动到主题' : service.dialog === 'retry' ? '重试处理' : '删除文档';
+  const dialogTitle = service.dialog === 'rename' ? '重命名文档' : service.dialog === 'move' ? '移动到主题' : service.dialog === 'retry' ? 'AI 消化' : '删除文档';
   return <>
     {children}
     {createPortal(<>
@@ -125,7 +125,7 @@ const ActionsContent = observer(function ActionsContent({ children }: { children
         <button role="menuitem" disabled={service.busy} onClick={() => service.showDialog('rename')}><Pencil />重命名</button>
         <button role="menuitem" disabled={service.busy} onClick={() => service.showDialog('move')}><FolderInput />移动到主题</button>
         <button role="menuitem" disabled={service.busy} onClick={() => void service.copyLink()}><Copy />复制链接</button>
-        {service.doc?.status === 'failed' && <button role="menuitem" disabled={service.busy} onClick={() => service.showDialog('retry')}><RotateCw />重试处理</button>}
+        <button role="menuitem" disabled={service.busy || service.doc?.status !== 'failed'} onClick={() => service.showDialog('retry')}><RotateCw />AI 消化</button>
         <div className="document-menu-separator" role="separator" />
         <button role="menuitem" className="is-danger" disabled={service.busy} onClick={() => service.showDialog('delete')}><Trash2 />删除</button>
         {service.error && <p role="alert">{service.error}</p>}
@@ -149,7 +149,7 @@ const ActionsContent = observer(function ActionsContent({ children }: { children
               onChange={(next) => { service.topicId = next; }}
             />{service.topicsLoading && <span>加载主题中…</span>}</label>}
             {service.dialog === 'delete' && <p>确定把「{service.doc ? docDisplayTitle(service.doc) : ''}」移入回收站？文档、批注和卡片会被隐藏，30 天内可在设置页恢复。</p>}
-            {service.dialog === 'retry' && <p>重新处理「{service.doc ? docDisplayTitle(service.doc) : ''}」。</p>}
+            {service.dialog === 'retry' && <p>重新消化「{service.doc ? docDisplayTitle(service.doc) : ''}」，未确认的卡片会重建。</p>}
             {service.error && <p className="banner-error" role="alert">{service.error}</p>}
             {service.dialog === 'move' && !service.topicsLoaded && !service.topicsLoading && <button type="button" className="btn btn-ghost" onClick={() => void service.loadTopics()}>重新加载主题</button>}
             <div className="document-action-buttons">

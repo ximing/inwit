@@ -1,7 +1,7 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { docDisplayTitle, type MemoryContent } from '@inwit/dto';
-import { and, count, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, isNull, lt, ne, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations, cards, documents, mapNodes, reviewLogs, reviewStates, topics } from '../db/schema.js';
 import { markdownToContentJson } from '../documents/content-json.js';
@@ -116,6 +116,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
         gte(annotations.createdAt, start),
         lt(annotations.createdAt, endExclusive),
         isNull(annotations.deletedAt),
+        ne(annotations.kind, 'outline'),
       ),
     );
 
@@ -138,6 +139,7 @@ async function queryWeekStats(userId: string, session: WeeklySession): Promise<W
         lt(annotations.createdAt, endExclusive),
         isNull(annotations.deletedAt),
         isNull(documents.deletedAt),
+        ne(annotations.kind, 'outline'),
       ),
     )
     .orderBy(desc(annotations.createdAt))

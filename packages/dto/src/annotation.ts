@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const ANNOTATION_KINDS = ['text', 'pdf', 'media', 'note'] as const;
+export const ANNOTATION_KINDS = ['text', 'pdf', 'media', 'note', 'outline'] as const;
 export const annotationKindSchema = z.enum(ANNOTATION_KINDS);
 export type AnnotationKind = z.infer<typeof annotationKindSchema>;
 
@@ -63,6 +63,15 @@ export const createAnnotationInputSchema = z
   })
   .superRefine((value, ctx) => {
     const kind = value.kind ?? 'text';
+    // outline 由消化 Agent 内部建，用户 API 不允许创建。
+    if (kind === 'outline') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['kind'],
+        message: 'kind outline is reserved for internal use',
+      });
+      return;
+    }
     if (kind === 'note') {
       // 想法：无锚点。quote 必须空，note 与 imageKey 至少其一，软锚点 anchorBlockIndex 可带。
       if (value.quote !== undefined && value.quote !== '') {

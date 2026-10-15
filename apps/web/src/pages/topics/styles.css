@@ -906,8 +906,8 @@ button.related-card {
 .topic-canvas-legend i.is-rel-pre { border-color: var(--gold); }
 .topic-canvas-legend i.is-rel-rel { border-color: var(--ink-3); }
 .topic-canvas-legend i.is-rel-same { border-color: var(--green); }
-/* 操作条改到右上后，窄图里图例继续占左上会叠住它。落到左下；有小地图时抬到地图上方。 */
-@container topic-canvas (max-width: 640px) {
+/* 操作条在顶部居中。窄图里左上图例会叠住它，所以落到左下；有小地图时抬到地图上方。 */
+@container topic-canvas (max-width: 720px) {
   .topic-canvas-legend {
     top: auto;
     bottom: 10px;

@@ -44,6 +44,8 @@ export type MindEditInput = {
   quote?: string;
   /** create_highlight：脑图上显示的短标题。retarget_highlight 省略则保留原说明。 */
   note?: string;
+  /** create_highlight：批注类型。缺省是普通划线；'outline' 是消化 Agent 建的大纲节点。 */
+  kind?: 'outline';
   parentId?: string | null;
   parentRef?: string;
   index?: number;
@@ -58,6 +60,7 @@ export type MindEditStep =
       note: string;
       blockIndex: number;
       parent: MindEditParent;
+      kind?: 'outline';
       index?: number;
     }
   | { op: 'rename_text'; nodeId: string; text: string }
@@ -275,6 +278,9 @@ export function planMindEdits(
   const steps: MindEditStep[] = [];
 
   for (const edit of edits) {
+    if (edit.op !== 'create_highlight' && edit.kind !== undefined) {
+      return { ok: false, reason: '只有新建划线能指定类型' };
+    }
     if (edit.op === 'create_text') {
       const ref = readRef(edit.ref);
       if (!ref.ok) return ref;
@@ -301,6 +307,9 @@ export function planMindEdits(
     }
 
     if (edit.op === 'create_highlight') {
+      if (edit.kind !== undefined && edit.kind !== 'outline') {
+        return { ok: false, reason: '划线类型不合法' };
+      }
       const ref = readRef(edit.ref);
       if (!ref.ok) return ref;
       if (refs.has(ref.ref)) return { ok: false, reason: `章节编号重复：${ref.ref}` };
@@ -326,6 +335,7 @@ export function planMindEdits(
         note: note.note,
         blockIndex: blockIndex.blockIndex,
         parent: parent.parent,
+        ...(edit.kind !== undefined ? { kind: edit.kind } : {}),
         ...(index.index !== undefined ? { index: index.index } : {}),
       });
       continue;

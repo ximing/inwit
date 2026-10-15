@@ -152,6 +152,7 @@ async function loadResurfaceCandidates(
         eq(annotations.userId, userId),
         isNull(annotations.convertedCardId),
         isNull(annotations.deletedAt),
+        ne(annotations.kind, 'outline'),
         ne(annotations.note, ''),
         lt(annotations.createdAt, cutoff),
       ),

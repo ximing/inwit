@@ -1,7 +1,7 @@
 import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { IMAGE_EXCERPT_QUOTE, type AnnotationKind } from '@inwit/dto';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, ne } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations } from '../db/schema.js';
 import { searchAnnotations } from '../retrieval/pipeline.js';
@@ -34,7 +34,15 @@ export async function loadDocumentAnnotationsView(
   const rows = await getDb()
     .select()
     .from(annotations)
-    .where(and(eq(annotations.userId, userId), eq(annotations.documentId, documentId), isNull(annotations.deletedAt)))
+    .where(
+      and(
+        eq(annotations.userId, userId),
+        eq(annotations.documentId, documentId),
+        isNull(annotations.deletedAt),
+        // 大纲节点是 Agent 产物，不是用户亲手标的重点。
+        ne(annotations.kind, 'outline'),
+      ),
+    )
     .orderBy(asc(annotations.createdAt), asc(annotations.id))
     .limit(limit);
   return rows.map((row) => ({

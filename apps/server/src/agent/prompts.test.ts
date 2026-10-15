@@ -36,7 +36,7 @@ function countOf(haystack: string, needle: string): number {
 }
 
 const STEPS: Record<string, { prompt: string; last: number }> = {
-  digest: { prompt: DIGEST_SYSTEM_PROMPT, last: 10 },
+  digest: { prompt: DIGEST_SYSTEM_PROMPT, last: 11 },
   chat: { prompt: CHAT_SYSTEM_PROMPT, last: 7 },
   evolve: { prompt: EVOLVE_SYSTEM_PROMPT, last: 4 },
   analyze: { prompt: ANALYZE_SYSTEM_PROMPT, last: 6 },
@@ -61,12 +61,17 @@ describe('memory collection prompts', () => {
     }
 
     expect(DIGEST_SYSTEM_PROMPT).toContain('2. 先用 read_document 读取原文');
-    expect(DIGEST_SYSTEM_PROMPT).toContain('4. 用 search_user_memories 检索用户已有概念');
-    expect(DIGEST_SYSTEM_PROMPT).toContain('7. 对 write_cards 返回的每一张新卡，再用 search_user_memories');
-    expect(DIGEST_SYSTEM_PROMPT).toContain('第 8 步刚软归属成功');
+    expect(DIGEST_SYSTEM_PROMPT).toContain('4. 用 write_outline 在文档脑图上建两级大纲');
+    expect(DIGEST_SYSTEM_PROMPT).toContain('5. 用 search_user_memories 检索用户已有概念');
+    expect(DIGEST_SYSTEM_PROMPT).toContain('8. 对 write_cards 返回的每一张新卡，再用 search_user_memories');
+    expect(DIGEST_SYSTEM_PROMPT).toContain('第 9 步刚软归属成功');
     expect(DIGEST_SYSTEM_PROMPT).toContain('就必须调用 attribute_topic');
+    expect(DIGEST_SYSTEM_PROMPT).toContain('write_outline');
+    expect(DIGEST_SYSTEM_PROMPT).toContain('place_cards');
+    expect(DIGEST_SYSTEM_PROMPT).toContain('write_outline 只能调用一次');
     expect(DIGEST_SYSTEM_PROMPT).not.toContain('没有把握就不要归属');
     expect(DIGEST_SYSTEM_PROMPT).not.toContain('第 7 步刚软归属成功');
+    expect(DIGEST_SYSTEM_PROMPT).not.toContain('第 8 步刚软归属成功');
     expect(DIGEST_SYSTEM_PROMPT).not.toContain(WRITE_MEMORY_TABLE_NOTE);
     expect(CHAT_SYSTEM_PROMPT).toContain('2. 先用 search_cards 检索用户已有卡片');
     expect(CHAT_SYSTEM_PROMPT).not.toContain(WRITE_MEMORY_TABLE_NOTE);

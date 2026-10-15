@@ -16,6 +16,7 @@ import { insertInitialReviewState } from '../review/state-init.js';
 import { logger } from '../utils/logger.js';
 import { readDocumentAnnotationsTool, searchAnnotationsTool } from './annotation-tools.js';
 import { memoryLoadTools } from './memory-tools.js';
+import { placeCardsTool, writeOutlineTool } from './outline-tools.js';
 import { numberedBlocksFromDoc, resolveQuoteAnchor } from './card-anchor-logic.js';
 import { persistDocumentMeta } from './doc-meta.js';
 import { isUserOwnedTitle } from './doc-meta-logic.js';
@@ -24,6 +25,10 @@ export interface DigestSession {
   userId: string;
   documentId: string;
   writtenCardIds: string[];
+  /** write_outline 建出的大纲节点 id（annotation id）。 */
+  outlineNodeIds?: string[];
+  /** place_cards 成功挂上大纲的卡片 id。 */
+  placedCardIds?: string[];
   cardSource?: CardSource;
   /** processDigest sets proposed only while DIGEST_CARD_GATE is on. Default accepted. */
   cardAcceptance?: Extract<CardAcceptance, 'proposed' | 'accepted'>;
@@ -628,6 +633,7 @@ export function digestTools(session: DigestSession): AgentTool[] {
     ...memoryLoadTools(session),
     readDocumentTool(session),
     readDocumentAnnotationsTool(session),
+    writeOutlineTool(session),
     writeCardsTool(session),
     writeQuestionsTool(session),
     searchUserMemoriesTool(session),
@@ -635,6 +641,7 @@ export function digestTools(session: DigestSession): AgentTool[] {
     attributeTopicTool(session),
     readTopicMapTool(session),
     placeOnMapTool(session),
+    placeCardsTool(session),
     setDocumentMetaTool(session),
   ];
 }

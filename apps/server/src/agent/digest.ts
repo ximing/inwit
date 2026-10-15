@@ -2,7 +2,7 @@ import { documentIdFromJobPayload } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
-import { cardQuestions, cards, documents, topics, type JobRow } from '../db/schema.js';
+import { annotations, cardQuestions, cards, documents, topics, type JobRow } from '../db/schema.js';
 import { findOwnedDocument } from '../documents/document.service.js';
 import { RescheduleJobError } from '../jobs/queue-logic.js';
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
@@ -25,6 +25,23 @@ async function listActiveTopics(userId: string) {
     .from(topics)
     .where(and(eq(topics.userId, userId), eq(topics.status, 'active')))
     .orderBy(asc(topics.createdAt));
+}
+
+/**
+ * 重消化清理：硬删这篇文档的大纲批注（含软删行）。
+ * canvas 行靠 FK 级联删除，挂在大纲下的卡片 parentId 置空回落为根。
+ * outline 不进检索索引，无需清索引。
+ */
+async function deleteOutlineAnnotations(userId: string, documentId: string): Promise<void> {
+  await getDb()
+    .delete(annotations)
+    .where(
+      and(
+        eq(annotations.userId, userId),
+        eq(annotations.documentId, documentId),
+        eq(annotations.kind, 'outline'),
+      ),
+    );
 }
 
 async function markDigested(id: string, extra?: { linkHint?: string | null }): Promise<void> {
@@ -110,6 +127,20 @@ async function verifyDigest(
     throw new Error(`digest missing questions for ${String(missingQuestions.length)} card(s)`);
   }
   const questionTotal = live.reduce((sum, row) => sum + (questionsByCard.get(row.id) ?? 0), 0);
+
+  if ((session.outlineNodeIds?.length ?? 0) === 0) {
+    throw new Error('digest wrote no outline nodes');
+  }
+  // 挂载是软验收：没挂上的卡留在脑图根部，不挡消化完成。
+  const placedCount = session.placedCardIds?.length ?? 0;
+  if (placedCount !== live.length) {
+    logger.warn('digest.place_cards_incomplete', {
+      jobId: job.id,
+      documentId,
+      placed: placedCount,
+      live: live.length,
+    });
+  }
 
   const hint = await associationHintForCards(job.userId, liveIds);
   const linkN = await countOutgoingLinks(job.userId, liveIds);
@@ -205,12 +236,14 @@ export async function processDigest(job: JobRow): Promise<void> {
 
   // Retry must not wipe cards the user already accepted or rejected.
   await deleteProposedDocumentCards(job.userId, documentId);
+  await deleteOutlineAnnotations(job.userId, documentId);
   const avoid = await loadDigestAvoidance(job.userId, documentId);
 
   const session: DigestSession = {
     userId: job.userId,
     documentId,
     writtenCardIds: [],
+    outlineNodeIds: [],
     topicId: document.topicId,
     ...(config.DIGEST_CARD_GATE ? { cardAcceptance: 'proposed' as const } : {}),
   };
@@ -231,6 +264,6 @@ export async function processDigest(job: JobRow): Promise<void> {
     context: { documentId },
     verify: ({ executionId }) => verifyDigest(job, documentId, session, executionId),
     nudgePrompt: (err) =>
-      `流程验收未通过：${err instanceof Error ? err.message : String(err)}。请继续按工作流程执行——write_cards 写入至少 2 张卡片、对每张卡 write_questions、read_topic_map 后对每张卡 place_on_map、最后 set_document_meta。必须调用工具落库，不要只回复文字。`,
+      `流程验收未通过：${err instanceof Error ? err.message : String(err)}。请继续按工作流程执行——write_outline 建两级大纲（只能调用一次）、write_cards 写入至少 2 张卡片、对每张卡 write_questions、place_cards 把每张卡挂到所属大纲节点、read_topic_map 后对每张卡 place_on_map、最后 set_document_meta。必须调用工具落库，不要只回复文字。`,
   });
 }

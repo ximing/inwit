@@ -6,7 +6,7 @@ import type {
   CreateAnnotationInput,
   UpdateAnnotationInput,
 } from '@inwit/dto';
-import { and, asc, count, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, ne } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations, documents, type AnnotationRow } from '../db/schema.js';
 import { commitCanvasRevision, readCanvasHistoryState } from '../canvas/canvas-history.js';
@@ -194,7 +194,12 @@ export async function listArchivedAnnotations(
   query: ArchiveListQuery,
 ): Promise<ArchivedAnnotationsResponse> {
   const offset = (query.page - 1) * query.limit;
-  const where = and(eq(annotations.userId, userId), isNotNull(annotations.deletedAt));
+  const where = and(
+    eq(annotations.userId, userId),
+    isNotNull(annotations.deletedAt),
+    // 大纲节点重消化时硬删，不进回收站。
+    ne(annotations.kind, 'outline'),
+  );
   const [rows, [totalRow]] = await Promise.all([
     getDb()
       .select({ annotation: annotations, documentTitle: documents.title })

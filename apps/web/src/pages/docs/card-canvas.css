@@ -613,8 +613,9 @@
 }
 .doc-canvas-tools {
   position: absolute;
-  right: 10px;
   top: 10px;
+  left: 50%;
+  translate: -50% 0;
   z-index: 4;
   display: flex;
   align-items: center;
@@ -668,8 +669,9 @@
 
 .canvas-history {
   position: absolute;
-  right: 10px;
   top: 52px;
+  left: 50%;
+  translate: -50% 0;
   z-index: 6;
   width: min(280px, calc(100% - 20px));
   max-height: min(320px, calc(100% - 70px));
@@ -749,14 +751,14 @@
 @container card-rail (max-width: 430px) {
   .doc-canvas-tools .is-fit { display: none; }
 }
-/* 超窄：四组收成右上角两列。绝对定位且宽度不定时，折行 flex 会收成一组一行。
+/* 超窄：四组收成顶部居中的两列。绝对定位且宽度不定时，折行 flex 会收成一组一行。
    列用 max-content，文字不折行，避免「待办 / 默写」被挤成竖排。 */
 @container card-rail (max-width: 300px) {
   .doc-canvas-tools {
     display: grid;
     grid-template-columns: max-content max-content;
-    justify-content: end;
-    justify-items: end;
+    justify-content: center;
+    justify-items: center;
     align-items: center;
     column-gap: 6px;
     row-gap: 2px;

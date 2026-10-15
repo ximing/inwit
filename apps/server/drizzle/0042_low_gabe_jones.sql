@@ -1,0 +1,2 @@
+ALTER TABLE "annotations" DROP CONSTRAINT "annotations_kind_check";--> statement-breakpoint
+ALTER TABLE "annotations" ADD CONSTRAINT "annotations_kind_check" CHECK ("annotations"."kind" IN ('text', 'pdf', 'media', 'note', 'outline'));

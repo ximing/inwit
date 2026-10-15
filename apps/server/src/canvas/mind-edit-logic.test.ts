@@ -209,6 +209,40 @@ describe('planMindEdits', () => {
     ).toEqual({ ok: false, reason: '章节编号重复：h1' });
   });
 
+  it('passes kind outline through on create_highlight', () => {
+    const plan = planMindEdits(
+      [],
+      [{ op: 'create_highlight', ref: 's1', quote: '原文', blockIndex: 1, kind: 'outline' }],
+    );
+    expect(plan.ok).toBe(true);
+    if (!plan.ok) return;
+    expect(plan.steps[0]).toMatchObject({ op: 'create_highlight', kind: 'outline' });
+  });
+
+  it('refuses an illegal highlight kind and kind on other ops', () => {
+    expect(
+      planMindEdits([], [
+        { op: 'create_highlight', ref: 's1', quote: '原文', blockIndex: 1, kind: 'bogus' as 'outline' },
+      ]),
+    ).toEqual({ ok: false, reason: '划线类型不合法' });
+    expect(planMindEdits([], [{ op: 'create_text', ref: 'c1', text: '章', kind: 'outline' }])).toEqual({
+      ok: false,
+      reason: '只有新建划线能指定类型',
+    });
+    expect(
+      planMindEdits(
+        [member(CHAPTER, 'text', null)],
+        [{ op: 'move', nodeId: CHAPTER, parentId: null, kind: 'outline' }],
+      ),
+    ).toEqual({ ok: false, reason: '只有新建划线能指定类型' });
+    expect(
+      planMindEdits(
+        [member(NOTE, 'annotation', null)],
+        [{ op: 'retarget_highlight', nodeId: NOTE, quote: '原文', blockIndex: 1, kind: 'outline' }],
+      ),
+    ).toEqual({ ok: false, reason: '只有新建划线能指定类型' });
+  });
+
   it('retargets an existing highlight and leaves its place', () => {
     const plan = planMindEdits(
       [member(NOTE, 'annotation', CHAPTER, 1)],

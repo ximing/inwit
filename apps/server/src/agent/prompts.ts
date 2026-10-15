@@ -52,26 +52,31 @@ ${MEMORY_COLLECTION_STEP}
    [块 3 | 第 2 页]（分页）
    blocks[].index 从 1 计；pageBreak 占一块且 text 为空。引用原文时必须给出 blockIndex + 该块内的精确 quote。
 3. 用 read_document_annotations 读取用户在这份材料上的批注。批注是用户亲手标记的重点：有批注的块优先切卡；批注 note 里若写有用户的疑问或理解，把它体现进卡片的 confusion_point 或 example，不要原样照抄。
-4. 用 search_user_memories 检索用户已有概念。若高度相关，在新卡的 confusion_point 或 tags 里指出关联（例如「这和已有卡片：反向传播 是同一条链上的问题」）。
-5. 调用 write_cards 写入至少 2 张卡片。每张卡必须包含：
+4. 用 write_outline 在文档脑图上建两级大纲（只能调用一次）：
+   - 一级节点是文章标题和各章节：quote 逐字抄写章节标题在原文中的原句，note 是压缩后的短标题，blockIndex 是 quote 所在块的序号，规则与 write_cards 相同。
+   - 每个一级节点下按 1、2、3 的列表脉络建二级节点：quote 抄该脉络点所在的原文句，note 是脉络点的短标题。
+   - 没有小标题的文档也要建：至少一个一级节点，quote 抄全文的主题句。
+   - 返回的树里带每个节点的 nodeId，第 7 步 place_cards 要用。
+5. 用 search_user_memories 检索用户已有概念。若高度相关，在新卡的 confusion_point 或 tags 里指出关联（例如「这和已有卡片：反向传播 是同一条链上的问题」）。
+6. 调用 write_cards 写入至少 2 张卡片。每张卡必须包含：
    - concept：一条独立可复习的概念（一句话能说清）
    - example：一个具体例子
    - confusion_point：一个易混点
    - tags：2-5 个短标签
    - blockIndex：quote 所在块的序号，与「块 N」一致，从 1 计
    - quote：该块内的精确子串。必须能在对应块中原样找到，不允许改写、同义替换、补字或删字。
-6. 对 write_cards 返回的每一张卡调用 write_questions：每卡 1-2 道题，题型只能是 cloze（填空）、compare（对比）、judge（判断这句话哪里错了）。
-7. 对 write_cards 返回的每一张新卡，再用 search_user_memories 按该卡的概念检索旧卡。只对你确信相关的旧卡调用 link_cards：
+7. 对 write_cards 返回的每一张卡调用 write_questions：每卡 1-2 道题，题型只能是 cloze（填空）、compare（对比）、judge（判断这句话哪里错了）。出题后调用 place_cards，把每张卡挂到它所属的大纲节点下，parentId 用 write_outline 返回的 nodeId；卡片和二级脉络对不上时挂到所属的一级节点。
+8. 对 write_cards 返回的每一张新卡，再用 search_user_memories 按该卡的概念检索旧卡。只对你确信相关的旧卡调用 link_cards：
    - type：same_concept（同一概念的两种说法）/ confusable（容易搞混）/ prerequisite（target 是这张新卡的前置）/ related
    - 每张新卡最多 3 条边；没有把握就不要建边
    - reason 必须是一句人话，例如「这和你之前那张「反向传播」讲的是同一件事，只是从梯度的角度说」
-8. 若文档没有 topicId：写完卡片后判断它属于哪门课。和某个活跃主题是同一门课（标题、目标或已有概念对得上）就必须调用 attribute_topic。只有和所有活跃主题都明显不是一门课时才留在未归属。对得上就在这一步归属，后面才能把卡片挂上地图。
-9. 若文档已有 topicId，或第 8 步刚软归属成功：必须 read_topic_map(topicId)，再对本轮每张新卡调用 place_on_map。
+9. 若文档没有 topicId：写完卡片后判断它属于哪门课。和某个活跃主题是同一门课（标题、目标或已有概念对得上）就必须调用 attribute_topic。只有和所有活跃主题都明显不是一门课时才留在未归属。对得上就在这一步归属，后面才能把卡片挂上地图。
+10. 若文档已有 topicId，或第 9 步刚软归属成功：必须 read_topic_map(topicId)，再对本轮每张新卡调用 place_on_map。
    - 优先挂到已有节点（传 nodeId）。
    - 只有没有合适节点时才传 newNode 新建（可挂到已有 parentId 下）。地图最多三级。
    - 章节结构保持稳定：不要每次消化都重排、改名或大改大纲。小步挂载即可。
    - 软归属之后同样必须 place_on_map，不能只改 topicId 就结束。
-10. 切卡完成后调用 set_document_meta：
+11. 切卡完成后调用 set_document_meta：
    - title：不超过 20 字的名词短语，概括主题，不要复读原文第一句。
    - description：不超过 60 字，一两句说清这篇讲了什么。
    - 若 read_document 返回 titleLocked=true（用户已有标题，含导入文件名），只写 description，不要改 title。
@@ -79,6 +84,7 @@ ${MEMORY_COLLECTION_STEP}
 
 约束：
 - 必须通过工具落库；不要只输出卡片草稿而不调用 write_cards / write_questions。
+- write_outline 只能调用一次，建错了不要重复调用，继续后面的步骤。
 - 卡片必须来自原文，不要编造原文没有的知识点。
 - 每张卡只讲一个概念，不要把整篇文章塞进一张卡。
 - 题目要能靠卡片内容回答，不要超纲。

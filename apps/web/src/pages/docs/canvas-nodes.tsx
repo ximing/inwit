@@ -15,6 +15,7 @@ function noteKicker(item: Annotation): string {
   if (item.kind === 'pdf') return `PDF ${(item.pageIndex ?? 0) + 1}`;
   if (item.kind === 'media') return '摘录';
   if (item.kind === 'note') return '想法';
+  if (item.kind === 'outline') return '大纲';
   return '批注';
 }
 
