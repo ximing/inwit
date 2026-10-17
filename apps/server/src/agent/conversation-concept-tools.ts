@@ -5,7 +5,7 @@ import { getDb } from '../db/index.js';
 import { documents, topics } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { createConceptBatch } from '../concepts/concept-batch.service.js';
-import { conceptsWritable } from '../concepts/concepts-flag.js';
+
 import { sha256Hex } from '../concepts/concept-identity.js';
 import type { ConversationSession } from './conversation-tools.js';
 
@@ -38,10 +38,6 @@ export function proposeArticleConceptsTool(
       '为当前文章生成概念与关系候选（后台任务）。只生成候选，不会收录或修改任何已有内容；候选生成后由用户在文章里核对并确认收录。文章不在任何主题时，返回已有主题列表，请用户先选择一个主题，不要自己新建主题。',
     parameters: proposeSchema,
     execute: async (_id, params) => {
-      if (!conceptsWritable()) {
-        return toolResult({ ok: false, code: 'disabled', reason: '概念功能尚未开放' });
-      }
-
       // 当前文章：显式指定优先（重新鉴权），否则用本轮 @ 的唯一文章。
       let documentId = params.documentId ?? null;
       if (!documentId) {

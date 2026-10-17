@@ -1,5 +1,4 @@
 import type { ConceptDraft } from '@inwit/dto';
-import { config } from '../config.js';
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { conceptBatches, documents } from '../db/schema.js';
@@ -43,7 +42,7 @@ describeDb('concept-batch.service（真实 PG）', () => {
     await teardownIsolatedDb(iso);
   });
 
-  it('生成入口（M2 接通）：创建批次并入队；开关关闭时不留批次', async () => {
+  it('生成入口（M2 接通）：创建批次并入队', async () => {
     const db = iso.db;
     const userId = await seedUser(db);
     const topicId = await seedTopic(db, userId);
@@ -59,15 +58,6 @@ describeDb('concept-batch.service（真实 PG）', () => {
     expect(batch!.status).toBe('queued');
     expect(batch!.contentSnapshot!.hash).toBeTruthy();
     expect(batch!.jobId).toBe(created.jobId);
-
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = false;
-    try {
-      await expect(
-        createConceptBatch(userId, documentId, { topicId, scope: 'document', requestId: 'gen-2' }),
-      ).rejects.toMatchObject({ status: 404, code: 'CONCEPTS_DISABLED' });
-    } finally {
-      (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
-    }
   });
 
   it('ready 批次读取；正文变化后 stale=true；软删除来源也 stale', async () => {

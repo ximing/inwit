@@ -82,7 +82,7 @@ export const StudyDock = observer(function StudyDock() {
   // 1 结构、2 概念、3 对照。编辑器和对话框里不抢按键。
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!topicId || (concepts.probed && !concepts.enabled)) return;
+      if (!topicId) return;
       if (shortcutBlockedTarget(event.target)) return;
       const mode = studyModeFromKey(event);
       if (!mode) return;
@@ -91,7 +91,7 @@ export const StudyDock = observer(function StudyDock() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [topicId, concepts.probed, concepts.enabled, workspace]);
+  }, [topicId, workspace]);
 
   // 脑图卡片选择 → 概念高亮（联动只高亮）
   const activeCardId = docs.activeCardId;
@@ -100,7 +100,6 @@ export const StudyDock = observer(function StudyDock() {
   }, [activeCardId, link]);
 
   if (!topicId) return <CardRail />;
-  if (concepts.probed && !concepts.enabled) return <CardRail />;
 
   const effective = workspace.effective;
   const showOutline = workspace.showOutline;

@@ -10,7 +10,6 @@ vi.mock('../llm/pi.js', async (importOriginal) => {
   };
 });
 
-import { config } from '../config.js';
 import {
   cards,
   conceptPracticeBindings,
@@ -49,7 +48,6 @@ describeDb('concept_practice 出题建议（真实 PG + 确定性模型）', () 
   let iso: IsolatedDb;
   beforeAll(async () => {
     iso = await setupIsolatedDb();
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
   });
   afterAll(async () => {
     await teardownIsolatedDb(iso);
@@ -198,25 +196,6 @@ describeDb('concept_practice 出题建议（真实 PG + 确定性模型）', () 
     expect(
       (await iso.db.select().from(cards).where(eq(cards.userId, userId))),
     ).toHaveLength(0);
-  });
-
-  it('开关关闭时不创建建议', async () => {
-    const userId = await seedUser(iso.db);
-    const topicId = await seedTopic(iso.db, userId);
-    const concept = await createConcept(userId, topicId, { name: 'Gate', aliases: [], evidence: [] });
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = false;
-    try {
-      await expect(
-        createConceptPracticeProposal(userId, {
-          targetKind: 'concept',
-          targetId: concept.concept.id,
-          exerciseKind: 'recall',
-          requestId: 'prop-gate-1',
-        }),
-      ).rejects.toMatchObject({ status: 404, code: 'CONCEPTS_DISABLED' });
-    } finally {
-      (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
-    }
   });
 
   it('同 requestId 幂等；归档目标拒绝', async () => {

@@ -1,6 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { config } from '../config.js';
 import { registerErrorHandler } from '../plugins/error-handler.js';
 import '../types.js';
 import { isolatedDbContext, setupIsolatedDb, teardownIsolatedDb } from '../testkit/context.js';
@@ -26,54 +25,9 @@ describeDb('concept.routes（真实 PG + HTTP）', () => {
   let iso: IsolatedDb;
   beforeAll(async () => {
     iso = await setupIsolatedDb();
-    // 发布开关默认关闭（生产）；测试显式打开，不依赖 .env.test。
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
   });
   afterAll(async () => {
     await teardownIsolatedDb(iso);
-  });
-
-  afterEach(() => {
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
-    (config as { CONCEPTS_READ_ENABLED: boolean | undefined }).CONCEPTS_READ_ENABLED = undefined;
-    (config as { CONCEPTS_WRITE_ENABLED: boolean | undefined }).CONCEPTS_WRITE_ENABLED = undefined;
-  });
-
-  it('开关关闭时所有入口 404 CONCEPTS_DISABLED', async () => {
-    const userId = await seedUser(iso.db);
-    const topicId = await seedTopic(iso.db, userId);
-    const app = await buildTestApp(userId);
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = false;
-    const response = await app.inject({ method: 'GET', url: `/api/topics/${topicId}/concepts` });
-    expect(response.statusCode).toBe(404);
-    expect(response.json().error.code).toBe('CONCEPTS_DISABLED');
-    await app.close();
-  });
-
-  it('读开写关时概念列表 200，创建概念 404 CONCEPTS_DISABLED', async () => {
-    const userId = await seedUser(iso.db);
-    const topicId = await seedTopic(iso.db, userId);
-    const app = await buildTestApp(userId);
-    const flags = config as {
-      CONCEPTS_ENABLED: boolean;
-      CONCEPTS_READ_ENABLED: boolean | undefined;
-      CONCEPTS_WRITE_ENABLED: boolean | undefined;
-    };
-    flags.CONCEPTS_ENABLED = false;
-    flags.CONCEPTS_READ_ENABLED = true;
-    flags.CONCEPTS_WRITE_ENABLED = false;
-
-    const list = await app.inject({ method: 'GET', url: `/api/topics/${topicId}/concepts` });
-    expect(list.statusCode).toBe(200);
-
-    const created = await app.inject({
-      method: 'POST',
-      url: `/api/topics/${topicId}/concepts`,
-      payload: { name: 'Task' },
-    });
-    expect(created.statusCode).toBe(404);
-    expect(created.json().error.code).toBe('CONCEPTS_DISABLED');
-    await app.close();
   });
 
   it('创建概念并读取；同名建议随创建返回', async () => {
@@ -308,11 +262,9 @@ describeDb('concept routes: 练习/建议/导航（真实 PG + HTTP）', () => {
   let iso: IsolatedDb;
   beforeAll(async () => {
     iso = await setupIsolatedDb();
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
   });
   afterAll(async () => {
     await teardownIsolatedDb(iso);
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
   });
 
   it('练习创建/绑定/refresh/resume/解绑与导航链接的 HTTP 接线', async () => {

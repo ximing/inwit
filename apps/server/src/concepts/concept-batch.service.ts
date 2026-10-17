@@ -12,7 +12,7 @@ import { AppError } from '../errors.js';
 import { enqueueJob } from '../jobs/enqueue.js';
 import { requestHashOf } from './concept-identity.js';
 import { conceptOperationRequests } from '../db/schema.js';
-import { conceptsWritable } from './concepts-flag.js';
+
 import { requireActiveTopic, lockActiveTopic } from './concept.service.js';
 import { blocksOfDocument, documentHashOf, snapshotConceptSource } from './concept-evidence.js';
 import { documentHashFromBlocks } from './concept-evidence-logic.js';
@@ -77,14 +77,12 @@ export async function getConceptBatch(userId: string, batchId: string): Promise<
 /**
  * 创建候选批次并入队 concept_extract 任务（同事务）。锁定当前已保存正文版本；
  * 与客户端自报 hash 不一致时拒绝（先保存再生成）。同 requestId 同请求返回原结果。
- * 功能关闭时 404，不留无法执行的批次或任务。
  */
 export async function createConceptBatch(
   userId: string,
   documentId: string,
   rawInput: CreateConceptBatchInput,
 ): Promise<CreateConceptBatchResult> {
-  if (!conceptsWritable()) throw AppError.of(404, 'CONCEPTS_DISABLED');
   const input = createConceptBatchInputSchema.parse(rawInput);
   const requestHash = requestHashOf({
     documentId,

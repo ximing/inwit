@@ -14,7 +14,7 @@ import {
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { enqueueJob } from '../jobs/enqueue.js';
-import { conceptsWritable } from './concepts-flag.js';
+
 import { requireActiveTopic } from './concept.service.js';
 import { requestHashOf } from './concept-identity.js';
 import { conceptOperationRequests } from '../db/schema.js';
@@ -76,7 +76,6 @@ export async function createConceptPracticeProposal(
   userId: string,
   rawInput: z.input<typeof createConceptPracticeProposalInputSchema>,
 ): Promise<CreateConceptPracticeProposalResult> {
-  if (!conceptsWritable()) throw AppError.of(404, 'CONCEPTS_DISABLED');
   const input = createConceptPracticeProposalInputSchema.parse(rawInput);
   const target =
     input.targetKind === 'concept'

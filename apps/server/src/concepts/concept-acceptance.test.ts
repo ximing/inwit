@@ -24,7 +24,6 @@ import {
   reviewStates,
 } from '../db/schema.js';
 import { getDb } from '../db/index.js';
-import { config } from '../config.js';
 import { isolatedDbContext, setupIsolatedDb, teardownIsolatedDb } from '../testkit/context.js';
 import { seedDocument, seedTopic, seedUser } from '../testkit/fixtures.js';
 import { fakeResolvedModel, lastToolResult, type FakeModelScript } from '../testkit/fake-model.js';
@@ -118,7 +117,6 @@ describeDb('概念全链路（隔离库）', () => {
 
   beforeAll(async () => {
     iso = await setupIsolatedDb();
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
   });
 
   afterAll(async () => {

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { Context } from '@earendil-works/pi-ai';
@@ -12,7 +12,6 @@ vi.mock('../llm/pi.js', async (importOriginal) => {
 });
 
 import { conceptBatches, conceptRelations, concepts, documents, jobs, cards, reviewStates, type JobRow } from '../db/schema.js';
-import { config } from '../config.js';
 import { isolatedDbContext, setupIsolatedDb, teardownIsolatedDb } from '../testkit/context.js';
 import { seedDocument, seedTopic, seedUser } from '../testkit/fixtures.js';
 import { fakeResolvedModel, lastToolResult, type FakeModelScript } from '../testkit/fake-model.js';
@@ -76,7 +75,6 @@ describeDb('concept_extract processor（真实 PG + 确定性模型）', () => {
   let iso: IsolatedDb;
   beforeAll(async () => {
     iso = await setupIsolatedDb();
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
   });
   afterAll(async () => {
     await teardownIsolatedDb(iso);
@@ -637,28 +635,4 @@ describeDb('concept_extract processor（真实 PG + 确定性模型）', () => {
     ).rejects.toMatchObject({ status: 409, code: 'CONCEPT_BATCH_RETRY_INVALID' });
   });
 
-  it('feature flag 关闭时不创建批次也不入队', async () => {
-    const userId = await seedUser(iso.db);
-    const topicId = await seedTopic(iso.db, userId);
-    const documentId = await seedDocument(iso.db, userId, { topicId });
-    (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = false;
-    try {
-      await expect(
-        createConceptBatch(userId, documentId, { topicId, scope: 'document', requestId: 'flag-1' }),
-      ).rejects.toMatchObject({ status: 404, code: 'CONCEPTS_DISABLED' });
-    } finally {
-      (config as { CONCEPTS_ENABLED: boolean }).CONCEPTS_ENABLED = true;
-    }
-    expect(
-      (await iso.db.select().from(conceptBatches).where(eq(conceptBatches.userId, userId))),
-    ).toHaveLength(0);
-    expect(
-      (
-        await iso.db
-          .select()
-          .from(jobs)
-          .where(and(eq(jobs.userId, userId), eq(jobs.type, 'concept_extract')))
-      ),
-    ).toHaveLength(0);
-  });
 });

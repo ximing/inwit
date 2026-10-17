@@ -12,7 +12,6 @@ const TopicConceptsTabContent = observer(function TopicConceptsTabContent({ topi
   useEffect(() => {
     void concepts.boot(topicId, null);
   }, [topicId, concepts]);
-  if (concepts.probed && !concepts.enabled) return null;
   return (
     <div className="topic-concepts-tab">
       <ConceptsPanel />

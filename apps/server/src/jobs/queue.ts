@@ -10,7 +10,6 @@ import { jobs, type JobRow } from '../db/schema.js';
 import { failConversationMessage } from '../conversations/conversation.service.js';
 import { failConceptBatchByJobId } from '../concepts/concept-batch.service.js';
 import { failConceptProposalByJobId } from '../concepts/concept-proposal.service.js';
-import { conceptsWritable } from '../concepts/concepts-flag.js';
 import { markDocumentFailed, pipelineDocumentId } from '../documents/document-status.js';
 import { logger } from '../utils/logger.js';
 import { CANCEL_REASON } from './cancel.js';
@@ -194,38 +193,7 @@ async function planOrganizeAfterRelease(job: JobRow): Promise<void> {
   await scheduleMemoryOrganizeSafely(job.userId, memoryOrganizeFollowupExclude(job.payload));
 }
 
-/**
- * 写开关关闭时概念任务直接终态失败：不跑模型、不重试。
- * 不走 settleConceptBatchFailure（那会把错误码改成 job_failed），也不改文章状态。
- */
-async function failDisabledConceptJob(job: JobRow, now: Date): Promise<void> {
-  await getDb()
-    .update(jobs)
-    .set({
-      status: 'failed',
-      lastError: 'concepts_disabled',
-      finishedAt: now,
-      updatedAt: now,
-    })
-    .where(and(eq(jobs.id, job.id), eq(jobs.status, 'running')));
-  if (job.type === 'concept_extract') await failConceptBatchByJobId(job.id, 'concepts_disabled');
-  if (job.type === 'concept_practice') await failConceptProposalByJobId(job.id, 'concepts_disabled');
-  logger.warn('job.concepts_disabled', { jobId: job.id, type: job.type });
-}
-
 async function processOne(job: JobRow): Promise<void> {
-  // 先同步看开关，避免调用方在第一个 await 之后把开关打开而仍然跑模型。
-  if (
-    (job.type === 'concept_extract' || job.type === 'concept_practice') &&
-    !conceptsWritable()
-  ) {
-    try {
-      await failDisabledConceptJob(job, new Date());
-    } catch (err) {
-      logger.error('job.finalize.failed', err);
-    }
-    return;
-  }
   const started = Date.now();
   try {
     await processJob(job);

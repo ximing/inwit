@@ -2,8 +2,8 @@ import { observer, useService } from '@rabjs/react';
 import { Loader2 } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
+import { StudyDock } from '@/features/study-workspace/study-workspace.js';
 import { documentReturnTarget } from '@/routes';
-import { CardRail } from './card-rail';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
 import { DocTopRow } from './doc-toprow';
@@ -98,7 +98,7 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
             )}
           </div>
         </div>
-        {service.doc || editor.id ? <CardRail /> : null}
+        {service.doc || editor.id ? <StudyDock /> : null}
       </div>
     </div>
   );

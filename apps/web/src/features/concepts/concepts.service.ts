@@ -38,17 +38,15 @@ export type ConceptTarget = { kind: 'concept' | 'relation'; id: string };
 
 const READONLY_ERROR = '概念功能当前只读';
 
-type ConceptFlags = { enabled: boolean; writable: boolean; failed?: boolean };
-
 /** 概念域 Service：文章（documentId+topicId）或主题（topicId）一个实例。 */
 export class ConceptsService extends Service {
   topicId: string | null = null;
   documentId: string | null = null;
-  /** 读开关：未证实前不显示概念 UI。 */
-  enabled = false;
-  /** 写开关：关闭时可以看已有数据，但不能创建、编辑、生成或收录。 */
-  writable = false;
-  probed = false;
+  /** 概念入口始终可见。 */
+  enabled = true;
+  /** 概念写入始终开放。 */
+  writable = true;
+  probed = true;
 
   // ---- 图数据 ----
   nodeCache = new Map<string, Concept>();
@@ -161,36 +159,8 @@ export class ConceptsService extends Service {
     this.focusId = null;
     this.revisionNotice = false;
     this.error = null;
-    const flags = await this.resolveFlags(topicId, documentId);
     if (gen !== this.bootGen) return;
-    this.enabled = flags.enabled;
-    this.writable = flags.writable;
-    this.probed = true;
-    if (!flags.enabled) return;
-    if (flags.failed) {
-      this.error = '概念数据加载失败，稍后重试';
-      return;
-    }
     await this.loadGraph();
-  }
-
-  /** /health 优先；失败或两个开关都缺失时，退回读接口探测。 */
-  private async resolveFlags(topicId: string, documentId: string | null): Promise<ConceptFlags> {
-    const health = await readConceptHealth();
-    if (health) return health;
-    try {
-      if (documentId) {
-        await api.getDocumentKnowledge(documentId, { topicId, limit: 1 });
-      } else {
-        await api.listConcepts(topicId, { limit: 1 });
-      }
-      return { enabled: true, writable: true };
-    } catch (err) {
-      if (err instanceof ApiError && err.code === 'CONCEPTS_DISABLED') {
-        return { enabled: false, writable: false };
-      }
-      return { enabled: true, writable: true, failed: true };
-    }
   }
 
   /** 后发的 loadGraph 作废先发的响应，避免同步重载盖掉刚收录的节点。 */
@@ -635,23 +605,3 @@ export class ConceptsService extends Service {
 }
 
 export type { DocumentKnowledge };
-
-/** 不走 API client：401 不能当成登出。字段缺失或请求失败时返回 null，交给读接口探测。 */
-async function readConceptHealth(): Promise<ConceptFlags | null> {
-  try {
-    const response = await fetch('/health');
-    if (!response.ok) return null;
-    const body: unknown = await response.json();
-    if (typeof body !== 'object' || body === null) return null;
-    const record = body as { conceptsEnabled?: unknown; conceptsWritable?: unknown };
-    if (typeof record.conceptsEnabled !== 'boolean') return null;
-    const enabled = record.conceptsEnabled;
-    if (typeof record.conceptsWritable === 'boolean') {
-      return { enabled, writable: enabled ? record.conceptsWritable : false };
-    }
-    if (enabled) return { enabled: true, writable: true };
-    return { enabled: false, writable: false };
-  } catch {
-    return null;
-  }
-}
