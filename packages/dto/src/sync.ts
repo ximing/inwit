@@ -9,6 +9,7 @@ export const SYNC_SCOPES = [
   'report',
   'suggest',
   'resurface',
+  'concept',
 ] as const;
 export const syncScopeSchema = z.enum(SYNC_SCOPES);
 export type SyncScope = z.infer<typeof syncScopeSchema>;

@@ -1,0 +1,686 @@
+[
+  {
+    "viewport": [
+      1440,
+      900
+    ],
+    "variant": "A",
+    "result": {
+      "checks": [
+        {
+          "name": "fixture counts",
+          "pass": true
+        },
+        {
+          "name": "selection only highlights other camera",
+          "pass": true
+        },
+        {
+          "name": "task1 difference and evidence",
+          "pass": true
+        },
+        {
+          "name": "task1 source locate",
+          "pass": true
+        },
+        {
+          "name": "task2 three occurrences",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h2",
+          "pass": true
+        },
+        {
+          "name": "task2 return h2",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h4",
+          "pass": true
+        },
+        {
+          "name": "task2 return h4",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h10",
+          "pass": true
+        },
+        {
+          "name": "task2 return h10",
+          "pass": true
+        },
+        {
+          "name": "task3 edit and retain reading",
+          "pass": true
+        },
+        {
+          "name": "task4 generation no focus or camera reset",
+          "pass": true
+        },
+        {
+          "name": "inferred default unchecked",
+          "pass": true
+        },
+        {
+          "name": "task4 confirmed entities and stable camera",
+          "pass": true
+        },
+        {
+          "name": "task5 answer hidden",
+          "pass": true
+        },
+        {
+          "name": "task5 return with feedback",
+          "pass": true
+        },
+        {
+          "name": "same card updates in both places",
+          "pass": true
+        },
+        {
+          "name": "A/B independent cameras",
+          "pass": true
+        },
+        {
+          "name": "no page horizontal overflow",
+          "pass": true,
+          "info": {
+            "scroll": 1440,
+            "width": 1440
+          }
+        }
+      ],
+      "geometry": {
+        "workspace": {
+          "width": 1392,
+          "height": 726
+        },
+        "article-panel": {
+          "width": 445.4375,
+          "height": 726
+        },
+        "outline-map": {
+          "width": 934.5625,
+          "height": 278
+        },
+        "concept-map": {
+          "width": 934.5625,
+          "height": 261
+        }
+      },
+      "layout": "正文左 / 双图上下 · 保留偏好：compare"
+    }
+  },
+  {
+    "viewport": [
+      1440,
+      900
+    ],
+    "variant": "B",
+    "result": {
+      "checks": [
+        {
+          "name": "fixture counts",
+          "pass": true
+        },
+        {
+          "name": "selection only highlights other camera",
+          "pass": true
+        },
+        {
+          "name": "task1 difference and evidence",
+          "pass": true
+        },
+        {
+          "name": "task1 source locate",
+          "pass": true
+        },
+        {
+          "name": "task2 three occurrences",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h2",
+          "pass": true
+        },
+        {
+          "name": "task2 return h2",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h4",
+          "pass": true
+        },
+        {
+          "name": "task2 return h4",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h10",
+          "pass": true
+        },
+        {
+          "name": "task2 return h10",
+          "pass": true
+        },
+        {
+          "name": "task3 edit and retain reading",
+          "pass": true
+        },
+        {
+          "name": "task4 generation no focus or camera reset",
+          "pass": true
+        },
+        {
+          "name": "inferred default unchecked",
+          "pass": true
+        },
+        {
+          "name": "task4 confirmed entities and stable camera",
+          "pass": true
+        },
+        {
+          "name": "task5 answer hidden",
+          "pass": true
+        },
+        {
+          "name": "task5 return with feedback",
+          "pass": true
+        },
+        {
+          "name": "same card updates in both places",
+          "pass": true
+        },
+        {
+          "name": "A/B independent cameras",
+          "pass": true
+        },
+        {
+          "name": "no page horizontal overflow",
+          "pass": true,
+          "info": {
+            "scroll": 1440,
+            "width": 1440
+          }
+        }
+      ],
+      "geometry": {
+        "workspace": {
+          "width": 1392,
+          "height": 726
+        },
+        "article-panel": {
+          "width": 445.4375,
+          "height": 726
+        },
+        "outline-map": {
+          "width": 934.5625,
+          "height": 641
+        },
+        "concept-map": {
+          "width": 810.1796875,
+          "height": 582
+        }
+      },
+      "layout": "聚焦模式 · 保留偏好：compare"
+    }
+  },
+  {
+    "viewport": [
+      1920,
+      1080
+    ],
+    "variant": "A",
+    "result": {
+      "checks": [
+        {
+          "name": "fixture counts",
+          "pass": true
+        },
+        {
+          "name": "selection only highlights other camera",
+          "pass": true
+        },
+        {
+          "name": "task1 difference and evidence",
+          "pass": true
+        },
+        {
+          "name": "task1 source locate",
+          "pass": true
+        },
+        {
+          "name": "task2 three occurrences",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h2",
+          "pass": true
+        },
+        {
+          "name": "task2 return h2",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h4",
+          "pass": true
+        },
+        {
+          "name": "task2 return h4",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h10",
+          "pass": true
+        },
+        {
+          "name": "task2 return h10",
+          "pass": true
+        },
+        {
+          "name": "task3 edit and retain reading",
+          "pass": true
+        },
+        {
+          "name": "task4 generation no focus or camera reset",
+          "pass": true
+        },
+        {
+          "name": "inferred default unchecked",
+          "pass": true
+        },
+        {
+          "name": "task4 confirmed entities and stable camera",
+          "pass": true
+        },
+        {
+          "name": "task5 answer hidden",
+          "pass": true
+        },
+        {
+          "name": "task5 return with feedback",
+          "pass": true
+        },
+        {
+          "name": "same card updates in both places",
+          "pass": true
+        },
+        {
+          "name": "A/B independent cameras",
+          "pass": true
+        },
+        {
+          "name": "no page horizontal overflow",
+          "pass": true,
+          "info": {
+            "scroll": 1920,
+            "width": 1920
+          }
+        }
+      ],
+      "geometry": {
+        "workspace": {
+          "width": 1872,
+          "height": 906
+        },
+        "article-panel": {
+          "width": 599.0390625,
+          "height": 906
+        },
+        "outline-map": {
+          "width": 629.4765625,
+          "height": 821
+        },
+        "concept-map": {
+          "width": 619.484375,
+          "height": 784
+        }
+      },
+      "layout": "横向三栏 · 保留偏好：compare"
+    }
+  },
+  {
+    "viewport": [
+      1920,
+      1080
+    ],
+    "variant": "B",
+    "result": {
+      "checks": [
+        {
+          "name": "fixture counts",
+          "pass": true
+        },
+        {
+          "name": "selection only highlights other camera",
+          "pass": true
+        },
+        {
+          "name": "task1 difference and evidence",
+          "pass": true
+        },
+        {
+          "name": "task1 source locate",
+          "pass": true
+        },
+        {
+          "name": "task2 three occurrences",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h2",
+          "pass": true
+        },
+        {
+          "name": "task2 return h2",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h4",
+          "pass": true
+        },
+        {
+          "name": "task2 return h4",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h10",
+          "pass": true
+        },
+        {
+          "name": "task2 return h10",
+          "pass": true
+        },
+        {
+          "name": "task3 edit and retain reading",
+          "pass": true
+        },
+        {
+          "name": "task4 generation no focus or camera reset",
+          "pass": true
+        },
+        {
+          "name": "inferred default unchecked",
+          "pass": true
+        },
+        {
+          "name": "task4 confirmed entities and stable camera",
+          "pass": true
+        },
+        {
+          "name": "task5 answer hidden",
+          "pass": true
+        },
+        {
+          "name": "task5 return with feedback",
+          "pass": true
+        },
+        {
+          "name": "same card updates in both places",
+          "pass": true
+        },
+        {
+          "name": "A/B independent cameras",
+          "pass": true
+        },
+        {
+          "name": "no page horizontal overflow",
+          "pass": true,
+          "info": {
+            "scroll": 1920,
+            "width": 1920
+          }
+        }
+      ],
+      "geometry": {
+        "workspace": {
+          "width": 1872,
+          "height": 906
+        },
+        "article-panel": {
+          "width": 599.0390625,
+          "height": 906
+        },
+        "outline-map": {
+          "width": 1260.9609375,
+          "height": 821
+        },
+        "concept-map": {
+          "width": 1097.40625,
+          "height": 762
+        }
+      },
+      "layout": "聚焦模式 · 保留偏好：compare"
+    }
+  },
+  {
+    "viewport": [
+      390,
+      844
+    ],
+    "variant": "A",
+    "result": {
+      "checks": [
+        {
+          "name": "fixture counts",
+          "pass": true
+        },
+        {
+          "name": "selection only highlights other camera",
+          "pass": true
+        },
+        {
+          "name": "task1 difference and evidence",
+          "pass": true
+        },
+        {
+          "name": "task1 source locate",
+          "pass": true
+        },
+        {
+          "name": "task2 three occurrences",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h2",
+          "pass": true
+        },
+        {
+          "name": "task2 return h2",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h4",
+          "pass": true
+        },
+        {
+          "name": "task2 return h4",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h10",
+          "pass": true
+        },
+        {
+          "name": "task2 return h10",
+          "pass": true
+        },
+        {
+          "name": "task3 edit and retain reading",
+          "pass": true
+        },
+        {
+          "name": "task4 generation no focus or camera reset",
+          "pass": true
+        },
+        {
+          "name": "inferred default unchecked",
+          "pass": true
+        },
+        {
+          "name": "task4 confirmed entities and stable camera",
+          "pass": true
+        },
+        {
+          "name": "task5 answer hidden",
+          "pass": true
+        },
+        {
+          "name": "task5 return with feedback",
+          "pass": true
+        },
+        {
+          "name": "same card updates in both places",
+          "pass": true
+        },
+        {
+          "name": "A/B independent cameras",
+          "pass": true
+        },
+        {
+          "name": "no page horizontal overflow",
+          "pass": true,
+          "info": {
+            "scroll": 390,
+            "width": 390
+          }
+        }
+      ],
+      "geometry": {
+        "workspace": {
+          "width": 366,
+          "height": 1070
+        },
+        "article-panel": {
+          "width": 366,
+          "height": 480
+        },
+        "outline-map": {
+          "width": 0,
+          "height": 0
+        },
+        "concept-map": {
+          "width": 364,
+          "height": 458
+        }
+      },
+      "layout": "窄屏上下聚焦 · 保留偏好：compare"
+    }
+  },
+  {
+    "viewport": [
+      390,
+      844
+    ],
+    "variant": "B",
+    "result": {
+      "checks": [
+        {
+          "name": "fixture counts",
+          "pass": true
+        },
+        {
+          "name": "selection only highlights other camera",
+          "pass": true
+        },
+        {
+          "name": "task1 difference and evidence",
+          "pass": true
+        },
+        {
+          "name": "task1 source locate",
+          "pass": true
+        },
+        {
+          "name": "task2 three occurrences",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h2",
+          "pass": true
+        },
+        {
+          "name": "task2 return h2",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h4",
+          "pass": true
+        },
+        {
+          "name": "task2 return h4",
+          "pass": true
+        },
+        {
+          "name": "task2 locate h10",
+          "pass": true
+        },
+        {
+          "name": "task2 return h10",
+          "pass": true
+        },
+        {
+          "name": "task3 edit and retain reading",
+          "pass": true
+        },
+        {
+          "name": "task4 generation no focus or camera reset",
+          "pass": true
+        },
+        {
+          "name": "inferred default unchecked",
+          "pass": true
+        },
+        {
+          "name": "task4 confirmed entities and stable camera",
+          "pass": true
+        },
+        {
+          "name": "task5 answer hidden",
+          "pass": true
+        },
+        {
+          "name": "task5 return with feedback",
+          "pass": true
+        },
+        {
+          "name": "same card updates in both places",
+          "pass": true
+        },
+        {
+          "name": "A/B independent cameras",
+          "pass": true
+        },
+        {
+          "name": "no page horizontal overflow",
+          "pass": true,
+          "info": {
+            "scroll": 390,
+            "width": 390
+          }
+        }
+      ],
+      "geometry": {
+        "workspace": {
+          "width": 366,
+          "height": 1070
+        },
+        "article-panel": {
+          "width": 366,
+          "height": 480
+        },
+        "outline-map": {
+          "width": 364,
+          "height": 495
+        },
+        "concept-map": {
+          "width": 364,
+          "height": 418
+        }
+      },
+      "layout": "窄屏上下聚焦 · 保留偏好：compare"
+    }
+  }
+]

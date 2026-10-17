@@ -28,13 +28,30 @@ export const reviewLogSchema = z.object({
   cardId: z.string().uuid(),
   feedback: reviewFeedbackSchema,
   reviewedAt: z.string(),
+  /** 概念练习归属（受管理卡由服务端写入；旧日志全部为 null）。 */
+  bindingId: z.string().uuid().nullable().optional(),
+  epochId: z.string().uuid().nullable().optional(),
+  targetVersion: z.number().int().positive().nullable().optional(),
+  questionId: z.string().uuid().nullable().optional(),
+  reviewRevision: z.number().int().positive().nullable().optional(),
 });
 export type ReviewLog = z.infer<typeof reviewLogSchema>;
 
 export const submitReviewFeedbackSchema = z.object({
   feedback: reviewFeedbackSchema,
+  /** 受管理卡必填：服务端在队列里签发的内容版本令牌。 */
+  reviewToken: z.string().max(2000).optional(),
+  /** 幂等键：重试只记一次；同 key 不同请求 409。 */
+  requestId: z.string().trim().min(1).max(80).optional(),
 });
 export type SubmitReviewFeedback = z.infer<typeof submitReviewFeedbackSchema>;
+
+/** 今日队列的能力声明：2 = 支持受管理卡的 reviewToken 校验。 */
+export const REVIEW_PROTOCOL_CURRENT = 2;
+export const reviewTodayQuerySchema = z.object({
+  reviewProtocol: z.coerce.number().int().min(1).max(REVIEW_PROTOCOL_CURRENT).optional(),
+});
+export type ReviewTodayQuery = z.infer<typeof reviewTodayQuerySchema>;
 
 export const mapPlacementSchema = z.object({
   topicTitle: z.string(),
@@ -46,6 +63,18 @@ export const reviewQueueItemSchema = z.object({
   card: cardWithQuestionsSchema,
   reviewState: reviewStateSchema,
   mapPlacement: mapPlacementSchema.nullable(),
+  /** 受管理卡：本次下发的实际首题 id 与服务端签名令牌（不含答案）。 */
+  servedQuestionId: z.string().uuid().optional(),
+  reviewToken: z.string().optional(),
+  /** 主要练习目标（展示用，不构成版本保护）。 */
+  knowledgeTarget: z
+    .object({
+      kind: z.enum(['concept', 'relation']),
+      id: z.string().uuid(),
+      label: z.string(),
+    })
+    .nullable()
+    .optional(),
 });
 export type ReviewQueueItem = z.infer<typeof reviewQueueItemSchema>;
 

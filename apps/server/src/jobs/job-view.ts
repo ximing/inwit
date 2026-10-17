@@ -49,6 +49,8 @@ const GENERIC: Record<JobType, { summary: string; description: string }> = {
   annotation_resurface: { summary: '批注回顾 · 今天', description: '挑出还没消化成卡片的旧批注' },
   memory_organize: { summary: '记忆整理', description: '根据确认与拒绝整理记忆集合' },
   conversation: { summary: '对话栏 · 一条消息', description: '在对话栏里回答或修改文档' },
+  concept_extract: { summary: '概念提取 · 一篇文档', description: '生成概念与关系候选' },
+  concept_practice: { summary: '概念出题 · 一个练习', description: '为概念或关系生成练习题候选' },
 };
 
 export function isUuid(value: string): boolean {

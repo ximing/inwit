@@ -120,6 +120,9 @@ export function planReloads(changes: SyncChange[], view: SyncView): ReloadIntent
       case 'resurface':
         push({ kind: change.scope });
         break;
+      case 'concept':
+        // 移动端首版无概念界面，忽略概念域变更（复习协议校验在服务端兜底）。
+        break;
       default: {
         const unexpected: never = change.scope;
         void unexpected;

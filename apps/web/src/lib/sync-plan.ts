@@ -117,6 +117,9 @@ export function planReloads(changes: SyncChange[], view: SyncView): ReloadIntent
       case 'resurface':
         push({ kind: change.scope });
         break;
+      case 'concept':
+        // 概念域变更由各 ConceptsService 订阅处理（重载业务数据，不重置视口）。
+        break;
       default: {
         const unexpected: never = change.scope;
         void unexpected;

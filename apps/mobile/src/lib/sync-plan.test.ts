@@ -260,6 +260,20 @@ describe('planReloads', () => {
     expect(reviewReloadMode(false)).toBe('queue');
   });
 
+  it('does not add a reload intent for a concept change', () => {
+    const documentOnly = plan([change({ id: '1', scope: 'document', resourceId: DOC })], [], view());
+    const withConcept = plan(
+      [
+        change({ id: '1', scope: 'document', resourceId: DOC }),
+        change({ id: '2', scope: 'concept', resourceId: TOPIC }),
+      ],
+      [],
+      view(),
+    );
+    expect(withConcept).toEqual(documentOnly);
+    expect(plan([change({ id: '3', scope: 'concept', resourceId: null })], [], view())).toEqual([]);
+  });
+
   it('emits a job intent without a jobs-page policy', () => {
     expect(
       plan([change({ id: '1', scope: 'job', resourceId: JOB })], [], view({ jobs: [], activeJobId: null })),

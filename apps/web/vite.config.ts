@@ -95,6 +95,10 @@ export default defineConfig({
         target: 'http://localhost:3020',
         changeOrigin: true,
       },
+      '/health': {
+        target: 'http://localhost:3020',
+        changeOrigin: true,
+      },
     },
   },
   preview: {
@@ -102,6 +106,10 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
+        target: 'http://localhost:3020',
+        changeOrigin: true,
+      },
+      '/health': {
         target: 'http://localhost:3020',
         changeOrigin: true,
       },

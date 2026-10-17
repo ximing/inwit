@@ -10,6 +10,8 @@ import { processTopic } from '../agent/topic.js';
 import { processWeeklyReport } from '../agent/weekly.js';
 import { processAnnotationResurface } from '../annotations/resurface.js';
 import type { JobRow } from '../db/schema.js';
+import { processConceptExtract } from '../agent/concept-extract.js';
+import { processConceptPractice } from '../agent/concept-practice.js';
 import { processExtract } from '../documents/extract-job.js';
 import { processOcr } from '../ocr/ocr-job.js';
 import { logger } from '../utils/logger.js';
@@ -26,6 +28,8 @@ const HANDLERS: Record<JobType, (job: JobRow) => Promise<void>> = {
   annotation_resurface: processAnnotationResurface,
   memory_organize: processMemoryOrganize,
   conversation: processConversation,
+  concept_extract: processConceptExtract,
+  concept_practice: processConceptPractice,
 };
 
 export async function processJob(job: JobRow): Promise<void> {

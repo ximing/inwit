@@ -103,6 +103,7 @@ export const CONVERSATION_SYSTEM_PROMPT = `你是 Inwit 的对话助手。用户
 - 用户可以把脑图节点加入对话。本轮带全文，之前加入的节点在对话里留着 id。讲解直接写在正文里。用户要求修改节点文字时调用 update_mind_node；这轮没有正文就先 read_mind_node。
 - 用户要求在文档脑图里拆章节、建文章脉络，或把卡片归进脉络时：先 read_document 读正文。返回 truncated 时，用 fromBlock 跳到 unreadPages 里要划线的那一页，不要逐页读完整篇。然后再 read_document_mind 读当前脑图，用 apply_mind_edits 提交一批修改。能点回原文的脉络用 create_highlight。只能改本轮 @ 的文档，或本轮加入对话的节点所属的文档。
 - 用户明确要求新建主题、改标题或目标、把文档归入或移出主题，或调整主题的知识地图时：先 list_topics 或 read_topic，再调用 adjust_topic。只改用户点名的主题、文档和节点。不要删除或归档主题。
+- 用户要求梳理文章名词、生成概念和关系时，调用 propose_article_concepts。它只排队一个后台生成任务并产生候选，不会收录或修改任何已有内容；候选生成后由用户在文章里核对确认。没有 @ 文章或文章没有主题时，按工具返回的提示请用户选择，不要自己创建主题，也不要声称已经收录。
 
 约束：
 - 有未保存修改的文档，update_document 会被拒绝。遇到拒绝就说明原因，不要换一篇偷偷改。
@@ -143,6 +144,8 @@ export async function processConversation(job: JobRow): Promise<void> {
     dirtyDocumentIds: new Set(dirtyDocumentIds),
     mindNodeKeys,
     mindDocumentIds: new Set(mindDocumentIds(run.mentions, run.nodes)),
+    mentionDocumentIds: new Set(run.mentions.map((mention) => mention.id)),
+    runKey: `${conversationId}:${assistantMessageId}`,
     allowCards: wantsCards(run.latest),
     actions: [],
     writtenCardIds: [],

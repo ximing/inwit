@@ -8,7 +8,7 @@ import {
   type ReviewStrugglingCard,
   type ReviewToday,
 } from '@inwit/dto';
-import { errorMessage } from '@/api/client';
+import { ApiError, errorMessage } from '@/api/client';
 import { archiveCard, getCardImage, suspendCard } from '@/api/cards';
 import { maskCloze, stripCloze } from '@/lib/cloze';
 import {
@@ -66,6 +66,8 @@ export class ReviewService extends Service {
   lastFeedback: ReviewFeedback | null = null;
   /** 打分飞出方向：忘了←左 / 模糊↑上 / 想起来→右；null 表示无动画。 */
   flyDir: 'left' | 'up' | 'right' | null = null;
+  /** 正在打分的卡的幂等键；同卡重试复用，成功或换卡清空。 */
+  gradeRequestId: string | null = null;
   /** 正在飞出的卡片 id，防止下一张卡继承飞出样式。 */
   flyCardId: string | null = null;
   /** 本场打小结，完成页回顾用。 */
@@ -392,8 +394,15 @@ export class ReviewService extends Service {
     if (!item || this.grading || !this.flipped) return;
     this.error = null;
     this.lastFeedback = feedback;
+    // 同一卡的打分重试复用同一 requestId（幂等）；成功后清空。
+    const requestId = this.gradeRequestId ?? crypto.randomUUID();
+    this.gradeRequestId = requestId;
     try {
-      await submitReviewFeedback(item.card.id, feedback);
+      await submitReviewFeedback(item.card.id, feedback, {
+        ...(item.reviewToken !== undefined ? { reviewToken: item.reviewToken } : {}),
+        requestId,
+      });
+      this.gradeRequestId = null;
       this.reviewedToday += 1;
       this.sessionRecap = { ...this.sessionRecap, [feedback]: this.sessionRecap[feedback] + 1 };
       if (this.isCurrentCalMonth) {
@@ -414,6 +423,15 @@ export class ReviewService extends Service {
         }
       }
     } catch (err) {
+      // 题目在别处更新过：丢弃本次作答，重新取队列让用户体验新题。
+      if (err instanceof ApiError && err.code === 'REVIEW_CONTENT_CHANGED') {
+        this.gradeRequestId = null;
+        this.error = '题目已更新，请重新复习';
+        this.lastFeedback = null;
+        this.flipped = false;
+        void this.load();
+        return;
+      }
       this.error = errorMessage(err, '这次反馈没记下，再点一次');
       this.lastFeedback = null;
     }

@@ -8,7 +8,7 @@ import {
 } from '@inwit/dto';
 import { router } from 'expo-router';
 import { archiveCard, getCardImage, suspendCard } from '@/api/cards';
-import { errorMessage } from '@/api/client';
+import { ApiError, errorMessage } from '@/api/client';
 import { getReviewSettings, getReviewStats, getReviewToday, submitReviewFeedback } from '@/api/review';
 import {
   isPresignedStale,
@@ -61,6 +61,8 @@ export class ReviewSessionService extends Service {
   settings: ReviewSettings = cloneSettings(DEFAULT_REVIEW_SETTINGS);
   cardImageUrls: Record<string, PresignedUrlEntry> = {};
   removing = false;
+  /** 打分幂等键：同卡重试复用，成功或换卡清空。 */
+  gradeRequestId: string | null = null;
   private sync: SyncService | null = null;
   private unsubscribeSync: (() => void) | null = null;
   private syncChain: Promise<void> = Promise.resolve();
@@ -209,9 +211,16 @@ export class ReviewSessionService extends Service {
     const item = currentItem(state);
     if (!item || !canGrade(state, this.grading)) return;
     this.error = null;
+    // 同一卡的打分重试复用同一 requestId（幂等）；成功后清空。
+    const requestId = this.gradeRequestId ?? crypto.randomUUID();
+    this.gradeRequestId = requestId;
     this.commit(applyGradeStart(state, feedback));
     try {
-      await submitReviewFeedback(item.card.id, feedback);
+      await submitReviewFeedback(item.card.id, feedback, {
+        ...(item.reviewToken !== undefined ? { reviewToken: item.reviewToken } : {}),
+        requestId,
+      });
+      this.gradeRequestId = null;
       this.commit(applyGradeSuccess(this.snapshot()));
       this.refreshDueBadge();
       if (this.items.length === 0) {
@@ -222,6 +231,14 @@ export class ReviewSessionService extends Service {
         }
       }
     } catch (err) {
+      // 题目在别处更新过：丢弃本次作答，重新取队列。
+      if (err instanceof ApiError && err.code === 'REVIEW_CONTENT_CHANGED') {
+        this.gradeRequestId = null;
+        this.error = '题目已更新，请重新复习';
+        this.commit(applyGradeFailure(this.snapshot()));
+        void this.load();
+        return;
+      }
       this.error = errorMessage(err, '这次反馈没记下，再点一次');
       this.commit(applyGradeFailure(this.snapshot()));
     }

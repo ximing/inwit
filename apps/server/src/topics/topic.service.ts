@@ -1,7 +1,7 @@
 import type { CreateTopicInput, ListTopicsQuery, Topic, UpdateTopicInput } from '@inwit/dto';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
-import { topics, type TopicRow } from '../db/schema.js';
+import { cards, conceptPracticeBindings, topics, type TopicRow } from '../db/schema.js';
 import { AppError } from '../errors.js';
 
 export function toPublicTopic(row: TopicRow): Topic {
@@ -88,7 +88,30 @@ export async function updateTopic(
 }
 
 export async function archiveTopic(userId: string, id: string): Promise<Topic> {
-  return updateTopic(userId, id, { status: 'archived' });
+  await getOwnedTopic(userId, id);
+  return getDb().transaction(async (tx) => {
+    const [row] = await tx
+      .update(topics)
+      .set({ status: 'archived', updatedAt: new Date() })
+      .where(and(eq(topics.id, id), eq(topics.userId, userId)))
+      .returning();
+    if (!row) throw AppError.of(404, 'TOPIC_NOT_FOUND');
+    // 主题归档暂停其全部概念绑定练习：标记显式恢复门槛并轮换受影响卡片版本。
+    // 不写 review_states.suspendedAt（手动暂停与知识阻断分离）；恢复主题后需用户显式 resume。
+    const affected = await tx
+      .update(conceptPracticeBindings)
+      .set({ resumeRequired: true, updatedAt: new Date() })
+      .where(and(eq(conceptPracticeBindings.topicId, id), isNull(conceptPracticeBindings.endedAt)))
+      .returning({ cardId: conceptPracticeBindings.cardId });
+    const cardIds = [...new Set(affected.map((binding) => binding.cardId))];
+    if (cardIds.length > 0) {
+      await tx
+        .update(cards)
+        .set({ reviewRevision: sql`${cards.reviewRevision} + 1`, updatedAt: new Date() })
+        .where(and(inArray(cards.id, cardIds), sql`${cards.reviewRevision} IS NOT NULL`));
+    }
+    return toPublicTopic(row);
+  });
 }
 
 export async function deleteTopic(userId: string, id: string): Promise<void> {

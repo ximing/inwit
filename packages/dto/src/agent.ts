@@ -11,6 +11,8 @@ export const AGENT_TYPES = [
   'ocr',
   'memory_organize',
   'conversation',
+  'concept_extract',
+  'concept_practice',
 ] as const;
 export const agentTypeSchema = z.enum(AGENT_TYPES);
 export type AgentType = z.infer<typeof agentTypeSchema>;

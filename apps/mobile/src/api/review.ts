@@ -11,16 +11,22 @@ import type {
 import { request } from './client';
 
 export function getReviewToday(): Promise<ReviewToday> {
-  return request<ReviewToday>('/api/review/today');
+  // 复习协议 2：受管理卡随队列下发 reviewToken
+  return request<ReviewToday>('/api/review/today?reviewProtocol=2');
 }
 
 export function submitReviewFeedback(
   cardId: string,
   feedback: ReviewFeedback,
+  opts?: { reviewToken?: string; requestId?: string },
 ): Promise<ReviewFeedbackResult> {
   return request<ReviewFeedbackResult>(`/api/review/${cardId}/feedback`, {
     method: 'POST',
-    body: JSON.stringify({ feedback }),
+    body: JSON.stringify({
+      feedback,
+      ...(opts?.reviewToken !== undefined ? { reviewToken: opts.reviewToken } : {}),
+      ...(opts?.requestId !== undefined ? { requestId: opts.requestId } : {}),
+    }),
   });
 }
 

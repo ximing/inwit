@@ -35,6 +35,7 @@ export function toPublicCardBase(row: CardRow): Card {
     source: row.source,
     acceptance: row.acceptance,
     rejectReason: row.rejectReason ?? null,
+    reviewRevision: row.reviewRevision ?? null,
     anchorText: row.anchorText ?? null,
     anchorBlockIndex: row.anchorBlockIndex ?? null,
     hasImage: Boolean(row.imageKey),

@@ -19,17 +19,29 @@ const TRIGGER_TABLES = [
   'memories',
 ] as const;
 
-function latestSyncMigration(): string {
+/** T10：概念与关系领域的行触发器（0044_concept_sync）。 */
+const CONCEPT_TRIGGER_TABLES = [
+  'concepts',
+  'concept_relations',
+  'concept_evidence',
+  'concept_notes',
+  'document_knowledge_refs',
+  'card_knowledge_links',
+  'concept_batches',
+  'concept_practice_proposals',
+  'concept_practice_bindings',
+] as const;
+
+function syncMigrationSql(): string {
   const files = readdirSync(drizzleDir)
     .filter((name) => name.endsWith('.sql') && name.includes('sync'))
     .sort();
-  const latest = files.at(-1);
-  if (!latest) throw new Error(`no sync migration sql in ${drizzleDir}`);
-  return readFileSync(path.join(drizzleDir, latest), 'utf8');
+  if (files.length === 0) throw new Error(`no sync migration sql in ${drizzleDir}`);
+  return files.map((name) => readFileSync(path.join(drizzleDir, name), 'utf8')).join('\n');
 }
 
 describe('sync trigger migration', () => {
-  const sql = latestSyncMigration();
+  const sql = syncMigrationSql();
 
   it('creates sync_changes and sync_emit without swallowing errors', () => {
     expect(sql).toContain('sync_changes');
@@ -44,6 +56,14 @@ describe('sync trigger migration', () => {
       expect(sql).toMatch(new RegExp(`ON ${table}\\b`));
     }
     expect(sql).toMatch(/CREATE TRIGGER sync_jobs_insert\b/);
+  });
+
+  it('names a row trigger for every concept-domain table and extends the scope enum', () => {
+    for (const table of CONCEPT_TRIGGER_TABLES) {
+      expect(sql).toMatch(new RegExp(`ON ${table}\\b`));
+    }
+    expect(sql).toContain(`'concept'`);
+    expect(sql).toMatch(/'resurface', 'concept'\)/);
   });
 
   it('skips a job heartbeat in the UPDATE WHEN clause', () => {

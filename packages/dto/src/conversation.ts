@@ -117,6 +117,17 @@ export const conversationActionSchema = z.discriminatedUnion('type', [
     clearedDocumentCount: z.number().int().nonnegative().default(0),
     clearedCardCount: z.number().int().nonnegative().default(0),
   }),
+  /** 概念生成候选批次：只生成，不含确认权限；动作卡打开批次预览。 */
+  z.object({
+    type: z.literal('concept_batch'),
+    documentId: z.string().uuid(),
+    title: z.string(),
+    topicId: z.string().uuid(),
+    batchId: z.string().uuid(),
+    jobId: z.string().uuid(),
+    status: z.enum(['queued', 'rejected']),
+    reason: z.string().optional(),
+  }),
 ]);
 
 /** 对话里展示的脑图调整结果。 */

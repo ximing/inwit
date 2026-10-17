@@ -100,6 +100,20 @@ export const envSchema = z.object({
   MEMORY_ORGANIZE_ENABLED: boolEnum.default('true'),
   /** When false, GET /api/sync is not registered. Row triggers keep writing. */
   SYNC_ENABLED: boolEnum.default('true'),
+  /**
+   * 概念与关系主开关（默认关闭）。未单独设置读/写开关时，两者都跟随它。
+   * 关闭时入口与 API 不可见（404 CONCEPTS_DISABLED）；已落库数据保留。
+   */
+  CONCEPTS_ENABLED: boolEnum.default('false'),
+  /**
+   * 概念读 API 与入口可见性。未设置时跟随 CONCEPTS_ENABLED。
+   */
+  CONCEPTS_READ_ENABLED: z.preprocess(blankToUndef, boolEnum.optional()),
+  /**
+   * 概念新生成与写入。未设置时跟随 CONCEPTS_ENABLED。
+   * 读关闭时不能单独打开（见 conceptsWritable）。
+   */
+  CONCEPTS_WRITE_ENABLED: z.preprocess(blankToUndef, boolEnum.optional()),
 });
 
 export const config = envSchema.parse(process.env);

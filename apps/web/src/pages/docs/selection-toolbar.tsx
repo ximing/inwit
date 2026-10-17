@@ -1,6 +1,6 @@
 import { CONVERSATION_TEXT_MAX, IMAGE_EXCERPT_QUOTE, type AnnotationGeometry } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
-import { Copy, GripVertical, Highlighter, MessageSquarePlus, Sparkles, SquarePlus } from 'lucide-react';
+import { BookMarked, Copy, GripVertical, Highlighter, MessageSquarePlus, Sparkles, SquarePlus, Workflow } from 'lucide-react';
 import {
   useEffect,
   useLayoutEffect,
@@ -18,6 +18,8 @@ import { UiPrefsService } from '@/services/ui-prefs.service';
 import { readAssistantModelId } from '@/shell/assistant-model';
 import { highlightSelection } from '@/shell/assistant-selection';
 import { AssistantService } from '@/shell/assistant.service';
+import { ConceptsService } from '@/features/concepts/concepts.service';
+import { StudyWorkspaceService } from '@/features/study-workspace/study-workspace.service';
 import { DocsService } from './docs.service';
 import { type QuoteDragExtra } from './mindmap-quote';
 import { beginQuoteDrag, isQuoteDragActive } from './quote-drag';
@@ -83,8 +85,12 @@ export const SelectionActions = observer(function SelectionActions({
 }) {
   const service = useService(DocsService);
   const prefs = useService(UiPrefsService);
+  const concepts = useService(ConceptsService);
+  const workspace = useService(StudyWorkspaceService);
   const digesting = service.selectionDigesting;
   const locked = !documentId;
+  const conceptsReady = concepts.enabled && service.doc?.topicId != null;
+  const conceptTip = service.doc?.topicId == null ? '先归入主题' : undefined;
   /** 只有脑图开着（map 布局）时，选区才能拖成脑图节点。 */
   const canQuoteDrag = !locked && prefs.cardLayout === 'map';
 
@@ -192,6 +198,38 @@ export const SelectionActions = observer(function SelectionActions({
       >
         <MessageSquarePlus width={15} height={15} strokeWidth={2} />
       </ToolIcon>
+      {concepts.probed && concepts.enabled && concepts.writable ? (
+        <>
+          <ToolIcon
+            label={conceptTip ?? (text.trim().length === 0 ? '先选中术语' : '收为概念')}
+            disabled={!conceptsReady || text.trim().length === 0}
+            onAction={() => {
+              concepts.createPrefill = text.trim().slice(0, 60);
+              workspace.setMode('concepts');
+            }}
+          >
+            <BookMarked width={15} height={15} strokeWidth={2} />
+          </ToolIcon>
+          <ToolIcon
+            label={conceptTip ?? '梳理选段概念与关系'}
+            disabled={!conceptsReady || concepts.batchPhase === 'generating'}
+            onAction={() => {
+              workspace.setMode('concepts');
+              const anchor = resolveAnchor();
+              if (anchor.blockIndex != null) {
+                void concepts.startGeneration('selection', {
+                  fromBlockIndex: anchor.blockIndex,
+                  toBlockIndex: anchor.blockIndex,
+                });
+              } else {
+                void concepts.startGeneration('document');
+              }
+            }}
+          >
+            <Workflow width={15} height={15} strokeWidth={2} />
+          </ToolIcon>
+        </>
+      ) : null}
     </>
   );
 });

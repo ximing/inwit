@@ -85,6 +85,15 @@ function actionView(
     };
   }
   if (action.type === 'apply_mind_edits') return { text: mindEditSummary(action), href };
+  if (action.type === 'concept_batch') {
+    if (action.status === 'rejected') {
+      return {
+        text: `没能生成《${action.title}》的概念候选${action.reason ? `：${action.reason}` : ''}`,
+        href,
+      };
+    }
+    return { text: `正在生成《${action.title}》的概念与关系候选`, href };
+  }
   return { text: `已写入 ${String(action.count)} 张卡片到《${action.title}》`, href };
 }
 

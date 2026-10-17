@@ -43,6 +43,8 @@ export const cardSchema = z.object({
   source: cardSourceSchema,
   acceptance: cardAcceptanceSchema,
   rejectReason: z.string().nullable(),
+  /** 受概念练习协议管理的版本；null = 从未受管理的普通卡。 */
+  reviewRevision: z.number().int().positive().nullable().default(null),
   anchorText: z.string().nullable(),
   anchorBlockIndex: z.number().int().nullable(),
   hasImage: z.boolean(),

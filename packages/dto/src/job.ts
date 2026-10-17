@@ -13,6 +13,8 @@ export const JOB_TYPES = [
   'annotation_resurface',
   'memory_organize',
   'conversation',
+  'concept_extract',
+  'concept_practice',
 ] as const;
 export const jobTypeSchema = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof jobTypeSchema>;
@@ -219,6 +221,20 @@ export const memoryOrganizeJobPayloadSchema = z.object({
   batchFeedbackIds: z.array(z.string().uuid()).max(12).optional(),
 });
 export type MemoryOrganizeJobPayload = z.infer<typeof memoryOrganizeJobPayloadSchema>;
+
+/** 概念提取任务（M2 接通 processor；M1 不入队）。 */
+export const conceptExtractJobPayloadSchema = z.object({
+  batchId: z.string().uuid(),
+  documentId: z.string().uuid(),
+  topicId: z.string().uuid(),
+});
+export type ConceptExtractJobPayload = z.infer<typeof conceptExtractJobPayloadSchema>;
+
+/** 概念练习出题任务（M3/T6 接通 processor；M1 不入队）。 */
+export const conceptPracticeJobPayloadSchema = z.object({
+  proposalId: z.string().uuid(),
+});
+export type ConceptPracticeJobPayload = z.infer<typeof conceptPracticeJobPayloadSchema>;
 
 const emptyToUndef = (value: unknown) => (value === '' || value === undefined ? undefined : value);
 

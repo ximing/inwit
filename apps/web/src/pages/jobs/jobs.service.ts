@@ -62,6 +62,8 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
   annotation_resurface: '批注回顾',
   memory_organize: '记忆整理',
   conversation: '对话栏',
+  concept_extract: '概念提取',
+  concept_practice: '概念出题',
 };
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {

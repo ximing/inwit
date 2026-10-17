@@ -25,6 +25,7 @@ const HostedDocsPage = lazy(() =>
 );
 import { DialogService } from '@/services/dialog.service';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
+import { TopicConceptsTab } from './concepts-tab';
 import { TopicCanvas } from './topic-canvas';
 import { TopicsService, type TopicListItem } from './topics.service';
 
@@ -695,6 +696,15 @@ const TopicSearch = observer(function TopicSearch() {
           <button
             type="button"
             role="tab"
+            aria-selected={service.tab === 'concepts'}
+            className={service.tab === 'concepts' ? 'is-on' : undefined}
+            onClick={() => service.setTab('concepts')}
+          >
+            概念
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={service.tab === 'feed'}
             className={service.tab === 'feed' ? 'is-on' : undefined}
             onClick={() => service.setTab('feed')}
@@ -715,6 +725,7 @@ const TopicSearch = observer(function TopicSearch() {
           {service.tab === 'docs' ? <DocsTab /> : null}
           {service.tab === 'map' ? <MapTab /> : null}
           {service.tab === 'canvas' ? <TopicCanvas /> : null}
+          {service.tab === 'concepts' && service.topic ? <TopicConceptsTab topicId={service.topic.id} /> : null}
           {service.tab === 'feed' ? <FeedTab /> : null}
         </>
       )}

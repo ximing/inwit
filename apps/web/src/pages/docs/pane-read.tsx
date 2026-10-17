@@ -12,7 +12,7 @@ import { Tag } from '@/components/tag';
 import { textToPmDoc } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { documentReturnTarget } from '@/routes';
-import { CardRail } from './card-rail';
+import { StudyDock } from '@/features/study-workspace/study-workspace.js';
 import { DocFindBar } from './doc-find-bar';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
@@ -155,7 +155,7 @@ export const PaneRead = observer(function PaneRead() {
             </div>
           )}
         </div>
-        <CardRail />
+        <StudyDock />
       </div>
       {isPdf ? null : <ReadSelectionToolbar />}
     </div>

@@ -16,6 +16,7 @@ import {
 } from './conversation-logic.js';
 import { sliceNumberedDocument } from './document-read-logic.js';
 import { applyMindEditsTool, readDocumentMindTool } from './conversation-mind-tools.js';
+import { proposeArticleConceptsTool } from './conversation-concept-tools.js';
 import { conversationTopicTools } from './conversation-topic-tools.js';
 import { applyMindNodeUpdate, loadMindNodeFacts, mindNodeAllowed } from './conversation-nodes.js';
 import { cardDraftSchema, searchCardsTool, writeCardsTool, type DigestSession } from './tools.js';
@@ -28,6 +29,10 @@ export interface ConversationSession {
   mindNodeKeys: ReadonlySet<string>;
   /** Documents this turn may restructure: mentions plus attached nodes. */
   mindDocumentIds: ReadonlySet<string>;
+  /** 本轮用户消息 @ 的文档（可信上下文，propose_article_concepts 的默认文章）。 */
+  mentionDocumentIds: ReadonlySet<string>;
+  /** 当前对话回合的稳定标识（conversationId:assistantMessageId），用于幂等。 */
+  runKey: string;
   allowCards: boolean;
   actions: ConversationAction[];
   writtenCardIds: string[];
@@ -454,5 +459,6 @@ export function conversationTools(session: ConversationSession): AgentTool[] {
     updateMindNodeTool(session),
     readDocumentMindTool(session),
     applyMindEditsTool(session),
+    proposeArticleConceptsTool(session),
   ];
 }

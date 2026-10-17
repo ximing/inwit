@@ -1,0 +1,154 @@
+[
+  {
+    "name": "prepare refresh with independent cameras, reading, draft, selection, max and filters",
+    "result": {
+      "mode": "compare",
+      "arrangement": "auto",
+      "readRatio": 0.32,
+      "graphRatio": 0.5,
+      "max": "concepts",
+      "focus": "concepts",
+      "outline": {
+        "x": 85,
+        "y": 20,
+        "z": 0.8,
+        "expanded": [
+          "ch1"
+        ],
+        "selected": null
+      },
+      "concepts": {
+        "x": 70,
+        "y": 60,
+        "z": 0.9,
+        "expanded": false,
+        "selected": "r1"
+      },
+      "highlight": [
+        "Task",
+        "Trial"
+      ],
+      "search": "Trial",
+      "filter": "all",
+      "graphMode": "list",
+      "local": false,
+      "detail": {
+        "kind": "relation",
+        "id": "r1"
+      },
+      "outlineCard": null,
+      "scroll": {},
+      "reading": {
+        "id": "h3",
+        "offset": -8.7421875
+      },
+      "drafts": {
+        "relation:r1": {
+          "id": "r1",
+          "from": "Task",
+          "to": "Trial",
+          "predicate": "可以进行多次",
+          "explanation": "刷新后必须保留的未提交草稿",
+          "example": "修复同一个缺陷运行五次：1 个 Task，5 个 Trial。",
+          "source": "h2",
+          "feedback": "想起来了"
+        }
+      },
+      "candidate": {
+        "concept": true,
+        "relation": false,
+        "name": "Reliability",
+        "explanation": "在固定条件下重复执行时结果的一致程度。"
+      },
+      "history": [],
+      "review": {
+        "answer": "",
+        "revealed": false,
+        "feedback": null
+      }
+    }
+  },
+  {
+    "name": "refresh restores complete view and unsaved draft",
+    "result": [
+      {
+        "key": "outline",
+        "pass": true
+      },
+      {
+        "key": "concepts",
+        "pass": true
+      },
+      {
+        "key": "mode",
+        "pass": true
+      },
+      {
+        "key": "max",
+        "pass": true
+      },
+      {
+        "key": "search",
+        "pass": true
+      },
+      {
+        "key": "filter",
+        "pass": true
+      },
+      {
+        "key": "graphMode",
+        "pass": true
+      },
+      {
+        "key": "drafts",
+        "pass": true
+      },
+      {
+        "key": "candidate",
+        "pass": true
+      },
+      {
+        "key": "readingScroll",
+        "pass": true
+      }
+    ]
+  },
+  {
+    "name": "DOM keyboard separator adjusts ratio",
+    "result": {
+      "pass": true,
+      "ratio": 0.34,
+      "focus": "read-split"
+    }
+  },
+  {
+    "name": "DOM keyboard node retains focus",
+    "result": {
+      "pass": true,
+      "focused": "1. 从任务到尝试"
+    }
+  },
+  {
+    "name": "invalid source and deleted target do not jump",
+    "result": {
+      "sourceNoJump": true,
+      "sourceMessage": true,
+      "deletedFocus": true,
+      "deletedCamera": true
+    }
+  },
+  {
+    "name": "narrow keeps compare preference",
+    "result": {
+      "pass": true,
+      "label": "窄屏上下聚焦 · 保留偏好：compare"
+    }
+  },
+  {
+    "name": "restored space restores compare",
+    "result": {
+      "pass": true,
+      "label": "正文左 / 双图上下 · 保留偏好：compare"
+    }
+  }
+]

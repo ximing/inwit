@@ -26,6 +26,16 @@ describe('pipelineDocumentId', () => {
     expect(pipelineDocumentId({ type: 'selection', payload: { documentId: DOC_ID } })).toBeNull();
     expect(pipelineDocumentId({ type: 'evolve', payload: { cardId: 'c' } })).toBeNull();
     expect(pipelineDocumentId({ type: 'weekly_report', payload: {} })).toBeNull();
+    // concept_extract 失败不能把正常文章标为 failed（失败落在批次上）
+    expect(
+      pipelineDocumentId({
+        type: 'concept_extract',
+        payload: { batchId: 'b', documentId: DOC_ID, topicId: 't' },
+      }),
+    ).toBeNull();
+    expect(
+      pipelineDocumentId({ type: 'concept_practice', payload: { proposalId: 'p' } }),
+    ).toBeNull();
   });
 
   it('returns null when the payload carries no documentId', () => {

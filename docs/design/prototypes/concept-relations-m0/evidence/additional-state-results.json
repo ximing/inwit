@@ -1,0 +1,67 @@
+[
+  {
+    "name": "real scroll positions captured",
+    "result": {
+      "pass": true,
+      "scroll": {
+        "concept-list": 120,
+        "concept-detail": 180,
+        "article": 600
+      }
+    }
+  },
+  {
+    "name": "list detail reader restored after A B",
+    "result": {
+      "pass": true
+    }
+  },
+  {
+    "name": "candidate unchecked dependency and draft survive refresh",
+    "result": {
+      "pass": true
+    }
+  },
+  {
+    "name": "reading anchor survives refresh",
+    "result": {
+      "pass": true,
+      "actual": 600
+    }
+  },
+  {
+    "name": "legal three node cycle retained",
+    "result": {
+      "pass": true,
+      "relations": [
+        {
+          "id": "r7",
+          "from": "Agent",
+          "to": "Tool",
+          "predicate": "调用",
+          "explanation": "在本文的代码修复语境中，Agent 调用 Tool。方向表达这一具体作用，并不表示通用的先后依赖。",
+          "example": "以修复一个解析错误为例，结合第 3 章的过程理解这条联系。",
+          "source": "h7"
+        },
+        {
+          "id": "r8",
+          "from": "Tool",
+          "to": "Feedback",
+          "predicate": "返回",
+          "explanation": "在本文的代码修复语境中，Tool 返回 Feedback。方向表达这一具体作用，并不表示通用的先后依赖。",
+          "example": "以修复一个解析错误为例，结合第 7 章的过程理解这条联系。",
+          "source": "h18"
+        },
+        {
+          "id": "r9",
+          "from": "Feedback",
+          "to": "Agent",
+          "predicate": "指导下一步",
+          "explanation": "在本文的代码修复语境中，Feedback 指导下一步 Agent。方向表达这一具体作用，并不表示通用的先后依赖。",
+          "example": "以修复一个解析错误为例，结合第 7 章的过程理解这条联系。",
+          "source": "h18"
+        }
+      ]
+    }
+  }
+]

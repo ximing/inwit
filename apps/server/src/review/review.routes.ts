@@ -1,4 +1,4 @@
-import { reviewSettingsSchema, submitReviewFeedbackSchema } from '@inwit/dto';
+import { reviewSettingsSchema, reviewTodayQuerySchema, submitReviewFeedbackSchema } from '@inwit/dto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../auth/authenticate.js';
@@ -25,7 +25,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   const auth = { preHandler: [app.authenticate] };
 
   app.get('/api/review/today', auth, async (req) => {
-    return getReviewToday(requireUser(req).id);
+    const { reviewProtocol } = reviewTodayQuerySchema.parse(req.query);
+    return getReviewToday(requireUser(req).id, new Date(), reviewProtocol);
   });
 
   app.get('/api/review/stats', auth, async (req) => {
@@ -58,6 +59,9 @@ export function registerReviewRoutes(app: FastifyInstance): void {
   app.post('/api/review/:cardId/feedback', auth, async (req) => {
     const { cardId } = cardIdParamsSchema.parse(req.params);
     const input = submitReviewFeedbackSchema.parse(req.body);
-    return submitReviewFeedback(requireUser(req).id, cardId, input.feedback);
+    return submitReviewFeedback(requireUser(req).id, cardId, input.feedback, new Date(), {
+      ...(input.reviewToken !== undefined ? { reviewToken: input.reviewToken } : {}),
+      ...(input.requestId !== undefined ? { requestId: input.requestId } : {}),
+    });
   });
 }

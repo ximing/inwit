@@ -95,6 +95,20 @@ export function conversationActionLine(
   if (action.type === 'apply_mind_edits') {
     return { text: mindEditSummary(action), documentId: action.documentId, topicId: null };
   }
+  if (action.type === 'concept_batch') {
+    if (action.status === 'rejected') {
+      return {
+        text: `没能生成《${action.title}》的概念候选${action.reason ? `：${action.reason}` : ''}`,
+        documentId: action.documentId,
+        topicId: action.topicId,
+      };
+    }
+    return {
+      text: `正在生成《${action.title}》的概念与关系候选`,
+      documentId: action.documentId,
+      topicId: action.topicId,
+    };
+  }
   return {
     text: `已写入 ${String(action.count)} 张卡片到《${action.title}》`,
     documentId: action.documentId,

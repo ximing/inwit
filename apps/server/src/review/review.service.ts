@@ -1,3 +1,4 @@
+import { REVIEW_PROTOCOL_CURRENT } from '@inwit/dto';
 import type {
   CardQuestion,
   MapPlacement,
@@ -18,22 +19,31 @@ import { getDb } from '../db/index.js';
 import {
   cards,
   cardQuestions,
+  conceptOperationRequests,
   mapNodes,
   reviewLogs,
   reviewStates,
   topics,
+  type ConceptPracticeBindingRow,
   type ReviewLogRow,
   type ReviewStateRow,
 } from '../db/schema.js';
 import { AppError } from '../errors.js';
 import { maybeEnqueueAnalyzePatterns } from '../agent/analyze-enqueue.js';
 import { loadStrugglingCards } from '../agent/analyze-tools.js';
+import {
+  activeBindingOf,
+  firstQuestionOf,
+  getReviewEligibility,
+} from '../concepts/concept-practice.service.js';
+import { requestHashOf } from '../concepts/concept-identity.js';
 import { enqueueJob } from '../jobs/queue.js';
 import { recalculateMapNodeStatus } from '../maps/map.service.js';
 import { logger } from '../utils/logger.js';
 import { addLocalDays, endOfLocalDay, localDateKey, startOfLocalDay, startOfLocalDayDaysAgo } from '../utils/date.js';
 import { evolveReasonFor } from './evolve-reason.js';
 import { upsertCardMasteryRecent } from './mastery-memory.js';
+import { issueReviewToken, verifyReviewToken } from './review-token.js';
 import {
   aggregateLast7Days,
   aggregateTopicStats,
@@ -73,6 +83,11 @@ function toPublicLog(row: ReviewLogRow): ReviewLog {
     cardId: row.cardId,
     feedback: row.feedback,
     reviewedAt: row.reviewedAt.toISOString(),
+    bindingId: row.bindingId,
+    epochId: row.epochId,
+    targetVersion: row.targetVersion,
+    questionId: row.questionId,
+    reviewRevision: row.reviewRevision,
   };
 }
 
@@ -161,7 +176,11 @@ async function loadQuestionsByCard(cardIds: string[]): Promise<Map<string, CardQ
   return questionsByCard;
 }
 
-export async function getReviewToday(userId: string, now = new Date()): Promise<ReviewToday> {
+export async function getReviewToday(
+  userId: string,
+  now = new Date(),
+  protocol?: number,
+): Promise<ReviewToday> {
   const dayStart = startOfLocalDay(now);
   const dayEnd = endOfLocalDay(now);
 
@@ -195,19 +214,62 @@ export async function getReviewToday(userId: string, now = new Date()): Promise<
       .then((rows) => rows[0]),
   ]);
 
+  // 协议分流：旧客户端不领取受管理卡；协议 2 下受管理卡还需通过知识资格校验。
+  const protocolVisible: typeof dueRows = [];
+  for (const row of dueRows) {
+    const managed = row.card.reviewRevision !== null;
+    if (!managed) {
+      protocolVisible.push(row);
+      continue;
+    }
+    if (protocol !== REVIEW_PROTOCOL_CURRENT) continue;
+    const eligibility = await getReviewEligibility(getDb(), userId, row.card.id);
+    if (!eligibility.eligible) continue;
+    protocolVisible.push(row);
+  }
+
   const limited = applyReviewQueueLimits(
-    dueRows.map((row) => ({ row, reps: row.state.reps })),
+    protocolVisible.map((row) => ({ row, reps: row.state.reps })),
     settings,
   );
   const selectedRows = limited.selected.map((item) => item.row);
 
   const questionsByCard = await loadQuestionsByCard(selectedRows.map((row) => row.card.id));
   const placements = await loadMapPlacements(selectedRows.map((row) => row.card));
-  const items: ReviewQueueItem[] = selectedRows.map((row) => ({
-    card: toPublicCard(row.card, questionsByCard.get(row.card.id) ?? []),
-    reviewState: toPublicReviewState(row.state),
-    mapPlacement: placements.get(row.card.id) ?? null,
-  }));
+  const items: ReviewQueueItem[] = [];
+  for (const row of selectedRows) {
+    const questions = questionsByCard.get(row.card.id) ?? [];
+    const item: ReviewQueueItem = {
+      card: toPublicCard(row.card, questions),
+      reviewState: toPublicReviewState(row.state),
+      mapPlacement: placements.get(row.card.id) ?? null,
+    };
+    if (row.card.reviewRevision !== null) {
+      // 受管理卡：固定本次下发的实际首题并签发版本令牌（不含答案）。
+      const first = questions[0];
+      const binding = await activeBindingOf(getDb(), row.card.id);
+      if (first) {
+        item.servedQuestionId = first.id;
+        item.reviewToken = issueReviewToken({
+          userId,
+          cardId: row.card.id,
+          questionId: first.id,
+          reviewRevision: row.card.reviewRevision,
+          bindingId: binding?.id ?? null,
+          epochId: binding?.epochId ?? null,
+          targetVersion: binding?.targetVersion ?? null,
+        });
+        if (binding) {
+          item.knowledgeTarget = {
+            kind: binding.conceptId ? 'concept' : 'relation',
+            id: binding.conceptId ?? binding.relationId!,
+            label: '',
+          };
+        }
+      }
+    }
+    items.push(item);
+  }
 
   const reviewedToday = Number(reviewedRow?.n ?? 0);
   return {
@@ -223,15 +285,76 @@ export async function submitReviewFeedback(
   cardId: string,
   feedback: ReviewFeedback,
   now = new Date(),
+  opts?: { reviewToken?: string; requestId?: string },
 ): Promise<ReviewFeedbackResult> {
   return getDb().transaction(async (tx) => {
+    const requestHash = opts?.requestId
+      ? requestHashOf({ cardId, feedback, reviewToken: opts.reviewToken ?? null })
+      : null;
+    if (opts?.requestId && requestHash) {
+      const [existingRequest] = await tx
+        .select()
+        .from(conceptOperationRequests)
+        .where(
+          and(
+            eq(conceptOperationRequests.userId, userId),
+            eq(conceptOperationRequests.operation, 'review_feedback'),
+            eq(conceptOperationRequests.requestId, opts.requestId),
+          ),
+        )
+        .limit(1);
+      if (existingRequest) {
+        if (existingRequest.requestHash !== requestHash) {
+          throw AppError.of(409, 'CONCEPT_REQUEST_CONFLICT');
+        }
+        return existingRequest.responseJson as ReviewFeedbackResult;
+      }
+    }
+
+    // 卡片行锁串行化资格/版本校验与反馈写入（所有变更入口遵守同一锁）。
     const [card] = await tx
-      .select({ id: cards.id, mapNodeId: cards.mapNodeId, acceptance: cards.acceptance })
+      .select()
       .from(cards)
       .where(and(eq(cards.id, cardId), eq(cards.userId, userId), isNull(cards.deletedAt)))
+      .for('update')
       .limit(1);
     if (!card) throw AppError.of(404, 'CARD_NOT_FOUND');
     if (card.acceptance !== 'accepted') throw AppError.of(409, 'CARD_NOT_ACCEPTED');
+
+    // 受管理卡（reviewRevision 非 null）强制版本令牌与资格校验，解绑后也不退回旧协议。
+    let binding: ConceptPracticeBindingRow | null = null;
+    if (card.reviewRevision !== null) {
+      if (!opts?.reviewToken) throw AppError.of(409, 'REVIEW_CLIENT_UPGRADE_REQUIRED');
+      const token = verifyReviewToken(opts.reviewToken);
+      if (!token || token.cardId !== cardId || token.userId !== userId) {
+        throw AppError.of(409, 'REVIEW_CONTENT_CHANGED');
+      }
+      if (token.reviewRevision !== card.reviewRevision) {
+        throw AppError.of(409, 'REVIEW_CONTENT_CHANGED');
+      }
+      const eligibility = await getReviewEligibility(tx, userId, cardId);
+      if (eligibility.knowledgeBlocks.length > 0) {
+        throw AppError.of(409, 'REVIEW_NOT_ELIGIBLE', { reasons: eligibility.knowledgeBlocks });
+      }
+      binding = eligibility.binding;
+      if (binding) {
+        if (
+          token.bindingId !== binding.id ||
+          token.epochId !== binding.epochId ||
+          token.targetVersion !== binding.targetVersion
+        ) {
+          throw AppError.of(409, 'REVIEW_CONTENT_CHANGED');
+        }
+        if (token.questionId !== binding.questionId) {
+          throw AppError.of(409, 'REVIEW_CONTENT_CHANGED');
+        }
+      }
+      // 下发的实际题目必须仍是当前首题（防迟到反馈投到已替换的题目上）。
+      const first = await firstQuestionOf(tx, cardId);
+      if (!first || first.id !== token.questionId) {
+        throw AppError.of(409, 'REVIEW_CONTENT_CHANGED');
+      }
+    }
 
     let [state] = await tx
       .select()
@@ -272,6 +395,12 @@ export async function submitReviewFeedback(
         cardId,
         feedback,
         reviewedAt: now,
+        // 归属按当前有效绑定由服务端填写，不信任客户端自报。
+        bindingId: binding?.id ?? null,
+        epochId: binding?.epochId ?? null,
+        targetVersion: binding?.targetVersion ?? null,
+        questionId: binding?.questionId ?? null,
+        reviewRevision: card.reviewRevision,
       })
       .returning();
     if (!log) throw AppError.of(500, 'INTERNAL_ERROR');
@@ -324,6 +453,16 @@ export async function submitReviewFeedback(
     };
     if (evolveJobId !== undefined) result.evolveJobId = evolveJobId;
     if (analyzeJobId !== undefined) result.analyzeJobId = analyzeJobId;
+
+    if (opts?.requestId && requestHash) {
+      await tx.insert(conceptOperationRequests).values({
+        userId,
+        operation: 'review_feedback',
+        requestId: opts.requestId,
+        requestHash,
+        responseJson: result as unknown as Record<string, unknown>,
+      });
+    }
     return result;
   });
 }
@@ -493,13 +632,18 @@ export async function suspendCard(
   return toPublicReviewState(current);
 }
 
-/** 恢复复习（idempotent）。 */
+/** 恢复复习（idempotent）。受管理卡的知识阻断不能从这里绕过。 */
 export async function resumeCard(
   userId: string,
   cardId: string,
   now = new Date(),
 ): Promise<ReviewState> {
   await requireActiveOwnedCard(userId, cardId);
+  // 旧恢复入口只清手动暂停；知识阻断（needsRefresh/归档/待恢复/题目失配）必须走绑定侧入口。
+  const eligibility = await getReviewEligibility(getDb(), userId, cardId);
+  if (eligibility.reviewRevision !== null && eligibility.knowledgeBlocks.length > 0) {
+    throw AppError.of(409, 'REVIEW_NOT_ELIGIBLE', { reasons: eligibility.knowledgeBlocks });
+  }
   await insertInitialReviewState(userId, cardId, now);
   const [state] = await getDb()
     .update(reviewStates)

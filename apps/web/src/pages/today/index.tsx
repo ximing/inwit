@@ -16,6 +16,8 @@ import {
   MessageCircle,
   MessagesSquare,
   Library,
+  Network,
+  GraduationCap,
   ScanText,
   StickyNote,
   Search,
@@ -47,6 +49,8 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
   annotation_resurface: StickyNote,
   memory_organize: Library,
   conversation: MessagesSquare,
+  concept_extract: Network,
+  concept_practice: GraduationCap,
 };
 
 function hotkeyGlyph(): string {

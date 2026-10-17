@@ -225,4 +225,30 @@ describe('ReviewService sync', () => {
     expect(service.reviewedToday).toBe(2);
     expect(service.calMonth).toBe('2020-01');
   });
+
+  it('replaces the hub queue with the server result and drops cards the response omitted', async () => {
+    const fresh = { card: { id: 'keep' }, reviewToken: 'new' } as ReviewQueueItem;
+    vi.mocked(getReviewToday).mockResolvedValue({
+      items: [fresh],
+      reviewedToday: 4,
+      total: 1,
+      truncated: 0,
+    });
+    vi.mocked(getReviewStats).mockResolvedValue(stats(2));
+    vi.mocked(getStrugglingCards).mockResolvedValue([]);
+    vi.mocked(getReviewCheckins).mockResolvedValue({ month: '2020-01', days: [] });
+    const service = new ReviewService();
+    service.mode = 'hub';
+    service.calMonth = '2020-01';
+    service.items = [
+      { card: { id: 'keep' }, reviewToken: 'old' } as ReviewQueueItem,
+      { card: { id: 'paused' } } as ReviewQueueItem,
+    ];
+    await service.handleSync({ type: 'changes', changes: [reviewChange()] });
+    expect(service.items).toEqual([fresh]);
+    expect(service.items.map((item) => item.card.id)).toEqual(['keep']);
+    expect(service.items.some((item) => item.card.id === 'paused')).toBe(false);
+    expect(service.reviewedToday).toBe(4);
+    expect(service.total).toBe(1);
+  });
 });

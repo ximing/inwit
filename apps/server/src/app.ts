@@ -10,6 +10,8 @@ import { registerAssetRoutes } from './assets/asset.routes.js';
 import { registerAuthRoutes } from './auth/auth.routes.js';
 import { registerCanvasRoutes } from './canvas/canvas.routes.js';
 import { registerCardRoutes } from './cards/card.routes.js';
+import { registerConceptRoutes } from './concepts/concept.routes.js';
+import { healthStatus } from './concepts/concepts-flag.js';
 import { registerConversationRoutes } from './conversations/conversation.routes.js';
 import { registerDocumentRoutes } from './documents/document.routes.js';
 import { registerOpenDocumentsRoutes } from './documents/open-documents.routes.js';
@@ -65,7 +67,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   registerErrorHandler(app);
 
-  app.get('/health', async () => ({ ok: true as const }));
+  app.get('/health', async () => healthStatus());
 
   registerAuthRoutes(app);
   registerUserRoutes(app);
@@ -82,6 +84,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerCanvasRoutes(app);
   registerMemoryRoutes(app);
   registerTopicRoutes(app);
+  registerConceptRoutes(app);
   registerMapRoutes(app);
   registerReviewRoutes(app);
   registerEvolveRoutes(app);

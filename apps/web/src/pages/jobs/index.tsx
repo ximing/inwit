@@ -7,6 +7,8 @@ import {
   MessageCircle,
   MessagesSquare,
   Library,
+  Network,
+  GraduationCap,
   ScanText,
   StickyNote,
   Sparkles,
@@ -50,6 +52,8 @@ const JOB_ICONS: Record<JobType, LucideIcon> = {
   annotation_resurface: StickyNote,
   memory_organize: Library,
   conversation: MessagesSquare,
+  concept_extract: Network,
+  concept_practice: GraduationCap,
 };
 
 const STATUS_CHIPS: Array<{ value: JobStatus | ''; label: string }> = [

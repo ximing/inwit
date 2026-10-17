@@ -21,6 +21,9 @@ import { PaneEmpty, PaneRead } from './pane-read';
 import { SelectionPopoverHost } from './selection-toolbar';
 import { ThoughtPop } from './thought-pop';
 import { WorkbenchList } from './workbench-list';
+import { ConceptsService } from '@/features/concepts/concepts.service';
+import { StudyLinkService } from '@/features/study-workspace/study-link.service';
+import { StudyWorkspaceService } from '@/features/study-workspace/study-workspace.service';
 
 const DocsPageContent = observer(function DocsPageContent() {
   const service = useService(DocsService);
@@ -347,4 +350,7 @@ export const DocsPage = bindServices(DocsPageContent, [
   SearchService,
   AssetUrlsService,
   DocFindService,
+  ConceptsService,
+  StudyWorkspaceService,
+  StudyLinkService,
 ]);

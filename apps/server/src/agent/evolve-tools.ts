@@ -30,6 +30,7 @@ import { memoryLoadTools } from './memory-tools.js';
 import { resolveQuoteAnchor } from './card-anchor-logic.js';
 import { SPLIT_LINK_REASON, SPLIT_LINK_TYPE, SPLIT_MAX_CHILDREN } from './evolve-logic.js';
 import { asToolError } from './tools.js';
+import { guardManagedCardEdit } from '../concepts/concept-practice.service.js';
 
 export interface EvolveSession {
   userId: string;
@@ -204,6 +205,17 @@ export function evolveWriteQuestionsTool(
         }
       }
 
+      // 受管理卡版本保护：记录加题前首题快照
+      const beforeFirst = card.reviewRevision !== null
+        ? (
+            await getDb()
+              .select()
+              .from(cardQuestions)
+              .where(eq(cardQuestions.cardId, card.id))
+              .orderBy(asc(cardQuestions.createdAt), asc(cardQuestions.id))
+              .limit(1)
+          )[0]
+        : undefined;
       const inserted: { id: string; type: string; cardId: string }[] = [];
       for (const q of params.questions) {
         const [row] = await getDb()
@@ -218,6 +230,21 @@ export function evolveWriteQuestionsTool(
         if (!row) throw new Error('failed to insert question');
         session.writtenQuestionIds.push(row.id);
         inserted.push({ id: row.id, type: row.type, cardId: card.id });
+      }
+      if (params.questions.length > 0) {
+        await guardManagedCardEdit(getDb(), card.id, {
+          changed: true,
+          ...(beforeFirst
+            ? {
+                beforeFirst: {
+                  id: beforeFirst.id,
+                  type: beforeFirst.type,
+                  question: beforeFirst.question,
+                  answer: beforeFirst.answer,
+                },
+              }
+            : {}),
+        });
       }
       return toolResult(JSON.stringify({ cardId: card.id, questions: inserted }), inserted);
     },

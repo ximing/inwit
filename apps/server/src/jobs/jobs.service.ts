@@ -13,6 +13,8 @@ import {
 import { isUniqueViolation } from '../db/pg.js';
 import { AppError } from '../errors.js';
 import { failConversationMessage } from '../conversations/conversation.service.js';
+import { cancelConceptBatchByJobId } from '../concepts/concept-batch.service.js';
+import { cancelConceptProposalByJobId } from '../concepts/concept-proposal.service.js';
 import { pipelineDocumentId, resetDocumentPipeline } from '../documents/document-status.js';
 import { endOfLocalDay, startOfLocalDay, startOfLocalDayDaysAgo } from '../utils/date.js';
 import {
@@ -278,7 +280,11 @@ export async function getJobUsage(userId: string, now = new Date()): Promise<Job
 }
 
 export async function retryJob(userId: string, id: string): Promise<Job> {
-  await getOwned(userId, id);
+  const existing = await getOwned(userId, id);
+  // 概念生成/出题任务不按原任务重试：批次终态后由创建接口产生新批次（retryOfBatchId）。
+  if (existing.type === 'concept_extract' || existing.type === 'concept_practice') {
+    throw AppError.of(409, 'JOB_NOT_RETRYABLE');
+  }
   const now = new Date();
   let row: JobRow | undefined;
   try {
@@ -311,5 +317,8 @@ export async function cancelJob(userId: string, id: string): Promise<Job> {
   const row = await markJobCancelled(userId, id);
   if (!row) throw AppError.of(409, 'JOB_NOT_CANCELABLE');
   if (row.type === 'conversation') await failConversationMessage(row, CANCEL_REASON);
+  // 概念生成任务取消时同步批次状态，迟到的结果不再覆盖（条件更新兜底）。
+  if (row.type === 'concept_extract') await cancelConceptBatchByJobId(row.id);
+  if (row.type === 'concept_practice') await cancelConceptProposalByJobId(row.id);
   return toHydratedJob(userId, row);
 }

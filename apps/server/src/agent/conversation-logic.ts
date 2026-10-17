@@ -314,6 +314,12 @@ function actionLine(action: ConversationAction): string {
   }
   if (action.type === 'apply_mind_edits') return mindEditSummary(action);
   if (action.type === 'adjust_topic') return topicAdjustSummary(action);
+  if (action.type === 'concept_batch') {
+    if (action.status === 'rejected') {
+      return `没能生成《${action.title}》的概念候选${action.reason ? `：${action.reason}` : ''}`;
+    }
+    return `正在生成《${action.title}》的概念与关系候选，完成后请先核对再收录`;
+  }
   return `已写入 ${String(action.count)} 张卡片到《${action.title}》`;
 }
 

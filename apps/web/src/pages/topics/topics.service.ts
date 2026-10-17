@@ -117,7 +117,7 @@ async function fetchDocumentWindow(
   return { items, total };
 }
 
-export type TopicTab = 'docs' | 'map' | 'feed' | 'canvas';
+export type TopicTab = 'docs' | 'map' | 'canvas' | 'feed' | 'concepts';
 export type TopicEditField = 'title' | 'goal';
 
 export type TopicListItem = {

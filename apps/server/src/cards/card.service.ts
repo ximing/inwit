@@ -38,6 +38,7 @@ import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from 
 import { commitCanvasRevision, readCanvasHistoryState } from '../canvas/canvas-history.js';
 import { detachCanvasMember } from '../canvas/canvas.service.js';
 import { applyOutlineDetach } from './outline.service.js';
+import { guardManagedCardEdit } from '../concepts/concept-practice.service.js';
 
 function toPublicLink(row: CardLinkRow): CardLink {
   return {
@@ -323,11 +324,29 @@ export async function updateCard(
     if (input.example !== undefined) fields.example = input.example;
     if (input.confusionPoint !== undefined) fields.confusionPoint = input.confusionPoint;
     if (input.tags !== undefined) fields.tags = normalizeTags(input.tags);
+    const contentChanged =
+      (input.concept !== undefined && input.concept !== existing.concept) ||
+      (input.example !== undefined && input.example !== existing.example) ||
+      (input.confusionPoint !== undefined && input.confusionPoint !== existing.confusionPoint);
+
+    // 版本保护：受管理卡（reviewRevision 非 null）需要首题修改前快照
+    const isManaged = existing.reviewRevision !== null;
+    const beforeFirst = isManaged
+      ? await tx
+          .select()
+          .from(cardQuestions)
+          .where(eq(cardQuestions.cardId, id))
+          .orderBy(asc(cardQuestions.createdAt), asc(cardQuestions.id))
+          .limit(1)
+          .then((rows) => rows[0])
+      : undefined;
+
     await tx
       .update(cards)
       .set(fields)
       .where(and(eq(cards.id, id), eq(cards.userId, userId)));
 
+    let questionsChanged = false;
     if (input.questions !== undefined) {
       const existingRows = await tx
         .select()
@@ -338,6 +357,8 @@ export async function updateCard(
         input.questions,
       );
       if (diff.unknownIds.length > 0) throw AppError.of(400, 'VALIDATION_ERROR');
+      questionsChanged =
+        diff.toCreate.length > 0 || diff.toUpdate.length > 0 || diff.toDelete.length > 0;
       for (const question of diff.toCreate) {
         await tx.insert(cardQuestions).values({
           cardId: id,
@@ -357,6 +378,23 @@ export async function updateCard(
           and(eq(cardQuestions.cardId, id), inArray(cardQuestions.id, diff.toDelete)),
         );
       }
+    }
+
+    // 受管理卡的呈现/题目变化：递增 reviewRevision；首题失配标 needsRefresh。
+    if (isManaged && (contentChanged || questionsChanged)) {
+      await guardManagedCardEdit(tx, id, {
+        changed: true,
+        ...(beforeFirst
+          ? {
+              beforeFirst: {
+                id: beforeFirst.id,
+                type: beforeFirst.type,
+                question: beforeFirst.question,
+                answer: beforeFirst.answer,
+              },
+            }
+          : {}),
+      });
     }
   });
 
