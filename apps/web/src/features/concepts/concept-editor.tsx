@@ -7,17 +7,16 @@ import { ConceptsService } from './concepts.service.js';
 /** 新建概念（可附匹配建议提示；同名异义显式选择）。 */
 export const ConceptEditorDialog = observer(function ConceptEditorDialog({
   onClose,
-  initialName = '',
 }: {
   onClose(): void;
-  initialName?: string;
 }) {
   const service = useService(ConceptsService);
-  const [name, setName] = useState(initialName);
-  const [sense, setSense] = useState('');
-  const [definition, setDefinition] = useState('');
-  const [aliases, setAliases] = useState('');
+  const form = service.ensureConceptForm();
   const [busy, setBusy] = useState(false);
+  const name = form.name;
+  const sense = form.sense;
+  const definition = form.definition;
+  const aliases = form.aliases;
 
   const matches = service.matches;
 
@@ -54,7 +53,7 @@ export const ConceptEditorDialog = observer(function ConceptEditorDialog({
             value={name}
             autoFocus
             onChange={(event) => {
-              setName(event.target.value);
+              service.patchConceptForm({ name: event.target.value });
               void service.searchMatches(event.target.value);
             }}
           />
@@ -76,15 +75,19 @@ export const ConceptEditorDialog = observer(function ConceptEditorDialog({
         ) : null}
         <label>
           语境（同名异义时区分）
-          <input value={sense} onChange={(event) => setSense(event.target.value)} />
+          <input value={sense} onChange={(event) => service.patchConceptForm({ sense: event.target.value })} />
         </label>
         <label>
           别名（用「、」分隔）
-          <input value={aliases} onChange={(event) => setAliases(event.target.value)} />
+          <input value={aliases} onChange={(event) => service.patchConceptForm({ aliases: event.target.value })} />
         </label>
         <label>
           定义
-          <textarea rows={3} value={definition} onChange={(event) => setDefinition(event.target.value)} />
+          <textarea
+            rows={3}
+            value={definition}
+            onChange={(event) => service.patchConceptForm({ definition: event.target.value })}
+          />
         </label>
         <div className="concept-detail-ops">
           <button type="submit" disabled={busy || !name.trim() || !service.writable}>
@@ -107,11 +110,8 @@ export const RelationEditorDialog = observer(function RelationEditorDialog({
 }) {
   const service = useService(ConceptsService);
   const dialog = useService(DialogService);
-  const [fromId, setFromId] = useState('');
-  const [toId, setToId] = useState('');
-  const [predicate, setPredicate] = useState('');
-  const [kind, setKind] = useState<'composition' | 'execution' | 'evaluation' | 'dependency' | 'contrast' | 'other'>('other');
-  const [context, setContext] = useState('');
+  const form = service.ensureRelationForm();
+  const { fromId, toId, predicate, kind, context } = form;
   const [busy, setBusy] = useState(false);
   const options = service.visibleConcepts;
 
@@ -154,7 +154,7 @@ export const RelationEditorDialog = observer(function RelationEditorDialog({
       >
         <label>
           源概念
-          <select value={fromId} onChange={(event) => setFromId(event.target.value)}>
+          <select value={fromId} onChange={(event) => service.patchRelationForm({ fromId: event.target.value })}>
             <option value="">选择…</option>
             {options.map((concept) => (
               <option key={concept.id} value={concept.id}>
@@ -166,11 +166,15 @@ export const RelationEditorDialog = observer(function RelationEditorDialog({
         </label>
         <label>
           谓词
-          <input value={predicate} onChange={(event) => setPredicate(event.target.value)} placeholder="如：可以进行多次" />
+          <input
+            value={predicate}
+            onChange={(event) => service.patchRelationForm({ predicate: event.target.value })}
+            placeholder="如：可以进行多次"
+          />
         </label>
         <label>
           目标概念
-          <select value={toId} onChange={(event) => setToId(event.target.value)}>
+          <select value={toId} onChange={(event) => service.patchRelationForm({ toId: event.target.value })}>
             <option value="">选择…</option>
             {options.map((concept) => (
               <option key={concept.id} value={concept.id}>
@@ -182,7 +186,10 @@ export const RelationEditorDialog = observer(function RelationEditorDialog({
         </label>
         <label>
           类型
-          <select value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}>
+          <select
+            value={kind}
+            onChange={(event) => service.patchRelationForm({ kind: event.target.value as typeof kind })}
+          >
             <option value="composition">组成</option>
             <option value="execution">执行流程</option>
             <option value="evaluation">评判</option>
@@ -193,7 +200,7 @@ export const RelationEditorDialog = observer(function RelationEditorDialog({
         </label>
         <label>
           语境（可选）
-          <input value={context} onChange={(event) => setContext(event.target.value)} />
+          <input value={context} onChange={(event) => service.patchRelationForm({ context: event.target.value })} />
         </label>
         <p className="concept-detail-hint">
           {fromId && toId && predicate.trim()
@@ -234,8 +241,8 @@ export const ConceptLinkDraft = observer(function ConceptLinkDraft({
 }) {
   const service = useService(ConceptsService);
   const dialog = useService(DialogService);
-  const [predicate, setPredicate] = useState('');
-  const [kind, setKind] = useState<(typeof LINK_KINDS)[number][0]>('other');
+  const link = service.linkForm ?? { predicate: '', kind: 'other' as const };
+  const { predicate, kind } = link;
   const [busy, setBusy] = useState(false);
   const from = service.visibleConcepts.find((concept) => concept.id === fromId);
   const to = service.visibleConcepts.find((concept) => concept.id === toId);
@@ -280,7 +287,7 @@ export const ConceptLinkDraft = observer(function ConceptLinkDraft({
         value={predicate}
         placeholder="这条关系是什么"
         aria-label="谓词"
-        onChange={(event) => setPredicate(event.target.value)}
+        onChange={(event) => service.patchLinkForm({ predicate: event.target.value })}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();
@@ -288,7 +295,11 @@ export const ConceptLinkDraft = observer(function ConceptLinkDraft({
           }
         }}
       />
-      <select aria-label="关系类型" value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}>
+      <select
+        aria-label="关系类型"
+        value={kind}
+        onChange={(event) => service.patchLinkForm({ kind: event.target.value as typeof kind })}
+      >
         {LINK_KINDS.map(([value, label]) => (
           <option key={value} value={value}>
             {label}

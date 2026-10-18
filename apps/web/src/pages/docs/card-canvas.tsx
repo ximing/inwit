@@ -81,6 +81,7 @@ import {
   siblingInsert,
 } from './mindmap-edit';
 import { loadFolds, saveFolds } from './mindmap-fold';
+import { mindSessionFor, rememberMindSession } from './mindmap-view';
 import {
   edgeAutoPan,
   linksPanelAnchor,
@@ -368,18 +369,37 @@ export const CardCanvas = observer(function CardCanvas({
   const [foldDoc, setFoldDoc] = useState(docId);
   const [folded, setFolded] = useState<Set<string>>(() => new Set(docId ? loadFolds(docId) : []));
   if (foldDoc !== docId) {
+    if (foldDoc) {
+      rememberMindSession(foldDoc, { view, searchQuery, searchOpen, searchIndex, todoOnly });
+    }
+    const next = mindSessionFor(docId);
+    stopViewAnim();
     setFoldDoc(docId);
     setFolded(new Set(docId ? loadFolds(docId) : []));
+    setView(next.view);
+    setSearchQuery(next.searchQuery);
+    setSearchOpen(next.searchOpen);
+    setSearchIndex(next.searchIndex);
+    setTodoOnly(next.todoOnly);
     setSelectedId(null);
     setEditingId(null);
     setReadoutId(null);
     setLinksOff(null);
-    setTodoOnly(false);
-    setSearchOpen(false);
     setMenu(null);
+    setHelpOpen(false);
     setRecall(false);
     setPeekId(null);
     setRevealAll(false);
+    setDrag(null);
+    setMarquee(null);
+    setQuoteDrag(null);
+    setQuoteGhost(null);
+    setFocusNodeId(null);
+    setLinkDraft(null);
+    setLinkEditor(null);
+    setLinkSaving(false);
+    panGesture.current = null;
+    marqueeGesture.current = null;
     recallFolds.current = null;
   }
 

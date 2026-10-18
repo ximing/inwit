@@ -34,6 +34,7 @@ import {
   type Topic,
   type UpdateCardInput,
 } from '@inwit/dto';
+import { discardThoughtDraft } from './thought-draft';
 import { listDocumentAnnotations } from '@/api/annotations';
 import {
   completeAssetMultipart,
@@ -288,6 +289,28 @@ function decisionError(err: unknown, action: 'accept' | 'reject'): string {
   return errorMessage(err, '操作没成功');
 }
 
+interface SelectionPopState {
+  kind: 'annotate' | 'card' | 'ask';
+  text: string;
+  left: number;
+  top: number;
+  documentId: string;
+  blockIndex?: number;
+  from?: number;
+  to?: number;
+  pdf?: {
+    pageIndex: number;
+    geometry: AnnotationGeometry;
+    imageKey?: string;
+  };
+}
+
+interface ThoughtPopState {
+  left: number;
+  top: number;
+  documentId: string;
+}
+
 export class DocsService extends Service {
   topics: Topic[] = [];
   documents: DocumentListItem[] = [];
@@ -337,23 +360,11 @@ export class DocsService extends Service {
   selectionPollDocId: string | null = null;
   selectionCardCountAtStart = 0;
   selectionJobId: string | null = null;
-  selectionPop: {
-    kind: 'annotate' | 'card' | 'ask';
-    text: string;
-    left: number;
-    top: number;
-    documentId: string;
-    blockIndex?: number;
-    from?: number;
-    to?: number;
-    pdf?: {
-      pageIndex: number;
-      geometry: AnnotationGeometry;
-      imageKey?: string;
-    };
-  } | null = null;
-  /** 记想法浮动输入框的位置；null 表示没打开。 */
-  thoughtPop: { left: number; top: number } | null = null;
+  selectionPop: SelectionPopState | null = null;
+  /** 记想法浮动输入框；null 表示没打开。位置和草稿都跟文章走。 */
+  thoughtPop: ThoughtPopState | null = null;
+  private selectionByDocument = new Map<string, SelectionPopState>();
+  private thoughtByDocument = new Map<string, ThoughtPopState>();
   editorHost: DocEditorHost | null = null;
 
   pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -950,6 +961,7 @@ export class DocsService extends Service {
     this.docError = null;
     this.composingNew = false;
     if (this.doc?.id !== id) {
+      this.parkDocumentPops(this.doc?.id ?? null);
       this.doc = null;
       this.annotations = [];
       this.canvasNodes = [];
@@ -960,6 +972,8 @@ export class DocsService extends Service {
       this.expandedCardIds = [];
       this.resetCanvasHistory();
       this.closeCanvasRevisionPanel();
+      this.selectionPop = this.selectionByDocument.get(id) ?? null;
+      this.thoughtPop = this.thoughtByDocument.get(id) ?? null;
     }
     const gen = ++this.docLoadGen;
     if (this.goneNotifiedId === id) this.goneNotifiedId = null;
@@ -994,6 +1008,7 @@ export class DocsService extends Service {
   }
 
   closeDoc(): void {
+    this.parkDocumentPops(this.doc?.id ?? null);
     this.docLoadGen += 1;
     this.editorHost = null;
     this.doc = null;
@@ -1010,6 +1025,7 @@ export class DocsService extends Service {
     this.closeCanvasRevisionPanel();
     this.cardRailOverlayOpen = false;
     this.closeSelectionPop();
+    this.thoughtPop = null;
     this.finishSelectionPoll();
     this.syncPolling();
   }
@@ -1169,10 +1185,22 @@ export class DocsService extends Service {
 
   /** 打开记想法浮动输入框。不传位置时取窗口上方居中。 */
   openThoughtPop(at?: { left: number; top: number }): void {
-    this.thoughtPop = at ?? { left: window.innerWidth / 2, top: 120 };
+    const documentId = this.doc?.id;
+    if (!documentId) return;
+    if (this.thoughtPop && this.thoughtPop.documentId !== documentId) {
+      this.thoughtByDocument.set(this.thoughtPop.documentId, this.thoughtPop);
+    }
+    const next = { ...(at ?? { left: window.innerWidth / 2, top: 120 }), documentId };
+    this.thoughtPop = next;
+    this.thoughtByDocument.set(documentId, next);
   }
 
   closeThoughtPop(): void {
+    const documentId = this.thoughtPop?.documentId;
+    if (documentId) {
+      this.thoughtByDocument.delete(documentId);
+      discardThoughtDraft('float', documentId);
+    }
     this.thoughtPop = null;
   }
 
@@ -1214,26 +1242,29 @@ export class DocsService extends Service {
     });
   }
 
-  openSelectionPop(input: {
-    kind: 'annotate' | 'card' | 'ask';
-    text: string;
-    left: number;
-    top: number;
-    documentId: string;
-    blockIndex?: number;
-    from?: number;
-    to?: number;
-    pdf?: {
-      pageIndex: number;
-      geometry: AnnotationGeometry;
-      imageKey?: string;
-    };
-  }): void {
+  openSelectionPop(input: SelectionPopState): void {
+    if (this.selectionPop && this.selectionPop.documentId !== input.documentId) {
+      this.selectionByDocument.set(this.selectionPop.documentId, this.selectionPop);
+    }
     this.selectionPop = input;
+    this.selectionByDocument.set(input.documentId, input);
   }
 
   closeSelectionPop(): void {
+    const documentId = this.selectionPop?.documentId;
+    if (documentId) this.selectionByDocument.delete(documentId);
     this.selectionPop = null;
+  }
+
+  /** 切文章时把当前浮层留给原文章，调用方再装上目标文章自己的。 */
+  private parkDocumentPops(documentId: string | null): void {
+    if (!documentId) return;
+    if (this.selectionPop?.documentId === documentId) {
+      this.selectionByDocument.set(documentId, this.selectionPop);
+    }
+    if (this.thoughtPop?.documentId === documentId) {
+      this.thoughtByDocument.set(documentId, this.thoughtPop);
+    }
   }
 
   async addAnnotation(

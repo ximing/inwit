@@ -25,7 +25,7 @@ export const ConceptBatchPanel = observer(function ConceptBatchPanel({ onClose }
       {service.batchPhase === 'generating' ? (
         <p className="concept-batch-status" role="status">
           <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
-          正在生成候选…可以离开，完成后这里会更新。
+          正在生成候选…可以先看别的文章，回到本文后会看到结果。
         </p>
       ) : null}
 

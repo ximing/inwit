@@ -572,7 +572,7 @@ export const CardRail = observer(function CardRail() {
           <section className="card-rail-sec is-notes" aria-label="批注">
             {service.doc ? (
               <div className="card-rail-thought">
-                <ThoughtComposer documentId={service.doc.id} />
+                <ThoughtComposer documentId={service.doc.id} slot="rail" />
               </div>
             ) : null}
             <button

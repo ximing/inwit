@@ -7,9 +7,22 @@ import { ConceptsService, type ConceptTarget } from '../concepts/concepts.servic
  * 双视图联动（T8b）：默认只高亮；显式「定位」才移动/展开另一图。
  * eventId 去重防循环；旧文章/旧主题的迟到结果被忽略。
  */
+type LocateSnapshot = { cardId: string | null; annotationId: string | null };
+
 export class StudyLinkService extends Service {
   private lastEventId = 0;
-  private locateSnapshot: { cardId: string | null; annotationId: string | null } | null = null;
+  private boundDocumentId: string | null = null;
+  private locateSnapshot: LocateSnapshot | null = null;
+  private snapshotsByDocument = new Map<string, LocateSnapshot | null>();
+
+  /** 定位快照跟着文章走。切走时丢掉尚未返回的高亮请求。 */
+  retainDocument(documentId: string | null): void {
+    if (this.boundDocumentId === documentId) return;
+    if (this.boundDocumentId) this.snapshotsByDocument.set(this.boundDocumentId, this.locateSnapshot);
+    this.lastEventId += 1;
+    this.boundDocumentId = documentId;
+    this.locateSnapshot = documentId ? (this.snapshotsByDocument.get(documentId) ?? null) : null;
+  }
 
   get docs(): DocsService {
     return this.resolve(DocsService);
@@ -22,13 +35,15 @@ export class StudyLinkService extends Service {
   /** 脑图卡片被选中 → 高亮关联概念/关系（不动概念图相机/选择）。 */
   async onCardSelected(cardId: string | null): Promise<void> {
     const eventId = ++this.lastEventId;
+    const documentId = this.boundDocumentId;
     if (!cardId) {
+      if (eventId !== this.lastEventId || this.boundDocumentId !== documentId) return;
       this.concepts.setHighlight(new Set(), new Set());
       return;
     }
     try {
       const { items } = await api.listCardKnowledgeLinks(cardId);
-      if (eventId !== this.lastEventId) return;
+      if (eventId !== this.lastEventId || this.boundDocumentId !== documentId) return;
       const conceptIds = new Set(items.filter((link) => link.conceptId).map((link) => link.conceptId!));
       const relationIds = new Set(items.filter((link) => link.relationId).map((link) => link.relationId!));
       this.concepts.setHighlight(conceptIds, relationIds);
@@ -52,7 +67,7 @@ export class StudyLinkService extends Service {
       targetKind: target.kind,
       targetId: target.id,
     });
-    if (eventId !== this.lastEventId) return { cards: [], annotations: [] };
+    if (eventId !== this.lastEventId || this.boundDocumentId !== documentId) return { cards: [], annotations: [] };
     return locations;
   }
 

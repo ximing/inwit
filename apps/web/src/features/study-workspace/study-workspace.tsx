@@ -49,11 +49,12 @@ export const StudyDock = observer(function StudyDock() {
 
   // 工作区与概念域按 文章+主题 启动；切文章不串状态
   useEffect(() => {
+    link.retainDocument(docId);
     if (!docId || !topicId) return;
     const scopeId = `${docId}:${topicId}`;
     workspace.boot(scopeId);
     void concepts.boot(topicId, docId);
-  }, [docId, topicId, workspace, concepts]);
+  }, [docId, topicId, workspace, concepts, link]);
 
   // 容器尺寸（含高度）
   useEffect(() => {

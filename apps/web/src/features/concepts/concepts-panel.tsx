@@ -1,6 +1,5 @@
 import { observer, useService } from '@rabjs/react';
 import { ListTree, Loader2, Network, Plus, Search } from 'lucide-react';
-import { useState } from 'react';
 import { ConceptsService } from './concepts.service.js';
 import { ConceptGraph } from './concept-graph.js';
 import { ConceptDetailPane, RelationDetailPane } from './concept-detail.js';
@@ -13,8 +12,6 @@ import { ConceptEditorDialog, ConceptLinkDraft, RelationEditorDialog } from './c
  */
 export const ConceptsPanel = observer(function ConceptsPanel() {
   const service = useService(ConceptsService);
-  const [editor, setEditor] = useState<'concept' | 'relation' | null>(null);
-  const [link, setLink] = useState<{ fromId: string; toId: string } | null>(null);
 
   if (service.probed && !service.enabled) return null;
   if (!service.probed) {
@@ -54,11 +51,11 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
         <span className="concepts-toolbar-gap" />
         {service.writable ? (
           <>
-            <button type="button" className="concepts-action" onClick={() => setEditor('concept')}>
+            <button type="button" className="concepts-action" onClick={() => service.openConceptEditor()}>
               <Plus width={13} height={13} strokeWidth={2} />
               新建概念
             </button>
-            <button type="button" className="concepts-action" onClick={() => setEditor('relation')}>
+            <button type="button" className="concepts-action" onClick={() => service.openRelationEditor()}>
               连接概念
             </button>
           </>
@@ -113,7 +110,7 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
               onExpandNeighbors={(id) => void service.expandNeighbors(id)}
               onConnect={
                 service.writable
-                  ? (fromId, toId) => setLink({ fromId, toId })
+                  ? (fromId, toId) => service.openLinkDraft(fromId, toId)
                   : undefined
               }
             />
@@ -152,21 +149,21 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
             <RelationDetailPane detail={service.detail} onClose={() => void service.select(null)} />
           )
         ) : null}
-        {service.writable && link ? (
-          <ConceptLinkDraft fromId={link.fromId} toId={link.toId} onClose={() => setLink(null)} />
+        {service.writable && service.linkDraft ? (
+          <ConceptLinkDraft
+            fromId={service.linkDraft.fromId}
+            toId={service.linkDraft.toId}
+            onClose={() => service.closeLinkDraft()}
+          />
         ) : null}
       </div>
 
-      {service.writable && (editor === 'concept' || service.createPrefill !== null) ? (
-        <ConceptEditorDialog
-          initialName={service.createPrefill ?? ''}
-          onClose={() => {
-            setEditor(null);
-            service.createPrefill = null;
-          }}
-        />
+      {service.writable && (service.editor === 'concept' || service.createPrefill !== null) ? (
+        <ConceptEditorDialog onClose={() => service.closeConceptEditor()} />
       ) : null}
-      {service.writable && editor === 'relation' ? <RelationEditorDialog onClose={() => setEditor(null)} /> : null}
+      {service.writable && service.editor === 'relation' ? (
+        <RelationEditorDialog onClose={() => service.closeRelationEditor()} />
+      ) : null}
     </div>
   );
 });

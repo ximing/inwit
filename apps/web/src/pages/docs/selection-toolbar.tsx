@@ -239,6 +239,7 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
   const assistant = useService(AssistantService);
   const prefs = useService(UiPrefsService);
   const pop = service.selectionPop;
+  const visible = pop !== null && pop.documentId === service.doc?.id;
   const [note, setNote] = useState('');
   const [concept, setConcept] = useState('');
   const [example, setExample] = useState('');
@@ -246,24 +247,38 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
   const [saving, setSaving] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: 12, top: 12 });
-
-  useEffect(() => {
+  const drafts = useRef(
+    new Map<string, { note: string; concept: string; example: string; prompt: string }>(),
+  );
+  const seenPop = useRef(pop);
+  if (seenPop.current !== pop) {
+    const previous = seenPop.current;
+    if (previous) drafts.current.set(previous.documentId, { note, concept, example, prompt });
+    seenPop.current = pop;
     if (!pop) {
       setNote('');
       setConcept('');
       setExample('');
+      setPrompt('');
       setSaving(false);
-      return;
+    } else if (previous?.documentId === pop.documentId) {
+      setNote('');
+      setConcept('');
+      setExample(pop.text);
+      setPrompt('');
+      setSaving(false);
+    } else {
+      const saved = drafts.current.get(pop.documentId);
+      setNote(saved?.note ?? '');
+      setConcept(saved?.concept ?? '');
+      setExample(saved?.example ?? pop.text);
+      setPrompt(saved?.prompt ?? '');
+      setSaving(false);
     }
-    setNote('');
-    setConcept('');
-    setExample(pop.text);
-    setPrompt('');
-    setSaving(false);
-  }, [pop]);
+  }
 
   useLayoutEffect(() => {
-    if (!pop) return;
+    if (!pop || !visible) return;
     const el = boxRef.current;
     const width = el?.offsetWidth ?? 280;
     const height = el?.offsetHeight ?? 160;
@@ -275,10 +290,10 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
       top = pop.top - height - 36;
     }
     setPos({ left, top });
-  }, [pop]);
+  }, [pop, visible]);
 
   useEffect(() => {
-    if (!pop) return;
+    if (!pop || !visible) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.stopImmediatePropagation();
@@ -296,9 +311,9 @@ export const SelectionPopoverHost = observer(function SelectionPopoverHost() {
       window.removeEventListener('keydown', onKey, true);
       window.removeEventListener('mousedown', onDown);
     };
-  }, [pop, service]);
+  }, [pop, visible, service]);
 
-  if (!pop) return null;
+  if (!visible || !pop) return null;
 
   const saveAnnotate = async () => {
     if (saving) return;

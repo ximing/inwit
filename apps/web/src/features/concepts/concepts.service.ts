@@ -88,14 +88,24 @@ export class ConceptsService extends Service {
   batchPhase: 'idle' | 'generating' | 'ready' | 'committing' | 'done' | 'error' = 'idle';
   batchError: string | null = null;
   choiceState: DraftChoiceState | null = null;
+  /** 进行中的候选按文章分开。切走只是先收起，回到该文再续上。 */
+  private batchesByDocument = new Map<string, DocumentBatchState>();
   private batchTimer: ReturnType<typeof setInterval> | null = null;
   private batchGen = 0;
 
   // ---- 编辑 ----
   matches: ConceptMatch[] = [];
   private syncUnsub: (() => void) | null = null;
-  /** 选词「收为概念」的预填名；面板消费后清空。 */
+  /** 选词「收为概念」的预填名。跟文章走，关闭对话框时清空。 */
   createPrefill: string | null = null;
+  /** 新建概念 / 连接概念对话框。跟文章走，避免在下一篇里继续创建。 */
+  editor: 'concept' | 'relation' | null = null;
+  linkDraft: { fromId: string; toId: string } | null = null;
+  conceptForm: ConceptFormDraft | null = null;
+  relationForm: RelationFormDraft | null = null;
+  linkForm: LinkFormDraft | null = null;
+  /** 图视图、筛选、草稿按文章分开。同一篇再次 boot 不换相机对象。 */
+  private viewsByDocument = new Map<string, DocumentViewState>();
   bootGen = 0;
 
   private get requestGenKey(): string {
@@ -144,6 +154,14 @@ export class ConceptsService extends Service {
   }
 
   async boot(topicId: string, documentId: string | null): Promise<void> {
+    const previousDocumentId = this.documentId;
+    const switchingDocument = previousDocumentId !== documentId;
+    if (switchingDocument && previousDocumentId) {
+      this.rememberDocumentBatch(previousDocumentId);
+      this.rememberDocumentView(previousDocumentId);
+      this.batchGen += 1;
+      this.stopBatchPolling();
+    }
     const gen = ++this.bootGen;
     this.subscribeSync();
     this.topicId = topicId;
@@ -154,13 +172,24 @@ export class ConceptsService extends Service {
     this.nodeCursor = null;
     this.edges = [];
     this.edgesComplete = false;
-    this.selected = null;
-    this.detail = null;
-    this.focusId = null;
-    this.revisionNotice = false;
-    this.error = null;
+    if (switchingDocument) {
+      this.restoreDocumentBatch(documentId);
+      this.restoreDocumentView(documentId);
+    } else {
+      this.selected = null;
+      this.detail = null;
+      this.focusId = null;
+      this.revisionNotice = false;
+      this.error = null;
+    }
     if (gen !== this.bootGen) return;
-    await this.loadGraph();
+    await this.loadGraph(this.focusId ? { focusId: this.focusId } : undefined);
+    if (gen !== this.bootGen || this.documentId !== documentId) return;
+    if (switchingDocument && this.viewMode === 'list') await this.loadList(true);
+    if (gen !== this.bootGen || this.documentId !== documentId) return;
+    if (switchingDocument && this.selected) await this.select(this.selected);
+    if (gen !== this.bootGen || this.documentId !== documentId) return;
+    await this.resumeDocumentBatch(documentId);
   }
 
   /** 后发的 loadGraph 作废先发的响应，避免同步重载盖掉刚收录的节点。 */
@@ -300,6 +329,76 @@ export class ConceptsService extends Service {
     this.highlightRelationIds = relations;
   }
 
+  ensureConceptForm(): ConceptFormDraft {
+    if (!this.conceptForm) {
+      this.conceptForm = {
+        name: this.createPrefill ?? '',
+        sense: '',
+        definition: '',
+        aliases: '',
+      };
+    }
+    return this.conceptForm;
+  }
+
+  patchConceptForm(patch: Partial<ConceptFormDraft>): void {
+    this.conceptForm = { ...this.ensureConceptForm(), ...patch };
+  }
+
+  openConceptEditor(): void {
+    this.editor = 'concept';
+    this.ensureConceptForm();
+  }
+
+  closeConceptEditor(): void {
+    this.editor = null;
+    this.createPrefill = null;
+    this.conceptForm = null;
+    this.matches = [];
+  }
+
+  ensureRelationForm(): RelationFormDraft {
+    if (!this.relationForm) {
+      this.relationForm = {
+        fromId: '',
+        toId: '',
+        predicate: '',
+        kind: 'other',
+        context: '',
+      };
+    }
+    return this.relationForm;
+  }
+
+  patchRelationForm(patch: Partial<RelationFormDraft>): void {
+    this.relationForm = { ...this.ensureRelationForm(), ...patch };
+  }
+
+  openRelationEditor(): void {
+    this.editor = 'relation';
+    this.ensureRelationForm();
+  }
+
+  closeRelationEditor(): void {
+    this.editor = null;
+    this.relationForm = null;
+  }
+
+  openLinkDraft(fromId: string, toId: string): void {
+    const same = this.linkDraft?.fromId === fromId && this.linkDraft.toId === toId;
+    this.linkDraft = { fromId, toId };
+    if (!same || !this.linkForm) this.linkForm = { predicate: '', kind: 'other' };
+  }
+
+  patchLinkForm(patch: Partial<LinkFormDraft>): void {
+    this.linkForm = { ...(this.linkForm ?? { predicate: '', kind: 'other' }), ...patch };
+  }
+
+  closeLinkDraft(): void {
+    this.linkDraft = null;
+    this.linkForm = null;
+  }
+
   async expandNeighbors(conceptId: string): Promise<void> {
     await this.loadGraph({ focusId: conceptId });
   }
@@ -409,9 +508,13 @@ export class ConceptsService extends Service {
     const topicId = this.topicId;
     const documentId = this.documentId;
     if (!topicId || !documentId) return;
-    const gen = ++this.batchGen;
-    this.batchPhase = 'generating';
-    this.batchError = null;
+    this.publishDocumentBatch(documentId, {
+      batch: null,
+      batchPhase: 'generating',
+      batchError: null,
+      choiceState: null,
+      pendingBatchId: null,
+    });
     try {
       const result = await api.createConceptBatch(documentId, {
         topicId,
@@ -419,16 +522,24 @@ export class ConceptsService extends Service {
         ...(selection ? { selection } : {}),
         requestId: crypto.randomUUID(),
       });
-      if (gen !== this.batchGen) return;
-      await this.loadBatch(result.batchId);
+      const current = this.batchesByDocument.get(documentId);
+      if (!current || current.batchPhase !== 'generating') return;
+      this.publishDocumentBatch(documentId, { ...current, pendingBatchId: result.batchId });
+      if (this.documentId === documentId) await this.loadBatch(result.batchId);
     } catch (err) {
-      if (gen !== this.batchGen) return;
-      this.batchPhase = 'error';
-      this.batchError = err instanceof ApiError ? err.message : '生成任务创建失败';
+      const current = this.batchesByDocument.get(documentId);
+      if (!current || current.batchPhase !== 'generating') return;
+      this.publishDocumentBatch(documentId, {
+        batch: current.batch,
+        batchPhase: 'error',
+        batchError: err instanceof ApiError ? err.message : '生成任务创建失败',
+        choiceState: current.choiceState,
+        pendingBatchId: null,
+      });
     }
   }
 
-  /** 打开已有批次（含对话动作卡恢复）。 */
+  /** 打开已有批次（含对话动作卡恢复）。结果写回批次所属文章，不盖到当前打开的另一篇。 */
   async loadBatch(batchId: string): Promise<void> {
     const gen = ++this.batchGen;
     this.stopBatchPolling();
@@ -436,29 +547,58 @@ export class ConceptsService extends Service {
       try {
         const batch = await api.getConceptBatch(batchId);
         if (gen !== this.batchGen) return;
-        this.batch = batch;
+        const owner = batch.documentId ?? this.ownerOfBatch(batchId) ?? this.documentId;
+        if (!owner) return;
+        const prev = this.batchesByDocument.get(owner);
+        const keptChoice = this.documentId === owner ? this.choiceState ?? prev?.choiceState ?? null : prev?.choiceState ?? null;
         if (batch.status === 'ready') {
-          this.batchPhase = 'ready';
-          this.choiceState = this.choiceState ?? (batch.draft ? defaultChoiceState(batch.draft) : null);
+          this.publishDocumentBatch(owner, {
+            batch,
+            batchPhase: 'ready',
+            batchError: null,
+            choiceState: keptChoice ?? (batch.draft ? defaultChoiceState(batch.draft) : null),
+            pendingBatchId: null,
+          });
           this.stopBatchPolling();
           return;
         }
         if (batch.status === 'failed' || batch.status === 'cancelled') {
-          this.batchPhase = 'error';
-          this.batchError = batch.errorCode ? `生成失败（${batch.errorCode}）` : '生成已取消';
+          this.publishDocumentBatch(owner, {
+            batch,
+            batchPhase: 'error',
+            batchError: batch.errorCode ? `生成失败（${batch.errorCode}）` : '生成已取消',
+            choiceState: keptChoice,
+            pendingBatchId: null,
+          });
           this.stopBatchPolling();
           return;
         }
-        this.batchPhase = 'generating';
+        this.publishDocumentBatch(owner, {
+          batch,
+          batchPhase: 'generating',
+          batchError: null,
+          choiceState: keptChoice,
+          pendingBatchId: null,
+        });
       } catch (err) {
         if (gen !== this.batchGen) return;
-        this.batchPhase = 'error';
-        this.batchError = err instanceof ApiError ? err.message : '批次加载失败';
+        const owner = this.ownerOfBatch(batchId) ?? this.documentId;
+        if (!owner) return;
+        const prev = this.batchesByDocument.get(owner);
+        this.publishDocumentBatch(owner, {
+          batch: prev?.batch ?? null,
+          batchPhase: 'error',
+          batchError: err instanceof ApiError ? err.message : '批次加载失败',
+          choiceState: prev?.choiceState ?? null,
+          pendingBatchId: null,
+        });
         this.stopBatchPolling();
       }
     };
     await poll();
-    if (this.batchPhase === 'generating') {
+    if (gen !== this.batchGen) return;
+    const owner = this.ownerOfBatch(batchId);
+    if (owner && this.documentId === owner && this.batchesByDocument.get(owner)?.batchPhase === 'generating') {
       this.batchTimer = setInterval(() => void poll(), 1500);
     }
   }
@@ -477,6 +617,10 @@ export class ConceptsService extends Service {
   patchChoice(patch: (state: DraftChoiceState) => DraftChoiceState): void {
     if (!this.choiceState || !this.draft) return;
     this.choiceState = patch(this.choiceState);
+    const documentId = this.batch?.documentId ?? this.documentId;
+    if (!documentId) return;
+    const prev = this.batchesByDocument.get(documentId);
+    if (prev) this.batchesByDocument.set(documentId, { ...prev, choiceState: this.choiceState });
   }
 
   chooseDraftConcept(tempId: string, choice: DraftChoiceState['concepts'][string]): void {
@@ -505,6 +649,7 @@ export class ConceptsService extends Service {
     const draft = this.draft;
     const state = this.choiceState;
     if (!batch || !draft || !state) return;
+    const documentId = batch.documentId ?? this.documentId;
     const plan = buildCommitPlan(draft, state);
     if (plan.unconfirmedInferred.length > 0) {
       this.batchError = '还有推断项未确认';
@@ -512,6 +657,10 @@ export class ConceptsService extends Service {
     }
     this.batchPhase = 'committing';
     this.batchError = null;
+    if (documentId) {
+      const prev = this.batchesByDocument.get(documentId);
+      if (prev) this.publishDocumentBatch(documentId, { ...prev, batchPhase: 'committing', batchError: null });
+    }
     try {
       const input: CommitConceptBatchInput = {
         expectedDraftRevision: batch.draftRevision,
@@ -520,14 +669,32 @@ export class ConceptsService extends Service {
         requestId: crypto.randomUUID(),
       };
       const result = await api.commitConceptBatch(batch.id, input);
-      this.batchPhase = 'done';
-      this.batch = { ...batch, status: 'committed', commitResult: result };
-      this.choiceState = null;
+      const done: DocumentBatchState = {
+        batch: { ...batch, status: 'committed', commitResult: result },
+        batchPhase: 'done',
+        batchError: null,
+        choiceState: null,
+        pendingBatchId: null,
+      };
+      if (documentId) this.publishDocumentBatch(documentId, done);
+      else this.applyBatch(done);
       this.stopBatchPolling();
-      await this.loadGraph({ focusId: this.focusId });
+      if (this.documentId === documentId) await this.loadGraph({ focusId: this.focusId });
     } catch (err) {
-      this.batchPhase = 'ready';
-      this.batchError = err instanceof ApiError ? err.message : '收录失败';
+      const message = err instanceof ApiError ? err.message : '收录失败';
+      if (documentId) {
+        const prev = this.batchesByDocument.get(documentId);
+        this.publishDocumentBatch(documentId, {
+          batch: prev?.batch ?? batch,
+          batchPhase: 'ready',
+          batchError: message,
+          choiceState: prev?.choiceState ?? state,
+          pendingBatchId: null,
+        });
+      } else {
+        this.batchPhase = 'ready';
+        this.batchError = message;
+      }
       if (err instanceof ApiError && (err.code === 'CONCEPT_BATCH_CONFLICT' || err.code === 'CONCEPT_BATCH_STALE')) {
         // 版本/正文冲突：重载批次，保留本地编辑由服务端版本决定
         await this.loadBatch(batch.id);
@@ -537,13 +704,18 @@ export class ConceptsService extends Service {
 
   async discardBatch(): Promise<void> {
     if (!this.allowWrite()) return;
-    if (!this.batch) return;
+    const batch = this.batch;
+    if (!batch) return;
+    const documentId = batch.documentId ?? this.documentId;
     try {
-      await api.discardConceptBatch(this.batch.id);
+      await api.discardConceptBatch(batch.id);
     } catch {
       // 已丢弃/状态变化都按关闭处理
     }
-    this.closeBatch();
+    this.batchGen += 1;
+    this.stopBatchPolling();
+    if (documentId) this.batchesByDocument.delete(documentId);
+    if (this.documentId === documentId) this.clearLiveBatch();
   }
 
   async refreshPractice(id: string, input: RefreshConceptPracticeInput): Promise<void> {
@@ -578,12 +750,141 @@ export class ConceptsService extends Service {
   }
 
   closeBatch(): void {
+    const documentId = this.batch?.documentId ?? this.documentId;
     this.batchGen += 1;
     this.stopBatchPolling();
+    if (documentId) this.batchesByDocument.delete(documentId);
+    if (!documentId || this.documentId === documentId) this.clearLiveBatch();
+  }
+
+  /** 切走前把当前文章的图视图和未提交草稿收进自己的格子。 */
+  private rememberDocumentView(documentId: string): void {
+    this.viewsByDocument.set(documentId, {
+      viewport: this.viewport,
+      positions: this.positions,
+      focusId: this.focusId,
+      selected: this.selected,
+      viewMode: this.viewMode,
+      filter: this.filter,
+      query: this.query,
+      createPrefill: this.createPrefill,
+      editor: this.editor,
+      linkDraft: this.linkDraft,
+      conceptForm: this.conceptForm,
+      relationForm: this.relationForm,
+      linkForm: this.linkForm,
+    });
+  }
+
+  /** 打开文章时露出这篇自己的视图；没有就回到默认。高亮跟卡片走，不在这里恢复。 */
+  private restoreDocumentView(documentId: string | null): void {
+    const saved = documentId ? this.viewsByDocument.get(documentId) : undefined;
+    if (saved) {
+      this.viewport = saved.viewport;
+      this.positions = saved.positions;
+      this.focusId = saved.focusId;
+      this.selected = saved.selected;
+      this.viewMode = saved.viewMode;
+      this.filter = saved.filter;
+      this.query = saved.query;
+      this.createPrefill = saved.createPrefill;
+      this.editor = saved.editor;
+      this.linkDraft = saved.linkDraft;
+      this.conceptForm = saved.conceptForm;
+      this.relationForm = saved.relationForm;
+      this.linkForm = saved.linkForm;
+    } else {
+      this.viewport = { x: 0, y: 0, zoom: 1 };
+      this.positions = new Map();
+      this.focusId = null;
+      this.selected = null;
+      this.viewMode = 'graph';
+      this.filter = 'all';
+      this.query = '';
+      this.createPrefill = null;
+      this.editor = null;
+      this.linkDraft = null;
+      this.conceptForm = null;
+      this.relationForm = null;
+      this.linkForm = null;
+    }
+    this.detail = null;
+    this.detailLoading = false;
+    this.highlightConceptIds = new Set();
+    this.highlightRelationIds = new Set();
+    this.matches = [];
+    this.listItems = [];
+    this.listCursor = null;
+    this.listLoading = false;
+    this.error = null;
+    this.revisionNotice = false;
+  }
+
+  /** 切走前把当前文章的候选收进自己的格子。 */
+  private rememberDocumentBatch(documentId: string): void {
+    const pendingBatchId = this.batch?.id ?? this.batchesByDocument.get(documentId)?.pendingBatchId ?? null;
+    this.writeDocumentBatch(documentId, {
+      batch: this.batch,
+      batchPhase: this.batchPhase,
+      batchError: this.batchError,
+      choiceState: this.choiceState,
+      pendingBatchId,
+    });
+  }
+
+  /** 打开文章时露出这篇自己的候选；没有就回到空闲。 */
+  private restoreDocumentBatch(documentId: string | null): void {
+    if (!documentId) {
+      this.clearLiveBatch();
+      return;
+    }
+    const saved = this.batchesByDocument.get(documentId);
+    if (saved) this.applyBatch(saved);
+    else this.clearLiveBatch();
+  }
+
+  /** 生成还没结束时，回到该文再接着问进度。 */
+  private async resumeDocumentBatch(documentId: string | null): Promise<void> {
+    if (!documentId || this.documentId !== documentId) return;
+    const saved = this.batchesByDocument.get(documentId);
+    if (!saved || saved.batchPhase !== 'generating') return;
+    const batchId = saved.batch?.id ?? saved.pendingBatchId;
+    if (!batchId) return;
+    await this.loadBatch(batchId);
+  }
+
+  private publishDocumentBatch(documentId: string, state: DocumentBatchState): void {
+    this.writeDocumentBatch(documentId, state);
+    if (this.documentId === documentId) this.applyBatch(state);
+  }
+
+  private writeDocumentBatch(documentId: string, state: DocumentBatchState): void {
+    if (state.batchPhase === 'idle' && !state.batch && !state.pendingBatchId) {
+      this.batchesByDocument.delete(documentId);
+      return;
+    }
+    this.batchesByDocument.set(documentId, state);
+  }
+
+  private applyBatch(state: DocumentBatchState): void {
+    this.batch = state.batch;
+    this.batchPhase = state.batchPhase;
+    this.batchError = state.batchError;
+    this.choiceState = state.choiceState;
+  }
+
+  private clearLiveBatch(): void {
     this.batch = null;
-    this.choiceState = null;
     this.batchPhase = 'idle';
     this.batchError = null;
+    this.choiceState = null;
+  }
+
+  private ownerOfBatch(batchId: string): string | null {
+    for (const [documentId, state] of this.batchesByDocument) {
+      if (state.batch?.id === batchId || state.pendingBatchId === batchId) return documentId;
+    }
+    return null;
   }
 
   get commitSummary(): string | null {
@@ -602,6 +903,59 @@ export class ConceptsService extends Service {
     this.syncUnsub?.();
     this.syncUnsub = null;
   }
+}
+
+interface DocumentBatchState {
+  batch: ConceptBatch | null;
+  batchPhase: ConceptsService['batchPhase'];
+  batchError: string | null;
+  choiceState: DraftChoiceState | null;
+  /** 创建请求已经返回、轮询还没挂上。切走后靠它续上。 */
+  pendingBatchId: string | null;
+}
+
+export type ConceptRelationKind =
+  | 'composition'
+  | 'execution'
+  | 'evaluation'
+  | 'dependency'
+  | 'contrast'
+  | 'other';
+
+export interface ConceptFormDraft {
+  name: string;
+  sense: string;
+  definition: string;
+  aliases: string;
+}
+
+export interface RelationFormDraft {
+  fromId: string;
+  toId: string;
+  predicate: string;
+  kind: ConceptRelationKind;
+  context: string;
+}
+
+export interface LinkFormDraft {
+  predicate: string;
+  kind: ConceptRelationKind;
+}
+
+interface DocumentViewState {
+  viewport: { x: number; y: number; zoom: number };
+  positions: Map<string, { x: number; y: number }>;
+  focusId: string | null;
+  selected: ConceptTarget | null;
+  viewMode: ConceptViewMode;
+  filter: ConceptFilter;
+  query: string;
+  createPrefill: string | null;
+  editor: 'concept' | 'relation' | null;
+  linkDraft: { fromId: string; toId: string } | null;
+  conceptForm: ConceptFormDraft | null;
+  relationForm: RelationFormDraft | null;
+  linkForm: LinkFormDraft | null;
 }
 
 export type { DocumentKnowledge };

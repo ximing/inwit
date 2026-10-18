@@ -21,6 +21,7 @@ export class StudyWorkspaceService extends Service {
   storageAvailable = true;
   private scopeKey: string | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private pending: { scopeKey: string; layout: WorkspaceLayoutState } | null = null;
 
   get authed(): AuthService {
     return this.resolve(AuthService);
@@ -53,6 +54,7 @@ export class StudyWorkspaceService extends Service {
   }
 
   boot(scopeId: string): void {
+    if (this.scopeKey !== scopeId) this.flushPending();
     this.scopeKey = scopeId;
     const state = loadWorkspaceState(this.userId);
     const saved = state.layouts[scopeId];
@@ -102,14 +104,25 @@ export class StudyWorkspaceService extends Service {
   }
 
   private persist(): void {
-    if (!this.scopeKey) return;
+    const scopeKey = this.scopeKey;
+    if (!scopeKey) return;
+    this.pending = { scopeKey, layout: { ...this.layout } };
     if (this.saveTimer) clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
-      if (!this.scopeKey) return;
-      const state = loadWorkspaceState(this.userId);
-      state.layouts[this.scopeKey] = this.layout;
-      const ok = saveWorkspaceState(this.userId, state);
-      if (!ok) this.storageAvailable = false;
-    }, 500);
+    this.saveTimer = setTimeout(() => this.flushPending(), 500);
+  }
+
+  /** 把已排上的布局写回它被修改时的那篇文章，而不是写到此刻打开的文章。 */
+  private flushPending(): void {
+    const pending = this.pending;
+    this.pending = null;
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    if (!pending) return;
+    const state = loadWorkspaceState(this.userId);
+    state.layouts[pending.scopeKey] = pending.layout;
+    const ok = saveWorkspaceState(this.userId, state);
+    if (!ok) this.storageAvailable = false;
   }
 }

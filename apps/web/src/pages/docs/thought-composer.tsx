@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Tip } from '@/components/tip';
 import { imeBlocksEnterFromEvent } from '@/lib/ime-enter';
 import { DocsService } from './docs.service';
+import { putThoughtDraft, thoughtDraftFor, thoughtDraftRevision } from './thought-draft';
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
 
@@ -13,26 +14,50 @@ const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
  */
 export const ThoughtComposer = observer(function ThoughtComposer({
   documentId,
+  slot,
   autoFocus = false,
   onDone,
 }: {
   documentId: string;
+  /** rail 常驻栏和 float 浮层各记各的草稿。 */
+  slot: 'rail' | 'float';
   autoFocus?: boolean;
   onDone?: () => void;
 }) {
   const service = useService(DocsService);
-  const [note, setNote] = useState('');
-  const [image, setImage] = useState<{ key: string; preview: string } | null>(null);
+  const [boundId, setBoundId] = useState(documentId);
+  const [note, setNote] = useState(() => thoughtDraftFor(slot, documentId).note);
+  const [image, setImage] = useState(() => thoughtDraftFor(slot, documentId).image);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const imageRef = useRef<{ key: string; preview: string } | null>(null);
+  const noteRef = useRef(note);
+  const imageRef = useRef(image);
+  const boundRef = useRef(documentId);
+  const revisionRef = useRef(thoughtDraftRevision(slot, documentId));
+  noteRef.current = note;
   imageRef.current = image;
+  boundRef.current = boundId;
+
+  if (boundId !== documentId) {
+    putThoughtDraft(slot, boundId, { note, image });
+    const next = thoughtDraftFor(slot, documentId);
+    revisionRef.current = thoughtDraftRevision(slot, documentId);
+    setBoundId(documentId);
+    setNote(next.note);
+    setImage(next.image);
+  }
+
+  const remember = (nextNote: string, nextImage: { key: string; preview: string } | null) => {
+    revisionRef.current = putThoughtDraft(slot, documentId, { note: nextNote, image: nextImage });
+  };
 
   useEffect(() => {
     return () => {
-      if (imageRef.current) URL.revokeObjectURL(imageRef.current.preview);
+      const id = boundRef.current;
+      if (thoughtDraftRevision(slot, id) !== revisionRef.current) return;
+      putThoughtDraft(slot, id, { note: noteRef.current, image: imageRef.current });
     };
-  }, []);
+  }, [slot]);
 
   const pick = async (file: File) => {
     if (busy) return;
@@ -41,12 +66,15 @@ export const ThoughtComposer = observer(function ThoughtComposer({
     setBusy(false);
     if (!key) return;
     if (imageRef.current) URL.revokeObjectURL(imageRef.current.preview);
-    setImage({ key, preview: URL.createObjectURL(file) });
+    const next = { key, preview: URL.createObjectURL(file) };
+    setImage(next);
+    remember(note, next);
   };
 
   const removeImage = () => {
     if (image) URL.revokeObjectURL(image.preview);
     setImage(null);
+    remember(note, null);
   };
 
   const submit = async () => {
@@ -64,7 +92,9 @@ export const ThoughtComposer = observer(function ThoughtComposer({
     setBusy(false);
     if (!created) return;
     setNote('');
-    removeImage();
+    if (image) URL.revokeObjectURL(image.preview);
+    setImage(null);
+    remember('', null);
     onDone?.();
   };
 
@@ -76,7 +106,11 @@ export const ThoughtComposer = observer(function ThoughtComposer({
         placeholder="记一条想法…"
         value={note}
         maxLength={20_000}
-        onChange={(event) => setNote(event.target.value)}
+        onChange={(event) => {
+          const next = event.target.value;
+          setNote(next);
+          remember(next, image);
+        }}
         onKeyDown={(event) => {
           if (imeBlocksEnterFromEvent(event.nativeEvent)) return;
           if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {

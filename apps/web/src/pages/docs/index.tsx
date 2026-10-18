@@ -27,6 +27,7 @@ import { StudyWorkspaceService } from '@/features/study-workspace/study-workspac
 
 const DocsPageContent = observer(function DocsPageContent() {
   const service = useService(DocsService);
+  const find = useService(DocFindService);
   const editor = useService(EditorService);
   const search = useService(SearchService);
   const prefs = useService(UiPrefsService);
@@ -85,6 +86,11 @@ const DocsPageContent = observer(function DocsPageContent() {
     };
   }, [editor, service]);
 
+  const openDocId = service.doc?.id ?? null;
+  useEffect(() => {
+    find.adopt(openDocId);
+  }, [find, openDocId]);
+
   useEffect(() => {
     void service.boot();
     const railMode = () =>
@@ -102,7 +108,9 @@ const DocsPageContent = observer(function DocsPageContent() {
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (service.thoughtPop) {
+        const thoughtHere =
+          service.thoughtPop != null && service.thoughtPop.documentId === service.doc?.id;
+        if (thoughtHere) {
           service.closeThoughtPop();
           return;
         }
@@ -149,7 +157,9 @@ const DocsPageContent = observer(function DocsPageContent() {
           (target.tagName === 'INPUT' ||
             target.tagName === 'TEXTAREA' ||
             target.isContentEditable);
-        if (editable || !service.doc || service.thoughtPop) return;
+        const thoughtHere =
+          service.thoughtPop != null && service.thoughtPop.documentId === service.doc?.id;
+        if (editable || !service.doc || thoughtHere) return;
         event.preventDefault();
         service.openThoughtPop();
       }

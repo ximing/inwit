@@ -11,11 +11,12 @@ import { ThoughtComposer } from './thought-composer';
 export const ThoughtPop = observer(function ThoughtPop() {
   const service = useService(DocsService);
   const pop = service.thoughtPop;
+  const hidden = !pop || pop.documentId !== service.doc?.id;
   const boxRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: 12, top: 12 });
 
   useLayoutEffect(() => {
-    if (!pop) return;
+    if (!pop || hidden) return;
     const el = boxRef.current;
     const width = el?.offsetWidth ?? 300;
     const height = el?.offsetHeight ?? 180;
@@ -27,10 +28,10 @@ export const ThoughtPop = observer(function ThoughtPop() {
       top = pop.top - height - 36;
     }
     setPos({ left, top });
-  }, [pop]);
+  }, [pop, hidden]);
 
   useEffect(() => {
-    if (!pop) return;
+    if (!pop || hidden) return;
     const onDown = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
@@ -39,9 +40,9 @@ export const ThoughtPop = observer(function ThoughtPop() {
     };
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
-  }, [pop, service]);
+  }, [pop, hidden, service]);
 
-  if (!pop || !service.doc) return null;
+  if (!pop) return null;
 
   return createPortal(
     <div
@@ -49,11 +50,13 @@ export const ThoughtPop = observer(function ThoughtPop() {
       className="sel-pop thought-pop"
       role="dialog"
       aria-label="记一条想法"
-      style={{ left: pos.left, top: pos.top }}
+      hidden={hidden}
+      style={hidden ? undefined : { left: pos.left, top: pos.top }}
     >
       <ThoughtComposer
-        documentId={service.doc.id}
-        autoFocus
+        documentId={pop.documentId}
+        slot="float"
+        autoFocus={!hidden}
         onDone={() => service.closeThoughtPop()}
       />
     </div>,
