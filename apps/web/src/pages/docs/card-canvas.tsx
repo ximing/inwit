@@ -81,7 +81,12 @@ import {
   siblingInsert,
 } from './mindmap-edit';
 import { loadFolds, saveFolds } from './mindmap-fold';
-import { mindSessionFor, rememberMindSession } from './mindmap-view';
+import {
+  mindCameraFollow,
+  mindSessionFor,
+  mindViewAfterNodesRemoved,
+  rememberMindSession,
+} from './mindmap-view';
 import {
   edgeAutoPan,
   linksPanelAnchor,
@@ -635,13 +640,34 @@ export const CardCanvas = observer(function CardCanvas({
   }, [placeView, zoomFor]);
 
   const cardKey = visible.map((member) => member.id).join('|');
+  const placedRef = useRef(layout.boxes);
   useLayoutEffect(() => {
-    if (cardKeyRef.current !== cardKey) {
-      cardKeyRef.current = cardKey;
-      userMoved.current = false;
+    const previousKey = cardKeyRef.current;
+    const previousBoxes = placedRef.current;
+    const follow = mindCameraFollow(previousKey, cardKey, userMoved.current);
+    if (previousKey !== cardKey) cardKeyRef.current = cardKey;
+    if (follow === 'refit') {
+      // 第一次铺开或新节点：适配整棵树。删除、折叠不会进这个分支。
+      if (previousKey !== cardKey) userMoved.current = false;
+      fit();
+    } else if (follow === 'hold') {
+      const stage = viewportRef.current;
+      const next = mindViewAfterNodesRemoved({
+        previous: previousBoxes,
+        next: layout.boxes,
+        view: viewRef.current,
+        stage: {
+          width: stage?.clientWidth ?? 0,
+          height: stage?.clientHeight ?? 0,
+        },
+      });
+      if (next) {
+        stopViewAnim();
+        setView(next);
+      }
     }
-    if (!userMoved.current) fit();
-  }, [cardKey, fit]);
+    placedRef.current = layout.boxes;
+  }, [cardKey, fit, layout.boxes, stopViewAnim]);
 
   useEffect(() => {
     const el = viewportRef.current;
