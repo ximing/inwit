@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { layoutConceptGraph, layoutHasOverlap } from './concept-graph-layout.js';
-import { clampDockRatio, clampMainRatio, dockRatioFromDrag, effectiveLayout } from '../study-workspace/study-layout.js';
+import {
+  clampDockRatio,
+  clampMainRatio,
+  dockRatioFromDrag,
+  effectiveLayout,
+  modeForConceptGeneration,
+} from '../study-workspace/study-layout.js';
 
 function concepts(...ids: string[]) {
   return ids.map((id) => ({ id }));
@@ -70,6 +76,12 @@ describe('study-layout', () => {
 
   it('零尺寸不降级不清状态', () => {
     expect(effectiveLayout(compare, { width: 0, height: 0 }).degraded).toBe(false);
+  });
+
+  it('生成概念与关系只从结构切到概念，对照和概念保持不动', () => {
+    expect(modeForConceptGeneration('outline')).toBe('concepts');
+    expect(modeForConceptGeneration('compare')).toBeNull();
+    expect(modeForConceptGeneration('concepts')).toBeNull();
   });
 
   it('非对照模式不受容器影响；比例限幅', () => {

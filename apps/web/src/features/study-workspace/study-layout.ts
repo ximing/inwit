@@ -58,6 +58,15 @@ export function effectiveLayout(
   return { mode: lastFocus, arrangement: 'stacked', degraded: true, focusedPane: lastFocus };
 }
 
+/**
+ * 点「生成概念与关系」时要不要改学习区模式。
+ * 对照里概念区已经在，不必切走；只有结构视图需要打开概念区。
+ * 返回 null 表示保持当前模式。
+ */
+export function modeForConceptGeneration(mode: StudyMode): StudyMode | null {
+  return mode === 'outline' ? 'concepts' : null;
+}
+
 /** 分隔比例限幅（保护正文与图的可读面积）。 */
 export function clampMainRatio(ratio: number): number {
   return Math.min(0.75, Math.max(0.3, ratio));

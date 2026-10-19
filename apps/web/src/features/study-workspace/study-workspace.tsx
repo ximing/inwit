@@ -15,7 +15,7 @@ import {
 import { UiPrefsService } from '@/services/ui-prefs.service.js';
 import { ConceptsPanel } from '../concepts/concepts-panel.js';
 import { ConceptsService } from '../concepts/concepts.service.js';
-import { dockRatioFromDrag } from './study-layout.js';
+import { dockRatioFromDrag, modeForConceptGeneration } from './study-layout.js';
 import { shortcutBlockedTarget, studyModeFromKey } from './study-mode-hotkey.js';
 import { StudyWorkspaceService } from './study-workspace.service.js';
 import { StudyLinkService } from './study-link.service.js';
@@ -246,7 +246,8 @@ export const StudyDock = observer(function StudyDock() {
             className="study-dock-generate"
             disabled={concepts.batchPhase === 'generating'}
             onClick={() => {
-              workspace.setMode('concepts');
+              const next = modeForConceptGeneration(workspace.layout.preferredMode);
+              if (next) workspace.setMode(next);
               void concepts.startGeneration('document');
             }}
           >
