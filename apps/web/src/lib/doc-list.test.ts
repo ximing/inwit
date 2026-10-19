@@ -43,6 +43,7 @@ function listItem(overrides: Partial<DocumentListItem> = {}): DocumentListItem {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     cardCount: 0,
+    conceptCount: 0,
     proposedCount: 0,
     topicTitle: null,
     preview: '本地预览',

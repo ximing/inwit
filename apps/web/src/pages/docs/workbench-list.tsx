@@ -129,8 +129,8 @@ const DocStreamRow = observer(function DocStreamRow({
           {doc.cardCount > 0 ? (
             <span className={justDigested ? 'card-count' : undefined}>{doc.cardCount} 卡</span>
           ) : null}
-          {doc.cardCount > 0 ? <span>·</span> : null}
-          <span>{formatRelativeTime(doc.updatedAt)}</span>
+          {doc.conceptCount > 0 ? <span>{doc.conceptCount} 概念</span> : null}
+          <span className="row-meta-when">{formatRelativeTime(doc.updatedAt)}</span>
         </div>
       </Link>
       {stage.canCancel || stage.canRetry ? (

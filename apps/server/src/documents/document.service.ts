@@ -28,6 +28,8 @@ import {
   annotations,
   cardQuestions,
   cards,
+  concepts,
+  documentKnowledgeRefs,
   documents,
   jobs,
   reviewStates,
@@ -217,6 +219,26 @@ function documentAcceptanceCounts() {
     .as('doc_card_counts');
 }
 
+/** 文章列表上的概念数：本文直接引用、未移除、且概念本身未归档。 */
+function documentConceptCounts() {
+  return getDb()
+    .select({
+      documentId: documentKnowledgeRefs.documentId,
+      conceptCount: sql<number>`count(*)::int`.as('concept_count'),
+    })
+    .from(documentKnowledgeRefs)
+    .innerJoin(concepts, eq(concepts.id, documentKnowledgeRefs.conceptId))
+    .where(
+      and(
+        isNull(documentKnowledgeRefs.removedAt),
+        isNotNull(documentKnowledgeRefs.conceptId),
+        isNull(concepts.archivedAt),
+      ),
+    )
+    .groupBy(documentKnowledgeRefs.documentId)
+    .as('doc_concept_counts');
+}
+
 export async function listDocuments(
   userId: string,
   query: ListDocumentsQuery,
@@ -233,16 +255,19 @@ export async function listDocuments(
 
   const [totalRow] = await getDb().select({ n: count() }).from(documents).where(where);
   const cardCounts = documentAcceptanceCounts();
+  const conceptCounts = documentConceptCounts();
 
   const rows = await getDb()
     .select({
       document: documents,
       cardCount: cardCounts.acceptedCount,
       proposedCount: cardCounts.proposedCount,
+      conceptCount: conceptCounts.conceptCount,
       topicTitle: topics.title,
     })
     .from(documents)
     .leftJoin(cardCounts, eq(cardCounts.documentId, documents.id))
+    .leftJoin(conceptCounts, eq(conceptCounts.documentId, documents.id))
     .leftJoin(topics, eq(topics.id, documents.topicId))
     .where(where)
     .orderBy(...(kind === 'weekly_report' ? [desc(documents.reportWeekStart), desc(documents.createdAt)] : [desc(documents.updatedAt)]), desc(documents.id))
@@ -254,6 +279,7 @@ export async function listDocuments(
       toDocumentListItem(toPublicDocument(row.document), {
         cardCount: Number(row.cardCount ?? 0),
         proposedCount: Number(row.proposedCount ?? 0),
+        conceptCount: Number(row.conceptCount ?? 0),
         topicTitle: row.topicTitle ?? null,
       }),
     ),
@@ -269,16 +295,19 @@ export async function getDocumentListItemsByIds(
 ): Promise<DocumentListItem[]> {
   if (ids.length === 0) return [];
   const cardCounts = documentAcceptanceCounts();
+  const conceptCounts = documentConceptCounts();
 
   const rows = await getDb()
     .select({
       document: documents,
       cardCount: cardCounts.acceptedCount,
       proposedCount: cardCounts.proposedCount,
+      conceptCount: conceptCounts.conceptCount,
       topicTitle: topics.title,
     })
     .from(documents)
     .leftJoin(cardCounts, eq(cardCounts.documentId, documents.id))
+    .leftJoin(conceptCounts, eq(conceptCounts.documentId, documents.id))
     .leftJoin(topics, eq(topics.id, documents.topicId))
     .where(and(eq(documents.userId, userId), inArray(documents.id, ids), isNull(documents.deletedAt)));
 
@@ -286,6 +315,7 @@ export async function getDocumentListItemsByIds(
     toDocumentListItem(toPublicDocument(row.document), {
       cardCount: Number(row.cardCount ?? 0),
       proposedCount: Number(row.proposedCount ?? 0),
+      conceptCount: Number(row.conceptCount ?? 0),
       topicTitle: row.topicTitle ?? null,
     }),
   );

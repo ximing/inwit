@@ -227,6 +227,8 @@ export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
  */
 export const documentListItemSchema = documentSchema.omit({ contentJson: true }).extend({
   cardCount: z.number().int().nonnegative(),
+  /** 本文直接引用、且未归档的概念数。 */
+  conceptCount: z.number().int().nonnegative(),
   proposedCount: z.number().int().nonnegative(),
   topicTitle: z.string().nullable(),
   preview: z.string().nullable(),

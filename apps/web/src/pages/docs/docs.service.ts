@@ -740,6 +740,7 @@ export class DocsService extends Service {
           return toDocumentListItem(updated, {
             cardCount: item.cardCount,
             proposedCount: item.proposedCount,
+            conceptCount: item.conceptCount,
             topicTitle,
           });
         });
@@ -862,6 +863,7 @@ export class DocsService extends Service {
               ...item,
               cardCount: existing.cardCount,
               proposedCount: existing.proposedCount,
+              conceptCount: existing.conceptCount,
               topicTitle: item.topicTitle ?? existing.topicTitle,
             }
           : doc,

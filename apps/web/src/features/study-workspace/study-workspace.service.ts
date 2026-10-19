@@ -10,8 +10,9 @@ import {
 } from './study-state.js';
 
 /**
- * 文章学习工作区（T8a）：三模式、分隔比例、临时放大、降级与恢复、
- * 布局偏好按 用户+文章+主题 持久化（localStorage）。
+ * 文章学习工作区：三模式、分隔比例、临时放大、降级与恢复。
+ * 选中的模式、排列和分隔比例按用户全局保留（localStorage），切文章不换。
+ * 学习区外侧宽度在 UiPrefsService，本来就是全局的。
  */
 export class StudyWorkspaceService extends Service {
   layout: WorkspaceLayoutState = { ...DEFAULT_LAYOUT };
@@ -20,8 +21,9 @@ export class StudyWorkspaceService extends Service {
   lastFocus: 'outline' | 'concepts' = 'outline';
   storageAvailable = true;
   private scopeKey: string | null = null;
+  private loadedUserId: string | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
-  private pending: { scopeKey: string; layout: WorkspaceLayoutState } | null = null;
+  private pending: { userId: string; layout: WorkspaceLayoutState } | null = null;
 
   get authed(): AuthService {
     return this.resolve(AuthService);
@@ -54,14 +56,25 @@ export class StudyWorkspaceService extends Service {
   }
 
   boot(scopeId: string): void {
-    if (this.scopeKey !== scopeId) this.flushPending();
+    const switching = this.scopeKey !== null && this.scopeKey !== scopeId;
+    if (switching) this.flushPending();
     this.scopeKey = scopeId;
+    if (this.loadedUserId === this.userId) {
+      if (switching && this.layout.zoomedPane) this.layout = { ...this.layout, zoomedPane: null };
+      return;
+    }
     const state = loadWorkspaceState(this.userId);
-    const saved = state.layouts[scopeId];
-    this.layout = saved ? { ...DEFAULT_LAYOUT, ...saved } : { ...DEFAULT_LAYOUT };
+    const saved = state.layout ?? state.layouts[scopeId];
+    this.layout = saved ? { ...DEFAULT_LAYOUT, ...saved, zoomedPane: null } : { ...DEFAULT_LAYOUT };
+    this.loadedUserId = this.userId;
     this.containerWidth = 0;
     this.containerHeight = 0;
-    this.lastFocus = 'outline';
+    this.lastFocus = this.layout.preferredMode === 'concepts' ? 'concepts' : 'outline';
+    if (!state.layout && saved) {
+      state.layout = { ...this.layout };
+      const ok = saveWorkspaceState(this.userId, state);
+      if (!ok) this.storageAvailable = false;
+    }
   }
 
   setContainer(width: number, height: number): void {
@@ -104,14 +117,14 @@ export class StudyWorkspaceService extends Service {
   }
 
   private persist(): void {
-    const scopeKey = this.scopeKey;
-    if (!scopeKey) return;
-    this.pending = { scopeKey, layout: { ...this.layout } };
+    const userId = this.loadedUserId;
+    if (!userId) return;
+    this.pending = { userId, layout: { ...this.layout, zoomedPane: null } };
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => this.flushPending(), 500);
   }
 
-  /** 把已排上的布局写回它被修改时的那篇文章，而不是写到此刻打开的文章。 */
+  /** 把已排上的全局布局写盘。切文章时提前落盘，避免 500ms 内刷新丢掉这次调整。 */
   private flushPending(): void {
     const pending = this.pending;
     this.pending = null;
@@ -120,9 +133,9 @@ export class StudyWorkspaceService extends Service {
       this.saveTimer = null;
     }
     if (!pending) return;
-    const state = loadWorkspaceState(this.userId);
-    state.layouts[pending.scopeKey] = pending.layout;
-    const ok = saveWorkspaceState(this.userId, state);
+    const state = loadWorkspaceState(pending.userId);
+    state.layout = pending.layout;
+    const ok = saveWorkspaceState(pending.userId, state);
     if (!ok) this.storageAvailable = false;
   }
 }

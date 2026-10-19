@@ -1,7 +1,8 @@
 /**
- * 工作区状态协议（T8a）：视口/布局用 localStorage（本机偏好，50 篇 LRU），
- * 未提交表单与候选勾选用 sessionStorage（当前标签刷新可恢复）。
- * 全部 key 按 用户/文章/主题 隔离；存储不可用时退回内存并标记。
+ * 工作区状态协议（T8a）：布局用 localStorage（本机偏好）。
+ * 结构 / 概念 / 对照、排列和分隔比例按用户全局保留。
+ * 视口仍按 用户+文章+主题。未提交表单用 sessionStorage。
+ * 存储不可用时退回内存并标记。
  */
 
 export interface ViewportState {
@@ -93,7 +94,10 @@ export function saveJson(storage: StorageLike | null, key: string, value: unknow
 }
 
 export interface StoredWorkspaceState {
+  /** 旧数据：按文章存的布局。只用来在没有全局布局时迁移一次。 */
   layouts: Record<string, WorkspaceLayoutState>;
+  /** 结构 / 概念 / 对照、排列和分隔比例。全账号一份，不随文章变。 */
+  layout?: WorkspaceLayoutState;
   viewports: Record<string, ViewportState>;
 }
 
@@ -104,8 +108,10 @@ export function loadWorkspaceState(
   const fallback = { layouts: {}, viewports: {} };
   const loaded = loadJson<StoredWorkspaceState>(storage, layoutStorageKey(userId));
   if (!loaded || typeof loaded !== 'object') return fallback;
+  const layout = loaded.layout;
   return {
     layouts: loaded.layouts && typeof loaded.layouts === 'object' ? loaded.layouts : {},
+    ...(layout && typeof layout === 'object' ? { layout } : {}),
     viewports: loaded.viewports && typeof loaded.viewports === 'object' ? loaded.viewports : {},
   };
 }

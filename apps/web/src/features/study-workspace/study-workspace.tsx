@@ -47,7 +47,7 @@ export const StudyDock = observer(function StudyDock() {
     };
   }, []);
 
-  // 工作区与概念域按 文章+主题 启动；切文章不串状态
+  // 概念图按文章启动。结构 / 概念 / 对照和分隔比例是全局偏好，boot 不会换掉。
   useEffect(() => {
     link.retainDocument(docId);
     if (!docId || !topicId) return;

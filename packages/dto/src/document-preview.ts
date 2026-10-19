@@ -193,12 +193,13 @@ export function listBodyPreview(contentJson: unknown): string | null {
 /** Drop the ProseMirror body when a full document is placed on a list. */
 export function toDocumentListItem(
   doc: Document,
-  extra: { cardCount: number; proposedCount?: number; topicTitle: string | null },
+  extra: { cardCount: number; proposedCount?: number; conceptCount?: number; topicTitle: string | null },
 ): DocumentListItem {
   const { contentJson, ...rest } = doc;
   return {
     ...rest,
     cardCount: extra.cardCount,
+    conceptCount: extra.conceptCount ?? 0,
     proposedCount: extra.proposedCount ?? 0,
     topicTitle: extra.topicTitle,
     preview: listBodyPreview(contentJson),

@@ -211,6 +211,7 @@ describe('document list item', () => {
       createdAt: '2026-09-30T00:00:00.000Z',
       updatedAt: '2026-09-30T00:00:00.000Z',
       cardCount: 0,
+      conceptCount: 0,
       proposedCount: 0,
       topicTitle: null,
       preview: '学习率',

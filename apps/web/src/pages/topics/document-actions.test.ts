@@ -223,6 +223,7 @@ function docItem(id: string): DocumentListItem {
     createdAt: '2026-09-30T00:00:00.000Z',
     updatedAt: '2026-09-30T00:00:00.000Z',
     cardCount: 0,
+    conceptCount: 0,
     proposedCount: 0,
     topicTitle: null,
   };
