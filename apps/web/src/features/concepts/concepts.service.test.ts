@@ -307,6 +307,79 @@ describe('ConceptsService flags and sync', () => {
     service.dispose();
   });
 
+  it('expand centers the next level and back restores the previous viewport', async () => {
+    const service = new ConceptsService();
+    await service.boot('topic-1', 'doc-1');
+    service.viewport = { x: 10, y: 20, zoom: 1.2 };
+    vi.mocked(getConceptGraph).mockResolvedValue({
+      nodes: [
+        {
+          concept: { id: 'node-a', name: '甲' } as ConceptGraphPage['nodes'][number]['concept'],
+          membership: 'direct',
+        },
+      ],
+      nextCursor: null,
+      graphRevision: 2,
+    });
+    vi.mocked(getConcept).mockResolvedValue({ marker: 'detail' } as unknown as ConceptDetail);
+    await service.expandNeighbors('node-a');
+    expect(service.focusId).toBe('node-a');
+    expect(service.focusStack).toEqual([
+      { focusId: null, label: '全文', viewport: { x: 10, y: 20, zoom: 1.2 } },
+    ]);
+    expect(service.centerRequest?.id).toBe('node-a');
+    expect(service.selected).toEqual({ kind: 'concept', id: 'node-a' });
+    expect(service.focusCrumbs.map((crumb) => crumb.label)).toEqual(['全文', '甲']);
+
+    service.viewport = { x: 80, y: 90, zoom: 1.4 };
+    await service.expandNeighbors('node-a');
+    expect(service.focusStack).toHaveLength(1);
+
+    vi.mocked(getConceptGraph).mockResolvedValue(emptyGraph);
+    await service.backFocus();
+    expect(service.focusId).toBeNull();
+    expect(service.focusStack).toEqual([]);
+    expect(service.viewport).toEqual({ x: 10, y: 20, zoom: 1.2 });
+    expect(service.centerRequest).toBeNull();
+  });
+
+  it('jumpFocus returns to an earlier level and restores that viewport', async () => {
+    const service = new ConceptsService();
+    await service.boot('topic-1', 'doc-1');
+    service.viewport = { x: 10, y: 20, zoom: 1.2 };
+    vi.mocked(getConcept).mockResolvedValue({ marker: 'detail' } as unknown as ConceptDetail);
+    vi.mocked(getConceptGraph).mockResolvedValue({
+      nodes: [
+        {
+          concept: { id: 'node-a', name: '甲' } as ConceptGraphPage['nodes'][number]['concept'],
+          membership: 'direct',
+        },
+      ],
+      nextCursor: null,
+      graphRevision: 2,
+    });
+    await service.expandNeighbors('node-a');
+    service.viewport = { x: 30, y: 40, zoom: 1 };
+    vi.mocked(getConceptGraph).mockResolvedValue({
+      nodes: [
+        {
+          concept: { id: 'node-b', name: '乙' } as ConceptGraphPage['nodes'][number]['concept'],
+          membership: 'direct',
+        },
+      ],
+      nextCursor: null,
+      graphRevision: 3,
+    });
+    await service.expandNeighbors('node-b');
+    expect(service.focusCrumbs.map((crumb) => crumb.label)).toEqual(['全文', '甲', '乙']);
+    vi.mocked(getConceptGraph).mockResolvedValue(emptyGraph);
+    await service.jumpFocus(0);
+    expect(service.focusId).toBeNull();
+    expect(service.focusStack).toEqual([]);
+    expect(service.viewport).toEqual({ x: 10, y: 20, zoom: 1.2 });
+    expect(service.centerRequest).toBeNull();
+  });
+
   it('keeps the camera when the same document boots again', async () => {
     const service = new ConceptsService();
     await service.boot('topic-1', 'doc-1');

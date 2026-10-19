@@ -31,6 +31,7 @@ import {
   rebindRelation,
   type DraftChoiceState,
 } from './concept-selection-logic.js';
+import { pushFocus, type FocusFrame } from './concept-graph-nav.js';
 
 export type ConceptViewMode = 'graph' | 'list';
 export type ConceptFilter = 'all' | 'document' | 'inferred' | 'practice';
@@ -82,6 +83,10 @@ export class ConceptsService extends Service {
   viewport = { x: 0, y: 0, zoom: 1 };
   /** 焦点概念（邻居展开）。 */
   focusId: string | null = null;
+  /** 展开路径。栈顶是上一层的焦点、名字和当时的视口，返回时还原。 */
+  focusStack: FocusFrame[] = [];
+  /** 进入下一层后，图按这一层重新取景，并把这个概念放在中央。nonce 用来重复触发。 */
+  centerRequest: { id: string; nonce: number } | null = null;
 
   // ---- 批次 ----
   batch: ConceptBatch | null = null;
@@ -120,6 +125,20 @@ export class ConceptsService extends Service {
 
   get filteredEdges(): ConceptRelation[] {
     return this.edges;
+  }
+
+  /** 根层在路径上的名字。文章里是全文，主题汇总里是全部。 */
+  get scopeLabel(): string {
+    return this.documentId ? '全文' : '全部';
+  }
+
+  /** 从根到当前层的路径。最后一项是当前层。 */
+  get focusCrumbs(): { label: string }[] {
+    const current = this.focusId
+      ? (this.nodeCache.get(this.focusId)?.name ?? '当前')
+      : this.scopeLabel;
+    if (this.focusStack.length === 0) return [{ label: current }];
+    return [...this.focusStack.map((frame) => ({ label: frame.label })), { label: current }];
   }
 
   private subscribeSync(): void {
@@ -218,8 +237,8 @@ export class ConceptsService extends Service {
       this.graphRevision = page.graphRevision;
       this.nodeCursor = page.nextCursor;
       this.hasMoreNodes = page.nextCursor !== null;
+      if (opts && 'focusId' in opts) this.focusId = opts.focusId ?? null;
       if (opts?.focusId) {
-        this.focusId = opts.focusId;
         this.visibleIds = page.nodes.map((node) => node.concept.id).slice(0, 50);
       } else if (!opts?.append) {
         this.visibleIds = page.nodes.map((node) => node.concept.id).slice(0, 50);
@@ -400,7 +419,40 @@ export class ConceptsService extends Service {
   }
 
   async expandNeighbors(conceptId: string): Promise<void> {
+    const frame: FocusFrame = {
+      focusId: this.focusId,
+      label: this.focusId ? (this.nodeCache.get(this.focusId)?.name ?? '上一层') : this.scopeLabel,
+      viewport: { ...this.viewport },
+    };
+    const pushed = this.focusId !== conceptId;
+    if (pushed) this.focusStack = pushFocus(this.focusStack, frame, conceptId);
     await this.loadGraph({ focusId: conceptId });
+    if (this.focusId !== conceptId) {
+      if (pushed && this.focusStack.at(-1)?.focusId === frame.focusId) {
+        this.focusStack = this.focusStack.slice(0, -1);
+      }
+      return;
+    }
+    this.centerRequest = { id: conceptId, nonce: (this.centerRequest?.nonce ?? 0) + 1 };
+    if (this.selected?.kind !== 'concept' || this.selected.id !== conceptId) {
+      await this.select({ kind: 'concept', id: conceptId });
+    }
+  }
+
+  /** 回到路径上的某一层，并还原离开那一层时的视口。 */
+  async jumpFocus(index: number): Promise<void> {
+    if (index < 0 || index >= this.focusStack.length) return;
+    const frame = this.focusStack[index]!;
+    this.focusStack = this.focusStack.slice(0, index);
+    await this.loadGraph({ focusId: frame.focusId });
+    if (this.focusId !== frame.focusId) return;
+    this.viewport = frame.viewport;
+    this.centerRequest = null;
+  }
+
+  /** 从展开的下一层回到上一层，并还原离开时的视口。 */
+  async backFocus(): Promise<void> {
+    await this.jumpFocus(this.focusStack.length - 1);
   }
 
   async createConcept(input: CreateConceptInput): Promise<CreateConceptResult> {
@@ -763,6 +815,7 @@ export class ConceptsService extends Service {
       viewport: this.viewport,
       positions: this.positions,
       focusId: this.focusId,
+      focusStack: this.focusStack,
       selected: this.selected,
       viewMode: this.viewMode,
       filter: this.filter,
@@ -783,6 +836,8 @@ export class ConceptsService extends Service {
       this.viewport = saved.viewport;
       this.positions = saved.positions;
       this.focusId = saved.focusId;
+      this.focusStack = saved.focusStack;
+      this.centerRequest = null;
       this.selected = saved.selected;
       this.viewMode = saved.viewMode;
       this.filter = saved.filter;
@@ -797,6 +852,8 @@ export class ConceptsService extends Service {
       this.viewport = { x: 0, y: 0, zoom: 1 };
       this.positions = new Map();
       this.focusId = null;
+      this.focusStack = [];
+      this.centerRequest = null;
       this.selected = null;
       this.viewMode = 'graph';
       this.filter = 'all';
@@ -946,6 +1003,7 @@ interface DocumentViewState {
   viewport: { x: number; y: number; zoom: number };
   positions: Map<string, { x: number; y: number }>;
   focusId: string | null;
+  focusStack: FocusFrame[];
   selected: ConceptTarget | null;
   viewMode: ConceptViewMode;
   filter: ConceptFilter;

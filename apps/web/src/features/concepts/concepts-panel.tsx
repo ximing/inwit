@@ -1,5 +1,7 @@
 import { observer, useService } from '@rabjs/react';
+import { useEffect } from 'react';
 import { ListTree, Loader2, Network, Plus, Search } from 'lucide-react';
+import { shortcutBlockedTarget } from '../study-workspace/study-mode-hotkey.js';
 import { ConceptsService } from './concepts.service.js';
 import { ConceptGraph } from './concept-graph.js';
 import { ConceptDetailPane, RelationDetailPane } from './concept-detail.js';
@@ -12,6 +14,19 @@ import { ConceptEditorDialog, ConceptLinkDraft, RelationEditorDialog } from './c
  */
 export const ConceptsPanel = observer(function ConceptsPanel() {
   const service = useService(ConceptsService);
+  const detailOpen = service.detail !== null;
+
+  useEffect(() => {
+    if (!detailOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing) return;
+      if (shortcutBlockedTarget(event.target)) return;
+      event.preventDefault();
+      void service.select(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [detailOpen, service]);
 
   if (service.probed && !service.enabled) return null;
   if (!service.probed) {
@@ -108,6 +123,12 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
               onSelectConcept={(id) => void service.select({ kind: 'concept', id })}
               onSelectRelation={(id) => void service.select({ kind: 'relation', id })}
               onExpandNeighbors={(id) => void service.expandNeighbors(id)}
+              canBack={service.focusStack.length > 0}
+              onBack={() => void service.backFocus()}
+              crumbs={service.focusCrumbs}
+              onJumpFocus={(index) => void service.jumpFocus(index)}
+              onDismiss={() => void service.select(null)}
+              centerRequest={service.centerRequest}
               onConnect={
                 service.writable
                   ? (fromId, toId) => service.openLinkDraft(fromId, toId)

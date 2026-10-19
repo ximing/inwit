@@ -191,13 +191,156 @@
 }
 .concepts-empty-sub { font-size: 12px; color: var(--ink-2, #6b6252); }
 
+.concept-graph-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
 .concept-graph {
   flex: 1;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   touch-action: none;
   cursor: grab;
+  outline: none;
 }
+.concept-graph-wrap.is-focused {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.concept-graph-wrap.is-space .concept-graph { cursor: grab; }
+.concept-graph-wrap.is-space .concept-graph.is-dragging { cursor: grabbing; }
+.concept-graph-chrome {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: calc(100% - 16px);
+}
+.concept-graph-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+}
+.concept-graph-tools button,
+.concept-graph-help,
+.concept-minimap-toggle {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--ink-2);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.concept-graph-tools button,
+.concept-minimap-toggle {
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.concept-graph-tools button {
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.concept-graph-tools button:hover,
+.concept-minimap-toggle:hover { color: var(--ink); }
+.concept-graph-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border-radius: 8px;
+}
+.concept-graph-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink);
+}
+.concept-graph-crumb button {
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 12px;
+}
+.concept-graph-crumb span {
+  max-width: 9em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.concept-graph-crumb button:hover { color: var(--ink); }
+.concept-graph-crumb-sep { color: var(--ink-4); }
+.concept-graph-help {
+  padding: 8px 10px;
+  box-shadow: var(--shadow-1);
+  max-width: 16em;
+}
+.concept-graph-help p { margin: 0; line-height: 1.6; }
+.concept-minimap-toggle {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 4;
+}
+.concept-minimap {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 4;
+  width: 168px;
+  height: 112px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  box-shadow: var(--shadow-1);
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+.concept-minimap svg { display: block; }
+.concept-minimap rect { fill: color-mix(in srgb, var(--ink-4) 60%, transparent); }
+.concept-minimap rect.is-on { fill: var(--accent); }
+.concept-minimap rect.concept-minimap-vp {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+.concept-minimap-hide {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  color: var(--ink-2);
+  cursor: pointer;
+  line-height: 18px;
+}
+.concept-minimap-hide:hover { color: var(--ink); }
 .concept-graph.is-dragging { cursor: grabbing; }
 .concept-node { filter: drop-shadow(0 1px 2px rgba(60, 48, 30, 0.06)) drop-shadow(0 4px 10px rgba(60, 48, 30, 0.04)); }
 html[data-theme='dark'] .concept-node { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.28)); }
@@ -284,11 +427,18 @@ html[data-theme='dark'] .concept-node { filter: drop-shadow(0 1px 2px rgba(0, 0,
 }
 .concept-link-draft button[type='submit'] { color: var(--accent, #b3402a); border-color: var(--accent, #b3402a); }
 .concept-link-draft button:disabled { opacity: 0.45; cursor: default; }
+.concept-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 12;
+  pointer-events: stroke;
+  cursor: pointer;
+}
 .concept-edge-line {
   fill: none;
   stroke: var(--ink-4);
   stroke-width: 1.15;
-  cursor: pointer;
+  pointer-events: none;
 }
 .concept-edge.is-selected .concept-edge-line { stroke: var(--accent); stroke-width: 1.6; }
 .concept-edge.is-highlight .concept-edge-line { stroke: var(--accent); stroke-width: 1.8; }
