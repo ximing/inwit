@@ -30,6 +30,11 @@ export class EditorService extends Service {
   preserveViewport = false;
   saveTimer: ReturnType<typeof setTimeout> | null = null;
   saveInflight: Promise<void> | null = null;
+  /**
+   * Bumped by idle, load, initNew, and destroy. A save that started earlier
+   * must not adopt a new id or schedule another save into the next session.
+   */
+  private saveEpoch = 0;
   onCreated: ((doc: Document) => void) | null = null;
   onSaved:
     | ((doc: {
@@ -111,7 +116,7 @@ export class EditorService extends Service {
   }
 
   initNew(topicId: string | null): void {
-    this.clearTimer();
+    this.invalidateSave();
     this.remoteGone = false;
     this.preserveViewport = false;
     this.phase = 'new';
@@ -131,7 +136,7 @@ export class EditorService extends Service {
   }
 
   idle(): void {
-    this.clearTimer();
+    this.invalidateSave();
     this.remoteGone = false;
     this.preserveViewport = false;
     this.phase = 'idle';
@@ -143,7 +148,7 @@ export class EditorService extends Service {
   }
 
   async load(id: string): Promise<void> {
-    this.clearTimer();
+    const epoch = this.invalidateSave();
     this.remoteGone = false;
     this.preserveViewport = false;
     this.phase = 'loading';
@@ -151,6 +156,7 @@ export class EditorService extends Service {
     this.publishPresence();
     try {
       const doc = await getDocument(id);
+      if (!this.saveStillCurrent(epoch)) return;
       if (doc.assetUrls) {
         this.resolve(AssetUrlsService).seed(doc.assetUrls, doc.assetUrlsFetchedAt);
       }
@@ -168,6 +174,7 @@ export class EditorService extends Service {
       this.saveState = 'saved';
       this.phase = 'ready';
     } catch (err) {
+      if (!this.saveStillCurrent(epoch)) return;
       this.phase = 'missing';
       this.error = errorMessage(err, '打不开这份文档');
     }
@@ -190,7 +197,7 @@ export class EditorService extends Service {
 
   private noteDirty(): void {
     this.publishPresence();
-    if (this.remoteGone) return;
+    if (!this.canAutosave()) return;
     if (!this.dirty) {
       this.clearTimer();
       if (this.saveState !== 'saving') this.saveState = this.id ? 'saved' : 'idle';
@@ -200,7 +207,7 @@ export class EditorService extends Service {
   }
 
   scheduleSave(): void {
-    if (this.remoteGone) return;
+    if (!this.canAutosave()) return;
     this.clearTimer();
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
@@ -215,10 +222,10 @@ export class EditorService extends Service {
   }
 
   async save(): Promise<void> {
-    if (this.remoteGone) return;
+    if (!this.canAutosave()) return;
     if (this.saveInflight) {
       await this.saveInflight;
-      if (this.remoteGone) return;
+      if (!this.canAutosave()) return;
       if (!this.dirty && this.saveState !== 'error') return;
     }
     const run = this.persist();
@@ -234,15 +241,23 @@ export class EditorService extends Service {
   }
 
   private async persist(): Promise<void> {
-    if (this.remoteGone) return;
+    if (!this.canAutosave()) return;
+    const epoch = this.saveEpoch;
+    const documentId = this.id;
     this.clearTimer();
     const contentJson = this.draftJson;
     const titleAtSend = this.draftTitle;
     const draftTitle = titleAtSend.trim();
     const titleValue = draftTitle.length > 0 ? draftTitle : null;
     const lastTitle = this.lastSavedTitle.trim() || null;
-    if (!this.id && isBlankPmDoc(contentJson)) return;
-    if (this.id && jsonEqual(contentJson, this.lastSavedJson) && titleValue === lastTitle) return;
+    if (documentId === null && isBlankPmDoc(contentJson)) return;
+    if (
+      documentId !== null &&
+      jsonEqual(contentJson, this.lastSavedJson) &&
+      titleValue === lastTitle
+    ) {
+      return;
+    }
 
     // Before the request: an in-flight getDocument must not paint the pre-save detail.
     this.onLocalWriteStart?.();
@@ -250,14 +265,14 @@ export class EditorService extends Service {
     this.error = null;
     try {
       let updatedAt: string | null = null;
-      if (!this.id) {
+      if (documentId === null) {
         const created = await createDocument({
           contentJson,
           source: 'editor',
           ...(titleValue ? { title: titleValue } : {}),
           ...(this.topicId ? { topicId: this.topicId } : {}),
         });
-        if (this.remoteGone) return;
+        if (!this.saveStillCurrent(epoch)) return;
         this.id = created.id;
         this.justCreated = true;
         this.phase = 'ready';
@@ -271,16 +286,18 @@ export class EditorService extends Service {
         if (titleValue !== lastTitle) patch.title = titleValue;
         if (!jsonEqual(contentJson, this.lastSavedJson)) patch.contentJson = contentJson;
         if (patch.title === undefined && patch.contentJson === undefined) {
+          if (!this.saveStillCurrent(epoch)) return;
           this.saveState = 'saved';
           return;
         }
-        const updated = await updateDocument(this.id, patch);
-        if (this.remoteGone) return;
+        const updated = await updateDocument(documentId, patch);
+        if (!this.saveStillCurrent(epoch)) return;
         this.lastSavedJson = clonePmJson(updated.contentJson);
         this.lastSavedTitle = updated.title ?? '';
         if (this.draftTitle === titleAtSend) this.draftTitle = this.lastSavedTitle;
         updatedAt = updated.updatedAt;
       }
+      if (!this.saveStillCurrent(epoch)) return;
       this.savedAt = new Date();
       this.saveState = 'saved';
       if (this.id && updatedAt) {
@@ -291,20 +308,37 @@ export class EditorService extends Service {
           updatedAt,
         });
       }
-      if (this.dirty) this.scheduleSave();
+      if (this.canAutosave() && this.dirty) this.scheduleSave();
     } catch (err) {
-      if (this.remoteGone) return;
+      if (!this.saveStillCurrent(epoch)) return;
       this.saveState = 'error';
       this.error = errorMessage(err, '没存上，再试一次');
     }
   }
 
   override destroy(): void {
-    this.clearTimer();
+    this.invalidateSave();
     this.id = null;
     this.phase = 'idle';
     this.publishPresence();
     super.destroy();
+  }
+
+  /** A new editor may create. An open document may only update that id. */
+  private canAutosave(): boolean {
+    if (this.remoteGone) return false;
+    if (this.phase === 'new' && this.id === null) return true;
+    return this.phase === 'ready' && this.id !== null;
+  }
+
+  private invalidateSave(): number {
+    this.saveEpoch += 1;
+    this.clearTimer();
+    return this.saveEpoch;
+  }
+
+  private saveStillCurrent(epoch: number): boolean {
+    return !this.remoteGone && this.saveEpoch === epoch;
   }
 
   private publishPresence(): void {
