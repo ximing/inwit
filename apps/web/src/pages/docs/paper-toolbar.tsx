@@ -7,6 +7,8 @@ import {
   TABLE_CELL_COLORS,
   tableActionState,
   tableShortcutLabel,
+  type TableCommand,
+  type TableShortcut,
 } from './table-actions';
 import '@tiptap/extension-text-align';
 import '@tiptap/extension-text-style';
@@ -47,6 +49,7 @@ import { Select } from '@/components/select';
 import { Tip } from '@/components/tip';
 import { selectionAnchorFromEditor } from '@/lib/entity-marks';
 import { SelectionActions } from './selection-toolbar';
+import { OverflowToolbar, type OverflowSlot } from './toolbar-overflow';
 
 const TOOL_ICON = 15;
 
@@ -580,6 +583,36 @@ function TableActionButton({
   );
 }
 
+function iconSlot(id: string, node: ReactNode, active = false): OverflowSlot {
+  return { id, node, active };
+}
+
+function sepSlot(id: string): OverflowSlot {
+  return { id, separator: true, node: <span className="paper-tool-sep" /> };
+}
+
+function selectSlot(id: string, label: string, node: ReactNode): OverflowSlot {
+  return {
+    id,
+    measure: 'select',
+    node: (
+      <span className="paper-more-select" data-label={label}>
+        {node}
+      </span>
+    ),
+  };
+}
+
+function textSlot(
+  id: string,
+  className: string,
+  text: string,
+  node: ReactNode,
+  active = false,
+): OverflowSlot {
+  return { id, measure: { className, text }, node, active };
+}
+
 function TableActionBar({
   editor,
   colorOpen,
@@ -594,78 +627,74 @@ function TableActionBar({
     selector: ({ editor: instance }) => tableActionState(instance),
   });
 
+  const action = (
+    label: string,
+    command: TableCommand,
+    extra?: { disabled?: boolean; pressed?: boolean },
+  ) => {
+    const shortcut: TableShortcut | null =
+      command === 'addRowBefore' ||
+      command === 'addRowAfter' ||
+      command === 'addColumnBefore' ||
+      command === 'addColumnAfter' ||
+      command === 'deleteRow' ||
+      command === 'deleteColumn'
+        ? command
+        : null;
+    return textSlot(
+      command,
+      'paper-tool is-wide',
+      label,
+      <TableActionButton
+        label={label}
+        hint={shortcut ? tableShortcutLabel(shortcut) : undefined}
+        disabled={extra?.disabled}
+        pressed={extra?.pressed}
+        onAction={() => runTableCommand(editor, command)}
+      />,
+      extra?.pressed,
+    );
+  };
+
   return (
-    <div className="paper-toolbar-inner paper-table-bar" role="toolbar" aria-label="表格操作">
-      <span className="paper-table-label">表格</span>
-      <TableActionButton
-        label="上方加行"
-        hint={tableShortcutLabel('addRowBefore')}
-        onAction={() => runTableCommand(editor, 'addRowBefore')}
-      />
-      <TableActionButton
-        label="下方加行"
-        hint={tableShortcutLabel('addRowAfter')}
-        onAction={() => runTableCommand(editor, 'addRowAfter')}
-      />
-      <TableActionButton
-        label="删除行"
-        hint={tableShortcutLabel('deleteRow')}
-        disabled={!state.canDeleteRow}
-        onAction={() => runTableCommand(editor, 'deleteRow')}
-      />
-      <span className="paper-tool-sep" />
-      <TableActionButton
-        label="左侧加列"
-        hint={tableShortcutLabel('addColumnBefore')}
-        onAction={() => runTableCommand(editor, 'addColumnBefore')}
-      />
-      <TableActionButton
-        label="右侧加列"
-        hint={tableShortcutLabel('addColumnAfter')}
-        onAction={() => runTableCommand(editor, 'addColumnAfter')}
-      />
-      <TableActionButton
-        label="删除列"
-        hint={tableShortcutLabel('deleteColumn')}
-        disabled={!state.canDeleteColumn}
-        onAction={() => runTableCommand(editor, 'deleteColumn')}
-      />
-      <span className="paper-tool-sep" />
-      <TableActionButton
-        label="合并单元格"
-        disabled={!state.canMerge}
-        onAction={() => runTableCommand(editor, 'mergeCells')}
-      />
-      <TableActionButton
-        label="拆分单元格"
-        disabled={!state.canSplit}
-        onAction={() => runTableCommand(editor, 'splitCell')}
-      />
-      <span className="paper-tool-sep" />
-      <TableActionButton
-        label="表头行"
-        pressed={state.headerRow}
-        onAction={() => runTableCommand(editor, 'toggleHeaderRow')}
-      />
-      <TableActionButton
-        label="表头列"
-        pressed={state.headerColumn}
-        onAction={() => runTableCommand(editor, 'toggleHeaderColumn')}
-      />
-      <PaperColorControl
-        label="单元格背景"
-        clearLabel="无"
-        icon={<PaintBucket width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
-        value={state.background}
-        fallback="#ece7df"
-        colors={TABLE_CELL_COLORS}
-        open={colorOpen}
-        onOpenChange={onColorOpenChange}
-        onPick={(value) => applyCellBackground(editor, value)}
-      />
-      <span className="paper-tool-sep" />
-      <TableActionButton label="删除表格" onAction={() => runTableCommand(editor, 'deleteTable')} />
-    </div>
+    <OverflowToolbar
+      label="表格操作"
+      className="paper-table-bar"
+      onClose={() => onColorOpenChange(false)}
+      slots={[
+        textSlot('label', 'paper-table-label', '表格', <span className="paper-table-label">表格</span>),
+        action('上方加行', 'addRowBefore'),
+        action('下方加行', 'addRowAfter'),
+        action('删除行', 'deleteRow', { disabled: !state.canDeleteRow }),
+        sepSlot('sep-row'),
+        action('左侧加列', 'addColumnBefore'),
+        action('右侧加列', 'addColumnAfter'),
+        action('删除列', 'deleteColumn', { disabled: !state.canDeleteColumn }),
+        sepSlot('sep-col'),
+        action('合并单元格', 'mergeCells', { disabled: !state.canMerge }),
+        action('拆分单元格', 'splitCell', { disabled: !state.canSplit }),
+        sepSlot('sep-cell'),
+        action('表头行', 'toggleHeaderRow', { pressed: state.headerRow }),
+        action('表头列', 'toggleHeaderColumn', { pressed: state.headerColumn }),
+        iconSlot(
+          'cell-color',
+          <PaperColorControl
+            label="单元格背景"
+            clearLabel="无"
+            icon={<PaintBucket width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
+            value={state.background}
+            fallback="#ece7df"
+            colors={TABLE_CELL_COLORS}
+            open={colorOpen}
+            onOpenChange={onColorOpenChange}
+            onPick={(value) => applyCellBackground(editor, value)}
+          />,
+          state.background !== '',
+        ),
+        sepSlot('sep-delete'),
+        action('删除表格', 'deleteTable'),
+      ]}
+    />
   );
 }
 
@@ -701,191 +730,153 @@ export function PaperToolbar({
     if (!active.table) setStyleMenu((current) => (current === 'cell' ? null : current));
   }, [active.table]);
 
+  const tool = (
+    id: string,
+    label: string,
+    icon: ReactNode,
+    onAction: () => void,
+    extra?: { active?: boolean; disabled?: boolean },
+  ) =>
+    iconSlot(
+      id,
+      <EditorToolButton
+        variant="paper"
+        label={label}
+        active={extra?.active}
+        disabled={extra?.disabled}
+        onAction={onAction}
+      >
+        {icon}
+      </EditorToolButton>,
+      extra?.active,
+    );
   return (
     <div className="paper-toolbar">
-      <div className="paper-toolbar-inner" role="toolbar" aria-label="编辑工具">
-        <EditorToolButton
-          variant="paper"
-          label="撤销"
-          disabled={!active.canUndo}
-          onAction={() => editor.chain().focus().undo().run()}
-        >
-          <Undo2 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="重做"
-          disabled={!active.canRedo}
-          onAction={() => editor.chain().focus().redo().run()}
-        >
-          <Redo2 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <span className="paper-tool-sep" />
-        <EditorToolButton
-          variant="paper"
-          label="粗体"
-          active={active.bold}
-          onAction={() => editor.chain().focus().toggleBold().run()}
-        >
-          <Bold width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="斜体"
-          active={active.italic}
-          onAction={() => editor.chain().focus().toggleItalic().run()}
-        >
-          <Italic width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="划线"
-          active={active.strike}
-          onAction={() => editor.chain().focus().toggleStrike().run()}
-        >
-          <Strikethrough width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <PaperToolSelect
-          label="字号"
-          value={active.fontSize}
-          options={fontSizeOptions(active.fontSize)}
-          onChange={(value) => applyFontSize(editor, value)}
-        />
-        <PaperColorControl
-          label="字体颜色"
-          clearLabel="默认"
-          icon={<Baseline width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
-          value={active.color}
-          fallback="#221d16"
-          colors={TEXT_COLORS}
-          open={styleMenu === 'color'}
-          onOpenChange={(open) => setStyleMenu(open ? 'color' : null)}
-          onPick={(value) => applyColor(editor, value)}
-        />
-        <PaperColorControl
-          label="字体背景色"
-          clearLabel="无"
-          icon={<Highlighter width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
-          value={active.backgroundColor}
-          fallback="#f6e7a8"
-          colors={BACKGROUND_COLORS}
-          open={styleMenu === 'background'}
-          onOpenChange={(open) => setStyleMenu(open ? 'background' : null)}
-          onPick={(value) => applyBackground(editor, value)}
-        />
-        <EditorToolButton variant="paper" label="清除格式" onAction={() => clearFormatting(editor)}>
-          <RemoveFormatting width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <span className="paper-tool-sep" />
-        <PaperToolSelect
-          label="对齐"
-          value={active.textAlign}
-          options={ALIGN_OPTIONS}
-          onChange={(value) => setTextAlign(editor, value as TextAlign)}
-        />
-        <PaperToolSelect
-          label="标题"
-          value={active.heading}
-          options={HEADING_OPTIONS}
-          onChange={(value) => applyHeading(editor, value)}
-        />
-        <EditorToolButton
-          variant="paper"
-          label="引用"
-          active={active.blockquote}
-          onAction={() => editor.chain().focus().toggleBlockquote().run()}
-        >
-          <Quote width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <span className="paper-tool-sep" />
-        <EditorToolButton
-          variant="paper"
-          label="无序列表"
-          active={active.bulletList}
-          onAction={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          <List width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="有序列表"
-          active={active.orderedList}
-          onAction={() => editor.chain().focus().toggleOrderedList().run()}
-        >
-          <ListOrdered width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="任务列表"
-          active={active.taskList}
-          onAction={() => editor.chain().focus().toggleTaskList().run()}
-        >
-          <ListChecks width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="代码块"
-          active={active.codeBlock}
-          onAction={() => editor.chain().focus().toggleCodeBlock().run()}
-        >
-          <Code width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <span className="paper-tool-sep" />
-        <EditorToolButton
-          variant="paper"
-          label="链接"
-          active={active.link}
-          onAction={onInsertLink}
-        >
-          <LinkIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="图片"
-          disabled={!canInsertMedia}
-          onAction={onPickImage}
-        >
-          <ImageIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="视频"
-          disabled={!canInsertMedia}
-          onAction={onPickVideo}
-        >
-          <Film width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="表格"
-          active={active.table}
-          onAction={onToggleTable}
-        >
-          <TableIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton
-          variant="paper"
-          label="分割线"
-          onAction={() => editor.chain().focus().setHorizontalRule().run()}
-        >
-          <Minus width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton variant="paper" label="公式" onAction={onInsertMath}>
-          <Sigma width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <EditorToolButton variant="paper" label="Mermaid" onAction={() => insertMermaid(editor)}>
-          <Workflow width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        <span className="paper-tool-sep" />
-        <EditorToolButton variant="paper" label="查找" active={findOpen} onAction={onFind}>
-          <Search width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />
-        </EditorToolButton>
-        {uploading ? (
-          <span className="paper-tool is-wide" aria-live="polite">
-            上传中…
-          </span>
-        ) : null}
-      </div>
+      <OverflowToolbar
+        label="编辑工具"
+        onClose={() => setStyleMenu((current) => (current === 'cell' ? current : null))}
+        slots={[
+          tool('undo', '撤销', <Undo2 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().undo().run(), { disabled: !active.canUndo }),
+          tool('redo', '重做', <Redo2 width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().redo().run(), { disabled: !active.canRedo }),
+          sepSlot('sep-history'),
+          tool('bold', '粗体', <Bold width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().toggleBold().run(), { active: active.bold }),
+          tool('italic', '斜体', <Italic width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().toggleItalic().run(), { active: active.italic }),
+          tool('strike', '划线', <Strikethrough width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().toggleStrike().run(), { active: active.strike }),
+          selectSlot(
+            'font-size',
+            '字号',
+            <PaperToolSelect
+              label="字号"
+              value={active.fontSize}
+              options={fontSizeOptions(active.fontSize)}
+              onChange={(value) => applyFontSize(editor, value)}
+            />,
+          ),
+          iconSlot(
+            'color',
+            <PaperColorControl
+              label="字体颜色"
+              clearLabel="默认"
+              icon={<Baseline width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
+              value={active.color}
+              fallback="#221d16"
+              colors={TEXT_COLORS}
+              open={styleMenu === 'color'}
+              onOpenChange={(open) => setStyleMenu(open ? 'color' : null)}
+              onPick={(value) => applyColor(editor, value)}
+            />,
+            active.color !== '',
+          ),
+          iconSlot(
+            'background',
+            <PaperColorControl
+              label="字体背景色"
+              clearLabel="无"
+              icon={<Highlighter width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
+              value={active.backgroundColor}
+              fallback="#f6e7a8"
+              colors={BACKGROUND_COLORS}
+              open={styleMenu === 'background'}
+              onOpenChange={(open) => setStyleMenu(open ? 'background' : null)}
+              onPick={(value) => applyBackground(editor, value)}
+            />,
+            active.backgroundColor !== '',
+          ),
+          tool('clear', '清除格式', <RemoveFormatting width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            clearFormatting(editor)),
+          sepSlot('sep-style'),
+          selectSlot(
+            'align',
+            '对齐',
+            <PaperToolSelect
+              label="对齐"
+              value={active.textAlign}
+              options={ALIGN_OPTIONS}
+              onChange={(value) => setTextAlign(editor, value as TextAlign)}
+            />,
+          ),
+          selectSlot(
+            'heading',
+            '标题',
+            <PaperToolSelect
+              label="标题"
+              value={active.heading}
+              options={HEADING_OPTIONS}
+              onChange={(value) => applyHeading(editor, value)}
+            />,
+          ),
+          tool('quote', '引用', <Quote width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().toggleBlockquote().run(), { active: active.blockquote }),
+          sepSlot('sep-block'),
+          tool('bullet', '无序列表', <List width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().toggleBulletList().run(), { active: active.bulletList }),
+          tool('ordered', '有序列表', <ListOrdered width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().toggleOrderedList().run(), { active: active.orderedList }),
+          tool('task', '任务列表', <ListChecks width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().toggleTaskList().run(), { active: active.taskList }),
+          tool('code', '代码块', <Code width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().toggleCodeBlock().run(), { active: active.codeBlock }),
+          sepSlot('sep-insert'),
+          tool('link', '链接', <LinkIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, onInsertLink, {
+            active: active.link,
+          }),
+          tool('image', '图片', <ImageIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, onPickImage, {
+            disabled: !canInsertMedia,
+          }),
+          tool('video', '视频', <Film width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, onPickVideo, {
+            disabled: !canInsertMedia,
+          }),
+          tool('table', '表格', <TableIcon width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, onToggleTable, {
+            active: active.table,
+          }),
+          tool('rule', '分割线', <Minus width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            editor.chain().focus().setHorizontalRule().run()),
+          tool('math', '公式', <Sigma width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, onInsertMath),
+          tool('mermaid', 'Mermaid', <Workflow width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, () =>
+            insertMermaid(editor)),
+          sepSlot('sep-find'),
+          tool('find', '查找', <Search width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, onFind, {
+            active: findOpen,
+          }),
+          ...(uploading
+            ? [
+                textSlot(
+                  'uploading',
+                  'paper-tool is-wide',
+                  '上传中…',
+                  <span className="paper-tool is-wide" aria-live="polite">
+                    上传中…
+                  </span>,
+                ),
+              ]
+            : []),
+        ]}
+      />
       {active.table ? (
         <TableActionBar
           editor={editor}

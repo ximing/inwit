@@ -37,16 +37,89 @@
   border-bottom: 1px solid var(--line-soft);
 }
 .paper-toolbar-inner {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
   max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
+  min-width: 0;
+  overflow: hidden;
   /* 让首个图标与正文左边线视觉对齐（按钮自身有内距） */
   margin-left: -8px;
 }
-.paper-toolbar-inner::-webkit-scrollbar { display: none; }
+/* Fixed so the off-screen copy does not stretch the toolbar's scroll width. */
+.paper-toolbar-measure {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.paper-tool-live,
+.paper-more-select { display: contents; }
+.paper-toolbar-more {
+  position: fixed;
+  z-index: 32;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: max-content;
+  min-width: 10.5rem;
+  max-width: min(18rem, calc(100vw - 16px));
+  max-height: min(36rem, calc(100vh - 16px));
+  overflow: auto;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-2);
+}
+.paper-toolbar-more .paper-tool {
+  width: auto;
+  height: 30px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.paper-toolbar-more .paper-tool:not(.is-wide)::after {
+  content: attr(aria-label);
+  font-size: 13px;
+  font-weight: 500;
+}
+.paper-toolbar-more .paper-color-tool {
+  flex-direction: row;
+  align-items: center;
+}
+.paper-toolbar-more .paper-tool-sep {
+  width: auto;
+  height: 1px;
+  margin: 4px 6px;
+}
+.paper-toolbar-more .paper-more-select {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 8px 6px;
+}
+.paper-toolbar-more .paper-more-select::before {
+  content: attr(data-label);
+  color: var(--ink-4);
+  font-size: 11px;
+  font-weight: 600;
+}
+.paper-toolbar-more .paper-tool-select,
+.paper-toolbar-more .select-field {
+  width: auto;
+}
+.paper-toolbar-more .paper-table-label {
+  margin: 4px 8px 0;
+}
 .paper-table-bar {
   gap: 4px;
   margin-top: 4px;
