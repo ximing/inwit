@@ -37,6 +37,8 @@ import { DocFindBar, DocFindController } from './doc-find-bar';
 import { DocFindService } from './doc-find.service';
 import { findSeedFromSelection } from './find-replace-logic';
 import { PaperToolbar, SelectionFormatBar } from './paper-toolbar';
+import { TableContextMenu } from './table-menu';
+import { tableKeys } from './table-keys';
 import {
   AssetUploadError,
   classifyAssetFile,
@@ -316,13 +318,15 @@ export const PaperEditor = observer(function PaperEditor({
   );
 
   const extensions = useMemo(
-    () =>
-      createDocExtensions({
+    () => [
+      ...createDocExtensions({
         editable: true,
         placeholder: '开始写，或者从左边扔进来…',
         assetUrls,
         anchorHighlight,
       }),
+      tableKeys,
+    ],
     [anchorHighlight, assetUrls],
   );
 
@@ -509,10 +513,7 @@ export const PaperEditor = observer(function PaperEditor({
   };
 
   const toggleTable = () => {
-    if (editor.isActive('table')) {
-      editor.chain().focus().deleteTable().run();
-      return;
-    }
+    if (editor.isActive('table')) return;
     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
   };
 
@@ -586,6 +587,7 @@ export const PaperEditor = observer(function PaperEditor({
         onChange={onPickFiles}
       />
       <EditorContent editor={editor} />
+      <TableContextMenu editor={editor} />
       <DocFindController editor={editor} editable />
     </div>
   );

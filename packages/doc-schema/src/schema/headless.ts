@@ -2,7 +2,7 @@ import { getSchema, type AnyExtension } from '@tiptap/core';
 import Image from '@tiptap/extension-image';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import { Table, TableRow } from '@tiptap/extension-table';
 import TaskItem from '@tiptap/extension-task-item';
 import TaskList from '@tiptap/extension-task-list';
 import StarterKit from '@tiptap/starter-kit';
@@ -13,6 +13,7 @@ import { MermaidBlock } from './mermaid-block.js';
 import { PageBreak } from './page-break.js';
 import { createDocMathExtensions } from './math.js';
 import { createTextAlignExtension } from './text-align.js';
+import { DocTableCell, DocTableHeader } from './table-cell.js';
 import { createDocTextStyleExtensions } from './text-style.js';
 import { Video } from './video.js';
 import { VitalEntity } from './vital-entity.js';
@@ -29,8 +30,8 @@ export function getHeadlessExtensions(): AnyExtension[] {
     }),
     Table.configure({ resizable: false }),
     TableRow,
-    TableHeader,
-    TableCell,
+    DocTableHeader,
+    DocTableCell,
     TaskList,
     TaskItem.configure({ nested: true }),
     // inline to match apps/web createDocExtensions; default Image is block.

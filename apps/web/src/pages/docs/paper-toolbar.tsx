@@ -1,6 +1,13 @@
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
 import { NodeSelection } from '@tiptap/pm/state';
+import {
+  applyCellBackground,
+  runTableCommand,
+  TABLE_CELL_COLORS,
+  tableActionState,
+  tableShortcutLabel,
+} from './table-actions';
 import '@tiptap/extension-text-align';
 import '@tiptap/extension-text-style';
 import {
@@ -16,6 +23,7 @@ import {
   ListChecks,
   ListOrdered,
   Minus,
+  PaintBucket,
   Quote,
   Redo2,
   RemoveFormatting,
@@ -540,6 +548,127 @@ function PaperColorControl({
   );
 }
 
+function TableActionButton({
+  label,
+  hint,
+  pressed,
+  disabled = false,
+  onAction,
+}: {
+  label: string;
+  hint?: string;
+  pressed?: boolean;
+  disabled?: boolean;
+  onAction: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`paper-tool is-wide${pressed ? ' is-on' : ''}`}
+      aria-label={label}
+      title={hint ? `${label}（${hint}）` : label}
+      aria-pressed={pressed}
+      disabled={disabled}
+      onMouseDown={(event: ReactMouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        if (disabled) return;
+        onAction();
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function TableActionBar({
+  editor,
+  colorOpen,
+  onColorOpenChange,
+}: {
+  editor: Editor;
+  colorOpen: boolean;
+  onColorOpenChange: (open: boolean) => void;
+}) {
+  const state = useEditorState({
+    editor,
+    selector: ({ editor: instance }) => tableActionState(instance),
+  });
+
+  return (
+    <div className="paper-toolbar-inner paper-table-bar" role="toolbar" aria-label="表格操作">
+      <span className="paper-table-label">表格</span>
+      <TableActionButton
+        label="上方加行"
+        hint={tableShortcutLabel('addRowBefore')}
+        onAction={() => runTableCommand(editor, 'addRowBefore')}
+      />
+      <TableActionButton
+        label="下方加行"
+        hint={tableShortcutLabel('addRowAfter')}
+        onAction={() => runTableCommand(editor, 'addRowAfter')}
+      />
+      <TableActionButton
+        label="删除行"
+        hint={tableShortcutLabel('deleteRow')}
+        disabled={!state.canDeleteRow}
+        onAction={() => runTableCommand(editor, 'deleteRow')}
+      />
+      <span className="paper-tool-sep" />
+      <TableActionButton
+        label="左侧加列"
+        hint={tableShortcutLabel('addColumnBefore')}
+        onAction={() => runTableCommand(editor, 'addColumnBefore')}
+      />
+      <TableActionButton
+        label="右侧加列"
+        hint={tableShortcutLabel('addColumnAfter')}
+        onAction={() => runTableCommand(editor, 'addColumnAfter')}
+      />
+      <TableActionButton
+        label="删除列"
+        hint={tableShortcutLabel('deleteColumn')}
+        disabled={!state.canDeleteColumn}
+        onAction={() => runTableCommand(editor, 'deleteColumn')}
+      />
+      <span className="paper-tool-sep" />
+      <TableActionButton
+        label="合并单元格"
+        disabled={!state.canMerge}
+        onAction={() => runTableCommand(editor, 'mergeCells')}
+      />
+      <TableActionButton
+        label="拆分单元格"
+        disabled={!state.canSplit}
+        onAction={() => runTableCommand(editor, 'splitCell')}
+      />
+      <span className="paper-tool-sep" />
+      <TableActionButton
+        label="表头行"
+        pressed={state.headerRow}
+        onAction={() => runTableCommand(editor, 'toggleHeaderRow')}
+      />
+      <TableActionButton
+        label="表头列"
+        pressed={state.headerColumn}
+        onAction={() => runTableCommand(editor, 'toggleHeaderColumn')}
+      />
+      <PaperColorControl
+        label="单元格背景"
+        clearLabel="无"
+        icon={<PaintBucket width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />}
+        value={state.background}
+        fallback="#ece7df"
+        colors={TABLE_CELL_COLORS}
+        open={colorOpen}
+        onOpenChange={onColorOpenChange}
+        onPick={(value) => applyCellBackground(editor, value)}
+      />
+      <span className="paper-tool-sep" />
+      <TableActionButton label="删除表格" onAction={() => runTableCommand(editor, 'deleteTable')} />
+    </div>
+  );
+}
+
 export function PaperToolbar({
   editor,
   uploading,
@@ -567,7 +696,10 @@ export function PaperToolbar({
     editor,
     selector: ({ editor: instance }) => paperMarksOf(instance),
   });
-  const [styleMenu, setStyleMenu] = useState<null | 'color' | 'background'>(null);
+  const [styleMenu, setStyleMenu] = useState<null | 'color' | 'background' | 'cell'>(null);
+  useEffect(() => {
+    if (!active.table) setStyleMenu((current) => (current === 'cell' ? null : current));
+  }, [active.table]);
 
   return (
     <div className="paper-toolbar">
@@ -754,6 +886,13 @@ export function PaperToolbar({
           </span>
         ) : null}
       </div>
+      {active.table ? (
+        <TableActionBar
+          editor={editor}
+          colorOpen={styleMenu === 'cell'}
+          onColorOpenChange={(open) => setStyleMenu(open ? 'cell' : null)}
+        />
+      ) : null}
     </div>
   );
 }

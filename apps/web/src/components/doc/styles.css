@@ -402,9 +402,12 @@
   display: table;
   overflow: visible;
   margin: 0;
+  width: 100%;
+  table-layout: fixed;
 }
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) th,
 :is(.md-body, .ws-writer .ProseMirror, .doc-view .ProseMirror) td {
+  box-sizing: border-box;
   border: 1px solid var(--line);
   padding: 6px 10px;
   text-align: left;

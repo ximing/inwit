@@ -18,6 +18,27 @@ describe('isBlankPmDoc', () => {
         type: 'doc',
         content: [
           {
+            type: 'table',
+            content: [
+              {
+                type: 'tableRow',
+                content: [
+                  {
+                    type: 'tableCell',
+                    content: [{ type: 'paragraph' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      isBlankPmDoc({
+        type: 'doc',
+        content: [
+          {
             type: 'paragraph',
             content: [{ type: 'image', attrs: { src: 'asset:pic', alt: null, width: 480, height: 240 } }],
           },

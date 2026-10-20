@@ -8,6 +8,7 @@ export { CardAnchorMark } from './schema/card-anchor-mark.js';
 export { getHeadlessExtensions, getHeadlessSchema } from './schema/headless.js';
 export { createTextAlignExtension, DOC_TEXT_ALIGN_TYPES } from './schema/text-align.js';
 export { createDocTextStyleExtensions } from './schema/text-style.js';
+export { DocTableCell, DocTableHeader, tableCellBackground } from './schema/table-cell.js';
 export {
   createDocMathExtensions,
   insertMathLatex,

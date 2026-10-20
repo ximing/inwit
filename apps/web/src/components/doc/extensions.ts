@@ -5,6 +5,8 @@ import {
   createDocMathExtensions,
   createDocTextStyleExtensions,
   createTextAlignExtension,
+  DocTableCell,
+  DocTableHeader,
   MermaidBlock,
   PageBreak,
   registerDocCodeAliases,
@@ -18,7 +20,7 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Placeholder from '@tiptap/extension-placeholder';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import { Table, TableRow } from '@tiptap/extension-table';
 import TaskItem from '@tiptap/extension-task-item';
 import TaskList from '@tiptap/extension-task-list';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
@@ -184,10 +186,15 @@ export function createDocExtensions(opts: CreateDocExtensionsOpts): AnyExtension
     }),
     DocCodeBlock.configure({ lowlight }),
     DocMermaid,
-    Table.configure({ resizable: false }),
+    Table.configure({
+      resizable: opts.editable,
+      cellMinWidth: 48,
+      handleWidth: 8,
+      lastColumnResizable: true,
+    }),
     TableRow,
-    TableHeader,
-    TableCell,
+    DocTableHeader,
+    DocTableCell,
     createDocImage(opts.assetUrls),
     createVideoNode(opts.assetUrls),
     TaskList,

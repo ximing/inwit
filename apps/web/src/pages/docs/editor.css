@@ -47,6 +47,28 @@
   margin-left: -8px;
 }
 .paper-toolbar-inner::-webkit-scrollbar { display: none; }
+.paper-table-bar {
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--line-soft);
+}
+.paper-table-label {
+  flex: none;
+  margin: 0 4px 0 8px;
+  color: var(--ink-4);
+  font-size: 12px;
+  font-weight: 600;
+}
+.paper-table-bar .paper-tool.is-wide {
+  color: var(--ink-2);
+}
+.paper-table-bar .paper-tool.is-wide:hover {
+  color: var(--ink);
+}
+.paper-table-bar .paper-tool.is-wide.is-on {
+  color: var(--accent);
+}
 .paper-tool {
   width: 30px;
   height: 28px;
@@ -190,6 +212,95 @@
 }
 .ws-writer .ProseMirror ::selection {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.ws-writer .ProseMirror td,
+.ws-writer .ProseMirror th {
+  position: relative;
+}
+.ws-writer .ProseMirror .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  pointer-events: none;
+}
+.ws-writer .ProseMirror .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: 0;
+  z-index: 3;
+  width: 4px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.ws-writer .ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+.paper-table-menu {
+  position: fixed;
+  z-index: 1100;
+  min-width: 220px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+}
+.paper-table-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  color: var(--ink-2);
+  font-size: 13px;
+  text-align: left;
+}
+.paper-table-menu-item:hover,
+.paper-table-menu-item:focus-visible {
+  background: var(--bg-sunken);
+  outline: none;
+}
+.paper-table-menu-item.is-on { color: var(--accent); }
+.paper-table-menu-item.is-danger { color: var(--danger, #b84343); }
+.paper-table-menu-item:disabled { opacity: 0.45; }
+.paper-table-menu-key {
+  color: var(--ink-4);
+  font-size: 12px;
+}
+.paper-table-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+.paper-table-menu-colors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 8px;
+}
+.paper-table-menu-colors > span {
+  margin-right: 2px;
+  color: var(--ink-4);
+  font-size: 12px;
+}
+.paper-table-menu-clear {
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.paper-table-menu-clear.is-on,
+.paper-table-menu-clear:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
 }
 .ws-writer .ProseMirror p.is-empty::before,
 .ws-writer .ProseMirror h1.is-empty::before,

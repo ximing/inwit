@@ -44,8 +44,16 @@ function hasMedia(node: unknown): boolean {
   return n.content.some((child) => hasMedia(child));
 }
 
+function hasTable(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as PmNode;
+  if (n.type === 'table') return true;
+  if (!Array.isArray(n.content)) return false;
+  return n.content.some((child) => hasTable(child));
+}
+
 export function isBlankPmDoc(value: unknown): boolean {
-  if (hasMedia(value)) return false;
+  if (hasMedia(value) || hasTable(value)) return false;
   try {
     return collectText(value).replaceAll('\u200b', '').trim().length === 0;
   } catch {

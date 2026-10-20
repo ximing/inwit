@@ -465,10 +465,13 @@ body.is-native .harness { display: none; }
   display: table;
   overflow: visible;
   margin: 0;
+  width: 100%;
+  table-layout: fixed;
 }
 
 .doc-view .ProseMirror th,
 .doc-view .ProseMirror td {
+  box-sizing: border-box;
   border: 1px solid var(--line);
   padding: 8px 12px;
   text-align: left;
