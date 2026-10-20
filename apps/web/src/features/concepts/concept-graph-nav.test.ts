@@ -11,6 +11,7 @@ import {
   popFocus,
   pushFocus,
   viewBoxSize,
+  boxIntersectsView,
   viewportCoversBoxes,
   zoomAt,
 } from './concept-graph-nav.js';
@@ -19,6 +20,13 @@ const world = { width: 800, height: 600 };
 const stage = { width: 400, height: 300 };
 
 describe('concept graph navigation', () => {
+  it('视口外的节点不绘制，贴边的留在画布里', () => {
+    const view = { x: 100, y: 80, width: 200, height: 120 };
+    expect(boxIntersectsView({ x: 90, y: 90, width: 40, height: 28 }, view)).toBe(true);
+    expect(boxIntersectsView({ x: 400, y: 90, width: 40, height: 28 }, view)).toBe(false);
+    expect(boxIntersectsView({ x: 340, y: 90, width: 40, height: 28 }, view, 80)).toBe(true);
+  });
+
   it('触控板滑动按像素平移，不再要求按住修饰键', () => {
     const next = panByWheel({ x: 0, y: 0, zoom: 1 }, world, stage, 40, -20);
     expect(next.zoom).toBe(1);

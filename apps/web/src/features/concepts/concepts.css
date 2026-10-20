@@ -342,8 +342,6 @@
 }
 .concept-minimap-hide:hover { color: var(--ink); }
 .concept-graph.is-dragging { cursor: grabbing; }
-.concept-node { filter: drop-shadow(0 1px 2px rgba(60, 48, 30, 0.06)) drop-shadow(0 4px 10px rgba(60, 48, 30, 0.04)); }
-html[data-theme='dark'] .concept-node { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45)) drop-shadow(0 4px 12px rgba(0, 0, 0, 0.28)); }
 .concept-node rect {
   fill: var(--surface);
   stroke: var(--line);
@@ -354,15 +352,22 @@ html[data-theme='dark'] .concept-node { filter: drop-shadow(0 1px 2px rgba(0, 0,
 .concept-node.is-selected rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
 .concept-node.is-connect-target rect { stroke: var(--accent); stroke-width: 1.5; }
 .concept-node-name { font-size: 13px; font-weight: 600; fill: var(--ink); font-family: var(--serif); }
-.concept-node-sense { font-size: 11px; fill: var(--ink-3); }
+.concept-node rect.concept-node-expand-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: none;
+}
 .concept-node-expand {
   font-size: 10px;
   fill: var(--ink-4);
   cursor: pointer;
   opacity: 0;
+  pointer-events: none;
 }
+.concept-node:hover .concept-node-expand-hit,
+.concept-node.is-selected .concept-node-expand-hit,
 .concept-node:hover .concept-node-expand,
-.concept-node.is-selected .concept-node-expand { opacity: 1; }
+.concept-node.is-selected .concept-node-expand { opacity: 1; pointer-events: all; }
 .concept-node-expand:hover { fill: var(--accent-deep); }
 .concept-node-port-hit { fill: transparent; stroke: none; pointer-events: all; }
 .concept-node-port-dot {

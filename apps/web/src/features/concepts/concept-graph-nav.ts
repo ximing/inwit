@@ -172,6 +172,16 @@ export function frameNeighborhood(
   return centerViewportOn({ x: 0, y: 0, zoom }, world, stage, focus);
 }
 
+/** 节点盒是否碰到视口（可外扩一圈，避免平移时贴边闪一下）。 */
+export function boxIntersectsView(box: GraphBox, view: GraphBox, margin = 0): boolean {
+  return (
+    box.x + box.width >= view.x - margin &&
+    box.x <= view.x + view.width + margin &&
+    box.y + box.height >= view.y - margin &&
+    box.y <= view.y + view.height + margin
+  );
+}
+
 /** 这些节点盒是否都落在当前 viewBox 里。整图可见时可以收起小地图。 */
 export function viewportCoversBoxes(
   viewport: GraphViewport,
