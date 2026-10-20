@@ -21,10 +21,16 @@ export function tableCellBackground(value: unknown): string | null {
   return `#${channels.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
 }
 
+/** Structural stand-in so the server build can typecheck this file without the DOM lib. */
+type CellElement = {
+  style: { backgroundColor: string };
+  getAttribute(name: string): string | null;
+};
+
 function backgroundColorAttribute() {
   return {
     default: null as string | null,
-    parseHTML: (element: HTMLElement) =>
+    parseHTML: (element: CellElement) =>
       tableCellBackground(element.style.backgroundColor || element.getAttribute('bgcolor')),
     renderHTML: (attributes: { backgroundColor?: unknown }) => {
       const color = tableCellBackground(attributes.backgroundColor);
