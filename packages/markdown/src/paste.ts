@@ -8,11 +8,16 @@ import type { PmNode } from './types.js';
  * paragraph per line. A document (a blank line, or a heading, list, fence,
  * table, or similar block) is parsed as Markdown, and a single newline inside
  * a paragraph becomes a space. Rich HTML that is not just a wrapper around
- * that same source is left for the editor's HTML paste.
+ * that same source is left for the editor's HTML paste. An editor cut or
+ * copy carries `data-pm-slice` and is left alone: its plain text does not
+ * spell out color, size, alignment, or marks.
  */
 
 const RICH_TAG =
   /<\s*\/?\s*(?:a|b|blockquote|code|del|em|h[1-6]|hr|i|img|li|ol|pre|s|strike|strong|sub|sup|table|tbody|td|tfoot|th|thead|tr|u|ul|video)\b/i;
+
+/** ProseMirror writes this on the first element of an editor slice. */
+const EDITOR_SLICE = /<[^>]*\sdata-pm-slice\s*=/i;
 
 const BLOCK_SIGNALS: RegExp[] = [
   /^[ \t]{0,3}#{1,6}[ \t]+\S/m,
@@ -59,6 +64,7 @@ export function htmlClipboardIsRich(html: string): boolean {
 
 /** PM blocks to insert, or null when the editor should keep its normal paste. */
 export function markdownPasteBlocks(plain: string, html = ''): PmNode[] | null {
+  if (EDITOR_SLICE.test(html)) return null;
   const richHtml = htmlClipboardIsRich(html);
   const source = normalizeSource(plain) || (richHtml ? '' : normalizeSource(looseTextFromHtml(html)));
   if (!source.trim()) return null;

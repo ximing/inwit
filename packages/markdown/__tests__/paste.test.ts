@@ -93,6 +93,17 @@ describe('markdownPasteBlocks', () => {
     ]);
   });
 
+  it('leaves an editor slice alone so cut and paste keep styles', () => {
+    const html =
+      '<h2 style="text-align: center;" data-pm-slice="0 0 []"><span style="color: #c45c26; font-size: 24px;">居中标题</span></h2>' +
+      '<p>普通<strong>粗体</strong><span style="color: #e11d48; background-color: #fde68a;">红底</span></p>' +
+      '<p>能量 <span data-type="inline-math">$E=mc^2$</span></p>';
+    const plain = '居中标题\n\n普通粗体红底\n\n能量 $E=mc^2$';
+    expect(markdownPasteBlocks(plain, html)).toBeNull();
+    expect(markdownPasteBlocks('能量 $E=mc^2$', '<p data-pm-slice="1 1 []">能量 $E=mc^2$</p>')).toBeNull();
+    expect(markdownPasteBlocks(plain, html.replace(' data-pm-slice="0 0 []"', ''))?.[0]?.type).toBe('paragraph');
+  });
+
   it('keeps rendered HTML and converts a source wrapper', () => {
     expect(htmlClipboardIsRich('<p><strong>粗</strong></p>')).toBe(true);
     expect(htmlClipboardIsRich('<div><span style="color:#000"># 标题</span></div>')).toBe(false);
