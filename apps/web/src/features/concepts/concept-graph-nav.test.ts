@@ -5,6 +5,7 @@ import {
   conceptMinimapFrame,
   fitViewport,
   frameNeighborhood,
+  GRAPH_ZOOM_MAX,
   keyboardPan,
   keyboardZoomFactor,
   panByWheel,
@@ -93,7 +94,17 @@ describe('concept graph navigation', () => {
     expect(neighbor.y).toBeGreaterThanOrEqual(next.y - 1);
     expect(neighbor.y + neighbor.height).toBeLessThanOrEqual(next.y + box.height + 1);
     expect(next.zoom).toBeGreaterThanOrEqual(0.35);
-    expect(next.zoom).toBeLessThanOrEqual(1.75);
+    expect(next.zoom).toBeLessThanOrEqual(GRAPH_ZOOM_MAX);
+  });
+
+  it('放大可以超过 1.75，再往上停在上限', () => {
+    const next = zoomAt({ x: 0, y: 0, zoom: 1.75 }, world, stage, 200, 150, 2);
+    expect(next.zoom).toBeGreaterThan(1.75);
+    expect(next.zoom).toBeLessThanOrEqual(GRAPH_ZOOM_MAX);
+    const capped = zoomAt({ x: 0, y: 0, zoom: GRAPH_ZOOM_MAX }, world, stage, 200, 150, 2);
+    expect(capped.zoom).toBe(GRAPH_ZOOM_MAX);
+    expect(capped.x).toBe(0);
+    expect(capped.y).toBe(0);
   });
 
   it('整图都在视口内时可以收起小地图', () => {

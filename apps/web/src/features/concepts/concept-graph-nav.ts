@@ -27,7 +27,8 @@ export interface GraphBox {
 }
 
 export const GRAPH_ZOOM_MIN = 0.35;
-export const GRAPH_ZOOM_MAX = 1.75;
+/** 密图要放大到能看清单条连线，不能停在和脑图一样的 1.75。 */
+export const GRAPH_ZOOM_MAX = 4;
 export const KEY_PAN_PX = 48;
 export const KEY_PAN_PX_FAST = 160;
 const KEY_ZOOM = 1.12;
