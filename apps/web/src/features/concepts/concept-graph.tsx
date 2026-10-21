@@ -7,6 +7,8 @@ import { hitConceptNode } from './concept-connect.js';
 import {
   layoutConceptGraph,
   conceptGraphIsDense,
+  conceptPredicateLabelWidth,
+  conceptReadingFocus,
   showConceptEdgeLabel,
   type ConceptGraphLayout,
   type GraphLayoutNode,
@@ -72,7 +74,11 @@ function rectBoundary(box: GraphBox, toward: { x: number; y: number }): { x: num
   return { x: cx + dx * scale, y: cy + dy * scale };
 }
 
-function edgeGeometry(from: GraphBox, to: GraphBox): { d: string; label: { x: number; y: number } } {
+function edgeGeometry(
+  from: GraphBox,
+  to: GraphBox,
+  lane = 0,
+): { d: string; label: { x: number; y: number } } {
   const fromCenter = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
   const toCenter = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
   const start = rectBoundary(from, toCenter);
@@ -81,12 +87,18 @@ function edgeGeometry(from: GraphBox, to: GraphBox): { d: string; label: { x: nu
   const dy = endOnBox.y - start.y;
   const dist = Math.max(1, Math.hypot(dx, dy));
   const end = { x: endOnBox.x - (dx / dist) * 6, y: endOnBox.y - (dy / dist) * 6 };
-  const bend = Math.min(16, dist * 0.08);
-  const cx = (start.x + end.x) / 2 + (-dy / dist) * bend;
-  const cy = (start.y + end.y) / 2 + (dx / dist) * bend;
+  const nx = -dy / dist;
+  const ny = dx / dist;
+  const side = lane % 2 === 0 ? 1 : -1;
+  const bend = side * (Math.min(36, dist * 0.14) + Math.floor(lane / 2) * 20);
+  const cx = (start.x + end.x) / 2 + nx * bend;
+  const cy = (start.y + end.y) / 2 + ny * bend;
+  const midX = 0.25 * start.x + 0.5 * cx + 0.25 * end.x;
+  const midY = 0.25 * start.y + 0.5 * cy + 0.25 * end.y;
+  const lift = 11;
   return {
     d: `M ${start.x} ${start.y} Q ${cx} ${cy} ${end.x} ${end.y}`,
-    label: { x: cx, y: cy - 6 },
+    label: { x: midX + nx * side * lift, y: midY + ny * side * lift },
   };
 }
 
@@ -117,16 +129,18 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
     [layout],
   );
   const boxById = useMemo(() => new Map(layout.nodes.map((node) => [node.id, node])), [layout]);
-  const drawnEdges = useMemo(
-    () =>
-      props.relations.flatMap((relation) => {
-        const from = boxById.get(relation.fromConceptId);
-        const to = boxById.get(relation.toConceptId);
-        if (!from || !to) return [];
-        return [{ relation, ...edgeGeometry(from, to) }];
-      }),
-    [props.relations, boxById],
-  );
+  const drawnEdges = useMemo(() => {
+    const seen = new Map<string, number>();
+    return props.relations.flatMap((relation) => {
+      const from = boxById.get(relation.fromConceptId);
+      const to = boxById.get(relation.toConceptId);
+      if (!from || !to) return [];
+      const key = `${relation.fromConceptId}\0${relation.toConceptId}`;
+      const lane = seen.get(key) ?? 0;
+      seen.set(key, lane + 1);
+      return [{ relation, ...edgeGeometry(from, to, lane) }];
+    });
+  }, [props.relations, boxById]);
   const conceptById = useMemo(
     () => new Map(props.concepts.map((concept) => [concept.id, concept])),
     [props.concepts],
@@ -482,6 +496,14 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
   const viewSize = viewBoxSize(world, props.viewport.zoom);
   const view = { x: props.viewport.x, y: props.viewport.y, width: viewSize.width, height: viewSize.height };
   const dense = conceptGraphIsDense(layout.nodes.length, props.relations.length);
+  const selectedRelationRecord = selectedRelation
+    ? (props.relations.find((relation) => relation.id === selectedRelation) ?? null)
+    : null;
+  const reading = conceptReadingFocus({
+    selectedConceptId: props.selectedId,
+    selectedRelation: selectedRelationRecord,
+    relations: props.relations,
+  });
 
   return (
     <div ref={wrapRef} className={`concept-graph-wrap${focused ? ' is-focused' : ''}${spaceDown ? ' is-space' : ''}`}>
@@ -505,7 +527,7 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
           <path d="M 0 0 L 10 5 L 0 10 z" className="concept-edge-arrow" />
         </marker>
       </defs>
-      {drawnEdges.map(({ relation, d, label }) => {
+      {drawnEdges.map(({ relation, d }) => {
         const from = boxById.get(relation.fromConceptId);
         const to = boxById.get(relation.toConceptId);
         if (!from || !to) return null;
@@ -518,10 +540,11 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
         if (!boxIntersectsView(span, view, 160)) return null;
         const highlighted = props.highlightRelationIds.has(relation.id);
         const selected = selectedRelation === relation.id;
+        const dimmed = reading != null && !reading.edgeIds.has(relation.id);
         return (
           <g
             key={relation.id}
-            className={`concept-edge${selected ? ' is-selected' : ''}${highlighted ? ' is-highlight' : ''}${relation.basis === 'inferred' ? ' is-inferred' : ''}`}
+            className={`concept-edge${selected ? ' is-selected' : ''}${highlighted ? ' is-highlight' : ''}${dimmed ? ' is-dim' : ''}${relation.basis === 'inferred' ? ' is-inferred' : ''}`}
           >
             <path
               d={d}
@@ -536,25 +559,6 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
               className="concept-edge-line"
               markerEnd="url(#concept-arrow)"
             />
-            {showConceptEdgeLabel({
-              dense,
-              zoom: props.viewport.zoom,
-              selected,
-              highlighted,
-            }) ? (
-              <text
-                className="concept-edge-label"
-                x={label.x}
-                y={label.y}
-                textAnchor="middle"
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                  props.onSelectRelation(relation.id);
-                }}
-              >
-                {relation.predicate}
-              </text>
-            ) : null}
           </g>
         );
       })}
@@ -565,10 +569,11 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
         const highlighted = props.highlightConceptIds.has(concept.id);
         const isContext = props.contextIds?.has(concept.id) === true;
         const connectTarget = connect?.targetId === concept.id;
+        const dimmed = reading != null && !reading.nodeIds.has(concept.id);
         return (
           <g
             key={concept.id}
-            className={`concept-node${selected ? ' is-selected' : ''}${highlighted ? ' is-highlight' : ''}${isContext ? ' is-context' : ''}${connectTarget ? ' is-connect-target' : ''}`}
+            className={`concept-node${selected ? ' is-selected' : ''}${highlighted ? ' is-highlight' : ''}${isContext ? ' is-context' : ''}${connectTarget ? ' is-connect-target' : ''}${dimmed ? ' is-dim' : ''}`}
             data-concept-id={concept.id}
             transform={`translate(${node.x}, ${node.y})`}
             onPointerDown={(event) => {
@@ -642,6 +647,46 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
                 <circle className="concept-node-port-dot" cx={node.width} cy={node.height / 2} r={3.5} />
               </g>
             ) : null}
+          </g>
+        );
+      })}
+      {drawnEdges.map(({ relation, label }) => {
+        const from = boxById.get(relation.fromConceptId);
+        const to = boxById.get(relation.toConceptId);
+        if (!from || !to) return null;
+        const highlighted = props.highlightRelationIds.has(relation.id);
+        const selected = selectedRelation === relation.id;
+        const inReading = reading?.edgeIds.has(relation.id) === true;
+        if (reading != null && !inReading) return null;
+        if (!showConceptEdgeLabel({
+          dense,
+          zoom: props.viewport.zoom,
+          selected: selected || inReading,
+          highlighted,
+        })) return null;
+        const textWidth = conceptPredicateLabelWidth(relation.predicate);
+        const chipH = 18;
+        const padX = 6;
+        const chip = {
+          x: label.x - textWidth / 2 - padX,
+          y: label.y - chipH / 2,
+          width: textWidth + padX * 2,
+          height: chipH,
+        };
+        if (!boxIntersectsView(chip, view, 40)) return null;
+        return (
+          <g
+            key={`label-${relation.id}`}
+            className={`concept-edge concept-edge-label-wrap${selected ? ' is-selected' : ''}${highlighted ? ' is-highlight' : ''}`}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              props.onSelectRelation(relation.id);
+            }}
+          >
+            <rect className="concept-edge-label-bg" x={chip.x} y={chip.y} width={chip.width} height={chip.height} rx={chipH / 2} />
+            <text className="concept-edge-label" x={label.x} y={label.y} textAnchor="middle" dominantBaseline="middle">
+              {relation.predicate}
+            </text>
           </g>
         );
       })}
@@ -728,6 +773,7 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
           <p>触控板双指滑动平移，捏合缩放</p>
           <p>空格拖动或中键平移</p>
           <p>双击节点展开，Enter 展开选中</p>
+          <p>单击节点后，其余节点变淡，只留一级关系</p>
           <p>Backspace 返回上一层，Esc 关闭详情</p>
         </div>
       ) : null}
@@ -736,6 +782,7 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
       <ConceptMinimap
         nodes={layout.nodes}
         selectedId={props.selectedId}
+        readingIds={reading?.nodeIds ?? null}
         frame={frame}
         viewportRect={miniVp}
         onJump={jumpMinimap}
@@ -756,6 +803,7 @@ const MAP_H = 112;
 function ConceptMinimap({
   nodes,
   selectedId,
+  readingIds,
   frame,
   viewportRect,
   onJump,
@@ -763,6 +811,7 @@ function ConceptMinimap({
 }: {
   nodes: ConceptGraphLayout['nodes'];
   selectedId: string | null;
+  readingIds: Set<string> | null;
   frame: { scale: number; offsetX: number; offsetY: number };
   viewportRect: { x: number; y: number; width: number; height: number };
   onJump(mapX: number, mapY: number): void;
@@ -801,7 +850,7 @@ function ConceptMinimap({
         {nodes.map((node) => (
           <rect
             key={node.id}
-            className={node.id === selectedId ? 'is-on' : undefined}
+            className={node.id === selectedId ? 'is-on' : readingIds && !readingIds.has(node.id) ? 'is-dim' : undefined}
             x={node.x * frame.scale + frame.offsetX}
             y={node.y * frame.scale + frame.offsetY}
             width={Math.max(2, node.width * frame.scale)}

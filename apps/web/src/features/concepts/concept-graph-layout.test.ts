@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   conceptGraphIsDense,
   conceptNodeMetrics,
+  conceptReadingFocus,
   layoutConceptGraph,
   layoutHasOverlap,
   showConceptEdgeLabel,
+  type ConceptGraphLayout,
 } from './concept-graph-layout.js';
 import {
   clampDockRatio,
@@ -16,6 +18,16 @@ import {
 
 function concepts(...ids: string[]) {
   return ids.map((id) => ({ id }));
+}
+
+function centerGap(layout: ConceptGraphLayout, fromId: string, toId: string): number {
+  const a = layout.nodes.find((node) => node.id === fromId)!;
+  const b = layout.nodes.find((node) => node.id === toId)!;
+  const dist = Math.hypot(
+    a.x + a.width / 2 - (b.x + b.width / 2),
+    a.y + a.height / 2 - (b.y + b.height / 2),
+  );
+  return dist - a.width / 2 - b.width / 2;
 }
 
 describe('concept-graph-layout', () => {
@@ -97,6 +109,131 @@ describe('concept-graph-layout', () => {
       expect(node.x).toBe(before.x);
       expect(node.y).toBe(before.y);
     }
+  });
+
+  it('相连节点按谓词留出空隙，长谓词比短谓词更开', () => {
+    const pair = [
+      { id: 'a', name: '四个核心闭环' },
+      { id: 'b', name: '三层决策拆分' },
+    ];
+    const short = layoutConceptGraph(pair, [
+      { fromConceptId: 'a', toConceptId: 'b', predicate: '包含' },
+    ]);
+    const long = layoutConceptGraph(pair, [
+      { fromConceptId: 'a', toConceptId: 'b', predicate: '以只负责协调的智能体为中心组织起来' },
+    ]);
+    expect(layoutHasOverlap(short)).toBe(false);
+    expect(layoutHasOverlap(long)).toBe(false);
+    expect(centerGap(short, 'a', 'b')).toBeGreaterThan(90);
+    expect(centerGap(long, 'a', 'b')).toBeGreaterThan(centerGap(short, 'a', 'b') + 80);
+    expect(centerGap(long, 'a', 'b')).toBeGreaterThan(180);
+  });
+
+  it('同一节点的多条长关系会把邻居撑开', () => {
+    const ids = ['hub', 'n0', 'n1', 'n2', 'n3', 'n4', 'n5'];
+    const layout = layoutConceptGraph(
+      ids.map((id) => ({ id, name: id === 'hub' ? '四个核心闭环' : `邻居概念${id}` })),
+      ids.slice(1).map((id) => ({
+        fromConceptId: 'hub',
+        toConceptId: id,
+        predicate: '验证闭环以外部证据判定完成',
+      })),
+    );
+    expect(layoutHasOverlap(layout)).toBe(false);
+    for (const id of ids.slice(1)) {
+      expect(centerGap(layout, 'hub', id)).toBeGreaterThan(140);
+    }
+    const neighbors = layout.nodes.filter((node) => node.id !== 'hub');
+    let closest = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < neighbors.length; i += 1) {
+      for (let j = i + 1; j < neighbors.length; j += 1) {
+        closest = Math.min(closest, centerGap(layout, neighbors[i]!.id, neighbors[j]!.id));
+      }
+    }
+    expect(closest).toBeGreaterThan(48);
+  });
+
+  it('十几个节点、长谓词的图也不叠在一起', () => {
+    const ids = Array.from({ length: 18 }, (_, index) => `n${index}`);
+    const predicates = [
+      '以只负责协调的智能体为中心组织',
+      '验证闭环以外部证据判定完成',
+      '副作用区别于具体执行',
+    ];
+    const relations = ids.slice(0, -1).map((id, index) => ({
+      fromConceptId: id,
+      toConceptId: ids[(index + 1) % ids.length]!,
+      predicate: predicates[index % predicates.length]!,
+    }));
+    for (let index = 0; index < ids.length; index += 3) {
+      relations.push({
+        fromConceptId: ids[index]!,
+        toConceptId: ids[(index + 5) % ids.length]!,
+        predicate: predicates[index % predicates.length]!,
+      });
+    }
+    const layout = layoutConceptGraph(
+      ids.map((id, index) => ({ id, name: index % 2 === 0 ? `概念名称${index}` : `稍长的概念${index}` })),
+      relations,
+    );
+    expect(layoutHasOverlap(layout)).toBe(false);
+    for (const relation of relations) {
+      expect(centerGap(layout, relation.fromConceptId, relation.toConceptId)).toBeGreaterThan(90);
+    }
+  });
+
+  it('用户拖过的位置不会因为加宽间距被挪走', () => {
+    const previous = new Map([
+      ['a', { x: 10, y: 10 }],
+      ['b', { x: 40, y: 12 }],
+    ]);
+    const layout = layoutConceptGraph(
+      [
+        { id: 'a', name: '甲' },
+        { id: 'b', name: '乙' },
+      ],
+      [{ fromConceptId: 'a', toConceptId: 'b', predicate: '以只负责协调的智能体为中心组织起来' }],
+      previous,
+    );
+    expect(layout.nodes.find((node) => node.id === 'a')).toMatchObject({ x: 10, y: 10 });
+    expect(layout.nodes.find((node) => node.id === 'b')).toMatchObject({ x: 40, y: 12 });
+  });
+});
+
+describe('concept reading focus', () => {
+  const relations = [
+    { id: 'ab', fromConceptId: 'a', toConceptId: 'b' },
+    { id: 'bc', fromConceptId: 'b', toConceptId: 'c' },
+    { id: 'ac', fromConceptId: 'a', toConceptId: 'c' },
+    { id: 'cd', fromConceptId: 'c', toConceptId: 'd' },
+  ];
+
+  it('选中节点时只留它、一级邻居，以及连到它的边', () => {
+    const focus = conceptReadingFocus({
+      selectedConceptId: 'b',
+      selectedRelation: null,
+      relations,
+    });
+    expect([...(focus?.nodeIds ?? [])].sort()).toEqual(['a', 'b', 'c']);
+    expect([...(focus?.edgeIds ?? [])].sort()).toEqual(['ab', 'bc']);
+  });
+
+  it('没选中时不聚焦', () => {
+    expect(conceptReadingFocus({
+      selectedConceptId: null,
+      selectedRelation: null,
+      relations,
+    })).toBeNull();
+  });
+
+  it('选中关系时只留这条边的两端', () => {
+    const focus = conceptReadingFocus({
+      selectedConceptId: null,
+      selectedRelation: relations[2]!,
+      relations,
+    });
+    expect([...(focus?.nodeIds ?? [])].sort()).toEqual(['a', 'c']);
+    expect([...(focus?.edgeIds ?? [])]).toEqual(['ac']);
   });
 });
 

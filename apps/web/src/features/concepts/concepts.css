@@ -321,6 +321,7 @@
 .concept-minimap svg { display: block; }
 .concept-minimap rect { fill: color-mix(in srgb, var(--ink-4) 60%, transparent); }
 .concept-minimap rect.is-on { fill: var(--accent); }
+.concept-minimap rect.is-dim { opacity: 0.22; }
 .concept-minimap rect.concept-minimap-vp {
   fill: color-mix(in srgb, var(--accent) 12%, transparent);
   stroke: var(--accent);
@@ -342,6 +343,13 @@
 }
 .concept-minimap-hide:hover { color: var(--ink); }
 .concept-graph.is-dragging { cursor: grabbing; }
+.concept-node,
+.concept-edge { transition: opacity 140ms ease; }
+.concept-node.is-dim { opacity: 0.14; }
+.concept-node.is-dim:hover,
+.concept-node.is-dim.is-connect-target { opacity: 0.9; }
+.concept-edge.is-dim { opacity: 0.1; }
+.concept-edge.is-dim:hover { opacity: 0.55; }
 .concept-node rect {
   fill: var(--surface);
   stroke: var(--line);
@@ -451,14 +459,17 @@
 .concept-edge-arrow { fill: var(--ink-4); }
 .concept-edge.is-selected .concept-edge-arrow,
 .concept-edge.is-highlight .concept-edge-arrow { fill: var(--accent); }
+.concept-edge-label-bg {
+  fill: var(--bg);
+  stroke: var(--line);
+  stroke-width: 1;
+}
 .concept-edge-label {
   font-size: 11px;
-  fill: var(--ink-3);
+  fill: var(--ink);
   cursor: pointer;
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 3px;
 }
+.concept-edge-label-wrap { cursor: pointer; }
 .concept-edge.is-selected .concept-edge-label,
 .concept-edge.is-highlight .concept-edge-label { fill: var(--accent-deep); }
 .concept-graph-loading { font-size: 11px; fill: var(--ink-2, #6b6252); }
@@ -762,6 +773,11 @@
 }
 .concept-node.is-context rect { fill: var(--bg); stroke-dasharray: 4 3; }
 .concept-node.is-context .concept-node-name { fill: var(--ink-2); }
+
+@media (prefers-reduced-motion: reduce) {
+  .concept-node,
+  .concept-edge { transition: none; }
+}
 
 .study-dock-body[data-arrangement='columns'] {
   flex-direction: row;

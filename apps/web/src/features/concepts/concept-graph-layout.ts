@@ -1,8 +1,9 @@
 import type { Concept, ConceptRelation } from '@inwit/dto';
 
 /**
- * 概念图布局：一般有向图（允许环）。节点是按名称收缩的单行标签，
- * 已有坐标保持不动；只有新节点才播种并松弛。
+ * 概念图布局：一般有向图（允许环）。节点是按名称收缩的单行标签。
+ * 连线按谓词宽度留出空隙，关系文字才放得下。
+ * 已有坐标保持不动（拖过的位置）；只有新节点才播种并松弛。
  */
 
 export interface GraphLayoutNode {
@@ -29,11 +30,21 @@ const MIN_W = 44;
 const MAX_LABEL_PX = 13.2 * 20;
 const CJK_W = 13.2;
 const LATIN_W = 7.4;
-const GAP_X = 28;
-const GAP_Y = 18;
-const RELAX_ROUNDS = 36;
+const GAP_X = 84;
+const RELAX_ROUNDS = 80;
 const PUSH_ROUNDS = 48;
-const OVERLAP_PAD = 8;
+const OVERLAP_PAD = 20;
+/** 边上至少留出的空隙，短谓词也要能放下。 */
+const EDGE_GAP = 96;
+/** 谓词芯片两侧再留一点，避免贴到胶囊上。 */
+const LABEL_PAD = 52;
+const LABEL_CJK = 11;
+const LABEL_LATIN = 6.4;
+/** 超长谓词不再把整张图撑到无法概览，其余文字可以略微伸出。 */
+const EDGE_GAP_CAP = LABEL_CJK * 28 + LABEL_PAD;
+/** 任意两个节点之间的最小额外间距，避免邻居叠在同一条谓词上。 */
+const PAIR_GAP = 64;
+const STEP_LIMIT = 80;
 
 function charWidth(ch: string): number {
   const code = ch.codePointAt(0) ?? 0;
@@ -90,23 +101,80 @@ export function showConceptEdgeLabel(input: {
   return input.zoom >= 1.2;
 }
 
+/** 谓词在 11px 下的大致宽度，布局留白和芯片共用。 */
+export function conceptPredicateLabelWidth(predicate: string): number {
+  let width = 0;
+  for (const ch of predicate.trim()) {
+    const code = ch.codePointAt(0) ?? 0;
+    width += code <= 0xff ? LABEL_LATIN : LABEL_CJK;
+  }
+  return width;
+}
+
+function edgeClearance(predicate: string | undefined): number {
+  const text = predicate?.trim() ?? '';
+  if (!text) return EDGE_GAP;
+  return Math.min(EDGE_GAP_CAP, Math.max(EDGE_GAP, conceptPredicateLabelWidth(text) + LABEL_PAD));
+}
+
+export interface ConceptReadingFocus {
+  nodeIds: Set<string>;
+  edgeIds: Set<string>;
+}
+
+/**
+ * 选中概念时，阅读范围是它和一级邻居，以及连到它的那些边。
+ * 两个邻居之间、但不经过它的边不在阅读范围内。
+ * 选中关系时只留这条边的两端。都没选中则不聚焦。
+ */
+export function conceptReadingFocus(input: {
+  selectedConceptId: string | null;
+  selectedRelation: { id: string; fromConceptId: string; toConceptId: string } | null;
+  relations: readonly { id: string; fromConceptId: string; toConceptId: string }[];
+}): ConceptReadingFocus | null {
+  if (input.selectedConceptId) {
+    const nodeIds = new Set<string>([input.selectedConceptId]);
+    const edgeIds = new Set<string>();
+    for (const relation of input.relations) {
+      if (
+        relation.fromConceptId !== input.selectedConceptId &&
+        relation.toConceptId !== input.selectedConceptId
+      ) {
+        continue;
+      }
+      nodeIds.add(relation.fromConceptId);
+      nodeIds.add(relation.toConceptId);
+      edgeIds.add(relation.id);
+    }
+    return { nodeIds, edgeIds };
+  }
+  if (input.selectedRelation) {
+    return {
+      nodeIds: new Set([input.selectedRelation.fromConceptId, input.selectedRelation.toConceptId]),
+      edgeIds: new Set([input.selectedRelation.id]),
+    };
+  }
+  return null;
+}
+
 function seedPositions(
   items: readonly { id: string; width: number }[],
 ): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
-  const cols = Math.max(1, Math.ceil(Math.sqrt(items.length)));
-  let x = 32;
-  let y = 32;
-  let rowWidth = 0;
+  const count = items.length;
+  if (count === 0) return positions;
+  if (count === 1) {
+    positions.set(items[0]!.id, { x: 48, y: 48 });
+    return positions;
+  }
+  // 网格播种会把同一行节点放在同一条射线上，松弛时叠在一起。圆周上角度先分开。
+  const average = items.reduce((sum, item) => sum + item.width, 0) / count;
+  const radius = Math.max(160, (count * (average + Math.max(GAP_X, EDGE_GAP))) / (2 * Math.PI));
   items.forEach((item, index) => {
-    const col = index % cols;
-    if (col === 0) {
-      x = 32 + (Math.floor(index / cols) % 2) * 16;
-      if (index > 0) y += NODE_H + GAP_Y;
-      rowWidth = 0;
-    }
-    positions.set(item.id, { x: x + rowWidth, y });
-    rowWidth += item.width + GAP_X;
+    const angle = -Math.PI / 2 + (index / count) * Math.PI * 2;
+    const cx = radius + 64 + Math.cos(angle) * radius;
+    const cy = radius + 64 + Math.sin(angle) * radius;
+    positions.set(item.id, { x: cx - item.width / 2, y: cy - NODE_H / 2 });
   });
   return positions;
 }
@@ -131,7 +199,7 @@ function boxesOverlap(a: GraphLayoutNode, b: GraphLayoutNode): boolean {
  */
 export function layoutConceptGraph(
   concepts: readonly (Pick<Concept, 'id'> & { name?: string })[],
-  relations: readonly Pick<ConceptRelation, 'fromConceptId' | 'toConceptId'>[],
+  relations: readonly (Pick<ConceptRelation, 'fromConceptId' | 'toConceptId'> & { predicate?: string })[],
   previousPositions?: ReadonlyMap<string, { x: number; y: number }>,
 ): ConceptGraphLayout {
   const metrics = new Map(concepts.map((concept) => [concept.id, conceptNodeMetrics(concept.name ?? '')]));
@@ -155,37 +223,88 @@ export function layoutConceptGraph(
       (relation) => idSet.has(relation.fromConceptId) && idSet.has(relation.toConceptId),
     );
     const widths = new Map(ids.map((id) => [id, metrics.get(id)!.width]));
+    const clearance = new Map<string, number>();
+    const springEdges: { fromConceptId: string; toConceptId: string }[] = [];
+    const springSeen = new Set<string>();
+    for (const edge of edges) {
+      const forward = `${edge.fromConceptId}\0${edge.toConceptId}`;
+      const backward = `${edge.toConceptId}\0${edge.fromConceptId}`;
+      const need = Math.max(
+        edgeClearance(edge.predicate),
+        clearance.get(forward) ?? 0,
+        clearance.get(backward) ?? 0,
+      );
+      clearance.set(forward, need);
+      clearance.set(backward, need);
+      const pair = [edge.fromConceptId, edge.toConceptId].sort().join('\0');
+      if (springSeen.has(pair)) continue;
+      springSeen.add(pair);
+      springEdges.push(edge);
+    }
+
+    const addDelta = (
+      delta: Map<string, { x: number; y: number }>,
+      id: string,
+      x: number,
+      y: number,
+    ) => {
+      const slot = delta.get(id);
+      if (!slot) return;
+      slot.x += x;
+      slot.y += y;
+    };
 
     for (let round = 0; round < RELAX_ROUNDS; round += 1) {
       const delta = new Map<string, { x: number; y: number }>();
       for (const id of movable) delta.set(id, { x: 0, y: 0 });
-      for (const edge of edges) {
+      for (const edge of springEdges) {
         const from = positions.get(edge.fromConceptId)!;
         const to = positions.get(edge.toConceptId)!;
         const fromW = widths.get(edge.fromConceptId)!;
         const toW = widths.get(edge.toConceptId)!;
         const dx = to.x + toW / 2 - (from.x + fromW / 2);
         const dy = to.y + NODE_H / 2 - (from.y + NODE_H / 2);
-        const dist = Math.max(1, Math.hypot(dx, dy));
-        const target = (fromW + toW) / 2 + GAP_X + 16;
-        const pull = (dist - target) * 0.045;
-        const ux = dx / dist;
-        const uy = dy / dist;
-        const fromDelta = delta.get(edge.fromConceptId);
-        const toDelta = delta.get(edge.toConceptId);
-        if (fromDelta) {
-          fromDelta.x += ux * pull;
-          fromDelta.y += uy * pull * 0.55;
-        }
-        if (toDelta) {
-          toDelta.x -= ux * pull;
-          toDelta.y -= uy * pull * 0.55;
+        const dist = Math.hypot(dx, dy);
+        const target =
+          (fromW + toW) / 2 + (clearance.get(`${edge.fromConceptId}\0${edge.toConceptId}`) ?? EDGE_GAP);
+        const pull = ((dist < 1 ? 0 : dist) - target) * 0.07;
+        const ux = dist < 1 ? 1 : dx / dist;
+        const uy = dist < 1 ? 0 : dy / dist;
+        addDelta(delta, edge.fromConceptId, ux * pull, uy * pull);
+        addDelta(delta, edge.toConceptId, -ux * pull, -uy * pull);
+      }
+      for (let i = 0; i < ids.length; i += 1) {
+        for (let j = i + 1; j < ids.length; j += 1) {
+          const aId = ids[i]!;
+          const bId = ids[j]!;
+          if (pinned.has(aId) && pinned.has(bId)) continue;
+          const a = positions.get(aId)!;
+          const b = positions.get(bId)!;
+          const aw = widths.get(aId)!;
+          const bw = widths.get(bId)!;
+          const dx = b.x + bw / 2 - (a.x + aw / 2);
+          const dy = b.y + NODE_H / 2 - (a.y + NODE_H / 2);
+          const dist = Math.hypot(dx, dy);
+          const minDist = (aw + bw) / 2 + PAIR_GAP;
+          if (dist >= minDist) continue;
+          const push = (minDist - (dist < 1 ? 0 : dist)) * 0.22;
+          const ux = dist < 1 ? 1 : dx / dist;
+          const uy = dist < 1 ? 0 : dy / dist;
+          // 共线时只沿连线推，会和弹簧一起卡在同一半径上。靠得越近，侧向拨开越多。
+          const peel = dist < minDist * 0.8 ? 0.65 : 0;
+          const side = (i + j) % 2 === 0 ? 1 : -1;
+          const tx = -uy * side * peel;
+          const ty = ux * side * peel;
+          addDelta(delta, aId, (-ux + tx) * push, (-uy + ty) * push);
+          addDelta(delta, bId, (ux - tx) * push, (uy - ty) * push);
         }
       }
       for (const id of movable) {
         const d = delta.get(id)!;
+        const mag = Math.hypot(d.x, d.y);
+        const scale = mag > STEP_LIMIT ? STEP_LIMIT / mag : 1;
         const current = positions.get(id)!;
-        positions.set(id, { x: current.x + d.x, y: current.y + d.y });
+        positions.set(id, { x: current.x + d.x * scale, y: current.y + d.y * scale });
       }
     }
 
