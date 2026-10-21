@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentTerminalError } from '../agent/terminal-error.js';
-import { backoffMs, failureDisposition } from './queue-logic.js';
+import { backoffMs, failureDisposition, failureSettlesConceptBatch } from './queue-logic.js';
 
 describe('failureDisposition', () => {
   it('treats AgentTerminalError as terminal regardless of attempts', () => {
@@ -20,6 +20,12 @@ describe('failureDisposition', () => {
 
   it('treats non-Error throws like ordinary errors', () => {
     expect(failureDisposition('boom', 1, 4)).toBe('retry');
+  });
+
+  it('settles a concept batch when the job is terminal or out of attempts', () => {
+    expect(failureSettlesConceptBatch('terminal')).toBe(true);
+    expect(failureSettlesConceptBatch('exhausted')).toBe(true);
+    expect(failureSettlesConceptBatch('retry')).toBe(false);
   });
 });
 

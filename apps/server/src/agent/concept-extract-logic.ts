@@ -205,6 +205,48 @@ export const shardSubmissionSchema = z
   });
 export type ShardSubmission = z.infer<typeof shardSubmissionSchema>;
 
+/** One shard should stay small enough that a thinking model can submit it inside the run budget. */
+export const SHARD_CONCEPT_CAP = 4;
+export const SHARD_RELATION_CAP = 6;
+
+export function shardCapIssue(submission: {
+  concepts: readonly unknown[];
+  relations: readonly unknown[];
+}): string | null {
+  if (
+    submission.concepts.length <= SHARD_CONCEPT_CAP &&
+    submission.relations.length <= SHARD_RELATION_CAP
+  ) {
+    return null;
+  }
+  return `这一分片最多 ${String(SHARD_CONCEPT_CAP)} 个概念、${String(SHARD_RELATION_CAP)} 条关系。请只保留本段最核心的，每条证据只留一句短引文，然后重新提交。`;
+}
+
+export function acceptedShardSubmissions(value: unknown): ShardSubmission[] {
+  if (!Array.isArray(value)) return [];
+  const out: ShardSubmission[] = [];
+  for (const item of value) {
+    const parsed = shardSubmissionSchema.safeParse(item);
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out;
+}
+
+/** Next shard index to read. Returns shardCount when every shard is already accepted. */
+export function firstUnreadShard(shardCount: number, accepted: readonly number[]): number {
+  const have = new Set(accepted);
+  for (let index = 0; index < shardCount; index += 1) {
+    if (!have.has(index)) return index;
+  }
+  return shardCount;
+}
+
+/** 4 minutes per shard, at least 10 and at most 30. A retry resumes, so one attempt need not finish every shard. */
+export function conceptExtractTimeoutMs(shardCount: number): number {
+  const minutes = Math.min(30, Math.max(10, Math.max(0, shardCount) * 4));
+  return minutes * 60_000;
+}
+
 export function submissionIssuesText(error: z.ZodError): string {
   return error.issues
     .slice(0, 8)

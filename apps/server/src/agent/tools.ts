@@ -18,6 +18,7 @@ import { readDocumentAnnotationsTool, searchAnnotationsTool } from './annotation
 import { memoryLoadTools } from './memory-tools.js';
 import { placeCardsTool, writeOutlineTool } from './outline-tools.js';
 import { numberedBlocksFromDoc, resolveQuoteAnchor } from './card-anchor-logic.js';
+import { sliceNumberedDocument } from './document-read-logic.js';
 import { persistDocumentMeta } from './doc-meta.js';
 import { isUserOwnedTitle } from './doc-meta-logic.js';
 
@@ -38,6 +39,14 @@ export interface DigestSession {
   documentWritten?: boolean;
   mapUpdated?: boolean;
   documentMetaWritten?: boolean;
+  /** Last block index in the article. Set before the run so coverage can nudge. */
+  lastBlockIndex?: number;
+  /** Furthest block index returned by read_document. */
+  readThrough?: number | null;
+  /** True while a later slice has not been read. */
+  truncated?: boolean;
+  /** Coverage nudge already consumed the one retry inside this run. */
+  coverageNudged?: boolean;
 }
 
 export function asToolError(err: unknown): never {
@@ -64,6 +73,7 @@ export const cardDraftSchema = Type.Object({
 
 export const readDocumentSchema = Type.Object({
   documentId: Type.String({ minLength: 1, maxLength: 36 }),
+  fromBlock: Type.Optional(Type.Integer({ minimum: 1 })),
 });
 export type ReadDocumentArgs = Static<typeof readDocumentSchema>;
 
@@ -72,7 +82,7 @@ export function readDocumentTool(session: DigestSession): AgentTool<typeof readD
     name: 'read_document',
     label: '读取文档',
     description:
-      '读取当前文档的标题、编号块视图、主题归属和状态。必须先调用这个工具再切卡。numberedView 形如「[块 1 | 第 1 页] …」；引用原文时用 blockIndex + quote。',
+      '读取当前文档的一段编号正文、主题归属和状态。必须先调用再切卡。一次大约 12000 字，停在整块边界。numberedView 形如「[块 N | 第 P 页] …」，N 是全文块号。truncated 为真时用返回的 nextBlock 作为 fromBlock 再读。unreadPages 的开头一句只用于定位，不能当 quote。',
     parameters: readDocumentSchema,
     execute: async (_id, params) => {
       if (params.documentId !== session.documentId) {
@@ -84,7 +94,14 @@ export function readDocumentTool(session: DigestSession): AgentTool<typeof readD
         .where(and(eq(documents.id, session.documentId), eq(documents.userId, session.userId), isNull(documents.deletedAt)))
         .limit(1);
       if (!row) throw new Error('document not found');
-      const { blocks, numberedView } = numberedBlocksFromDoc(asPmJson(row.contentJson));
+      const { blocks } = numberedBlocksFromDoc(asPmJson(row.contentJson));
+      const view = sliceNumberedDocument(blocks, {
+        ...(params.fromBlock !== undefined ? { fromBlock: params.fromBlock } : {}),
+      });
+      const lastBlockIndex = blocks.at(-1)?.index ?? blocks.length;
+      session.lastBlockIndex = lastBlockIndex;
+      session.readThrough = Math.max(session.readThrough ?? 0, view.throughBlock ?? 0);
+      session.truncated = view.truncated || (view.throughBlock ?? 0) < lastBlockIndex;
       const payload = {
         id: row.id,
         title: row.title,
@@ -93,8 +110,15 @@ export function readDocumentTool(session: DigestSession): AgentTool<typeof readD
         topicId: row.topicId,
         source: row.source,
         status: row.status,
-        blocks,
-        numberedView,
+        numberedView: view.text,
+        truncated: view.truncated,
+        fromBlock: view.fromBlock,
+        throughBlock: view.throughBlock,
+        nextBlock: view.nextBlock,
+        blockCount: view.blockCount,
+        lastBlockIndex,
+        unreadPages: view.unreadPages,
+        unreadPageCount: view.unreadPageCount,
       };
       return toolResult(JSON.stringify(payload), payload);
     },

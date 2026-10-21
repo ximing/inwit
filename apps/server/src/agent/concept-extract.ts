@@ -4,7 +4,7 @@ import type { ConceptMatch } from '@inwit/dto';
 import { conceptExtractJobPayloadSchema } from '@inwit/dto';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
-import { conceptBatches, documents, concepts } from '../db/schema.js';
+import { conceptBatches, documents, concepts, jobs } from '../db/schema.js';
 import { isJobRunning } from '../jobs/heartbeat.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -14,12 +14,18 @@ import {
 } from '../concepts/concept-batch.service.js';
 import { findConceptMatches } from '../concepts/concept.service.js';
 import {
+  acceptedShardSubmissions,
+  conceptExtractTimeoutMs,
   ExtractTooLargeError,
   finalizeConceptDraft,
   fillExistingRefVersions,
+  firstUnreadShard,
   formatShardText,
   mergeShardSubmissions,
+  SHARD_CONCEPT_CAP,
+  SHARD_RELATION_CAP,
   shardBlocks,
+  shardCapIssue,
   shardSubmissionSchema,
   submissionIssuesText,
   type ExtractShard,
@@ -40,11 +46,12 @@ const SYSTEM_PROMPT = `你是 Inwit 的概念提取器。用户给出自己一�
 流程：反复调用 read_next_shard 读取下一个分片，用 submit_shard_candidates 提交该分片的候选；返回 done 后用一句话总结。每个分片都必须提交一次；没有可提取内容的分片提交空列表并写 note 说明原因。
 
 提取规则：
-- 默认提取 5–12 个核心概念、最多 20 条关系；短文可以更少或为零。整个任务硬上限 30 个概念、60 条关系。
-- 概念：name（术语原文）、aliases、sense（消除歧义的语境，可空）、definition（文章语境内的解释，文章没解释就留空并标 inferred）、example、evidence。
+- 每个分片最多 ${String(SHARD_CONCEPT_CAP)} 个新概念、${String(SHARD_RELATION_CAP)} 条关系。短文可以更少或为零。全文合计仍不超过 30 个概念、60 条关系。
+- 不要重复 alreadySubmitted 里已经提交过的名字。直接调用工具，不要先在回复里写出完整候选 JSON。
+- 概念：name（术语原文）、aliases、sense（消除歧义的语境，可空）、definition（一句文章语境内的解释，文章没解释就留空并标 inferred）、example、evidence。
 - 关系：from/to（本批候选用 tempId；主题已有概念用给出的 conceptId；前面分片已提取的候选也可以按 name 引用）、kind（composition 组成 / execution 执行流程 / evaluation 评判 / dependency 依赖 / contrast 对比 / other）、predicate（自然语言动词短语，方向与 from→to 一致；组成关系整体指向部分）、context、explanation、example、evidence。
 - 关系必须表达具体联系，不能因为两个词出现在同一段就建立关系。
-- evidence：quote 必须从分片正文逐字抄写（不改写、不跨块），并带上所在 blockIndex；PDF 文本给 pageIndex。文章没有依据的内容标 basis=inferred，不要编造引文。
+- evidence：每条只留一句短引文。quote 必须从分片正文逐字抄写（不改写、不跨块），并带上所在 blockIndex；PDF 文本给 pageIndex。basis 只能是 explicit 或 inferred。文章没有依据的内容标 inferred，不要编造引文。
 - 概念图允许环，不要把关系强行转成树。`;
 
 interface ExtractSessionState {
@@ -56,6 +63,8 @@ interface ExtractSessionState {
   attempts: Map<number, number>;
   /** verify 失败次数：第一次触发补跑，第二次终态失败。 */
   verifyFailures: number;
+  /** Persist accepted shards so the next attempt does not start over. */
+  onAccepted?: (accepted: ShardSubmission[]) => Promise<void>;
 }
 
 function toolResult(payload: unknown, isError = false) {
@@ -71,11 +80,18 @@ function readNextShardTool(session: ExtractSessionState): AgentTool {
     name: 'read_next_shard',
     label: '读取下一个分片',
     description:
-      '按顺序读取文章的下一个正文分片（不超过 8000 字），返回 shardIndex、带块号/页码的正文和总片数。返回 done=true 表示全部读完。',
+      '按顺序读取下一个还没提交的正文分片（不超过 8000 字）。返回 shardIndex、带块号/页码的正文、总片数，以及 alreadySubmitted（不要重复这些名字）。返回 done=true 表示全部读完。',
     parameters: Type.Object({}),
     execute: async () => {
+      const alreadySubmitted = [...session.accepted.values()].flatMap((submission) =>
+        submission.concepts.map((concept) => concept.name),
+      );
       if (session.nextShard >= session.shards.length) {
-        return toolResult({ done: true, totalShards: session.shards.length });
+        return toolResult({
+          done: true,
+          totalShards: session.shards.length,
+          alreadySubmitted,
+        });
       }
       const shard = session.shards[session.nextShard]!;
       session.nextShard += 1;
@@ -85,6 +101,8 @@ function readNextShardTool(session: ExtractSessionState): AgentTool {
         totalShards: session.shards.length,
         chars: shard.chars,
         text: formatShardText(shard),
+        alreadySubmitted,
+        cap: { concepts: SHARD_CONCEPT_CAP, relations: SHARD_RELATION_CAP },
       });
     },
   };
@@ -128,7 +146,16 @@ function submitShardTool(session: ExtractSessionState): AgentTool {
           true,
         );
       }
+      const cap = shardCapIssue(submission);
+      if (cap) return toolResult({ ok: false, reason: cap }, true);
       session.accepted.set(submission.shardIndex, submission);
+      try {
+        await session.onAccepted?.([...session.accepted.values()]);
+      } catch (err) {
+        logger.warn('concept_extract.progress_failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
       return toolResult({
         ok: true,
         shardIndex: submission.shardIndex,
@@ -172,6 +199,7 @@ export async function processConceptExtract(job: JobRow): Promise<void> {
   const parsed = conceptExtractJobPayloadSchema.safeParse(job.payload);
   if (!parsed.success) throw new AgentTerminalError('concept_extract job payload invalid', 'bad_payload');
   const { batchId } = parsed.data;
+  const restored = acceptedShardSubmissions(parsed.data.progress?.accepted);
 
   const [batch] = await getDb()
     .select()
@@ -201,16 +229,32 @@ export async function processConceptExtract(job: JobRow): Promise<void> {
   const shards = shardBlocks(snapshot.blocks);
   const session: ExtractSessionState = {
     shards,
-    nextShard: 0,
-    accepted: new Map(),
+    nextShard: firstUnreadShard(
+      shards.length,
+      restored.map((submission) => submission.shardIndex),
+    ),
+    accepted: new Map(restored.map((submission) => [submission.shardIndex, submission])),
     attempts: new Map(),
     verifyFailures: 0,
+    onAccepted: async (accepted) => {
+      await getDb()
+        .update(jobs)
+        .set({
+          payload: { ...parsed.data, progress: { accepted } },
+          updatedAt: new Date(),
+        })
+        .where(eq(jobs.id, job.id));
+    },
   };
   const existing = await loadExistingConcepts(job.userId, batch.topicId);
 
+  const doneShards = [...session.accepted.keys()].sort((a, b) => a - b);
   const userPrompt = [
     `文章：《${source?.title ?? '未命名文档'}》，目标主题 ID：${batch.topicId}。`,
     `共 ${String(shards.length)} 个分片。先 read_next_shard 读取分片，再 submit_shard_candidates 提交候选，直到全部提交完成。`,
+    doneShards.length > 0
+      ? `分片 ${doneShards.join(',')} 已经提交，不要重读或重交。从下一个未提交的分片继续。`
+      : '',
     existing.length > 0
       ? `主题已有概念（可复用，引用 conceptId）：\n${existing
           .map(
@@ -219,7 +263,9 @@ export async function processConceptExtract(job: JobRow): Promise<void> {
           )
           .join('\n')}`
       : '主题还没有已有概念。',
-  ].join('\n');
+  ]
+    .filter((line) => line.length > 0)
+    .join('\n');
 
   const failBatch = async (err: unknown) => {
     if (!(err instanceof AgentTerminalError)) return;
@@ -238,6 +284,7 @@ export async function processConceptExtract(job: JobRow): Promise<void> {
       userPrompt,
       tools: [readNextShardTool(session), submitShardTool(session)],
       maxTurns: Math.max(8, shards.length * 3 + 4),
+      timeoutMs: conceptExtractTimeoutMs(shards.length),
       context: {
         ...(batch.documentId ? { documentId: batch.documentId } : {}),
         topicId: batch.topicId,

@@ -227,6 +227,12 @@ export const conceptExtractJobPayloadSchema = z.object({
   batchId: z.string().uuid(),
   documentId: z.string().uuid(),
   topicId: z.string().uuid(),
+  /** Shard submissions already accepted. A timed-out attempt resumes from here. */
+  progress: z
+    .object({
+      accepted: z.array(z.unknown()).max(80),
+    })
+    .optional(),
 });
 export type ConceptExtractJobPayload = z.infer<typeof conceptExtractJobPayloadSchema>;
 

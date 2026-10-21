@@ -15,7 +15,12 @@ import { logger } from '../utils/logger.js';
 import { CANCEL_REASON } from './cancel.js';
 import { heartbeatJob } from './heartbeat.js';
 import { processJob } from './processors.js';
-import { backoffMs, failureDisposition, RescheduleJobError } from './queue-logic.js';
+import {
+  backoffMs,
+  failureDisposition,
+  failureSettlesConceptBatch,
+  RescheduleJobError,
+} from './queue-logic.js';
 
 export { heartbeatJob };
 export { enqueueJob, type EnqueueJobInput, type JobWriter } from './enqueue.js';
@@ -157,6 +162,7 @@ async function settleJobFailure(job: JobRow, err: unknown, now: Date): Promise<v
     logger.warn('job.failed', { jobId: job.id, type: job.type, attempts, lastError: message });
     await settleDocumentFailure(job, message);
     await settleConversationFailure(job, message);
+    if (failureSettlesConceptBatch(disposition)) await settleConceptBatchFailure(job);
     await planOrganizeAfterRelease(job);
     return;
   }

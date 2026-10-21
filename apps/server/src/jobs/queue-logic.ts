@@ -26,6 +26,11 @@ export function failureDisposition(
   return attempts >= maxAttempts ? 'exhausted' : 'retry';
 }
 
+/** Concept batches stay running unless both terminal and exhausted failures settle them. */
+export function failureSettlesConceptBatch(disposition: FailureDisposition): boolean {
+  return disposition === 'terminal' || disposition === 'exhausted';
+}
+
 export function backoffMs(attempts: number, steps: readonly number[]): number {
   return steps[Math.min(Math.max(attempts - 1, 0), steps.length - 1)] ?? 32_000;
 }

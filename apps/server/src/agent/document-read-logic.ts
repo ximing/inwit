@@ -1,8 +1,22 @@
 import type { DocBlock } from '@inwit/doc-schema';
 import { formatNumberedBlockView } from './card-anchor-logic.js';
 
-/** 对话读正文时一次放进上下文的上限。按整块截止，不在句子中间切开。 */
+/** 对话和消化读正文时一次放进上下文的上限。按整块截止，不在句子中间切开。 */
 export const DOCUMENT_READ_MAX_CHARS = 12_000;
+
+export function documentTextChars(blocks: readonly { text: string }[]): number {
+  return blocks.reduce((sum, block) => sum + [...block.text].length, 0);
+}
+
+/**
+ * Long articles need more than one 10-minute pass. Each extra 12000-character
+ * slice adds 3 minutes, capped at 25 so a runaway run still ends.
+ */
+export function digestRunTimeoutMs(textChars: number): number {
+  const slices = Math.max(1, Math.ceil(Math.max(0, textChars) / DOCUMENT_READ_MAX_CHARS));
+  const minutes = Math.min(25, 10 + (slices - 1) * 3);
+  return minutes * 60_000;
+}
 
 /** 未读页目录里，每页开头保留的字数。这句只用于定位，不能当划线引文。 */
 export const UNREAD_PAGE_LINE_CHARS = 40;

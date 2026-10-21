@@ -38,6 +38,8 @@ export interface AgentJobRun {
   userPrompt: string;
   tools: AgentTool[];
   maxTurns?: number;
+  /** Wall clock for the agent loop. Defaults to 10 minutes. A nudge gets the same budget again. */
+  timeoutMs?: number;
   /** Extra AsyncLocalStorage context fields (documentId / topicId). */
   context?: Partial<Pick<AgentRunContext, 'documentId' | 'topicId'>> | undefined;
   /**
@@ -49,7 +51,12 @@ export interface AgentJobRun {
    * Runs after a successful agent loop; return the done result summary.
    * Throw to fail the execution (AgentTerminalError carries its own summary).
    */
-  verify?: (input: { agent: Agent; executionId: string }) => Promise<string | null>;
+  verify?: (input: {
+    agent: Agent;
+    executionId: string;
+    /** True when the loop was aborted and we are keeping output that already landed. */
+    salvaging?: boolean;
+  }) => Promise<string | null>;
   /**
    * Sent once when the agent loop ends normally but verify fails — gives the
    * model one chance to finish the job in the same conversation (it still has
@@ -223,7 +230,7 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
         const runPrompt = async (prompt: string) => {
           const timer = setTimeout(() => {
             agent.abort();
-          }, RUN_TIMEOUT_MS);
+          }, run.timeoutMs ?? RUN_TIMEOUT_MS);
           try {
             await agent.prompt(prompt);
           } finally {
@@ -243,7 +250,7 @@ export async function runAgentJob(run: AgentJobRun): Promise<void> {
             // as cancelled, so there is nothing to rescue.
             if (failed.stopReason === 'aborted' && run.verify && !cancelled) {
               try {
-                const salvaged = await run.verify({ agent, executionId });
+                const salvaged = await run.verify({ agent, executionId, salvaging: true });
                 await finishExecution({
                   executionId,
                   status: 'done',

@@ -2,10 +2,14 @@ import { CONCEPT_CHUNK_TARGET_CHARS } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
 import {
   ExtractTooLargeError,
+  acceptedShardSubmissions,
+  conceptExtractTimeoutMs,
   finalizeConceptDraft,
+  firstUnreadShard,
   formatShardText,
   mergeShardSubmissions,
   shardBlocks,
+  shardCapIssue,
   shardSubmissionSchema,
   type ExtractBlock,
   type ShardSubmission,
@@ -274,5 +278,33 @@ describe('finalizeConceptDraft', () => {
         existingConceptIds: new Set(),
       }),
     ).toThrow(ExtractTooLargeError);
+  });
+});
+
+describe('shard progress', () => {
+  it('rejects a shard that tries to submit the whole article at once', () => {
+    expect(shardCapIssue({ concepts: [1, 2, 3, 4, 5], relations: [] })).toContain('4 个概念');
+    expect(shardCapIssue({ concepts: [1], relations: [1, 2, 3, 4, 5, 6, 7] })).toContain('6 条关系');
+    expect(shardCapIssue({ concepts: [1], relations: [1] })).toBeNull();
+  });
+
+  it('resumes at the first shard that has no accepted submission', () => {
+    expect(firstUnreadShard(5, [0, 2])).toBe(1);
+    expect(firstUnreadShard(3, [0, 1, 2])).toBe(3);
+  });
+
+  it('drops progress entries that are not valid submissions', () => {
+    const kept = acceptedShardSubmissions([
+      { shardIndex: 0, concepts: [], relations: [], note: '没有术语' },
+      { shardIndex: 1, concepts: [{ tempId: '' }] },
+    ]);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.shardIndex).toBe(0);
+  });
+
+  it('gives a long article more than ten minutes and still caps the run', () => {
+    expect(conceptExtractTimeoutMs(1)).toBe(10 * 60_000);
+    expect(conceptExtractTimeoutMs(5)).toBe(20 * 60_000);
+    expect(conceptExtractTimeoutMs(12)).toBe(30 * 60_000);
   });
 });

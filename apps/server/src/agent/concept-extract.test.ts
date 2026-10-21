@@ -354,11 +354,12 @@ describeDb('concept_extract processor（真实 PG + 确定性模型）', () => {
 
   it('候选超硬上限 → 终态失败 too_large，不偷偷删节点', async () => {
     const { userId, batchId, jobId } = await seedBatch({
-      blocks: ['A'.repeat(6000), 'B'.repeat(6000)],
+      // 每段单独成片。每片 4 个概念，八片合计超过全文 30 的硬上限。
+      blocks: Array.from({ length: 8 }, () => '甲'.repeat(7000)),
     });
     currentScript = extractionScript((shardIndex) => ({
       shardIndex,
-      concepts: Array.from({ length: 16 }, (_, i) => ({
+      concepts: Array.from({ length: 4 }, (_, i) => ({
         tempId: `s${String(shardIndex)}c${String(i)}`,
         name: `概念${String(shardIndex)}-${String(i)}`,
         basis: 'explicit',

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { DocBlock } from '@inwit/doc-schema';
 import { formatNumberedBlockView } from './card-anchor-logic.js';
-import { sliceNumberedDocument, UNREAD_PAGE_LIMIT } from './document-read-logic.js';
+import {
+  digestRunTimeoutMs,
+  documentTextChars,
+  DOCUMENT_READ_MAX_CHARS,
+  sliceNumberedDocument,
+  UNREAD_PAGE_LIMIT,
+} from './document-read-logic.js';
 
 function block(index: number, pageIndex: number, text: string): DocBlock {
   return { index, pageIndex, text };
@@ -92,5 +98,14 @@ describe('sliceNumberedDocument', () => {
     expect(view.unreadPages[0]).toMatchObject({ page: 2, blockIndex: 2 });
     expect(view.unreadPages[0]!.line.endsWith('…')).toBe(true);
     expect([...view.unreadPages[0]!.line].length).toBe(41);
+  });
+});
+
+describe('digestRunTimeoutMs', () => {
+  it('keeps a short article at ten minutes and stretches a long one', () => {
+    expect(documentTextChars([{ text: '甲乙' }, { text: '丙' }])).toBe(3);
+    expect(digestRunTimeoutMs(DOCUMENT_READ_MAX_CHARS)).toBe(10 * 60_000);
+    expect(digestRunTimeoutMs(DOCUMENT_READ_MAX_CHARS + 1)).toBe(13 * 60_000);
+    expect(digestRunTimeoutMs(DOCUMENT_READ_MAX_CHARS * 8)).toBe(25 * 60_000);
   });
 });

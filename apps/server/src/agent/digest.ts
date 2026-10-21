@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
 import { annotations, cardQuestions, cards, documents, topics, type JobRow } from '../db/schema.js';
+import { asPmJson } from '../documents/content-json.js';
 import { findOwnedDocument } from '../documents/document.service.js';
 import { RescheduleJobError } from '../jobs/queue-logic.js';
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
@@ -14,6 +15,9 @@ import {
   countOutgoingLinks,
   deleteProposedDocumentCards,
 } from './card-harvest.js';
+import { numberedBlocksFromDoc } from './card-anchor-logic.js';
+import { digestCoverageGap } from './digest-coverage-logic.js';
+import { digestRunTimeoutMs, documentTextChars, DOCUMENT_READ_MAX_CHARS } from './document-read-logic.js';
 import { ensureDocumentMeta } from './doc-meta.js';
 import { DIGEST_SYSTEM_PROMPT, digestUserPrompt } from './prompts.js';
 import { AgentTerminalError, runAgentJob } from './run-agent-job.js';
@@ -90,6 +94,7 @@ async function verifyDigest(
   documentId: string,
   session: DigestSession,
   executionId: string,
+  salvaging = false,
 ): Promise<string> {
   const required = session.cardAcceptance ?? 'accepted';
   const writtenIds = session.writtenCardIds;
@@ -101,6 +106,7 @@ async function verifyDigest(
             id: cards.id,
             acceptance: cards.acceptance,
             deletedAt: cards.deletedAt,
+            anchorBlockIndex: cards.anchorBlockIndex,
           })
           .from(cards)
           .where(
@@ -125,6 +131,19 @@ async function verifyDigest(
   const missingQuestions = live.filter((row) => (questionsByCard.get(row.id) ?? 0) < 1);
   if (missingQuestions.length > 0) {
     throw new Error(`digest missing questions for ${String(missingQuestions.length)} card(s)`);
+  }
+  const coverageGap =
+    session.lastBlockIndex === undefined
+      ? null
+      : digestCoverageGap({
+          lastBlockIndex: session.lastBlockIndex,
+          readThrough: session.readThrough ?? null,
+          truncated: session.truncated === true,
+          anchors: live.map((row) => row.anchorBlockIndex),
+        });
+  if (coverageGap && !salvaging && session.coverageNudged !== true) {
+    session.coverageNudged = true;
+    throw new Error(coverageGap);
   }
   const questionTotal = live.reduce((sum, row) => sum + (questionsByCard.get(row.id) ?? 0), 0);
 
@@ -207,7 +226,8 @@ async function verifyDigest(
   }
 
   const topicPart = session.topicId ? ` topic=${session.topicId}` : ' topic=none';
-  return `cards=${String(live.length)} questions=${String(questionTotal)} links=${String(linkN)}${topicPart}${hint ? ' same_concept_hint=1' : ''}`;
+  const coveragePart = coverageGap ? ' coverage=partial' : '';
+  return `cards=${String(live.length)} questions=${String(questionTotal)} links=${String(linkN)}${topicPart}${hint ? ' same_concept_hint=1' : ''}${coveragePart}`;
 }
 
 export async function processDigest(job: JobRow): Promise<void> {
@@ -239,12 +259,16 @@ export async function processDigest(job: JobRow): Promise<void> {
   await deleteOutlineAnnotations(job.userId, documentId);
   const avoid = await loadDigestAvoidance(job.userId, documentId);
 
+  const sourceBlocks = numberedBlocksFromDoc(asPmJson(document.contentJson)).blocks;
   const session: DigestSession = {
     userId: job.userId,
     documentId,
     writtenCardIds: [],
     outlineNodeIds: [],
     topicId: document.topicId,
+    lastBlockIndex: sourceBlocks.at(-1)?.index ?? sourceBlocks.length,
+    readThrough: null,
+    truncated: documentTextChars(sourceBlocks) > DOCUMENT_READ_MAX_CHARS,
     ...(config.DIGEST_CARD_GATE ? { cardAcceptance: 'proposed' as const } : {}),
   };
   const activeTopics = await listActiveTopics(job.userId);
@@ -261,8 +285,10 @@ export async function processDigest(job: JobRow): Promise<void> {
     }),
     tools: digestTools(session),
     maxTurns: 72,
+    timeoutMs: digestRunTimeoutMs(documentTextChars(sourceBlocks)),
     context: { documentId },
-    verify: ({ executionId }) => verifyDigest(job, documentId, session, executionId),
+    verify: ({ executionId, salvaging }) =>
+      verifyDigest(job, documentId, session, executionId, salvaging === true),
     nudgePrompt: (err) =>
       `流程验收未通过：${err instanceof Error ? err.message : String(err)}。请继续按工作流程执行——write_outline 建两级大纲（只能调用一次）、write_cards 写入至少 2 张卡片、对每张卡 write_questions、place_cards 把每张卡挂到所属大纲节点、read_topic_map 后对每张卡 place_on_map、最后 set_document_meta。必须调用工具落库，不要只回复文字。`,
   });
