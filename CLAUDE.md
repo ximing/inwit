@@ -2,93 +2,71 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## What this is
+## 项目概览
 
-Inwit — 一个「扔进去、AI 消化、催你复习」的学习伴侣。pnpm monorepo，Node 22+，全 ESM（相对导入带 `.js` 后缀，tsconfig NodeNext 风格，新文件保持一致）。
+Inwit — 一个「扔进去、AI 消化、催你复习」的学习伴侣。pnpm monorepo，Node 22+，全 ESM（相对导入必须带 `.js` 后缀，tsconfig NodeNext 风格，新文件保持一致）。
 
-- `apps/server` — Fastify 5 + drizzle-orm + PostgreSQL，以及独立 worker 进程
-- `apps/web` — Vite + React 19 + @rabjs/react（响应式 Service 模式）+ react-router + tiptap
-- `packages/dto` — 前后端共享 zod schema（API 契约的唯一来源）
-- `docs/` — PRD、任务书与报告（`docs/tasks/`）、开发日志；`docs/design/v2/*.html` 是 UI 重构的设计稿（视觉唯一真相来源）；`docs/rewrite/CONTEXT.md` 是重构任务的共享上下文
+### 子系统与包结构
+
+- `apps/server` — Fastify 5 + drizzle-orm + PostgreSQL 后端服务，以及独立异步 `worker` 进程
+- `apps/web` — Vite + React 19 + `@rabjs/react` + react-router + Tiptap Web 应用（同时作为桌面壳加载的远端站点）
+- `apps/mobile` — Expo + React Native + `expo-router` + `@rabjs/react` 移动端应用
+- `apps/desktop` — Tauri 2 桌面壳（加载 dev 或线上 Web 站点，提供系统菜单、托盘、全局快捷键与区域截图）
+- `packages/dto` — 跨端共享的 Zod Schema 与类型定义（API 契约唯一来源）
+- `packages/doc-schema` — 跨端共享的 ProseMirror / Tiptap 文档 Schema、块扩展与锚点定位
+- `packages/doc-engine` — 供 Mobile WebView 消费的单文件富文本引擎构建包与桥接协议
+- `packages/markdown` — Markdown（含 `[[kind:id]]` 实体 token）与 ProseMirror JSON 双向转换
+- `packages/brand` — 品牌 Logo 与多端图标生成管线（改 `src/logo.svg` 后跑 `pnpm --filter @inwit/brand raster-icons`）
+- `docs/` — PRD、设计系统、UI 设计稿（`docs/design/v2/*.html` 为视觉唯一真相来源）与重构上下文（`docs/rewrite/CONTEXT.md`）
+- `skills/inwit` — 面向 Agent 的 HTTP 投喂与操作技能（由 `pnpm gen:inwit-skill` 从路由与 DTO 提取接口参考）
+
+## 全局规则
+
+- **ESM 导入**：TypeScript 相对导入一律带 `.js` 后缀。
+- **契约先行**：前后端与移动端共享类型均从 `@inwit/dto` 导入；修改 API 先改 `packages/dto`。
+- **数据库迁移**：改表结构必须走 drizzle migration（`apps/server/src/db/schema.ts` → `migrate:generate` → `migrate`），禁止手改数据库。
+- **文件与图片访问**：所有图片与文件的上传/读取统一由服务端签发 S3 presigned URL（PUT 上传、GET 带过期时间）；客户端禁止持有存储凭证或直连 bucket 二次获取；DB 只存对象 key，不存 URL。
+- **文案与设计**：产品文案全中文，语气克制书面；图标统一使用 `lucide-react` / `lucide-react-native`；各端 App 图标由 `packages/brand` 统一生成，不手改产物。
+- **发版**：发版前必须先升级 `apps/web/package.json` 的 `version`（semver，构建时注入前端常量，禁止在 UI 里手写版本号）。
 
 ## 常用命令
 
 ```bash
 pnpm install
-pnpm dev                                  # server :3020 + web :5190（并行）
-pnpm --filter @inwit/server worker        # Agent 队列 worker，需另开终端；没有它文档停在「消化中…」
-pnpm typecheck                            # 全仓库 tsc
-pnpm -r build
-pnpm --filter @inwit/server test          # vitest（co-located: src/**/*.test.ts）
-pnpm --filter @inwit/server test -- src/review/sm2.test.ts   # 单个文件
-pnpm --filter @inwit/server test -- -t "merges"              # 按用例名过滤
-pnpm --filter @inwit/server test:retrieval # 检索链路自检（需真实外部服务）
+pnpm dev                                         # server :3020 + web :5190（并行）
+pnpm --filter @inwit/server worker               # Agent 队列 worker，需另开终端；没有它文档停在「消化中…」
+pnpm typecheck                                   # 全仓库 tsc
+pnpm -r build                                    # 全仓库构建
+
+# 测试
+pnpm --filter @inwit/server test                 # 服务端 vitest（支持 -- <file> 或 -t "<pattern>"）
+pnpm --filter @inwit/web test                    # Web 端 vitest
+pnpm --filter @inwit/mobile test                 # 移动端 vitest
+pnpm --filter @inwit/desktop test                # 桌面壳契约测试
+pnpm --filter @inwit/server test:retrieval       # 检索链路自检（需真实外部服务）
 
 # 数据库 migration（远程 PG，.env 已配好，可直接跑）
-pnpm --filter @inwit/server migrate:generate   # drizzle-kit 生成
-pnpm --filter @inwit/server migrate            # 执行
+pnpm --filter @inwit/server migrate:generate     # drizzle-kit 生成
+pnpm --filter @inwit/server migrate              # 执行迁移
 ```
 
-改 schema 必须走 drizzle migration（`apps/server/src/db/schema.ts` → generate → migrate），不手改数据库。
+## 局部规则导航
 
-## 发版
+进入具体子系统或修改特定类型文件时，遵循对应的局部指令与路径规则：
 
-发版前必须先升级 `apps/web/package.json` 的 `version`（semver）。Vite 构建时把它打进前端常量，设置页底部展示该版本号；不要在 UI 里手写版本。改完需重新构建；dev 下改 version 后要重启 Vite。
-
-## 服务端架构
-
-分层模式（每个功能一个目录，如 `src/documents/`、`src/review/`）：
-
-- `*.routes.ts` — 薄路由：`preHandler: [app.authenticate]` → zod parse（schema 来自 `@inwit/dto`）→ 调 service
-- `*.service.ts` — 业务逻辑与 drizzle 查询；`toPublicX` mapper 把 row 转 DTO（时间转 ISO 字符串）
-- `app.ts` — `buildApp()` 注册所有路由模块；错误统一走 `AppError.of(status, 'CODE')` + error-handler plugin
-- 所有查询都以 `userId` 过滤（多租户隔离）；属主校验用 `getOwnedX` / `requireUser`
-- `db/index.ts` 的 `setDb()` 是测试 seam，产品代码不调用
-
-**Job / Agent 管线**（核心异步流）：
-
-- service 在事务内 `enqueueJob(tx, { userId, type, payload })`（`src/jobs/enqueue.ts`）
-- 独立 worker 进程（`src/worker.ts`）轮询 `jobs` 表：`recoverStuckJobs`（超时回收）→ `processDueJobs`，另有每小时扫描自动入队周报
-- job 类型分发到 `src/agent/`：`digest`（切卡）、`chat`（问答转卡片）、`evolve`（换讲法/拆卡/混淆对比）、`weekly_report`——全部构建在 `pi-agent-core` + `pi-ai` 上；LLM 为 BYOK（用户自配 key）。对话和消化必须使用用户自己的模型配置；embedding 与 rerank 仍用系统百炼密钥。
-- **Agent 代码的固定切分**：可测的纯逻辑放 `*-logic.ts`（有对应 `*.test.ts`），编排/IO 放 `*.ts`、工具定义放 `*-tools.ts`
-
-**检索层**（`src/retrieval/`）：混合召回 = Qdrant 向量（百炼 embedding，2560 维）+ Meilisearch 中文稀疏 → RRF 融合 → rerank。store 名按 `NODE_ENV` 区分（`inwit_cards_dev/prod`）。
-
-**复习**（`src/review/`）：SM-2 间隔重复，`sm2.ts` 纯函数；用户设置经 `mergeReviewSettings` 与默认值合并（坏值静默回落默认）。
-
-## 前端架构
-
-- 每页一个 `*.service.ts`（`Service` 子类，参考 `pages/today/today.service.ts`），组件用 `bindServices` + `observer` + `useService` 消费；不要引入其它状态管理
-- Service 依赖其它 Service 时，在使用点 `this.resolve(X)`（getter 或方法内），不在构造器里 resolve；跨 Service 的回调 wiring 放页面 effect
-- `src/routes.ts` 的 `ROUTES` 是路径唯一来源，导航/守卫一律用它
-- `src/api/` 是薄 fetch 封装（带 cookie），不直接在组件里 fetch
-- 编辑器是 tiptap（`pages/editor/paper-editor.tsx`）；图标用 lucide-react
-- 文案全中文，语气克制书面；dev 端口 5190，`/api` 代理到 3020
-- 不要用 `window.alert` / `window.prompt` / `window.confirm`，统一走全局 `DialogService`（`apps/web/src/services/dialog.service.ts`）
-
-### Web 样式组织规范
-
-- **按功能就近维护**：页面样式放在 `apps/web/src/pages/<功能>/styles.css`；复杂页面按子功能继续拆分，如 `pages/docs/editor.css`、`card-rail.css`、`pdf-pane/styles.css`、`pages/review/reports.css`。组件样式放在对应组件目录的 `styles.css`，或与组件同级的同名 CSS（如 `components/doc-row.css`）；应用骨架样式放在 `shell/styles.css`。
-- **全局边界**：`apps/web/src/styles.css` 只维护主题变量、基础元素/reset、全局可访问性规则，以及按钮、表单、对话框、标签等通用基础样式。禁止向该文件追加页面或业务功能专属样式；跨页面复用的业务组件仍由所属组件目录维护样式。
-- **规则随模块归属**：功能相关的响应式 `@media`、深色主题覆盖、`@keyframes` 和减少动画规则，与该功能的基础样式放在一起。跨模块的组合选择器按归属拆开，避免在全局文件末尾集中堆积适配或补丁。
-- **统一加载入口**：`main.tsx` 只导入 `style-entry.css`，由它使用 `@import` 统一加载全局与模块 CSS。新增样式文件必须在入口登记；全局基础样式先加载，模块之间根据覆盖关系安排顺序，不在路由组件中重复或延迟导入，以免样式依赖页面访问顺序。CSS 文件按模块组织并不提供自动作用域隔离，新增类名应使用功能前缀或所属容器约束。
-- **拆分与验证**：纯样式迁移应保留选择器、声明、媒体查询条件及有效覆盖顺序，尤其注意共享组件、同名选择器和窄屏覆盖。完成后运行 `pnpm --filter @inwit/web build` 与 `git diff --check`；涉及视觉或覆盖关系调整时，检查受影响页面的宽屏/窄屏、浅色/深色表现。
-
-## DTO 契约
-
-前后端类型都从 `@inwit/dto` 导入。改 API 时：先改 `packages/dto/src/*.ts`（zod schema + index 导出），再同步 server 的 parse/service 和 web 的调用方。DTO 的 types 字段用 `types: "./src/index.ts"`（web 直接吃源码，server 走 dist）。
-
-## 测试约定
-
-后端测试是纯单元测试（无数据库依赖）：逻辑先抽到 `*-logic.ts` / 纯函数模块再测。测试环境只读 `apps/server/.env.test`，不回落开发 `.env`。前端目前没有测试，验收靠 `pnpm -F @inwit/web build`。
-
-## 文件/图片访问规范
-
-所有图片与文件的上传/访问一律由服务端接口层签发 S3 presigned URL（PUT 上传、GET 读取带过期时间）；客户端禁止持有 storage token、禁止直连 bucket 二次获取；DB 只存对象 key，不存 URL。
-
-## 品牌图标
-
-App 图标（web/mobile/desktop）由 `packages/brand` 管线统一生成：改 `packages/brand/src/logo.svg` 后跑 `pnpm --filter @inwit/brand raster-icons`，不手改各端产物。设计决策、比例规则（macOS Dock 80% 等）与注意事项见 `docs/design/brand-icons.md`。
+- **子系统 `CLAUDE.md`**（按目录按需加载）：
+  - `apps/server/CLAUDE.md` — 服务端分层、多租户隔离、Job/Agent 管线、混合检索与 SM-2 复习
+  - `apps/web/CLAUDE.md` — Web 目录边界、路由与弹窗规范、Tiptap/PDF 工作台、平台传输边界
+  - `apps/mobile/CLAUDE.md` — Expo 路由结构、PAT 鉴权传输、WebView `doc-engine` 同步机制
+  - `apps/desktop/CLAUDE.md` — Tauri 2 远程站点壳契约、权限白名单与原生 IPC 边界
+  - `packages/dto/CLAUDE.md` — API 契约 Schema 编写与导出规范
+  - `packages/doc-schema/CLAUDE.md` — ProseMirror / Tiptap 节点扩展与锚点纯函数规范
+  - `packages/doc-engine/CLAUDE.md` — WebView 编辑器单文件产物构建与桥接协议规范
+- **横切路径规则 `.claude/rules/`**（按文件 glob 按需加载）：
+  - `.claude/rules/rab-service-ui.md` — `@rabjs/react` 响应式 Service 与组件开发规范
+  - `.claude/rules/web-styles.md` — Web CSS 模块化就近维护与 `style-entry.css` 登记规范
+  - `.claude/rules/testing.md` — `*-logic.ts` 纯函数切分、测试环境隔离与架构守护测试
+  - `.claude/rules/api-contract.md` — 跨端 API 变更协同与 Skill 引用生成
 
 <!-- agent-recall -->
 ## 记忆
