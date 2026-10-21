@@ -122,11 +122,14 @@ export function buildAnchorDecorations(
   const noteById = new Map(
     entities.filter((item) => item.kind === 'annotation' && item.note).map((item) => [item.id, item.note!]),
   );
+  const outlineIds = new Set(entities.filter((item) => item.outline).map((item) => item.id));
   const decorations: Decoration[] = [];
   for (const segment of collectHighlightSegments(doc, entities, activeCardId, activeAnnotationId)) {
     const classes: string[] = [];
-    if (segment.cardIds.length > 0) classes.push('anchor');
-    if (segment.annotationIds.length > 0) classes.push('anchor-note');
+    const outlineHere = segment.annotationIds.some((id) => outlineIds.has(id));
+    const noteHere = segment.annotationIds.some((id) => !outlineIds.has(id));
+    if (segment.cardIds.length > 0 || outlineHere) classes.push('anchor');
+    if (noteHere) classes.push('anchor-note');
     if (segment.active) classes.push('is-on', 'is-active');
     const attrs: Record<string, string> = { class: classes.join(' ') };
     if (segment.cardIds.length > 0) {
@@ -136,7 +139,8 @@ export function buildAnchorDecorations(
     if (segment.annotationIds.length > 0) {
       attrs['data-annotation-ids'] = JSON.stringify(segment.annotationIds);
       attrs['data-annotation-id'] = segment.annotationIds[0] ?? '';
-      const note = noteById.get(segment.annotationIds[0] ?? '');
+      const noteId = segment.annotationIds.find((id) => !outlineIds.has(id));
+      const note = noteId ? noteById.get(noteId) : undefined;
       if (note) {
         attrs['data-note'] = note;
         attrs['aria-label'] = `批注：${note}`;

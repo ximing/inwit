@@ -7,6 +7,8 @@ export type EntityMeta = {
   id: string;
   kind: AnchorKind;
   note?: string;
+  /** 消化大纲。正文用划线样式，不用批注样式。 */
+  outline?: boolean;
 };
 
 export function noteSummary(note: string, max = 72): string {
@@ -25,12 +27,14 @@ export function entitiesFromAnnotations(
   notes: ReadonlyArray<{ id: string; kind?: string; note?: string | null }>,
 ): EntityMeta[] {
   return notes
-    .filter((item) => item.id && (item.kind == null || item.kind === 'text'))
+    // outline 是消化大纲的正文划线，和 text 一样要画出来。pdf、media、note 不画。
+    .filter((item) => item.id && (item.kind == null || item.kind === 'text' || item.kind === 'outline'))
     .map((item) => {
       const note = item.note?.trim() ?? '';
       return {
         id: item.id,
         kind: 'annotation' as const,
+        ...(item.kind === 'outline' ? { outline: true } : {}),
         ...(note.length > 0 ? { note: noteSummary(note) } : {}),
       };
     });
