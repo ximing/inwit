@@ -45,7 +45,7 @@ export const ConceptPracticeDialog = observer(function ConceptPracticeDialog({
     detail && 'concept' in detail ? detail.concept.version : detail?.relation.version ?? 1;
 
   const refreshDetail = async () => {
-    await service.select({ kind: targetKind, id: targetId });
+    await service.openDetail({ kind: targetKind, id: targetId });
   };
 
   const bindableCards = (docs.doc?.cards ?? []).filter(

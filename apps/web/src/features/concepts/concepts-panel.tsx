@@ -14,19 +14,23 @@ import { ConceptEditorDialog, ConceptLinkDraft, RelationEditorDialog } from './c
  */
 export const ConceptsPanel = observer(function ConceptsPanel() {
   const service = useService(ConceptsService);
-  const detailOpen = service.detail !== null;
 
   useEffect(() => {
-    if (!detailOpen) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.isComposing) return;
       if (shortcutBlockedTarget(event.target)) return;
-      event.preventDefault();
-      void service.select(null);
+      // 分层收起：详情浮层 → 信息卡（选中态）。
+      if (service.detail !== null) {
+        event.preventDefault();
+        service.closeDetail();
+      } else if (service.selected !== null) {
+        event.preventDefault();
+        service.select(null);
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [detailOpen, service]);
+  }, [service]);
 
   if (service.probed && !service.enabled) return null;
   if (!service.probed) {
@@ -120,14 +124,16 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
               highlightRelationIds={service.highlightRelationIds}
               onViewportChange={(viewport) => (service.viewport = viewport)}
               onPositionsChange={(positions) => (service.positions = positions)}
-              onSelectConcept={(id) => void service.select({ kind: 'concept', id })}
-              onSelectRelation={(id) => void service.select({ kind: 'relation', id })}
+              onSelectConcept={(id) => service.select({ kind: 'concept', id })}
+              onSelectRelation={(id) => service.select({ kind: 'relation', id })}
               onExpandNeighbors={(id) => void service.expandNeighbors(id)}
               canBack={service.focusStack.length > 0}
               onBack={() => void service.backFocus()}
               crumbs={service.focusCrumbs}
               onJumpFocus={(index) => void service.jumpFocus(index)}
-              onDismiss={() => void service.select(null)}
+              onDismiss={() => service.select(null)}
+              detailOpen={service.detail !== null}
+              onOpenDetail={() => void service.openDetail()}
               centerRequest={service.centerRequest}
               onConnect={
                 service.writable
@@ -143,7 +149,7 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
                 key={concept.id}
                 type="button"
                 className={`concepts-list-item${service.selected?.kind === 'concept' && service.selected.id === concept.id ? ' is-active' : ''}`}
-                onClick={() => void service.select({ kind: 'concept', id: concept.id })}
+                onClick={() => void service.openDetail({ kind: 'concept', id: concept.id })}
               >
                 <span className="concepts-list-name">{concept.name}</span>
                 {concept.sense ? <span className="concepts-list-sense">{concept.sense}</span> : null}
@@ -165,9 +171,9 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
 
         {service.detail ? (
           'concept' in service.detail ? (
-            <ConceptDetailPane detail={service.detail} onClose={() => void service.select(null)} />
+            <ConceptDetailPane detail={service.detail} onClose={() => service.closeDetail()} />
           ) : (
-            <RelationDetailPane detail={service.detail} onClose={() => void service.select(null)} />
+            <RelationDetailPane detail={service.detail} onClose={() => service.closeDetail()} />
           )
         ) : null}
         {service.writable && service.linkDraft ? (

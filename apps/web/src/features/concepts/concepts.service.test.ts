@@ -1,5 +1,6 @@
 import type { ConceptBatch, ConceptDetail, ConceptGraphPage, SyncChange } from '@inwit/dto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '@/api/client';
 import {
   createConcept,
   createConceptBatch,
@@ -23,6 +24,7 @@ vi.mock('@/api/concepts', () => ({
   createConcept: vi.fn(),
   createConceptBatch: vi.fn(),
   getConcept: vi.fn(),
+  getConceptRelation: vi.fn(),
   getConceptBatch: vi.fn(),
   saveConceptBundle: vi.fn(),
   setDocumentKnowledgeRef: vi.fn(),
@@ -30,6 +32,59 @@ vi.mock('@/api/concepts', () => ({
 
 const T1 = '2026-10-16T00:00:00.000Z';
 const emptyGraph: ConceptGraphPage = { nodes: [], nextCursor: null, graphRevision: 1 };
+
+describe('ConceptsService select and detail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getConceptGraph).mockResolvedValue(emptyGraph);
+    vi.mocked(postConceptGraphView).mockResolvedValue({ edges: [], nextEdgeCursor: null, graphRevision: 1 });
+  });
+
+  it('selects lightly without fetching detail', async () => {
+    const service = new ConceptsService();
+    await service.boot('topic-1', 'doc-1');
+    service.select({ kind: 'concept', id: 'node-a' });
+    expect(service.selected).toEqual({ kind: 'concept', id: 'node-a' });
+    expect(service.detail).toBeNull();
+    expect(getConcept).not.toHaveBeenCalled();
+    service.dispose();
+  });
+
+  it('openDetail selects the target and fetches its detail', async () => {
+    const detail = { marker: 'detail' } as unknown as ConceptDetail;
+    vi.mocked(getConcept).mockResolvedValue(detail);
+    const service = new ConceptsService();
+    await service.boot('topic-1', 'doc-1');
+    await service.openDetail({ kind: 'concept', id: 'node-a' });
+    expect(service.selected).toEqual({ kind: 'concept', id: 'node-a' });
+    expect(service.detail).toEqual(detail);
+    expect(service.detailLoading).toBe(false);
+    expect(getConcept).toHaveBeenCalledWith('node-a');
+    service.dispose();
+  });
+
+  it('closeDetail closes the pane but keeps the selection', async () => {
+    vi.mocked(getConcept).mockResolvedValue({ marker: 'detail' } as unknown as ConceptDetail);
+    const service = new ConceptsService();
+    await service.boot('topic-1', 'doc-1');
+    await service.openDetail({ kind: 'concept', id: 'node-a' });
+    service.closeDetail();
+    expect(service.detail).toBeNull();
+    expect(service.selected).toEqual({ kind: 'concept', id: 'node-a' });
+    service.dispose();
+  });
+
+  it('clears the selection when the detail is gone', async () => {
+    vi.mocked(getConcept).mockRejectedValue(new ApiError(404, 'NOT_FOUND', '概念不存在'));
+    const service = new ConceptsService();
+    await service.boot('topic-1', 'doc-1');
+    await service.openDetail({ kind: 'concept', id: 'node-a' });
+    expect(service.selected).toBeNull();
+    expect(service.detail).toBeNull();
+    expect(service.error).toBe('概念不存在');
+    service.dispose();
+  });
+});
 
 function batchOf(documentId: string, status: ConceptBatch['status'] = 'queued'): ConceptBatch {
   return {
@@ -453,7 +508,8 @@ describe('ConceptsService flags and sync', () => {
     expect(service.linkForm).toEqual({ predicate: '包含', kind: 'composition' });
     expect(service.selected).toEqual({ kind: 'concept', id: '11111111-1111-4111-8111-111111111111' });
     expect(service.highlightConceptIds.size).toBe(0);
-    expect(getConcept).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+    // 选中恢复后不再回拉详情：信息卡已够用，详情由用户显式打开。
+    expect(getConcept).not.toHaveBeenCalled();
     expect(listConcepts).toHaveBeenCalledWith('topic-1', expect.objectContaining({ q: '背包' }));
     expect(getConceptGraph).toHaveBeenCalledWith(
       'topic-1',

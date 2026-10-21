@@ -197,6 +197,8 @@
   min-width: 0;
   min-height: 0;
   display: flex;
+  /* 信息卡随节点移动，锚点移出视口时卡片要能被裁掉 */
+  overflow: hidden;
 }
 .concept-graph {
   flex: 1;
@@ -503,6 +505,152 @@
 }
 .concepts-more { margin: 8px 12px; font-size: 12px; color: var(--accent, #b3402a); background: none; border: none; cursor: pointer; }
 
+/* 图内信息卡：选中节点/边后原地长出，位置跟随锚点、字号恒定；详情浮层是它的二级入口 */
+.concept-card {
+  position: absolute;
+  z-index: 6;
+  box-sizing: border-box;
+  width: 300px;
+  max-width: calc(100% - 16px);
+  max-height: min(340px, calc(100% - 16px));
+  overflow-y: auto;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-2);
+  animation: concept-card-in 160ms ease-out;
+}
+@keyframes concept-card-in {
+  from { opacity: 0; transform: translateY(3px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+/* 小尾巴：旋转 45° 的方片，按 data-side 朝向锚点，--caret-pos 沿边定位 */
+.concept-card-caret {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+.concept-card[data-side='right'] .concept-card-caret {
+  left: -6px;
+  top: var(--caret-pos);
+  margin-top: -5px;
+  border-top: none;
+  border-right: none;
+}
+.concept-card[data-side='left'] .concept-card-caret {
+  right: -6px;
+  top: var(--caret-pos);
+  margin-top: -5px;
+  border-bottom: none;
+  border-left: none;
+}
+.concept-card[data-side='bottom'] .concept-card-caret {
+  top: -6px;
+  left: var(--caret-pos);
+  margin-left: -5px;
+  border-bottom: none;
+  border-right: none;
+}
+.concept-card[data-side='top'] .concept-card-caret {
+  bottom: -6px;
+  left: var(--caret-pos);
+  margin-left: -5px;
+  border-top: none;
+  border-left: none;
+}
+.concept-card-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-4);
+  cursor: pointer;
+  padding: 0;
+}
+.concept-card-close:hover { background: var(--bg-sunken); color: var(--ink); }
+.concept-card-head { padding-right: 22px; }
+.concept-card-head h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+}
+.concept-card-rel-title { font-size: 13.5px; }
+.concept-card-sense {
+  display: inline-flex;
+  margin-top: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.concept-card-aliases { margin: 6px 0 0; font-size: 12px; color: var(--ink-3); }
+.concept-card-def { margin: 8px 0 0; font-size: 13px; line-height: 1.7; color: var(--ink); }
+.concept-card-example { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-3); }
+.concept-card-rels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+.concept-card-rels button {
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+.concept-card-rels button:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent-deep);
+}
+.concept-card-arrow { color: var(--accent); font-style: normal; }
+.concept-card-rels button .concept-card-arrow { color: var(--ink-4); }
+.concept-card-rels button:hover .concept-card-arrow { color: var(--accent); }
+.concept-card-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.concept-card-rels + .concept-card-foot { border-top: none; padding-top: 0; }
+.concept-card-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: none;
+  padding: 2px 2px;
+  font-size: 12.5px;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+.concept-card-detail-btn:hover { color: var(--accent-deep); text-decoration: underline; text-underline-offset: 3px; }
+
 .concept-detail {
   position: absolute;
   top: 8px;
@@ -777,6 +925,7 @@
 @media (prefers-reduced-motion: reduce) {
   .concept-node,
   .concept-edge { transition: none; }
+  .concept-card { animation: none; }
 }
 
 .study-dock-body[data-arrangement='columns'] {

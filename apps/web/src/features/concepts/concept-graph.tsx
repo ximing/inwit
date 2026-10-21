@@ -5,6 +5,11 @@ import { wheelZoomFactor } from '@/pages/docs/canvas-zoom.js';
 import { shortcutBlockedTarget } from '../study-workspace/study-mode-hotkey.js';
 import { hitConceptNode } from './concept-connect.js';
 import {
+  ConceptNodeCard,
+  ConceptRelationCard,
+  type ConceptCardNeighbor,
+} from './concept-card.js';
+import {
   layoutConceptGraph,
   conceptGraphIsDense,
   conceptPredicateLabelWidth,
@@ -60,6 +65,10 @@ export interface ConceptGraphProps {
   onJumpFocus?(index: number): void;
   /** 单击空白或按 Esc 时关闭详情。 */
   onDismiss?(): void;
+  /** 信息卡上的「详情」入口：打开完整详情浮层。 */
+  onOpenDetail?(): void;
+  /** 详情浮层开着时隐藏信息卡。 */
+  detailOpen?: boolean;
   /** 进入下一层后按这一层重新取景，并把这个概念放在中央。 */
   centerRequest?: { id: string; nonce: number } | null;
 }
@@ -505,6 +514,53 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
     relations: props.relations,
   });
 
+  // 信息卡锚点：世界坐标 → 屏幕像素（与 SVG 的 xMidYMid meet 同一份换算）。
+  const meet = viewMeet(stage, viewSize);
+  const toScreen = (wx: number, wy: number) => ({
+    x: (wx - props.viewport.x) * meet.scale + meet.offsetX,
+    y: (wy - props.viewport.y) * meet.scale + meet.offsetY,
+  });
+  const selectedNeighbors = useMemo<ConceptCardNeighbor[]>(() => {
+    if (!props.selectedId) return [];
+    const neighbors: ConceptCardNeighbor[] = [];
+    for (const relation of props.relations) {
+      if (relation.fromConceptId === props.selectedId) {
+        const target = conceptById.get(relation.toConceptId);
+        if (target) neighbors.push({ id: target.id, name: target.name, predicate: relation.predicate, dir: 'out' });
+      } else if (relation.toConceptId === props.selectedId) {
+        const source = conceptById.get(relation.fromConceptId);
+        if (source) neighbors.push({ id: source.id, name: source.name, predicate: relation.predicate, dir: 'in' });
+      }
+    }
+    return neighbors;
+  }, [props.selectedId, props.relations, conceptById]);
+
+  const showCard = !props.detailOpen && !connect;
+  const selectedNode = props.selectedId ? boxById.get(props.selectedId) : undefined;
+  const selectedConcept = props.selectedId ? conceptById.get(props.selectedId) : undefined;
+  const nodeCardAnchor =
+    showCard && selectedNode
+      ? (() => {
+          const origin = toScreen(selectedNode.x, selectedNode.y);
+          return {
+            x: origin.x,
+            y: origin.y,
+            width: selectedNode.width * meet.scale,
+            height: selectedNode.height * meet.scale,
+          };
+        })()
+      : null;
+  const drawnSelectedRelation = selectedRelationRecord
+    ? drawnEdges.find((edge) => edge.relation.id === selectedRelationRecord.id)
+    : undefined;
+  const relationCardAnchor =
+    showCard && !nodeCardAnchor && drawnSelectedRelation
+      ? (() => {
+          const point = toScreen(drawnSelectedRelation.label.x, drawnSelectedRelation.label.y);
+          return { x: point.x - 1, y: point.y - 9, width: 2, height: 18 };
+        })()
+      : null;
+
   return (
     <div ref={wrapRef} className={`concept-graph-wrap${focused ? ' is-focused' : ''}${spaceDown ? ' is-space' : ''}`}>
     <svg
@@ -773,8 +829,8 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
           <p>触控板双指滑动平移，捏合缩放</p>
           <p>空格拖动或中键平移</p>
           <p>双击节点展开，Enter 展开选中</p>
-          <p>单击节点后，其余节点变淡，只留一级关系</p>
-          <p>Backspace 返回上一层，Esc 关闭详情</p>
+          <p>单击节点长出信息卡，其余节点变淡</p>
+          <p>Backspace 返回上一层，Esc 先关详情再收卡</p>
         </div>
       ) : null}
     </div>
@@ -793,6 +849,30 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
         地图
       </button>
     )}
+    {nodeCardAnchor && selectedConcept ? (
+      <ConceptNodeCard
+        key={selectedConcept.id}
+        concept={selectedConcept}
+        neighbors={selectedNeighbors}
+        anchor={nodeCardAnchor}
+        stage={stage}
+        onSelectConcept={(id) => props.onSelectConcept(id)}
+        onOpenDetail={() => props.onOpenDetail?.()}
+        onDismiss={() => props.onDismiss?.()}
+      />
+    ) : null}
+    {relationCardAnchor && selectedRelationRecord ? (
+      <ConceptRelationCard
+        key={selectedRelationRecord.id}
+        relation={selectedRelationRecord}
+        fromName={conceptById.get(selectedRelationRecord.fromConceptId)?.name ?? ''}
+        toName={conceptById.get(selectedRelationRecord.toConceptId)?.name ?? ''}
+        anchor={relationCardAnchor}
+        stage={stage}
+        onOpenDetail={() => props.onOpenDetail?.()}
+        onDismiss={() => props.onDismiss?.()}
+      />
+    ) : null}
     </div>
   );
 });

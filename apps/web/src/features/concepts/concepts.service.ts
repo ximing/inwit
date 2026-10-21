@@ -206,8 +206,7 @@ export class ConceptsService extends Service {
     if (gen !== this.bootGen || this.documentId !== documentId) return;
     if (switchingDocument && this.viewMode === 'list') await this.loadList(true);
     if (gen !== this.bootGen || this.documentId !== documentId) return;
-    if (switchingDocument && this.selected) await this.select(this.selected);
-    if (gen !== this.bootGen || this.documentId !== documentId) return;
+    // 选中被 restoreDocumentView 恢复后不再回拉详情：信息卡直接够用。
     await this.resumeDocumentBatch(documentId);
   }
 
@@ -323,16 +322,24 @@ export class ConceptsService extends Service {
     if (this.viewMode === 'list') void this.loadList(true);
   }
 
-  async select(target: ConceptTarget | null): Promise<void> {
+  /** 选中是轻操作：只记目标并关掉旧详情；详情由 openDetail 显式拉取。 */
+  select(target: ConceptTarget | null): void {
     this.selected = target;
     this.detail = null;
-    if (!target) return;
+    this.detailLoading = false;
+  }
+
+  /** 拉取当前选中目标的完整详情（出处、练习、编辑所需）；可带 target 先选中。 */
+  async openDetail(target?: ConceptTarget): Promise<void> {
+    if (target !== undefined) this.select(target);
+    const current = this.selected;
+    if (!current) return;
     this.detailLoading = true;
     try {
       this.detail =
-        target.kind === 'concept'
-          ? await api.getConcept(target.id)
-          : await api.getConceptRelation(target.id);
+        current.kind === 'concept'
+          ? await api.getConcept(current.id)
+          : await api.getConceptRelation(current.id);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         this.selected = null;
@@ -341,6 +348,12 @@ export class ConceptsService extends Service {
     } finally {
       this.detailLoading = false;
     }
+  }
+
+  /** 只关详情浮层，保留选中（信息卡还在）。 */
+  closeDetail(): void {
+    this.detail = null;
+    this.detailLoading = false;
   }
 
   setHighlight(concepts: Set<string>, relations: Set<string>): void {
@@ -435,7 +448,7 @@ export class ConceptsService extends Service {
     }
     this.centerRequest = { id: conceptId, nonce: (this.centerRequest?.nonce ?? 0) + 1 };
     if (this.selected?.kind !== 'concept' || this.selected.id !== conceptId) {
-      await this.select({ kind: 'concept', id: conceptId });
+      this.select({ kind: 'concept', id: conceptId });
     }
   }
 

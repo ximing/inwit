@@ -138,7 +138,7 @@ export const ConceptDetailPane = observer(function ConceptDetailPane({
         <ul className="concept-detail-relations">
           {detail.relations.map((relation) => (
             <li key={relation.id}>
-              <button type="button" onClick={() => void service.select({ kind: 'relation', id: relation.id })}>
+              <button type="button" onClick={() => void service.openDetail({ kind: 'relation', id: relation.id })}>
                 {relation.predicate}
               </button>
             </li>
