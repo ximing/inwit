@@ -9,6 +9,8 @@ import {
   DocTableHeader,
   MermaidBlock,
   PageBreak,
+  codeBlockCollapsedAttribute,
+  codeFoldTypingPlugin,
   registerDocCodeAliases,
   VitalEntity,
 } from '@inwit/doc-schema';
@@ -35,8 +37,17 @@ const lowlight = createLowlight(common);
 registerDocCodeAliases(lowlight);
 
 const DocCodeBlock = CodeBlockLowlight.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      collapsed: codeBlockCollapsedAttribute(),
+    };
+  },
   addNodeView() {
     return codeBlockNodeView;
+  },
+  addProseMirrorPlugins() {
+    return [...(this.parent?.() ?? []), codeFoldTypingPlugin()];
   },
 });
 

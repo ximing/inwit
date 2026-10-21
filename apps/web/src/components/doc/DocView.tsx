@@ -1,4 +1,5 @@
 import type { Annotation, DocumentCard } from '@inwit/dto';
+import { CODE_FOLD_META } from '@inwit/doc-schema';
 import { observer, useService } from '@rabjs/react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react';
@@ -66,6 +67,7 @@ export const DocView = observer(function DocView({
   bindHost,
   className,
   enableFind = false,
+  onCodeFold,
 }: {
   source: unknown;
   cards?: DocumentCard[];
@@ -79,6 +81,8 @@ export const DocView = observer(function DocView({
   className?: string;
   /** 阅读态正文才接查找。回答摘录和周报不接。 */
   enableFind?: boolean;
+  /** 阅读态折叠代码时回写正文。编辑态由编辑器自己保存。 */
+  onCodeFold?: (json: unknown) => void;
 }) {
   const assetUrls = useService(AssetUrlsService);
   const navigate = useNavigate();
@@ -139,11 +143,30 @@ export const DocView = observer(function DocView({
 
   const bindHostRef = useRef(bindHost);
   bindHostRef.current = bindHost;
+  const onCodeFoldRef = useRef(onCodeFold);
+  onCodeFoldRef.current = onCodeFold;
   useLayoutEffect(() => {
     if (!editor) return;
     const host = createDocEditorHost(editor);
     bindHostRef.current?.(host);
     return () => bindHostRef.current?.(null);
+  }, [editor]);
+
+  useLayoutEffect(() => {
+    if (!editor) return;
+    const onTx = ({
+      transaction,
+    }: {
+      transaction: { docChanged: boolean; getMeta: (key: string) => unknown };
+    }): void => {
+      if (!transaction.docChanged || transaction.getMeta('preventUpdate') === true) return;
+      if (transaction.getMeta(CODE_FOLD_META) !== true) return;
+      onCodeFoldRef.current?.(editor.getJSON());
+    };
+    editor.on('transaction', onTx);
+    return () => {
+      editor.off('transaction', onTx);
+    };
   }, [editor]);
 
   useLayoutEffect(() => {

@@ -210,6 +210,8 @@ const DocsPageContent = observer(function DocsPageContent() {
 
     const sync = async () => {
       try {
+        await service.flushCodeFold();
+        if (cancelled) return;
         if (leavingEdit) {
           await editor.save();
           if (cancelled) return;

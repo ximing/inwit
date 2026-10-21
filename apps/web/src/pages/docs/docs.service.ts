@@ -101,7 +101,7 @@ import {
 import { type PresignedUrlEntry } from '@/lib/presign-cache-logic';
 import { isLostTextEntity, type DocEditorHost } from '@/lib/entity-marks';
 import { dropPrefetchedDocument, prefetchedDocument } from '@/lib/document-prefetch';
-import { asPmJson, jsonEqual, textToPmDoc } from '@/lib/pm-doc';
+import { asPmJson, clonePmJson, jsonEqual, textToPmDoc } from '@/lib/pm-doc';
 import {
   classifyRemoteDetail,
   coalesceChanges,
@@ -381,6 +381,10 @@ export class DocsService extends Service {
   private syncChain: Promise<void> = Promise.resolve();
   private echoes: EchoStamp[] = [];
   private saveFloors = new Map<string, number>();
+  /** Latest folded body from the read view, waiting to be written. */
+  private codeFold: { id: string; json: PmDocJson; baseline: PmDocJson } | null = null;
+  private codeFoldTimer: ReturnType<typeof setTimeout> | null = null;
+  private codeFoldInflight: Promise<void> | null = null;
   private conflictNotifiedAt: string | null = null;
   private goneNotifiedId: string | null = null;
   private inflightReads: DetailRead[] = [];
@@ -2245,7 +2249,56 @@ export class DocsService extends Service {
     stopPolling(this);
   }
 
+  noteCodeFold(json: unknown): void {
+    const doc = this.doc;
+    if (!doc) return;
+    const next = asPmJson(json);
+    const baseline = this.codeFold?.id === doc.id ? this.codeFold.baseline : clonePmJson(doc.contentJson);
+    this.codeFold = { id: doc.id, json: next, baseline };
+    if (this.codeFoldTimer) clearTimeout(this.codeFoldTimer);
+    this.codeFoldTimer = setTimeout(() => {
+      this.codeFoldTimer = null;
+      void this.flushCodeFold();
+    }, 400);
+  }
+
+  async flushCodeFold(): Promise<void> {
+    if (this.codeFoldTimer) {
+      clearTimeout(this.codeFoldTimer);
+      this.codeFoldTimer = null;
+    }
+    if (this.codeFoldInflight) await this.codeFoldInflight;
+    const pending = this.codeFold;
+    if (!pending) return;
+    this.codeFold = null;
+    const run = this.persistCodeFold(pending);
+    this.codeFoldInflight = run;
+    try {
+      await run;
+    } finally {
+      if (this.codeFoldInflight === run) this.codeFoldInflight = null;
+    }
+    if (this.codeFold) await this.flushCodeFold();
+  }
+
+  private async persistCodeFold(pending: {
+    id: string;
+    json: PmDocJson;
+    baseline: PmDocJson;
+  }): Promise<void> {
+    if (jsonEqual(pending.baseline, pending.json)) return;
+    this.bumpCardWriteGen();
+    try {
+      const updated = await updateDocument(pending.id, { contentJson: pending.json });
+      this.noteEditorSaved(pending.id, updated.title, asPmJson(updated.contentJson), updated.updatedAt);
+    } catch (err) {
+      if (!this.codeFold) this.codeFold = pending;
+      this.error = errorMessage(err, '没记住代码的折叠');
+    }
+  }
+
   override destroy(): void {
+    void this.flushCodeFold();
     this.unsubscribeSync?.();
     this.unsubscribeSync = null;
     this._sync = null;
@@ -2579,7 +2632,8 @@ export class DocsService extends Service {
       if (detail.assetUrls) {
         this.resolve(AssetUrlsService).seed(detail.assetUrls, detail.assetUrlsFetchedAt);
       }
-      this.doc = detail;
+      const held = this.codeFold?.id === id ? this.codeFold.json : null;
+      this.doc = held ? { ...detail, contentJson: held } : detail;
       if (notes) this.annotations = notes;
       if (canvas) {
         this.canvasNodes = canvas;

@@ -9,6 +9,7 @@ import StarterKit from '@tiptap/starter-kit';
 import type { Schema } from 'prosemirror-model';
 import { AnnotationMark } from './annotation-mark.js';
 import { CardAnchorMark } from './card-anchor-mark.js';
+import { FoldableCodeBlock } from './code-block.js';
 import { MermaidBlock } from './mermaid-block.js';
 import { PageBreak } from './page-break.js';
 import { createDocMathExtensions } from './math.js';
@@ -23,11 +24,13 @@ export function getHeadlessExtensions(): AnyExtension[] {
   return [
     StarterKit.configure({
       heading: { levels: [1, 2, 3, 4, 5, 6] },
+      codeBlock: false,
       link: {
         openOnClick: false,
         autolink: true,
       },
     }),
+    FoldableCodeBlock,
     Table.configure({ resizable: false }),
     TableRow,
     DocTableHeader,

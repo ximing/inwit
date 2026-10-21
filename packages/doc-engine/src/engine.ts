@@ -1,4 +1,4 @@
-import { insertMathLatex, updateMathLatex } from '@inwit/doc-schema';
+import { CODE_FOLD_META, insertMathLatex, updateMathLatex } from '@inwit/doc-schema';
 import { dispatchMarkdownPaste } from '@inwit/doc-schema/paste-markdown';
 import type { PmDocJson } from '@inwit/dto';
 import { Editor } from '@tiptap/core';
@@ -383,8 +383,9 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
     }, FORMAT_STATE_DEBOUNCE_MS);
   };
 
-  const scheduleDocChanged = (): void => {
-    if (!alive || !editable) return;
+  const scheduleDocChanged = (force = false): void => {
+    if (!alive) return;
+    if (!editable && !force) return;
     // Leading edge so a poll cannot replace the body before the debounce fires.
     if (!docChangedLeading) {
       docChangedLeading = true;
@@ -394,7 +395,8 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
     docChangedTimer = window.setTimeout(() => {
       docChangedTimer = undefined;
       docChangedLeading = false;
-      if (!alive || !editable) return;
+      if (!alive) return;
+      if (!editable && !force) return;
       emitEvent({ type: 'docChanged' });
     }, DOC_CHANGED_DEBOUNCE_MS);
   };
@@ -504,11 +506,15 @@ export function createDocEngine(opts: { element: HTMLElement }): DocEngine {
   };
 
   editor.on('transaction', ({ transaction, appendedTransactions }) => {
-    if (!editable || applyingContent) return;
+    if (applyingContent) return;
+    const fold =
+      transaction.getMeta(CODE_FOLD_META) === true ||
+      appendedTransactions.some((item) => item.getMeta(CODE_FOLD_META) === true);
+    if (!editable && !fold) return;
     if (transaction.getMeta('preventUpdate')) return;
     const docChanged = transaction.docChanged || appendedTransactions.some((item) => item.docChanged);
-    if (docChanged) scheduleDocChanged();
-    scheduleFormatState();
+    if (docChanged) scheduleDocChanged(fold);
+    if (editable) scheduleFormatState();
   });
 
   const { dispatch } = installBridge((cmd) => {

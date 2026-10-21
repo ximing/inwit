@@ -1,6 +1,8 @@
 import type { NodeViewRenderer, NodeViewRendererProps } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { NodeSelection } from '@tiptap/pm/state';
 import type { NodeView } from '@tiptap/pm/view';
+import { CODE_FOLD_META, codeBlockCollapsedOf, codeBlockFoldLabel } from './code-block.js';
 import {
   codeLanguageChoices,
   codeLanguageValue,
@@ -34,9 +36,10 @@ function storedLanguage(node: ProseMirrorNode): string | null {
 let closeOpenMenu: (() => void) | null = null;
 
 /**
- * Code block chrome: a language button while editing, a quiet label while reading.
- * The list is fixed to the document so pane overflow does not clip it.
- * Highlighting stays on CodeBlockLowlight; this view only edits `language`.
+ * Code block chrome: a fold button, a language button while editing, and a quiet
+ * label while reading. Fold state is the `collapsed` attribute. The list is
+ * fixed to the document so pane overflow does not clip it. Highlighting stays
+ * on CodeBlockLowlight.
  */
 export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTMLAttributes }) => {
   let current = node;
@@ -66,11 +69,21 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
   const name = document.createElement('span');
   name.className = 'doc-code-lang-name';
 
+  const fold = document.createElement('button');
+  fold.type = 'button';
+  fold.className = 'doc-code-fold';
+  fold.setAttribute('aria-expanded', 'true');
+  fold.setAttribute('aria-label', '折叠代码');
+
+  const summary = document.createElement('div');
+  summary.className = 'doc-code-summary';
+  summary.setAttribute('contenteditable', 'false');
+
   const pre = document.createElement('pre');
   const code = document.createElement('code');
   bar.append(trigger, name);
   pre.append(code);
-  wrapper.append(bar, pre);
+  wrapper.append(fold, summary, bar, pre);
 
   let menu: HTMLDivElement | null = null;
   let filter: HTMLInputElement | null = null;
@@ -354,6 +367,41 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
     else openMenu();
   };
 
+  const setCollapsed = (next: boolean, keepSelection = false): void => {
+    if (editor.isDestroyed) return;
+    const pos = readPos(getPos);
+    if (pos === null) return;
+    const block = editor.state.doc.nodeAt(pos);
+    if (!block || block.type.name !== 'codeBlock') return;
+    if (codeBlockCollapsedOf(block.attrs.collapsed) === next) return;
+    const tr = editor.state.tr.setNodeMarkup(pos, null, { ...block.attrs, collapsed: next });
+    tr.setMeta(CODE_FOLD_META, true);
+    if (next && !keepSelection) {
+      const mapped = tr.mapping.map(pos);
+      const updated = tr.doc.nodeAt(mapped);
+      const selection = tr.selection;
+      const inside =
+        updated !== null && selection.from > mapped && selection.to < mapped + updated.nodeSize;
+      if (inside && updated) tr.setSelection(NodeSelection.create(tr.doc, mapped));
+    }
+    editor.view.dispatch(tr);
+  };
+
+  fold.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setCollapsed(!codeBlockCollapsedOf(current.attrs.collapsed));
+  });
+  fold.addEventListener('click', (event) => {
+    event.preventDefault();
+  });
+  fold.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    setCollapsed(!codeBlockCollapsedOf(current.attrs.collapsed));
+  });
+
   trigger.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
     event.preventDefault();
@@ -372,17 +420,26 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
 
   const sync = (): void => {
     const editable = editor.isEditable;
+    const collapsed = codeBlockCollapsedOf(current.attrs.collapsed);
     const stored = current.attrs.language;
     const value = codeLanguageValue(stored);
     const label = choiceLabel(stored, value);
+    const foldLabel = collapsed ? '展开代码' : '折叠代码';
     triggerLabel.textContent = label;
     trigger.setAttribute('aria-label', `代码语言：${label}`);
     name.textContent = label;
     trigger.hidden = !editable;
     name.hidden = editable || value === '';
     bar.hidden = !editable && value === '';
+    fold.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    fold.setAttribute('aria-label', foldLabel);
+    fold.title = foldLabel;
+    summary.hidden = !collapsed;
+    summary.textContent = codeBlockFoldLabel(current.textContent);
+    pre.hidden = collapsed;
     wrapper.classList.toggle('is-editing', editable);
     wrapper.classList.toggle('is-bare', bar.hidden);
+    wrapper.classList.toggle('is-collapsed', collapsed);
     const raw = storedLanguage(current);
     if (raw) wrapper.dataset.language = raw;
     else delete wrapper.dataset.language;
@@ -393,9 +450,45 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
   const onEditor = (): void => {
     sync();
   };
-  editor.on('transaction', onEditor);
+  const onTransaction = ({
+    transaction,
+  }: {
+    transaction: { getMeta: (key: string) => unknown };
+  }): void => {
+    const ui = transaction.getMeta('uiEvent');
+    const pos = readPos(getPos);
+    const selection = editor.state.selection;
+    const inside = pos !== null && selection.from > pos && selection.to < pos + current.nodeSize;
+    if (
+      inside &&
+      editor.isEditable &&
+      codeBlockCollapsedOf(current.attrs.collapsed) &&
+      (ui === 'input' || ui === 'paste' || ui === 'drop')
+    ) {
+      setCollapsed(false, true);
+      return;
+    }
+    sync();
+  };
+  editor.on('transaction', onTransaction);
   editor.on('update', onEditor);
   sync();
+
+  // Opening a document can leave the caret in a hidden block. Select the block instead.
+  queueMicrotask(() => {
+    if (editor.isDestroyed || !editor.isEditable) return;
+    const pos = readPos(getPos);
+    if (pos === null) return;
+    const block = editor.state.doc.nodeAt(pos);
+    if (!block || block.type.name !== 'codeBlock' || !codeBlockCollapsedOf(block.attrs.collapsed)) return;
+    const selection = editor.state.selection;
+    const inside = selection.from > pos && selection.to < pos + block.nodeSize;
+    if (!inside) return;
+    const tr = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos));
+    tr.setMeta('addToHistory', false);
+    tr.setMeta('preventUpdate', true);
+    editor.view.dispatch(tr);
+  });
 
   const view: NodeView = {
     dom: wrapper,
@@ -408,7 +501,10 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
     },
     stopEvent(event) {
       const target = event.target;
-      return target instanceof Element && target.closest('.doc-code-lang') !== null;
+      return (
+        target instanceof Element &&
+        target.closest('.doc-code-lang, .doc-code-fold, .doc-code-summary') !== null
+      );
     },
     ignoreMutation(mutation) {
       if (mutation.type === 'selection') return false;
@@ -417,7 +513,7 @@ export const codeBlockNodeView: NodeViewRenderer = ({ editor, node, getPos, HTML
     },
     destroy() {
       closeMenu(false);
-      editor.off('transaction', onEditor);
+      editor.off('transaction', onTransaction);
       editor.off('update', onEditor);
     },
   };

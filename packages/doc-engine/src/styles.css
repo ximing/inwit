@@ -221,7 +221,80 @@ body.is-native .harness { display: none; }
   margin: 0;
   padding-top: 44px;
 }
-.doc-view .ProseMirror .doc-code.is-bare > pre { padding-top: 12px; }
+.doc-view .ProseMirror .doc-code-fold {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.doc-view .ProseMirror .doc-code-fold::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateX(-1px) rotate(-45deg);
+}
+.doc-view .ProseMirror .doc-code-fold[aria-expanded="true"]::before {
+  transform: translateY(-1px) rotate(45deg);
+}
+.doc-view .ProseMirror .doc-code-fold:focus-visible {
+  background: var(--surface);
+  color: var(--ink);
+}
+.doc-view .ProseMirror .doc-code-summary {
+  display: none;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 0.9em;
+  line-height: 1.45;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.doc-view .ProseMirror .doc-code.is-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 8px 6px 4px;
+  background: var(--bg-sunken);
+  border-radius: var(--r-sm);
+}
+.doc-view .ProseMirror .doc-code.is-collapsed > .doc-code-fold,
+.doc-view .ProseMirror .doc-code.is-collapsed > .doc-code-lang {
+  position: static;
+  flex: none;
+}
+.doc-view .ProseMirror .doc-code.is-collapsed > .doc-code-summary {
+  display: block;
+  flex: 1;
+  user-select: none;
+}
+.doc-view .ProseMirror .doc-code.is-collapsed > .doc-code-lang {
+  margin-left: auto;
+  max-width: 46%;
+  pointer-events: auto;
+}
+.doc-view .ProseMirror .doc-code.is-collapsed > pre,
+.doc-view .ProseMirror .doc-code > pre[hidden] {
+  display: none;
+}
 .doc-view .ProseMirror .doc-code-lang {
   position: absolute;
   z-index: 1;

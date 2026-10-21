@@ -17,6 +17,14 @@ export {
 export { mathPlainText } from './schema/math-plain.js';
 export { classifyLatexInput, normalizeMathHtml } from './schema/math-html.js';
 export {
+  CODE_FOLD_META,
+  codeBlockCollapsedAttribute,
+  codeBlockCollapsedOf,
+  codeBlockFoldLabel,
+  codeFoldTypingPlugin,
+  collapsedCodeTypingTransaction,
+} from './schema/code-block.js';
+export {
   CODE_LANGUAGES,
   codeLanguageChoices,
   codeLanguageValue,

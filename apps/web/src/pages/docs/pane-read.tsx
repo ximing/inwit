@@ -142,6 +142,7 @@ export const PaneRead = observer(function PaneRead() {
                     activeAnnotationId={service.activeAnnotationId}
                     focusCardId={urlAnchor}
                     bindHost={(host) => service.attachEditorHost(host)}
+                    onCodeFold={(json) => service.noteCodeFold(json)}
                     onAnchorClick={(ids) => service.openAnchors(ids)}
                     onAnnotationClick={(ids) => {
                       const id = ids[0];
