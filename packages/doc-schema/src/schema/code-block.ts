@@ -64,6 +64,95 @@ export function collapsedCodeTypingTransaction(
   return tr;
 }
 
+/** Two spaces. Tab in a code block inserts this instead of moving focus. */
+export const CODE_INDENT = '  ';
+
+interface LineSpan {
+  start: number;
+  end: number;
+}
+
+function lineSpans(text: string): LineSpan[] {
+  const spans: LineSpan[] = [];
+  let start = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== '\n') continue;
+    spans.push({ start, end: index });
+    start = index + 1;
+  }
+  spans.push({ start, end: text.length });
+  return spans;
+}
+
+/** Lines covered by a selection inside one code block. An empty caret covers its own line. */
+function linesInSelection(text: string, fromRel: number, toRel: number, empty: boolean): LineSpan[] {
+  const spans = lineSpans(text);
+  if (empty) return spans.filter((span) => fromRel >= span.start && fromRel <= span.end);
+  return spans.filter((span) => span.start < toRel && span.end >= fromRel);
+}
+
+function isCodeNode(name: string, specCode: unknown): boolean {
+  return specCode === true && (name === 'codeBlock' || name === 'mermaid');
+}
+
+/**
+ * Tab inserts two spaces at the caret. A selection indents each covered line.
+ * Shift-Tab removes up to two leading spaces from those lines.
+ * Returns an unchanged transaction when the caret is in code but nothing can
+ * be outdented, and null when the selection is not in a code block.
+ */
+export function codeIndentTransaction(
+  state: EditorState,
+  direction: 'indent' | 'outdent',
+): Transaction | null {
+  const { selection } = state;
+  if (selection instanceof NodeSelection) {
+    if (!isCodeNode(selection.node.type.name, selection.node.type.spec.code)) return null;
+    return indentCodeText(state.tr, selection.from, selection.node.textContent, 0, selection.node.textContent.length, false, direction);
+  }
+  if (!(selection instanceof TextSelection)) return null;
+  const { $from, $to } = selection;
+  if (!isCodeNode($from.parent.type.name, $from.parent.type.spec.code)) return null;
+  if ($from.parent !== $to.parent) return null;
+  const start = $from.before();
+  const fromRel = selection.from - $from.start();
+  const toRel = selection.to - $from.start();
+  if (selection.empty && direction === 'indent') {
+    return state.tr.insertText(CODE_INDENT, selection.from);
+  }
+  return indentCodeText(state.tr, start, $from.parent.textContent, fromRel, toRel, selection.empty, direction);
+}
+
+function indentCodeText(
+  tr: Transaction,
+  nodePos: number,
+  text: string,
+  fromRel: number,
+  toRel: number,
+  empty: boolean,
+  direction: 'indent' | 'outdent',
+): Transaction {
+  const contentStart = nodePos + 1;
+  const lines = linesInSelection(text, fromRel, toRel, empty);
+  if (direction === 'indent') {
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      const line = lines[index];
+      if (!line) continue;
+      tr.insertText(CODE_INDENT, contentStart + line.start);
+    }
+    return tr;
+  }
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (!line) continue;
+    const leading = text.slice(line.start, line.start + CODE_INDENT.length);
+    const remove = leading.startsWith(CODE_INDENT) ? CODE_INDENT.length : leading.startsWith(' ') ? 1 : 0;
+    if (remove === 0) continue;
+    tr.delete(contentStart + line.start, contentStart + line.start + remove);
+  }
+  return tr;
+}
+
 /** Keeps typing, Backspace, Delete, and paste from replacing a folded code block. */
 export function codeFoldTypingPlugin(): Plugin {
   return new Plugin({
@@ -75,6 +164,24 @@ export function codeFoldTypingPlugin(): Plugin {
         return true;
       },
       handleKeyDown(view, event) {
+        if (event.key === 'Tab' && view.editable) {
+          // Avoid the DOM Element type: the server typecheck includes this file and only has ES2022.
+          const target: unknown = event.target;
+          const closest =
+            target !== null && typeof target === 'object' && 'closest' in target
+              ? (target as { closest?: unknown }).closest
+              : undefined;
+          const onChrome =
+            typeof closest === 'function' &&
+            closest.call(target, '.doc-code-fold, .doc-code-lang, .doc-code-summary') != null;
+          if (!onChrome) {
+            const tr = codeIndentTransaction(view.state, event.shiftKey ? 'outdent' : 'indent');
+            if (tr) {
+              if (tr.docChanged) view.dispatch(tr);
+              return true;
+            }
+          }
+        }
         if (event.key !== 'Backspace' && event.key !== 'Delete') return false;
         const tr = collapsedCodeTypingTransaction(view.state, {
           kind: 'expand',

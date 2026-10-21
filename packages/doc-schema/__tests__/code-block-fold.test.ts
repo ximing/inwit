@@ -1,5 +1,5 @@
 import { serializePmJSONToMarkdown } from '@inwit/markdown';
-import { EditorState, NodeSelection } from '@tiptap/pm/state';
+import { EditorState, NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { Node } from 'prosemirror-model';
 import { describe, expect, it } from 'vitest';
 import { applyEntityAnchor, getHeadlessSchema, pmJsonToText, type PmJson } from '../src/index.js';
@@ -7,6 +7,7 @@ import {
   codeBlockCollapsedAttribute,
   codeBlockCollapsedOf,
   codeBlockFoldLabel,
+  codeIndentTransaction,
   collapsedCodeTypingTransaction,
 } from '../src/schema/code-block.js';
 
@@ -128,5 +129,65 @@ describe('code block fold', () => {
     ]);
     const state = EditorState.create({ schema, doc });
     expect(collapsedCodeTypingTransaction(state, { kind: 'insert', text: 'x' })).toBeNull();
+  });
+
+  it('inserts two spaces at the caret in a code block', () => {
+    const schema = getHeadlessSchema();
+    const code = schema.nodes.codeBlock!.create({ language: 'ts' }, schema.text('const x = 1'));
+    const doc = schema.nodes.doc!.create(null, [code]);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 6) });
+    const tr = codeIndentTransaction(state, 'indent');
+    expect(tr).not.toBeNull();
+    const next = state.apply(tr!);
+    expect(next.doc.firstChild?.textContent).toBe('const   x = 1');
+    expect(next.selection.from).toBe(8);
+    expect(next.selection.empty).toBe(true);
+  });
+
+  it('indents each selected line by two spaces', () => {
+    const schema = getHeadlessSchema();
+    const code = schema.nodes.codeBlock!.create(
+      { language: 'ts' },
+      schema.text('const x = 1\nreturn x'),
+    );
+    const doc = schema.nodes.doc!.create(null, [code]);
+    const end = doc.content.size - 1;
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 1, end) });
+    const tr = codeIndentTransaction(state, 'indent');
+    const next = state.apply(tr!);
+    expect(next.doc.firstChild?.textContent).toBe('  const x = 1\n  return x');
+  });
+
+  it('removes up to two leading spaces on shift-tab', () => {
+    const schema = getHeadlessSchema();
+    const code = schema.nodes.codeBlock!.create({ language: null }, schema.text('  return\n x'));
+    const doc = schema.nodes.doc!.create(null, [code]);
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 4) });
+    const tr = codeIndentTransaction(state, 'outdent');
+    const next = state.apply(tr!);
+    expect(next.doc.firstChild?.textContent).toBe('return\n x');
+
+    const second = EditorState.create({
+      schema,
+      doc: next.doc,
+      selection: TextSelection.create(next.doc, next.doc.content.size - 2),
+    });
+    const again = codeIndentTransaction(second, 'outdent');
+    expect(second.apply(again!).doc.firstChild?.textContent).toBe('return\nx');
+
+    const bare = codeIndentTransaction(
+      EditorState.create({ schema, doc: second.apply(again!).doc, selection: TextSelection.create(second.apply(again!).doc, 1) }),
+      'outdent',
+    );
+    expect(bare?.docChanged).toBe(false);
+  });
+
+  it('leaves tab alone outside a code block', () => {
+    const schema = getHeadlessSchema();
+    const doc = schema.nodes.doc!.create(null, [
+      schema.nodes.paragraph!.create(null, schema.text('正文')),
+    ]);
+    const state = EditorState.create({ schema, doc });
+    expect(codeIndentTransaction(state, 'indent')).toBeNull();
   });
 });
