@@ -1,6 +1,8 @@
+import type { DocBlock } from '@inwit/doc-schema';
 import { commitConceptBatchInputSchema } from '@inwit/dto';
 import type {
   ConceptCommitResult,
+  ConceptDraftEvidence,
   ConceptDraftRef,
 } from '@inwit/dto';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -19,8 +21,13 @@ import {
   blocksOfDocument,
   insertEvidenceForTarget,
   type ConceptSourceSnapshot,
+  type EvidenceWriteItem,
 } from './concept-evidence.js';
-import { documentHashFromBlocks } from './concept-evidence-logic.js';
+import {
+  retargetEvidenceLocator,
+  sourceBlocksAreStale,
+  validateEvidenceInBlocks,
+} from './concept-evidence-logic.js';
 import {
   normalizeConceptName,
   relationIdentityHash,
@@ -35,9 +42,10 @@ import {
 type Db = Pick<Database, 'select' | 'insert' | 'update' | 'delete' | 'execute'>;
 
 /**
- * 候选确认事务：锁批次与主题行 → 核对状态/草稿版本/正文 hash/existing 版本 →
+ * 候选确认事务：锁批次与主题行 → 核对状态/草稿版本/正文改动幅度/existing 版本 →
  * 解析临时 ID → 建概念/补充说明与证据 → 关系去重/补证据 → 写本文引用 →
  * 保存提交结果并置 committed。任一步失败整体回滚。
+ * 小改动仍可收录；对不上当前正文的摘录跳过，不因此拒绝整批。
  */
 
 function decisionMaps(input: z.output<typeof commitConceptBatchInputSchema>) {
@@ -108,7 +116,7 @@ export async function commitConceptBatch(
 
     await lockActiveTopic(tx, userId, batch.topicId);
 
-    // 正文 hash 校验：来源不可用或正文变化拒绝旧提交，不覆盖更新内容。
+    // 来源不可用或正文改动较大时拒绝旧提交。小改动仍收录，摘录按当前正文重定位。
     if (!batch.documentId) throw AppError.of(409, 'CONCEPT_BATCH_STALE');
     const [document] = await tx
       .select()
@@ -118,7 +126,15 @@ export async function commitConceptBatch(
     if (!document || document.deletedAt) throw AppError.of(409, 'CONCEPT_BATCH_STALE');
     if (document.userId !== userId) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
     const blocks = blocksOfDocument(document);
-    if (documentHashFromBlocks(blocks) !== batch.documentHash) {
+    if (
+      sourceBlocksAreStale({
+        scope: batch.scope,
+        documentHash: batch.documentHash,
+        selection: batch.selectionSnapshot ?? null,
+        snapshot: batch.contentSnapshot ?? null,
+        blocks,
+      })
+    ) {
       throw AppError.of(409, 'CONCEPT_BATCH_STALE');
     }
 
@@ -206,11 +222,7 @@ export async function commitConceptBatch(
         counts.appendedEvidence += await insertEvidenceForTarget(tx, {
           userId,
           target: { conceptId: row.id },
-          items: draftConcept.evidence.map((item) => ({
-            documentId: item.documentId ?? batch.documentId!,
-            locator: item.locator,
-            basis: item.basis,
-          })),
+          items: groundedEvidence(blocks, batch.contentSnapshot ?? null, batch.documentId, draftConcept.evidence),
           snapshots,
         });
       } else {
@@ -240,11 +252,7 @@ export async function commitConceptBatch(
         counts.appendedEvidence += await insertEvidenceForTarget(tx, {
           userId,
           target: { conceptId: existing.id },
-          items: draftConcept.evidence.map((item) => ({
-            documentId: item.documentId ?? batch.documentId!,
-            locator: item.locator,
-            basis: item.basis,
-          })),
+          items: groundedEvidence(blocks, batch.contentSnapshot ?? null, batch.documentId, draftConcept.evidence),
           snapshots,
         });
       }
@@ -349,11 +357,7 @@ export async function commitConceptBatch(
       counts.appendedEvidence += await insertEvidenceForTarget(tx, {
         userId,
         target: { relationId },
-        items: draftRelation.evidence.map((item) => ({
-          documentId: item.documentId ?? batch.documentId!,
-          locator: item.locator,
-          basis: item.basis,
-        })),
+        items: groundedEvidence(blocks, batch.contentSnapshot ?? null, batch.documentId, draftRelation.evidence),
         snapshots,
       });
     }
@@ -401,4 +405,43 @@ export async function commitConceptBatch(
       .where(eq(conceptBatches.id, batch.id));
     return result;
   });
+}
+
+/**
+ * 摘录能在当前正文里对上才写入，块号变了就改到新位置。
+ * 生成时对得上、现在对不上：正文小改把原句改掉了，跳过这条摘录。
+ * 生成时就对不上：伪造引文，拒绝整批。
+ */
+function groundedEvidence(
+  blocks: readonly DocBlock[],
+  snapshot: { blocks: readonly { index: number; pageIndex: number; text: string }[] } | null,
+  documentId: string,
+  items: readonly ConceptDraftEvidence[],
+): EvidenceWriteItem[] {
+  const snapshotBlocks: DocBlock[] | null = snapshot
+    ? snapshot.blocks.map((block) => ({
+        index: block.index,
+        pageIndex: block.pageIndex,
+        text: block.text,
+      }))
+    : null;
+  const grounded: EvidenceWriteItem[] = [];
+  for (const item of items) {
+    const itemDocumentId = item.documentId ?? documentId;
+    if (itemDocumentId !== documentId) {
+      grounded.push({ documentId: itemDocumentId, locator: item.locator, basis: item.basis });
+      continue;
+    }
+    const locator = retargetEvidenceLocator(blocks, item.locator);
+    if (locator) {
+      grounded.push({ documentId: itemDocumentId, locator, basis: item.basis });
+      continue;
+    }
+    if (snapshotBlocks && retargetEvidenceLocator(snapshotBlocks, item.locator)) continue;
+    const validation = validateEvidenceInBlocks(blocks, item.locator);
+    throw AppError.of(422, 'EVIDENCE_QUOTE_INVALID', {
+      reason: validation.ok ? 'not_found' : validation.reason,
+    });
+  }
+  return grounded;
 }

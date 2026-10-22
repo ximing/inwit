@@ -193,11 +193,56 @@ describeDb('concept-commit（真实 PG，含并发）', () => {
     ).rejects.toMatchObject({ status: 409, code: 'CONCEPT_BATCH_NOT_READY' });
   });
 
-  it('正文 hash 变化拒绝旧提交，不产生任何写入', async () => {
+  it('正文小改仍可收录；引文还在就写入，引文被改掉则跳过摘录', async () => {
     const db = iso.db;
     const userId = await seedUser(db);
     const topicId = await seedTopic(db, userId);
-    const documentId = await seedDocument(db, userId, { topicId, blocks: ['原文。'] });
+    const documentId = await seedDocument(db, userId, { topicId, blocks: ['Task 是单位。', '后文保持。'] });
+    const draft: ConceptDraft = {
+      schemaVersion: 1,
+      concepts: [
+        draftConcept('c1', 'Task', {
+          evidence: [{ locator: { kind: 'quote', quote: 'Task 是单位。' }, basis: 'explicit' }],
+        }),
+      ],
+      relations: [],
+    };
+    const batchId = await seedReadyConceptBatch(db, { userId, topicId, documentId, draft });
+    await db
+      .update(documents)
+      .set({ contentJson: contentJsonFromBlocks(['Task 是单位。', '后文改了一点。']) })
+      .where(eq(documents.id, documentId));
+    const kept = await commitConceptBatch(userId, batchId, {
+      expectedDraftRevision: 1,
+      conceptDecisions: [{ tempId: 'c1', decision: 'create' }],
+      relationDecisions: [],
+      requestId: 'commit-small-edit',
+    });
+    expect(kept.counts.createdConcepts).toBe(1);
+    expect(kept.counts.appendedEvidence).toBe(1);
+
+    const droppedDoc = await seedDocument(db, userId, { topicId, blocks: ['Task 是单位。', '后文保持。'] });
+    const droppedBatch = await seedReadyConceptBatch(db, { userId, topicId, documentId: droppedDoc, draft });
+    await db
+      .update(documents)
+      .set({ contentJson: contentJsonFromBlocks(['任务的定义改写了。', '后文保持。']) })
+      .where(eq(documents.id, droppedDoc));
+    const dropped = await commitConceptBatch(userId, droppedBatch, {
+      expectedDraftRevision: 1,
+      conceptDecisions: [{ tempId: 'c1', decision: 'create' }],
+      relationDecisions: [],
+      requestId: 'commit-quote-gone',
+    });
+    expect(dropped.counts.createdConcepts).toBe(1);
+    expect(dropped.counts.appendedEvidence).toBe(0);
+  });
+
+  it('正文大改拒绝旧提交，不产生任何写入', async () => {
+    const db = iso.db;
+    const userId = await seedUser(db);
+    const topicId = await seedTopic(db, userId);
+    const original = `原文主题。${'这是原来的句子。'.repeat(80)}`;
+    const documentId = await seedDocument(db, userId, { topicId, blocks: [original] });
     const batchId = await seedReadyConceptBatch(db, {
       userId,
       topicId,
@@ -206,7 +251,7 @@ describeDb('concept-commit（真实 PG，含并发）', () => {
     });
     await db
       .update(documents)
-      .set({ contentJson: contentJsonFromBlocks(['原文改了。']) })
+      .set({ contentJson: contentJsonFromBlocks([`另一篇文章。${'完全不同的内容。'.repeat(80)}`]) })
       .where(eq(documents.id, documentId));
     await expect(
       commitConceptBatch(userId, batchId, {

@@ -41,7 +41,7 @@ export const ConceptBatchPanel = observer(function ConceptBatchPanel({ onClose }
       ) : null}
 
       {batch?.stale ? (
-        <p className="concept-batch-status is-error" role="alert">正文已变化，这批候选不能收录，请重新生成。</p>
+        <p className="concept-batch-status is-error" role="alert">正文改动较大，这批候选不能收录，请重新生成。</p>
       ) : null}
 
       {service.batchPhase === 'ready' && draft && state ? (

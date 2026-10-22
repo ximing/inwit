@@ -14,8 +14,8 @@ import { requestHashOf } from './concept-identity.js';
 import { conceptOperationRequests } from '../db/schema.js';
 
 import { requireActiveTopic, lockActiveTopic } from './concept.service.js';
-import { blocksOfDocument, documentHashOf, snapshotConceptSource } from './concept-evidence.js';
-import { documentHashFromBlocks } from './concept-evidence-logic.js';
+import { blocksOfDocument, snapshotConceptSource } from './concept-evidence.js';
+import { documentHashFromBlocks, sourceBlocksAreStale } from './concept-evidence-logic.js';
 
 /**
  * 候选批次生命周期。生成入口由 concept_extract processor（M2/T5）执行；
@@ -33,8 +33,8 @@ export async function getOwnedBatch(userId: string, batchId: string): Promise<Co
 }
 
 /**
- * ready 批次的派生过期标记：来源文档不可用（硬删/软删/越权）或正文 hash
- * 与生成时不一致。过期不修改批次状态，只拒绝提交并要求重新生成。
+ * ready 批次的派生过期标记：来源文档不可用（硬删/软删/越权），或正文相对生成时改动较大。
+ * 小改动仍可收录。过期不修改批次状态，只拒绝提交并要求重新生成。
  */
 export async function isBatchStale(row: ConceptBatchRow): Promise<boolean> {
   if (row.status !== 'ready') return false;
@@ -45,7 +45,13 @@ export async function isBatchStale(row: ConceptBatchRow): Promise<boolean> {
     .where(and(eq(documents.id, row.documentId), eq(documents.userId, row.userId)))
     .limit(1);
   if (!document || document.deletedAt) return true;
-  return documentHashOf(document) !== row.documentHash;
+  return sourceBlocksAreStale({
+    scope: row.scope,
+    documentHash: row.documentHash,
+    selection: row.selectionSnapshot ?? null,
+    snapshot: row.contentSnapshot ?? null,
+    blocks: blocksOfDocument(document),
+  });
 }
 
 export function toPublicBatch(row: ConceptBatchRow, stale: boolean): ConceptBatch {

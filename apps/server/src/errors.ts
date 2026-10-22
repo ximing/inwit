@@ -77,7 +77,7 @@ export const ERROR_MESSAGES = {
   CONCEPT_RELATION_ARCHIVED: '关系已归档，无法写入',
   CONCEPT_BATCH_NOT_FOUND: '生成批次不存在',
   CONCEPT_BATCH_NOT_READY: '候选尚未就绪，不能提交',
-  CONCEPT_BATCH_STALE: '正文已变化，请重新生成',
+  CONCEPT_BATCH_STALE: '正文改动较大，请重新生成',
   CONCEPT_BATCH_CONFLICT: '候选已被修改，请刷新后重试',
   CONCEPT_BATCH_ALREADY_COMMITTED: '该批次已按其他请求提交',
   CONCEPT_INFERRED_UNCONFIRMED: '推断内容需要明确确认',

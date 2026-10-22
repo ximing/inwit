@@ -60,7 +60,7 @@ describeDb('concept-batch.service（真实 PG）', () => {
     expect(batch!.jobId).toBe(created.jobId);
   });
 
-  it('ready 批次读取；正文变化后 stale=true；软删除来源也 stale', async () => {
+  it('ready 批次读取；小改动仍可用，大改或软删除来源才过期', async () => {
     const db = iso.db;
     const userId = await seedUser(db);
     const topicId = await seedTopic(db, userId);
@@ -76,9 +76,17 @@ describeDb('concept-batch.service（真实 PG）', () => {
       .update(documents)
       .set({ contentJson: contentJsonFromBlocks(['原文被修改了。']) })
       .where(eq(documents.id, documentId));
+    const edited = await getConceptBatch(userId, batchId);
+    expect(edited.stale).toBe(false);
+    expect(edited.status).toBe('ready');
+
+    const rewritten = `另一篇文章。${'完全不同的内容。'.repeat(80)}`;
+    await db
+      .update(documents)
+      .set({ contentJson: contentJsonFromBlocks([rewritten]) })
+      .where(eq(documents.id, documentId));
     const stale = await getConceptBatch(userId, batchId);
     expect(stale.stale).toBe(true);
-    // 过期只是派生标记，不改状态
     expect(stale.status).toBe('ready');
 
     // 标题变化不影响

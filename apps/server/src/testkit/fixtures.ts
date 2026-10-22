@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { ConceptDraft } from '@inwit/dto';
 import type { Database } from '../db/index.js';
 import { cardQuestions, cards, conceptBatches, documents, reviewStates, topics, users } from '../db/schema.js';
-import { documentHashFromBlocks } from '../concepts/concept-evidence-logic.js';
+import { documentHashFromBlocks, totalCharsOfBlocks } from '../concepts/concept-evidence-logic.js';
 
 /** 真实 PG 测试的种子辅助：每个文件 seed 独立用户，避免共享 schema 下相互干扰。 */
 
@@ -128,7 +128,8 @@ export async function seedReadyConceptBatch(
     .where(eq(documents.id, input.documentId))
     .limit(1);
   if (!document) throw new Error('seedReadyConceptBatch: document missing');
-  const hash = documentHashFromBlocks(blocksFromPmJSON(document.contentJson as PmJson));
+  const blocks = blocksFromPmJSON(document.contentJson as PmJson);
+  const hash = documentHashFromBlocks(blocks);
   const [row] = await db
     .insert(conceptBatches)
     .values({
@@ -139,6 +140,15 @@ export async function seedReadyConceptBatch(
       status: input.status ?? 'ready',
       draft: input.draft,
       coverage: { totalChars: 0, blocks: [] },
+      contentSnapshot: {
+        hash,
+        totalChars: totalCharsOfBlocks(blocks.filter((block) => block.text.trim() !== '')),
+        blocks: blocks.map((block) => ({
+          index: block.index,
+          pageIndex: block.pageIndex,
+          text: block.text,
+        })),
+      },
     })
     .returning({ id: conceptBatches.id });
   if (!row) throw new Error('seedReadyConceptBatch failed');

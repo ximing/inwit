@@ -438,8 +438,9 @@ describeDb('concept_extract processor（真实 PG + 确定性模型）', () => {
     expect(after.draft!.concepts[0]!.name).toBe('Task（人工改过）');
   });
 
-  it('生成后正文变化：批次 stale 且旧结果不能确认', async () => {
-    const { userId, batchId, jobId, documentId } = await seedBatch({ blocks: ['Task 是单位。'] });
+  it('生成后正文大改：批次 stale 且旧结果不能确认', async () => {
+    const original = `Task 是单位。${'背景介绍。'.repeat(80)}`;
+    const { userId, batchId, jobId, documentId } = await seedBatch({ blocks: [original] });
     currentScript = extractionScript((shardIndex) => ({
       shardIndex,
       concepts: [{ tempId: 'a', name: 'Task', basis: 'explicit' }],
@@ -452,7 +453,12 @@ describeDb('concept_extract processor（真实 PG + 确定性模型）', () => {
       .set({
         contentJson: {
           type: 'doc',
-          content: [{ type: 'paragraph', content: [{ type: 'text', text: '正文改了。' }] }],
+          content: [
+            {
+              type: 'paragraph',
+              content: [{ type: 'text', text: `正文改了。${'另一套说明。'.repeat(80)}` }],
+            },
+          ],
         },
       })
       .where(eq(documents.id, documentId));

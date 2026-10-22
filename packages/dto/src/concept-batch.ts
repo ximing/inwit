@@ -354,7 +354,7 @@ export const conceptBatchSchema = z.object({
   draftRevision: z.number().int().positive(),
   draft: conceptDraftSchema.nullable(),
   coverage: conceptBatchCoverageSchema.nullable(),
-  /** ready 且当前正文 hash 与生成时不一致（或来源不可用）时为 true；派生标记，不改状态。 */
+  /** ready 且来源不可用，或正文相对生成时改动较大时为 true。小改动仍可收录。派生标记，不改状态。 */
   stale: z.boolean(),
   errorCode: z.string().nullable(),
   /** 结果说明：零结果原因或计数摘要（如「未识别到领域术语」）。 */
