@@ -114,10 +114,10 @@ describe('concept graph navigation', () => {
   });
 
   it('展开压栈，返回弹出上一层视口；同一层不重复压', () => {
-    const root = { focusId: null, label: '全文', viewport: { x: 1, y: 2, zoom: 1 } };
+    const root = { focusId: null, label: '全文', viewport: { x: 1, y: 2, zoom: 1 }, positions: new Map() };
     const once = pushFocus([], root, 'a');
     expect(once).toEqual([root]);
-    expect(pushFocus(once, { focusId: 'a', label: '甲', viewport: fitViewport() }, 'a')).toEqual(once);
+    expect(pushFocus(once, { focusId: 'a', label: '甲', viewport: fitViewport(), positions: new Map([['a', { x: 1, y: 1 }]]) }, 'a')).toEqual(once);
     const back = popFocus(once);
     expect(back.frame).toEqual(root);
     expect(back.stack).toEqual([]);

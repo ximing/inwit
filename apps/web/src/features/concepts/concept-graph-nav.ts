@@ -39,6 +39,8 @@ export interface FocusFrame {
   /** 这一层在路径上的名字。根层是「全文」或「全部」。 */
   label: string;
   viewport: GraphViewport;
+  /** 离开这一层时的节点坐标。返回时还原；子图不沿用，单独重排。 */
+  positions: Map<string, { x: number; y: number }>;
 }
 
 export function clampZoom(zoom: number): number {
@@ -268,10 +270,15 @@ export function conceptMinimapCenter(
   return centerViewportOn(viewport, world, stage, { x: worldX, y: worldY, width: 0, height: 0 });
 }
 
-/** 进入下一层前压入当前层。已经在这一层上则不重复压栈。 */
+/** 进入下一层前压入当前层。已经在这一层上则不重复压栈。坐标复制一份，避免子图拖动改到上一层。 */
 export function pushFocus(stack: readonly FocusFrame[], current: FocusFrame, nextId: string): FocusFrame[] {
   if (current.focusId === nextId) return [...stack];
-  return [...stack, { focusId: current.focusId, label: current.label, viewport: { ...current.viewport } }];
+  return [...stack, {
+    focusId: current.focusId,
+    label: current.label,
+    viewport: { ...current.viewport },
+    positions: new Map(current.positions),
+  }];
 }
 
 export function popFocus(stack: readonly FocusFrame[]): { stack: FocusFrame[]; frame: FocusFrame | null } {

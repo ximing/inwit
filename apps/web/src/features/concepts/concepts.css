@@ -362,23 +362,27 @@
 .concept-node.is-selected rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
 .concept-node.is-connect-target rect { stroke: var(--accent); stroke-width: 1.5; }
 .concept-node-name { font-size: 13px; font-weight: 600; fill: var(--ink); font-family: var(--serif); }
-.concept-node rect.concept-node-expand-hit {
+.concept-node rect.concept-node-action-hit {
   fill: transparent;
   stroke: none;
   pointer-events: none;
 }
-.concept-node-expand {
+.concept-node-action {
   font-size: 10px;
   fill: var(--ink-4);
-  cursor: pointer;
   opacity: 0;
   pointer-events: none;
 }
-.concept-node:hover .concept-node-expand-hit,
-.concept-node.is-selected .concept-node-expand-hit,
-.concept-node:hover .concept-node-expand,
-.concept-node.is-selected .concept-node-expand { opacity: 1; pointer-events: all; }
-.concept-node-expand:hover { fill: var(--accent-deep); }
+.concept-node:hover rect.concept-node-action-hit,
+.concept-node.is-selected rect.concept-node-action-hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+  cursor: pointer;
+}
+.concept-node:hover .concept-node-action,
+.concept-node.is-selected .concept-node-action { opacity: 1; }
+.concept-node-action-hit:hover + .concept-node-action { fill: var(--accent-deep); }
 .concept-node-port-hit { fill: transparent; stroke: none; pointer-events: all; }
 .concept-node-port-dot {
   fill: var(--accent);
@@ -474,6 +478,12 @@
 .concept-edge-label-wrap { cursor: pointer; }
 .concept-edge.is-selected .concept-edge-label,
 .concept-edge.is-highlight .concept-edge-label { fill: var(--accent-deep); }
+.concept-edge-detail {
+  font-size: 10px;
+  fill: var(--accent);
+  cursor: pointer;
+}
+.concept-edge-detail:hover { fill: var(--accent-deep); }
 .concept-graph-loading { font-size: 11px; fill: var(--ink-2, #6b6252); }
 .concept-graph-fit { font-size: 11px; fill: var(--accent, #b3402a); cursor: pointer; }
 

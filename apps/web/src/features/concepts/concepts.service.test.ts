@@ -46,6 +46,7 @@ describe('ConceptsService select and detail', () => {
     service.select({ kind: 'concept', id: 'node-a' });
     expect(service.selected).toEqual({ kind: 'concept', id: 'node-a' });
     expect(service.detail).toBeNull();
+    expect(service.card).toBeNull();
     expect(getConcept).not.toHaveBeenCalled();
     service.dispose();
   });
@@ -60,6 +61,22 @@ describe('ConceptsService select and detail', () => {
     expect(service.detail).toEqual(detail);
     expect(service.detailLoading).toBe(false);
     expect(getConcept).toHaveBeenCalledWith('node-a');
+    service.dispose();
+  });
+
+  it('opens the info card only from openCard, and select closes it', async () => {
+    const service = new ConceptsService();
+    await service.boot('topic-1', 'doc-1');
+    service.openCard({ kind: 'concept', id: 'node-a' });
+    expect(service.card).toEqual({ kind: 'concept', id: 'node-a' });
+    expect(service.selected).toEqual({ kind: 'concept', id: 'node-a' });
+    expect(getConcept).not.toHaveBeenCalled();
+    service.closeCard();
+    expect(service.card).toBeNull();
+    expect(service.selected).toEqual({ kind: 'concept', id: 'node-a' });
+    service.openCard({ kind: 'concept', id: 'node-a' });
+    service.select({ kind: 'concept', id: 'node-b' });
+    expect(service.card).toBeNull();
     service.dispose();
   });
 
@@ -366,6 +383,8 @@ describe('ConceptsService flags and sync', () => {
     const service = new ConceptsService();
     await service.boot('topic-1', 'doc-1');
     service.viewport = { x: 10, y: 20, zoom: 1.2 };
+    service.positions = new Map([['kept', { x: 4, y: 5 }]]);
+    service.openCard({ kind: 'concept', id: 'node-a' });
     vi.mocked(getConceptGraph).mockResolvedValue({
       nodes: [
         {
@@ -380,8 +399,15 @@ describe('ConceptsService flags and sync', () => {
     await service.expandNeighbors('node-a');
     expect(service.focusId).toBe('node-a');
     expect(service.focusStack).toEqual([
-      { focusId: null, label: '全文', viewport: { x: 10, y: 20, zoom: 1.2 } },
+      {
+        focusId: null,
+        label: '全文',
+        viewport: { x: 10, y: 20, zoom: 1.2 },
+        positions: new Map([['kept', { x: 4, y: 5 }]]),
+      },
     ]);
+    expect(service.positions.size).toBe(0);
+    expect(service.card).toBeNull();
     expect(service.centerRequest?.id).toBe('node-a');
     expect(service.selected).toEqual({ kind: 'concept', id: 'node-a' });
     expect(service.focusCrumbs.map((crumb) => crumb.label)).toEqual(['全文', '甲']);
@@ -395,7 +421,9 @@ describe('ConceptsService flags and sync', () => {
     expect(service.focusId).toBeNull();
     expect(service.focusStack).toEqual([]);
     expect(service.viewport).toEqual({ x: 10, y: 20, zoom: 1.2 });
+    expect(service.positions.get('kept')).toEqual({ x: 4, y: 5 });
     expect(service.centerRequest).toBeNull();
+    service.dispose();
   });
 
   it('jumpFocus returns to an earlier level and restores that viewport', async () => {

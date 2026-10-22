@@ -19,10 +19,13 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.isComposing) return;
       if (shortcutBlockedTarget(event.target)) return;
-      // 分层收起：详情浮层 → 信息卡（选中态）。
+      // 分层收起：详情浮层 → 信息卡 → 选中。
       if (service.detail !== null) {
         event.preventDefault();
         service.closeDetail();
+      } else if (service.card !== null) {
+        event.preventDefault();
+        service.closeCard();
       } else if (service.selected !== null) {
         event.preventDefault();
         service.select(null);
@@ -133,6 +136,10 @@ export const ConceptsPanel = observer(function ConceptsPanel() {
               onJumpFocus={(index) => void service.jumpFocus(index)}
               onDismiss={() => service.select(null)}
               detailOpen={service.detail !== null}
+              cardOpen={service.card !== null && service.selected !== null && service.card.kind === service.selected.kind && service.card.id === service.selected.id}
+              onOpenCard={(id) => service.openCard({ kind: 'concept', id })}
+              onOpenRelationCard={(id) => service.openCard({ kind: 'relation', id })}
+              onCloseCard={() => service.closeCard()}
               onOpenDetail={() => void service.openDetail()}
               centerRequest={service.centerRequest}
               onConnect={

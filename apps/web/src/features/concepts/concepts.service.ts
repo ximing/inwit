@@ -1,4 +1,4 @@
-import { Service } from '@rabjs/react';
+import { Service, batch } from '@rabjs/react';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
 import type {
   BindExistingConceptPracticeInput,
@@ -74,6 +74,8 @@ export class ConceptsService extends Service {
   query = '';
   filter: ConceptFilter = 'all';
   selected: ConceptTarget | null = null;
+  /** 信息卡。单击只选中，看详情才打开。 */
+  card: ConceptTarget | null = null;
   /** 联动高亮（不改变相机/选择）。 */
   highlightConceptIds = new Set<string>();
   highlightRelationIds = new Set<string>();
@@ -197,6 +199,7 @@ export class ConceptsService extends Service {
     } else {
       this.selected = null;
       this.detail = null;
+      this.card = null;
       this.focusId = null;
       this.revisionNotice = false;
       this.error = null;
@@ -213,8 +216,13 @@ export class ConceptsService extends Service {
   /** 后发的 loadGraph 作废先发的响应，避免同步重载盖掉刚收录的节点。 */
   private loadGen = 0;
 
-  /** 节点发现分页（最多两页缓存；可见集合最多 50）。 */
-  async loadGraph(opts?: { focusId?: string | null; append?: boolean }): Promise<void> {
+  /** 节点发现分页（最多两页缓存；可见集合最多 50）。freshLayout 丢掉历史坐标；positions 在换层时还原上一层。 */
+  async loadGraph(opts?: {
+    focusId?: string | null;
+    append?: boolean;
+    freshLayout?: boolean;
+    positions?: Map<string, { x: number; y: number }>;
+  }): Promise<void> {
     const topicId = this.topicId;
     if (!topicId || !this.enabled) return;
     const gen = this.bootGen;
@@ -233,17 +241,22 @@ export class ConceptsService extends Service {
         this.nodeCache.set(node.concept.id, node.concept);
         this.membershipById.set(node.concept.id, node.membership);
       }
-      this.graphRevision = page.graphRevision;
-      this.nodeCursor = page.nextCursor;
-      this.hasMoreNodes = page.nextCursor !== null;
-      if (opts && 'focusId' in opts) this.focusId = opts.focusId ?? null;
-      if (opts?.focusId) {
-        this.visibleIds = page.nodes.map((node) => node.concept.id).slice(0, 50);
-      } else if (!opts?.append) {
-        this.visibleIds = page.nodes.map((node) => node.concept.id).slice(0, 50);
-      } else {
-        this.visibleIds = [...this.visibleIds, ...page.nodes.map((node) => node.concept.id)].slice(0, 50);
-      }
+      const nextIds = page.nodes.map((node) => node.concept.id).slice(0, 50);
+      batch(() => {
+        this.graphRevision = page.graphRevision;
+        this.nodeCursor = page.nextCursor;
+        this.hasMoreNodes = page.nextCursor !== null;
+        if (opts && 'focusId' in opts) this.focusId = opts.focusId ?? null;
+        if (opts?.focusId) {
+          this.visibleIds = nextIds;
+        } else if (!opts?.append) {
+          this.visibleIds = nextIds;
+        } else {
+          this.visibleIds = [...this.visibleIds, ...nextIds].slice(0, 50);
+        }
+        if (opts?.freshLayout) this.positions = new Map();
+        else if (opts?.positions) this.positions = opts.positions;
+      });
       await this.refreshEdges();
     } catch (err) {
       if (gen !== this.bootGen || loadGen !== this.loadGen) return;
@@ -322,11 +335,25 @@ export class ConceptsService extends Service {
     if (this.viewMode === 'list') void this.loadList(true);
   }
 
-  /** 选中是轻操作：只记目标并关掉旧详情；详情由 openDetail 显式拉取。 */
+  /** 选中是轻操作：只记目标并关掉旧详情和信息卡。详情由 openDetail 拉取，信息卡由 openCard 打开。 */
   select(target: ConceptTarget | null): void {
     this.selected = target;
     this.detail = null;
     this.detailLoading = false;
+    this.card = null;
+  }
+
+  /** 选中并打开信息卡。单击图上的节点不会走到这里。 */
+  openCard(target: ConceptTarget): void {
+    this.selected = target;
+    this.detail = null;
+    this.detailLoading = false;
+    this.card = target;
+  }
+
+  /** 只收起信息卡，保留选中。 */
+  closeCard(): void {
+    this.card = null;
   }
 
   /** 拉取当前选中目标的完整详情（出处、练习、编辑所需）；可带 target 先选中。 */
@@ -436,10 +463,12 @@ export class ConceptsService extends Service {
       focusId: this.focusId,
       label: this.focusId ? (this.nodeCache.get(this.focusId)?.name ?? '上一层') : this.scopeLabel,
       viewport: { ...this.viewport },
+      positions: this.positions,
     };
     const pushed = this.focusId !== conceptId;
     if (pushed) this.focusStack = pushFocus(this.focusStack, frame, conceptId);
-    await this.loadGraph({ focusId: conceptId });
+    // 子图节点在上一层往往挤在一起。丢掉历史坐标，按这一层的关系重新力导。
+    await this.loadGraph({ focusId: conceptId, freshLayout: pushed });
     if (this.focusId !== conceptId) {
       if (pushed && this.focusStack.at(-1)?.focusId === frame.focusId) {
         this.focusStack = this.focusStack.slice(0, -1);
@@ -447,6 +476,7 @@ export class ConceptsService extends Service {
       return;
     }
     this.centerRequest = { id: conceptId, nonce: (this.centerRequest?.nonce ?? 0) + 1 };
+    this.card = null;
     if (this.selected?.kind !== 'concept' || this.selected.id !== conceptId) {
       this.select({ kind: 'concept', id: conceptId });
     }
@@ -457,7 +487,7 @@ export class ConceptsService extends Service {
     if (index < 0 || index >= this.focusStack.length) return;
     const frame = this.focusStack[index]!;
     this.focusStack = this.focusStack.slice(0, index);
-    await this.loadGraph({ focusId: frame.focusId });
+    await this.loadGraph({ focusId: frame.focusId, positions: new Map(frame.positions) });
     if (this.focusId !== frame.focusId) return;
     this.viewport = frame.viewport;
     this.centerRequest = null;
@@ -880,6 +910,7 @@ export class ConceptsService extends Service {
     }
     this.detail = null;
     this.detailLoading = false;
+    this.card = null;
     this.highlightConceptIds = new Set();
     this.highlightRelationIds = new Set();
     this.matches = [];

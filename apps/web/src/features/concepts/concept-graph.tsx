@@ -63,12 +63,17 @@ export interface ConceptGraphProps {
   /** 从根到当前层。多于一层时显示路径，点击前面的层级跳回。 */
   crumbs?: { label: string }[];
   onJumpFocus?(index: number): void;
-  /** 单击空白或按 Esc 时关闭详情。 */
+  /** 单击空白时取消选中。 */
   onDismiss?(): void;
   /** 信息卡上的「详情」入口：打开完整详情浮层。 */
   onOpenDetail?(): void;
   /** 详情浮层开着时隐藏信息卡。 */
   detailOpen?: boolean;
+  /** 信息卡是否打开。单击只选中，看详情才打开。 */
+  cardOpen?: boolean;
+  onOpenCard?(id: string): void;
+  onOpenRelationCard?(id: string): void;
+  onCloseCard?(): void;
   /** 进入下一层后按这一层重新取景，并把这个概念放在中央。 */
   centerRequest?: { id: string; nonce: number } | null;
 }
@@ -535,7 +540,7 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
     return neighbors;
   }, [props.selectedId, props.relations, conceptById]);
 
-  const showCard = !props.detailOpen && !connect;
+  const showCard = Boolean(props.cardOpen) && !props.detailOpen && !connect;
   const selectedNode = props.selectedId ? boxById.get(props.selectedId) : undefined;
   const selectedConcept = props.selectedId ? conceptById.get(props.selectedId) : undefined;
   const nodeCardAnchor =
@@ -626,6 +631,7 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
         const isContext = props.contextIds?.has(concept.id) === true;
         const connectTarget = connect?.targetId === concept.id;
         const dimmed = reading != null && !reading.nodeIds.has(concept.id);
+        const actionX = (node.width - ACTIONS_W) / 2;
         return (
           <g
             key={concept.id}
@@ -666,20 +672,55 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
             >
               {node.label}
             </text>
-            <rect className="concept-node-expand-hit" x={Math.max(0, node.width - 32)} y={-16} width={32} height={16} />
-            <text
-              x={node.width}
-              y={-4}
-              textAnchor="end"
-              className="concept-node-expand"
+            <rect
+              className="concept-node-action-hit"
+              x={actionX}
+              y={-16}
+              width={DETAIL_ACTION_W}
+              height={16}
               onPointerDown={(event) => {
                 event.stopPropagation();
-                props.onExpandNeighbors(concept.id);
+                event.preventDefault();
+                props.onOpenCard?.(concept.id);
               }}
+              onPointerUp={(event) => event.stopPropagation()}
               onDoubleClick={(event) => {
                 event.stopPropagation();
                 event.preventDefault();
               }}
+            />
+            <text
+              x={actionX + DETAIL_ACTION_W}
+              y={-4}
+              textAnchor="end"
+              className="concept-node-action"
+              pointerEvents="none"
+            >
+              看详情
+            </text>
+            <rect
+              className="concept-node-action-hit"
+              x={actionX + DETAIL_ACTION_W + ACTION_GAP}
+              y={-16}
+              width={EXPAND_ACTION_W}
+              height={16}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                props.onExpandNeighbors(concept.id);
+              }}
+              onPointerUp={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+              }}
+            />
+            <text
+              x={actionX + ACTIONS_W}
+              y={-4}
+              textAnchor="end"
+              className="concept-node-action"
+              pointerEvents="none"
             >
               展开
             </text>
@@ -743,6 +784,22 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
             <text className="concept-edge-label" x={label.x} y={label.y} textAnchor="middle" dominantBaseline="middle">
               {relation.predicate}
             </text>
+            {selected ? (
+              <text
+                className="concept-edge-detail"
+                x={label.x}
+                y={chip.y + chip.height + 12}
+                textAnchor="middle"
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  props.onOpenRelationCard?.(relation.id);
+                }}
+                onPointerUp={(event) => event.stopPropagation()}
+              >
+                看详情
+              </text>
+            ) : null}
           </g>
         );
       })}
@@ -828,9 +885,10 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
           <p>+ / − 缩放，0 适应全部</p>
           <p>触控板双指滑动平移，捏合缩放</p>
           <p>空格拖动或中键平移</p>
-          <p>双击节点展开，Enter 展开选中</p>
-          <p>单击节点长出信息卡，其余节点变淡</p>
-          <p>Backspace 返回上一层，Esc 先关详情再收卡</p>
+          <p>单击节点只选中，其余节点变淡</p>
+          <p>悬停节点可看详情，或点展开进入子图</p>
+          <p>双击节点展开，Enter 展开选中。子图会重新排开</p>
+          <p>Backspace 返回上一层，Esc 先关详情，再收卡，再取消选中</p>
         </div>
       ) : null}
     </div>
@@ -856,9 +914,9 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
         neighbors={selectedNeighbors}
         anchor={nodeCardAnchor}
         stage={stage}
-        onSelectConcept={(id) => props.onSelectConcept(id)}
+        onSelectConcept={(id) => (props.onOpenCard ? props.onOpenCard(id) : props.onSelectConcept(id))}
         onOpenDetail={() => props.onOpenDetail?.()}
-        onDismiss={() => props.onDismiss?.()}
+        onDismiss={() => props.onCloseCard?.()}
       />
     ) : null}
     {relationCardAnchor && selectedRelationRecord ? (
@@ -870,7 +928,7 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
         anchor={relationCardAnchor}
         stage={stage}
         onOpenDetail={() => props.onOpenDetail?.()}
-        onDismiss={() => props.onDismiss?.()}
+        onDismiss={() => props.onCloseCard?.()}
       />
     ) : null}
     </div>
@@ -879,6 +937,11 @@ export const ConceptGraph = observer(function ConceptGraph(props: ConceptGraphPr
 
 const MAP_W = 168;
 const MAP_H = 112;
+/** 「看详情」「展开」画在胶囊上方，窄节点允许字超出胶囊。 */
+const DETAIL_ACTION_W = 36;
+const EXPAND_ACTION_W = 24;
+const ACTION_GAP = 8;
+const ACTIONS_W = DETAIL_ACTION_W + ACTION_GAP + EXPAND_ACTION_W;
 
 function ConceptMinimap({
   nodes,
