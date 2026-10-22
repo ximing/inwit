@@ -10,6 +10,8 @@ import { AppError } from '../errors.js';
 import { getTopicMapFlat, placeCardOnMap, recalculateMapNodeStatus } from '../maps/map.service.js';
 import { OutlineError, parsePlaceOnMapTarget } from '../maps/outline.js';
 import { acceptedCard } from '../cards/accepted-card.js';
+import { planCardIndex } from '../cards/card-acceptance-logic.js';
+import { insertCardRow, updateCards } from '../cards/card-write.js';
 import { reindexDocumentCards } from '../topics/topic-assign.js';
 import { deleteCardFromIndex, indexCard, searchCards } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
@@ -154,30 +156,28 @@ export function writeCardsTool(session: DigestSession): AgentTool<typeof writeCa
       }[] = [];
       const contentJson = asPmJson(document.contentJson);
       const proposed = session.cardAcceptance === 'proposed';
+      const indexPlan = planCardIndex({ reason: 'digest', proposed });
       for (const draft of params.cards) {
         const now = new Date();
         const resolved = resolveQuoteAnchor(contentJson, draft.blockIndex, draft.quote, {
           recover: true,
         });
-        const [row] = await getDb()
-          .insert(cards)
-          .values({
-            userId: session.userId,
-            documentId: document.id,
-            topicId: document.topicId,
-            mapNodeId: document.mapNodeId,
-            concept: draft.concept.trim(),
-            example: draft.example.trim(),
-            confusionPoint: draft.confusion_point.trim(),
-            tags: draft.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0),
-            source: session.cardSource ?? 'agent',
-            anchorText: resolved.anchorText,
-            anchorBlockIndex: resolved.anchorBlockIndex,
-            ...(proposed ? { acceptance: 'proposed' as const } : {}),
-          })
-          .returning();
+        const row = await insertCardRow(getDb(), {
+          userId: session.userId,
+          documentId: document.id,
+          topicId: document.topicId,
+          mapNodeId: document.mapNodeId,
+          concept: draft.concept.trim(),
+          example: draft.example.trim(),
+          confusionPoint: draft.confusion_point.trim(),
+          tags: draft.tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0),
+          source: session.cardSource ?? 'agent',
+          anchorText: resolved.anchorText,
+          anchorBlockIndex: resolved.anchorBlockIndex,
+          ...(proposed ? { acceptance: 'proposed' as const } : {}),
+        });
         if (!row) throw new Error('failed to insert card');
-        if (!proposed) {
+        if (indexPlan.index && indexPlan.onFailure === 'delete-card') {
           try {
             await insertInitialReviewState(
               session.userId,
@@ -382,8 +382,7 @@ export function attributeTopicTool(session: DigestSession): AgentTool<typeof att
         .update(documents)
         .set({ topicId: topic.id, updatedAt: now })
         .where(eq(documents.id, document.id));
-      await getDb()
-        .update(cards)
+      await updateCards(getDb())
         .set({ topicId: topic.id, updatedAt: now })
         .where(and(eq(cards.documentId, document.id), eq(cards.userId, session.userId), isNull(cards.deletedAt)));
       session.topicId = topic.id;

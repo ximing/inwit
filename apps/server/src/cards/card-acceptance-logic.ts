@@ -42,6 +42,48 @@ export function normalizeRejectReason(reason: string | undefined): string | null
   return stripped.length === 0 ? null : stripped;
 }
 
+export type CardIndexFailure = 'swallow' | 'delete-card' | 'rollback-accept';
+
+export type CardIndexRequest =
+  | { reason: 'manual' }
+  | { reason: 'resurface' }
+  | { reason: 'digest'; proposed: boolean }
+  | { reason: 'selection' }
+  | { reason: 'evolve' }
+  | { reason: 'accept' }
+  | { reason: 'practice' };
+
+export type CardIndexPlan =
+  | { index: true; onFailure: CardIndexFailure }
+  | { index: false };
+
+/**
+ * Whether this write indexes the card, and how that call site finishes if
+ * indexing throws. Proposed digest cards and concept-practice cards stay out
+ * of the index. Callers still run tryIndexCard or indexCard themselves.
+ */
+export function planCardIndex(input: CardIndexRequest): CardIndexPlan {
+  switch (input.reason) {
+    case 'manual':
+    case 'resurface':
+      return { index: true, onFailure: 'swallow' };
+    case 'digest':
+      if (input.proposed) return { index: false };
+      return { index: true, onFailure: 'delete-card' };
+    case 'selection':
+    case 'evolve':
+      return { index: true, onFailure: 'delete-card' };
+    case 'accept':
+      return { index: true, onFailure: 'rollback-accept' };
+    case 'practice':
+      return { index: false };
+    default: {
+      const unreachable: never = input;
+      return unreachable;
+    }
+  }
+}
+
 /** Meili ids that are not an accepted live card are removed; missing accepted ids are indexed. */
 export function planSearchBackfill(input: {
   indexedIds: readonly string[];

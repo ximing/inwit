@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { shouldIndexCard } from '../cards/card-acceptance-logic.js';
+import { updateCards } from '../cards/card-write.js';
 import { getDb } from '../db/index.js';
 import { cards, documents, mapNodes, topics } from '../db/schema.js';
 import { tryIndexCard, hybridSearchRanked } from '../retrieval/pipeline.js';
@@ -282,8 +283,7 @@ export async function assignUnscopedDigestedDocument(
       )
       .returning({ id: documents.id });
     if (!updated) return false;
-    await tx
-      .update(cards)
+    await updateCards(tx)
       .set({ topicId: topic.id, updatedAt: now })
       .where(
         and(

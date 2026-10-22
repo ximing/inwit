@@ -30,6 +30,7 @@ import { confirmAction } from '@/lib/confirm';
 import { formatRelativeTime } from '@/lib/format';
 import { ROUTES } from '@/routes';
 import { useTheme, type ThemeTokens } from '@/theme';
+import { TopicsMapService } from './topics-map.service.js';
 import { flattenMapTree, TopicsService, type TopicTab } from './topics.service';
 
 function statusColor(status: MapNodeStatus, theme: ThemeTokens): string {
@@ -752,4 +753,4 @@ function makeStyles(theme: ThemeTokens) {
   });
 }
 
-export default bindServices(TopicDetailContent, [TopicsService]);
+export default bindServices(TopicDetailContent, [TopicsService, TopicsMapService]);

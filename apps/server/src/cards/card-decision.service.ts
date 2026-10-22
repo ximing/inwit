@@ -20,7 +20,8 @@ import { insertInitialReviewState } from '../review/state-init.js';
 import { maybeEnqueueTopicSuggest } from '../topics/suggest.js';
 import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.js';
 import { logger } from '../utils/logger.js';
-import { decideCardAcceptance, normalizeRejectReason } from './card-acceptance-logic.js';
+import { decideCardAcceptance, normalizeRejectReason, planCardIndex } from './card-acceptance-logic.js';
+import { updateCards } from './card-write.js';
 import { getCard } from './card.service.js';
 import { commitCanvasRevision, readCanvasHistoryState } from '../canvas/canvas-history.js';
 import { detachCanvasMember } from '../canvas/canvas.service.js';
@@ -127,8 +128,7 @@ async function rollbackAccept(
   removeReview: boolean,
 ): Promise<boolean> {
   return getDb().transaction(async (tx) => {
-    const [reverted] = await tx
-      .update(cards)
+    const [reverted] = await updateCards(tx)
       .set({ acceptance: 'proposed', updatedAt: new Date() })
       .where(
         and(
@@ -183,8 +183,7 @@ async function acceptOne(userId: string, cardId: string): Promise<AcceptOutcome>
     if (decision.kind !== 'accept') throw AppError.of(500, 'INTERNAL_ERROR');
 
     const now = new Date();
-    const [updated] = await tx
-      .update(cards)
+    const [updated] = await updateCards(tx)
       .set({ acceptance: 'accepted', updatedAt: now })
       .where(
         and(
@@ -231,8 +230,11 @@ async function acceptOne(userId: string, cardId: string): Promise<AcceptOutcome>
   if (prepared.kind === 'noop') return { kind: 'noop' };
   if (prepared.kind === 'still_proposed') return { kind: 'still_proposed' };
 
+  const indexPlan = planCardIndex({ reason: 'accept' });
   try {
-    await indexCard(toIndexable(prepared.card));
+    if (indexPlan.index && indexPlan.onFailure === 'rollback-accept') {
+      await indexCard(toIndexable(prepared.card));
+    }
   } catch (err) {
     logger.error('card.index_failed', {
       cardId,
@@ -417,8 +419,7 @@ export async function rejectCard(userId: string, cardId: string, input: RejectCa
       if (card.documentId && before) {
         await commitCanvasRevision(tx, userId, card.documentId, before);
       }
-      const [updated] = await tx
-        .update(cards)
+      const [updated] = await updateCards(tx)
         .set({
           acceptance: 'rejected',
           rejectReason: reason,

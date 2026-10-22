@@ -1,7 +1,8 @@
 import type { CreateTopicInput, ListTopicsQuery, Topic, UpdateTopicInput } from '@inwit/dto';
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
+import { bumpManagedCardRevisions } from '../concepts/concept-review-revision.js';
 import { getDb } from '../db/index.js';
-import { cards, conceptPracticeBindings, topics, type TopicRow } from '../db/schema.js';
+import { conceptPracticeBindings, topics, type TopicRow } from '../db/schema.js';
 import { AppError } from '../errors.js';
 
 export function toPublicTopic(row: TopicRow): Topic {
@@ -104,12 +105,7 @@ export async function archiveTopic(userId: string, id: string): Promise<Topic> {
       .where(and(eq(conceptPracticeBindings.topicId, id), isNull(conceptPracticeBindings.endedAt)))
       .returning({ cardId: conceptPracticeBindings.cardId });
     const cardIds = [...new Set(affected.map((binding) => binding.cardId))];
-    if (cardIds.length > 0) {
-      await tx
-        .update(cards)
-        .set({ reviewRevision: sql`${cards.reviewRevision} + 1`, updatedAt: new Date() })
-        .where(and(inArray(cards.id, cardIds), sql`${cards.reviewRevision} IS NOT NULL`));
-    }
+    await bumpManagedCardRevisions(tx, cardIds);
     return toPublicTopic(row);
   });
 }

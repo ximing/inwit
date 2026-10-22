@@ -23,7 +23,7 @@ import type {
   ScreenshotInitResponse,
   UpdateDocumentInput,
 } from '@inwit/dto';
-import { request } from './client';
+import { ApiError, request, requestConditional } from './client';
 
 export function listDocuments(query: {
   topicId?: string;
@@ -102,8 +102,49 @@ export function createChat(input: CreateChatInput): Promise<Document> {
   });
 }
 
+type CachedDetail = { etag: string; body: DocumentDetail };
+
+const detailCache = new Map<string, CachedDetail>();
+const detailInflight = new Map<string, Promise<DocumentDetail>>();
+
+/** Drop a stored validator. The next read fetches the document again. */
+export function dropCachedDocument(id: string): void {
+  detailCache.delete(id);
+}
+
+export function clearDocumentDetailCache(): void {
+  detailCache.clear();
+  detailInflight.clear();
+}
+
+async function loadDocumentDetail(id: string): Promise<DocumentDetail> {
+  const cached = detailCache.get(id);
+  try {
+    const result = await requestConditional<DocumentDetail>(
+      `/api/documents/${id}`,
+      cached?.etag,
+    );
+    if (result.status === 304) {
+      if (!cached) throw new ApiError(304, 'NOT_MODIFIED', '文档没有变化');
+      return structuredClone(cached.body);
+    }
+    if (result.etag) detailCache.set(id, { etag: result.etag, body: structuredClone(result.body) });
+    else detailCache.delete(id);
+    return result.body;
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) detailCache.delete(id);
+    throw err;
+  }
+}
+
 export function getDocument(id: string): Promise<DocumentDetail> {
-  return request<DocumentDetail>(`/api/documents/${id}`);
+  const existing = detailInflight.get(id);
+  if (existing) return existing;
+  const task = loadDocumentDetail(id).finally(() => {
+    if (detailInflight.get(id) === task) detailInflight.delete(id);
+  });
+  detailInflight.set(id, task);
+  return task;
 }
 
 export function acceptProposedCards(id: string): Promise<AcceptProposedResult> {

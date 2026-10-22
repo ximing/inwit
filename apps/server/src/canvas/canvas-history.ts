@@ -1,6 +1,7 @@
 import type { AnnotationKind, CanvasRevision, CanvasSnapshotNode } from '@inwit/dto';
 import { canvasSnapshotSchema } from '@inwit/dto';
 import { and, count, desc, eq, inArray, isNull, notInArray } from 'drizzle-orm';
+import { updateCards } from '../cards/card-write.js';
 import { getDb, type Database } from '../db/index.js';
 import { annotations, canvasNodes, canvasRevisions, cards } from '../db/schema.js';
 import { getOwnedDocument } from '../documents/document.service.js';
@@ -298,8 +299,7 @@ async function applySnapshot(
       );
   }
   for (const outline of cardOutlinesAfterRestore(current, plan.final)) {
-    await db
-      .update(cards)
+    await updateCards(db)
       .set({
         outlineParentId: outline.parentId,
         outlinePosition: outline.position,

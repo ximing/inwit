@@ -10,6 +10,7 @@ import type {
 import { MAP_MAX_DEPTH, docDisplayTitle } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { toCardSummary } from '../cards/card.mapper.js';
+import { updateCards } from '../cards/card-write.js';
 import { getDb, type Database } from '../db/index.js';
 import {
   cards,
@@ -366,8 +367,7 @@ export async function placeCardOnMap(
   const oldNodeId = card.mapNodeId;
   const now = new Date();
   await db.transaction(async (tx) => {
-    await tx
-      .update(cards)
+    await updateCards(tx)
       .set({
         mapNodeId: node.id,
         ...(card.topicId === null ? { topicId: node.topicId } : {}),

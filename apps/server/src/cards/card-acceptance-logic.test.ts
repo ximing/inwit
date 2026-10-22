@@ -4,6 +4,7 @@ import {
   codePointsAtMost,
   decideCardAcceptance,
   normalizeRejectReason,
+  planCardIndex,
   planSearchBackfill,
   shouldIndexCard,
 } from './card-acceptance-logic.js';
@@ -93,6 +94,58 @@ describe('normalizeRejectReason', () => {
     expect(normalizeRejectReason('   ')).toBeNull();
     expect(normalizeRejectReason('\0\0')).toBeNull();
     expect(normalizeRejectReason(' 太碎了 \0')).toBe('太碎了');
+  });
+});
+
+describe('planCardIndex', () => {
+  it('indexes a manual card and swallows an index failure', () => {
+    expect(planCardIndex({ reason: 'manual' })).toEqual({
+      index: true,
+      onFailure: 'swallow',
+    });
+  });
+
+  it('indexes a resurfaced annotation card and swallows an index failure', () => {
+    expect(planCardIndex({ reason: 'resurface' })).toEqual({
+      index: true,
+      onFailure: 'swallow',
+    });
+  });
+
+  it('indexes an accepted digest card and deletes the new row if indexing throws', () => {
+    expect(planCardIndex({ reason: 'digest', proposed: false })).toEqual({
+      index: true,
+      onFailure: 'delete-card',
+    });
+  });
+
+  it('does not index a proposed digest card', () => {
+    expect(planCardIndex({ reason: 'digest', proposed: true })).toEqual({ index: false });
+  });
+
+  it('indexes a selection card and deletes the new row if indexing throws', () => {
+    expect(planCardIndex({ reason: 'selection' })).toEqual({
+      index: true,
+      onFailure: 'delete-card',
+    });
+  });
+
+  it('indexes an evolve split child and deletes the new row if indexing throws', () => {
+    expect(planCardIndex({ reason: 'evolve' })).toEqual({
+      index: true,
+      onFailure: 'delete-card',
+    });
+  });
+
+  it('indexes an accepted suggestion and rolls the accept back if indexing throws', () => {
+    expect(planCardIndex({ reason: 'accept' })).toEqual({
+      index: true,
+      onFailure: 'rollback-accept',
+    });
+  });
+
+  it('does not index a concept practice card', () => {
+    expect(planCardIndex({ reason: 'practice' })).toEqual({ index: false });
   });
 });
 

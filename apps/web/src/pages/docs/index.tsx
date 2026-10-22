@@ -12,6 +12,9 @@ import { CardEditDialog } from './card-edit-dialog';
 import { cardRailMode } from './card-rail-mode';
 import { DocFindService } from './doc-find.service';
 import { DocsAnnotationsService } from './docs-annotations.service';
+import { DocsCanvasService } from './docs-canvas.service.js';
+import { DocsSelectionService } from './docs-selection.service.js';
+import { DocsPendingPollService } from './docs-pending-poll.service.js';
 import { DocsImportService } from './docs-import.service';
 import { DocsService } from './docs.service';
 import { EditorService } from './editor.service';
@@ -357,6 +360,9 @@ const DocsPageContent = observer(function DocsPageContent() {
 export const DocsPage = bindServices(DocsPageContent, [
   DocsService,
   DocsImportService,
+  DocsCanvasService,
+  DocsSelectionService,
+  DocsPendingPollService,
   DocsAnnotationsService,
   EditorService,
   SearchService,

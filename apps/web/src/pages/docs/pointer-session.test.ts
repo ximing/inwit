@@ -4,8 +4,10 @@ import {
   pointerDragReleased,
   pointerEventIdentity,
   pointerReleasePoint,
+  routeMindPointer,
+  type MindPointerInput,
   type PointerSession,
-} from './pointer-session';
+} from './pointer-session.js';
 
 class FakePointerEvent extends Event {
   pointerId: number;
@@ -100,5 +102,126 @@ describe('bindPointerSession', () => {
     target.dispatchEvent(new FakePointerEvent('pointermove', { pointerId: 1, buttons: 1 }));
     expect(next.current.blur).toHaveBeenCalledTimes(1);
     expect(next.current.move).not.toHaveBeenCalled();
+  });
+});
+
+function route(overrides: Partial<MindPointerInput> & Pick<MindPointerInput, 'phase'>): MindPointerInput {
+  return {
+    pointerId: 1,
+    buttons: 1,
+    pointerType: 'mouse',
+    sawButton: false,
+    nodePointerId: null,
+    panPointerId: null,
+    marqueePointerId: null,
+    linkPointerId: null,
+    ...overrides,
+  };
+}
+
+describe('routeMindPointer', () => {
+  it('moves one gesture, node before view before link, and remembers a pressed button', () => {
+    expect(
+      routeMindPointer(route({ phase: 'move', nodePointerId: 1, panPointerId: 1, linkPointerId: 1 })),
+    ).toEqual({ action: 'move', gesture: 'node', sawButton: true });
+    expect(routeMindPointer(route({ phase: 'move', panPointerId: 1, linkPointerId: 1 }))).toEqual({
+      action: 'move',
+      gesture: 'view',
+      sawButton: true,
+    });
+    expect(routeMindPointer(route({ phase: 'move', marqueePointerId: 1, linkPointerId: 1 }))).toEqual({
+      action: 'move',
+      gesture: 'view',
+      sawButton: true,
+    });
+    expect(routeMindPointer(route({ phase: 'move', linkPointerId: 1 }))).toEqual({
+      action: 'move',
+      gesture: 'link',
+      sawButton: true,
+    });
+    expect(routeMindPointer(route({ phase: 'move' }))).toEqual({ action: 'ignore', sawButton: true });
+  });
+
+  it('releases a buttonless mouse or pen move and does not keep moving', () => {
+    expect(
+      routeMindPointer(
+        route({ phase: 'move', buttons: 0, sawButton: true, pointerType: 'mouse', nodePointerId: 1, panPointerId: 1 }),
+      ),
+    ).toEqual({ action: 'release', gesture: 'node', sawButton: true });
+    expect(
+      routeMindPointer(route({ phase: 'move', buttons: 0, sawButton: true, pointerType: 'pen', panPointerId: 1 })),
+    ).toEqual({ action: 'release', gesture: 'view', sawButton: true });
+  });
+
+  it('does not release touch, or a mouse that has not seen a press, when buttons stay 0', () => {
+    expect(
+      routeMindPointer(
+        route({ phase: 'move', buttons: 0, sawButton: true, pointerType: 'touch', nodePointerId: 1 }),
+      ),
+    ).toEqual({ action: 'move', gesture: 'node', sawButton: true });
+    expect(
+      routeMindPointer(route({ phase: 'move', buttons: 0, sawButton: false, pointerType: 'mouse', linkPointerId: 1 })),
+    ).toEqual({ action: 'move', gesture: 'link', sawButton: false });
+  });
+
+  it('releases on pointerup with node before view before link', () => {
+    expect(
+      routeMindPointer(route({ phase: 'up', buttons: 0, nodePointerId: 1, panPointerId: 1, linkPointerId: 1 })),
+    ).toEqual({ action: 'release', gesture: 'node', sawButton: false });
+    expect(routeMindPointer(route({ phase: 'up', buttons: 0, marqueePointerId: 1, linkPointerId: 1 }))).toEqual({
+      action: 'release',
+      gesture: 'view',
+      sawButton: false,
+    });
+    expect(routeMindPointer(route({ phase: 'up', buttons: 0, linkPointerId: 1 }))).toEqual({
+      action: 'release',
+      gesture: 'link',
+      sawButton: false,
+    });
+    expect(routeMindPointer(route({ phase: 'up', buttons: 0 }))).toEqual({
+      action: 'release',
+      gesture: null,
+      sawButton: false,
+    });
+  });
+
+  it('cancels a link stroke instead of releasing it, even when a node drag shares the pointer', () => {
+    expect(
+      routeMindPointer(route({ phase: 'cancel', buttons: 0, nodePointerId: 1, linkPointerId: 1 })),
+    ).toEqual({ action: 'cancel-link', sawButton: false });
+    expect(routeMindPointer(route({ phase: 'cancel', buttons: 0, nodePointerId: 1 }))).toEqual({
+      action: 'release',
+      gesture: 'node',
+      sawButton: false,
+    });
+    expect(routeMindPointer(route({ phase: 'cancel', buttons: 0, panPointerId: 1 }))).toEqual({
+      action: 'release',
+      gesture: 'view',
+      sawButton: false,
+    });
+  });
+
+  it('on blur finishes the node drag before pan, marquee, or a link', () => {
+    expect(
+      routeMindPointer(route({ phase: 'blur', buttons: 0, pointerId: 2, nodePointerId: 7, panPointerId: 2 })),
+    ).toEqual({ action: 'finish-node', pointerId: 7, sawButton: false });
+    expect(routeMindPointer(route({ phase: 'blur', buttons: 0, panPointerId: 4, marqueePointerId: 5 }))).toEqual({
+      action: 'finish-view',
+      pointerId: 4,
+      sawButton: false,
+    });
+    expect(routeMindPointer(route({ phase: 'blur', buttons: 0, marqueePointerId: 5, linkPointerId: 6 }))).toEqual({
+      action: 'finish-view',
+      pointerId: 5,
+      sawButton: false,
+    });
+    expect(routeMindPointer(route({ phase: 'blur', buttons: 0, linkPointerId: 6 }))).toEqual({
+      action: 'cancel-link',
+      sawButton: false,
+    });
+    expect(routeMindPointer(route({ phase: 'blur', buttons: 0 }))).toEqual({
+      action: 'ignore',
+      sawButton: false,
+    });
   });
 });

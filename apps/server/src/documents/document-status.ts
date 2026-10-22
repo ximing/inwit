@@ -48,3 +48,26 @@ export async function resetDocumentPipeline(userId: string, documentId: string):
       ),
     );
 }
+
+/**
+ * Marks the document digested after digest, chat, or topic fill succeeds.
+ * Where is id and deletedAt is null only: no userId, and an already digested
+ * row is written again. answer and linkHint are set only when the caller
+ * includes those keys.
+ */
+export async function markDocumentDigested(
+  documentId: string,
+  extra?: { answer?: string | null; linkHint?: string | null },
+): Promise<void> {
+  await getDb()
+    .update(documents)
+    .set({
+      status: 'digested',
+      failReason: null,
+      updatedAt: new Date(),
+      ...(extra && 'answer' in extra ? { answer: extra.answer ?? null } : {}),
+      ...(extra && 'linkHint' in extra ? { linkHint: extra.linkHint ?? null } : {}),
+    })
+    // Skip documents in 回收站: a stale job must not resurrect them.
+    .where(and(eq(documents.id, documentId), isNull(documents.deletedAt)));
+}

@@ -32,6 +32,11 @@ import { ThemeService, useTheme, type ThemeTokens } from '@/theme';
 import type { FormatName, FormatState, TextSelectionAnchor } from '../../../../../packages/doc-engine/src/protocol';
 import { pdfMarksFromAnnotations } from './pdf-logic';
 import { PdfView } from './pdf-view';
+import { ReaderCanvasService } from './reader-canvas.service';
+import { ReaderEngineService } from './reader-engine.service.js';
+import { ReaderFormatService } from './reader-format.service.js';
+import { ReaderPdfService } from './reader-pdf.service.js';
+import { ReaderSelectionService } from './reader-selection.service.js';
 import { ReaderService } from './reader.service';
 
 function useKeyboardOverlap(): number {
@@ -1697,4 +1702,11 @@ function makeStyles(theme: ThemeTokens) {
   });
 }
 
-export default bindServices(ReaderContent, [ReaderService]);
+export default bindServices(ReaderContent, [
+  ReaderService,
+  ReaderCanvasService,
+  ReaderPdfService,
+  ReaderFormatService,
+  ReaderEngineService,
+  ReaderSelectionService,
+]);

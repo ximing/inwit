@@ -1,5 +1,7 @@
 import { docDisplayTitle, documentIdFromJobPayload, selectionJobPayloadFrom } from '@inwit/dto';
 import { eq } from 'drizzle-orm';
+import { planCardIndex } from '../cards/card-acceptance-logic.js';
+import { insertCardRow } from '../cards/card-write.js';
 import { getDb } from '../db/index.js';
 import { cards, type JobRow } from '../db/schema.js';
 import { asPmJson } from '../documents/content-json.js';
@@ -38,34 +40,34 @@ async function persistDrafts(input: {
   });
   for (const draft of input.drafts) {
     const now = new Date();
-    const [row] = await getDb()
-      .insert(cards)
-      .values({
-        userId: input.userId,
-        documentId: input.documentId,
-        topicId: input.topicId,
-        mapNodeId: input.mapNodeId,
-        concept: draft.concept,
-        example: draft.example,
-        confusionPoint: draft.confusionPoint,
-        tags: draft.tags,
-        source: 'agent',
-        anchorText: resolved.anchorText,
-        anchorBlockIndex: resolved.anchorBlockIndex,
-      })
-      .returning();
+    const row = await insertCardRow(getDb(), {
+      userId: input.userId,
+      documentId: input.documentId,
+      topicId: input.topicId,
+      mapNodeId: input.mapNodeId,
+      concept: draft.concept,
+      example: draft.example,
+      confusionPoint: draft.confusionPoint,
+      tags: draft.tags,
+      source: 'agent',
+      anchorText: resolved.anchorText,
+      anchorBlockIndex: resolved.anchorBlockIndex,
+    });
     if (!row) throw new Error('failed to insert card');
     await insertInitialReviewState(input.userId, row.id, now);
+    const indexPlan = planCardIndex({ reason: 'selection' });
     try {
-      await indexCard({
-        id: row.id,
-        userId: row.userId,
-        topicId: row.topicId,
-        concept: row.concept,
-        example: row.example,
-        confusionPoint: row.confusionPoint,
-        tags: row.tags,
-      });
+      if (indexPlan.index && indexPlan.onFailure === 'delete-card') {
+        await indexCard({
+          id: row.id,
+          userId: row.userId,
+          topicId: row.topicId,
+          concept: row.concept,
+          example: row.example,
+          confusionPoint: row.confusionPoint,
+          tags: row.tags,
+        });
+      }
     } catch (err) {
       logger.error('selection.index_card_failed', err);
       try {

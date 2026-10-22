@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { updateCards } from '../cards/card-write.js';
 import { getDb } from '../db/index.js';
 import { cards, documents, mapNodes } from '../db/schema.js';
 import { AppError } from '../errors.js';
@@ -151,8 +152,7 @@ export async function applyTopicOutline(opts: {
     }
 
     for (const [cardId, nodeId] of cardToNode) {
-      await tx
-        .update(cards)
+      await updateCards(tx)
         .set({ mapNodeId: nodeId, topicId: opts.topicId, updatedAt: now })
         .where(and(eq(cards.id, cardId), eq(cards.userId, opts.userId)));
     }

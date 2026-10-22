@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Service } from '@rabjs/react';
 import type {
   Document,
@@ -16,14 +15,7 @@ import { ApiError, errorMessage } from '@/api/client';
 import { createChat, createDocument, getDocument, listDocuments } from '@/api/documents';
 import { getJob } from '@/api/jobs';
 import { getReviewTopicStats } from '@/api/review';
-import {
-  fillMapNode,
-  getActiveTopicJob,
-  getMapNodeDetail,
-  getTopicMap,
-  getTopicMapSummary,
-  organizeTopicMap,
-} from '@/api/maps';
+import { getActiveTopicJob, getTopicMap, getTopicMapSummary } from '@/api/maps';
 import {
   archiveTopic,
   createTopic,
@@ -44,6 +36,7 @@ import {
 } from '@/lib/sync-plan';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { ToastService } from '@/services/toast.service';
+import { TopicsMapService } from './topics-map.service.js';
 
 const POLL_MS = 3000;
 const DOC_PAGE = 20;
@@ -70,22 +63,6 @@ function blankItem(topic: Topic): TopicListItem {
     uncoveredNodes: 0,
     masteryPct: 0,
   };
-}
-
-function collapsedKey(topicId: string): string {
-  return `inwit.map.collapsed.${topicId}`;
-}
-
-async function readCollapsed(topicId: string): Promise<string[]> {
-  try {
-    const raw = await AsyncStorage.getItem(collapsedKey(topicId));
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is string => typeof item === 'string');
-  } catch {
-    return [];
-  }
 }
 
 function jobIdFromConflict(err: unknown): string | null {
@@ -138,17 +115,7 @@ export function flattenMapTree(
   return out;
 }
 
-export function firstUncoveredNode(
-  nodes: MapTreeNode[],
-  skipProposed = false,
-): MapTreeNode | null {
-  for (const node of nodes) {
-    if (node.status === 'uncovered' && !(skipProposed && node.proposedCount > 0)) return node;
-    const child = firstUncoveredNode(node.children, skipProposed);
-    if (child) return child;
-  }
-  return null;
-}
+export { firstUncoveredNode } from './topics-map.service.js';
 
 export class TopicsService extends Service {
   items: TopicListItem[] = [];
@@ -164,15 +131,9 @@ export class TopicsService extends Service {
   draftGoal = '';
 
   topic: Topic | null = null;
-  tree: MapTreeNode[] = [];
-  summary: MapSummary | null = null;
   documents: DocumentListItem[] = [];
   documentsTotal = 0;
-  titleByNodeId: Record<string, string> = {};
   tab: TopicTab = 'docs';
-  collapsedIds: string[] = [];
-  selectedNodeId: string | null = null;
-  nodeDetail: MapNodeDetail | null = null;
   activeJob: Job | null = null;
   topicId: string | null = null;
   draft = '';
@@ -193,9 +154,7 @@ export class TopicsService extends Service {
   private topicGen = new Map<string, number>();
   private topicsGen = 0;
   private docListGen = 0;
-  private mapGen = 0;
   private summaryGen = 0;
-  private nodeGen = 0;
   private opGen = 0;
   private hiddenDocs = new Map<string, number>();
   private hiddenTopics = new Map<string, number>();
@@ -213,6 +172,66 @@ export class TopicsService extends Service {
 
   get toastService(): ToastService {
     return this.resolve(ToastService);
+  }
+
+  get mapService(): TopicsMapService {
+    return this.resolve(TopicsMapService);
+  }
+
+  get tree(): MapTreeNode[] {
+    return this.mapService.tree;
+  }
+  set tree(value: MapTreeNode[]) {
+    this.mapService.tree = value;
+  }
+
+  get summary(): MapSummary | null {
+    return this.mapService.summary;
+  }
+  set summary(value: MapSummary | null) {
+    this.mapService.summary = value;
+  }
+
+  get collapsedIds(): string[] {
+    return this.mapService.collapsedIds;
+  }
+  set collapsedIds(value: string[]) {
+    this.mapService.collapsedIds = value;
+  }
+
+  get selectedNodeId(): string | null {
+    return this.mapService.selectedNodeId;
+  }
+  set selectedNodeId(value: string | null) {
+    this.mapService.selectedNodeId = value;
+  }
+
+  get nodeDetail(): MapNodeDetail | null {
+    return this.mapService.nodeDetail;
+  }
+  set nodeDetail(value: MapNodeDetail | null) {
+    this.mapService.nodeDetail = value;
+  }
+
+  get titleByNodeId(): Record<string, string> {
+    return this.mapService.titleByNodeId;
+  }
+  set titleByNodeId(value: Record<string, string>) {
+    this.mapService.titleByNodeId = value;
+  }
+
+  private get mapGen(): number {
+    return this.mapService.mapGen;
+  }
+  private set mapGen(value: number) {
+    this.mapService.mapGen = value;
+  }
+
+  private get nodeGen(): number {
+    return this.mapService.nodeGen;
+  }
+  private set nodeGen(value: number) {
+    this.mapService.nodeGen = value;
   }
 
   get active(): TopicListItem[] {
@@ -310,17 +329,12 @@ export class TopicsService extends Service {
   }
 
   get fillTarget(): MapTreeNode | null {
-    if (this.selectedNodeId) {
-      const selected = this.findNode(this.tree, this.selectedNodeId);
-      if (selected?.status === 'uncovered' && selected.proposedCount <= 0) return selected;
-    }
-    // A node that only has proposed cards stays uncovered, but it is not a gap to fill.
-    return firstUncoveredNode(this.tree, true);
+    return this.mapService.fillTarget;
   }
 
   /** Uncovered nodes exist, and every one of them is waiting on proposed cards. */
   get fillWaiting(): boolean {
-    return this.fillTarget === null && firstUncoveredNode(this.tree) !== null;
+    return this.mapService.fillWaiting;
   }
 
   hangingTitle(doc: DocumentListItem): string | null {
@@ -329,16 +343,7 @@ export class TopicsService extends Service {
   }
 
   isCollapsed(id: string): boolean {
-    return this.collapsedIds.includes(id);
-  }
-
-  findNode(nodes: MapTreeNode[], id: string): MapTreeNode | null {
-    for (const node of nodes) {
-      if (node.id === id) return node;
-      const child = this.findNode(node.children, id);
-      if (child) return child;
-    }
-    return null;
+    return this.mapService.isCollapsed(id);
   }
 
   setTab(tab: TopicTab): void {
@@ -386,40 +391,19 @@ export class TopicsService extends Service {
   }
 
   toggleCollapsed(id: string): void {
-    if (this.collapsedIds.includes(id)) {
-      this.collapsedIds = this.collapsedIds.filter((item) => item !== id);
-    } else {
-      this.collapsedIds = [...this.collapsedIds, id];
-    }
-    this.persistCollapsed();
+    this.mapService.toggleCollapsed(id, this.topicId);
   }
 
   persistCollapsed(): void {
-    if (!this.topicId) return;
-    void AsyncStorage.setItem(collapsedKey(this.topicId), JSON.stringify(this.collapsedIds)).catch(
-      () => {
-        // ignore quota / private mode
-      },
-    );
+    this.mapService.persistCollapsed(this.topicId);
   }
 
   closeDrawer(): void {
-    this.nodeGen += 1;
-    this.selectedNodeId = null;
-    this.nodeDetail = null;
+    this.mapService.closeDrawer();
   }
 
   applyMap(nodes: MapTreeNode[]): void {
-    this.tree = nodes;
-    const titles: Record<string, string> = {};
-    const walk = (list: MapTreeNode[]) => {
-      for (const node of list) {
-        titles[node.id] = node.title;
-        walk(node.children);
-      }
-    };
-    walk(nodes);
-    this.titleByNodeId = titles;
+    this.mapService.applyMap(nodes);
   }
 
   applyTopic(topic: Topic): void {
@@ -582,7 +566,7 @@ export class TopicsService extends Service {
       this.stopDocPolling();
       return;
     }
-    this.collapsedIds = await readCollapsed(id);
+    await this.mapService.restoreCollapsed(id);
     const listedAt = this.opGen;
     const [topicR, mapR, summaryR, docsR, jobR] = await Promise.allSettled([
       getTopic(id),
@@ -855,61 +839,39 @@ export class TopicsService extends Service {
   }
 
   async openNode(nodeId: string): Promise<void> {
-    const gen = ++this.nodeGen;
-    this.selectedNodeId = nodeId;
-    try {
-      const detail = await getMapNodeDetail(nodeId);
-      if (gen !== this.nodeGen) return;
-      this.nodeDetail = detail;
-    } catch (err) {
-      if (gen !== this.nodeGen) return;
-      this.detailError = errorMessage(err, '打不开这个节点');
-      this.nodeDetail = null;
-    }
+    await this.mapService.openNode(nodeId, {
+      setDetailError: (message) => {
+        this.detailError = message;
+      },
+    });
   }
 
   async organize(): Promise<void> {
-    if (!this.topic || this.topic.status === 'archived' || this.jobRunning) return;
-    this.detailError = null;
-    try {
-      const job = await organizeTopicMap(this.topic.id);
-      this.watchJob(job);
-    } catch (err) {
-      if (await this.resumeFromConflict(err)) return;
-      this.detailError = errorMessage(err, '整理地图失败');
-    }
+    await this.mapService.organize({
+      topic: this.topic,
+      jobRunning: this.jobRunning,
+      watchJob: (job) => this.watchJob(job),
+      resumeFromConflict: (err) => this.resumeFromConflict(err),
+      setDetailError: (message) => {
+        this.detailError = message;
+      },
+    });
   }
 
   async fill(nodeId?: string): Promise<void> {
-    if (!this.topic || this.topic.status === 'archived' || this.jobRunning) return;
-    let target = nodeId;
-    if (target) {
-      const node = this.findNode(this.tree, target);
-      if (node && node.proposedCount > 0) {
-        this.showToast('有待确认的卡');
-        return;
-      }
-    } else {
-      target = this.fillTarget?.id;
-    }
-    if (!target) {
-      if (this.fillWaiting) this.showToast('有待确认的卡');
-      else this.detailError = '没有可补充的未覆盖节点';
-      return;
-    }
-    this.detailError = null;
-    try {
-      const job = await fillMapNode(target);
-      this.watchJob(job);
-      void this.openNode(target);
-    } catch (err) {
-      if (await this.resumeFromConflict(err)) return;
-      if (err instanceof ApiError && err.code === 'NODE_HAS_PROPOSED_CARDS') {
-        this.showToast('有待确认的卡');
-        return;
-      }
-      this.detailError = errorMessage(err, '补节点失败');
-    }
+    await this.mapService.fill(nodeId, {
+      topic: this.topic,
+      jobRunning: this.jobRunning,
+      watchJob: (job) => this.watchJob(job),
+      resumeFromConflict: (err) => this.resumeFromConflict(err),
+      setDetailError: (message) => {
+        this.detailError = message;
+      },
+      showToast: (message) => this.showToast(message),
+      openNode: (id) => {
+        void this.openNode(id);
+      },
+    });
   }
 
   async resumeFromConflict(err: unknown): Promise<boolean> {

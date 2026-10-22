@@ -8,8 +8,6 @@ import {
   listBodyPreview,
   toDocumentListItem,
   type Annotation,
-  type AnnotationGeometry,
-  type Card,
   type CreateAnnotationInput,
   type CreateCardInput,
   type Document,
@@ -25,10 +23,8 @@ import {
   type CanvasRevision,
   type CreateCanvasNodeInput,
   type SyncChange,
-  mergeCanvasForest,
   outlineChildSlots,
   outlineSlot,
-  planOutlineDetach,
   planOutlineMove,
   planOutlinePlace,
   type Topic,
@@ -65,7 +61,6 @@ import { ApiError, errorMessage } from '@/api/client';
 import {
   acceptProposedCards,
   createDocument,
-  enqueueSelectionCards,
   getDocument,
   listDocuments,
   retryDocument,
@@ -74,20 +69,12 @@ import {
 import {
   asListItem,
   captureIsChat,
-  FlipFollowUpScheduler,
-  hasPendingDoc,
-  justFlippedFromPending,
   mergeDetail,
-  mergeDocMeta,
-  mergeStatusDetail,
-  pendingPollTargets,
   sendCapture,
   showToast,
-  startPolling,
-  stopPolling,
   stopToast,
 } from '@/lib/doc-list';
-import { getJob, getJobQueue } from '@/api/jobs';
+import { getJob } from '@/api/jobs';
 import { createTopic, listTopics } from '@/api/topics';
 import {
   describeDocumentStage,
@@ -116,11 +103,32 @@ import { DialogService } from '@/services/dialog.service';
 import { CARD_RAIL_NARROW_PX } from '@/services/ui-prefs.service';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
 import { AssetUploadError, storeDocAsset, type UploadDocAssetApi } from './upload-asset';
-import { CanvasHistory, type CanvasOp } from './canvas-history';
+import { type CanvasOp } from './canvas-history';
 import { DocsAnnotationsService } from './docs-annotations.service';
+import { DocsCanvasService } from './docs-canvas.service.js';
+import {
+  DocsSelectionService,
+  type SelectionPollHooks,
+  type SelectionPopState,
+} from './docs-selection.service.js';
+import {
+  DocsPendingPollService,
+  type PendingPollHooks,
+} from './docs-pending-poll.service.js';
 import { MIND_NEW_TEXT } from './mindmap-edit';
 import { DocsImportService, importFailMessage } from './docs-import.service';
 import { EditorService } from './editor.service';
+import {
+  applyCanvasDetach,
+  applyCanvasMoves,
+  asDocumentCard,
+  cardsAfterDetach,
+  cardsAfterMoves,
+  clipReason,
+  decisionError,
+  forestOf,
+  upsertCanvas,
+} from './docs-canvas-logic.js';
 
 const canvasAssetApi: UploadDocAssetApi = {
   presign: presignAsset,
@@ -132,137 +140,6 @@ const canvasAssetApi: UploadDocAssetApi = {
 
 const DOC_PAGE = 20;
 const LIST_LIMIT_MAX = 100;
-const SELECTION_POLL_MS = 2000;
-const SELECTION_POLL_FOR_MS = 9000;
-
-function asDocumentCard(card: Card): DocumentCard {
-  return {
-    ...card,
-    questions: [],
-    review: { dueAt: new Date().toISOString(), intervalDays: 0, suspendedAt: null },
-  };
-}
-
-function memberStub(
-  documentId: string,
-  member: CanvasMember,
-  parentId: string | null,
-  position: number,
-): CanvasNode {
-  const now = new Date().toISOString();
-  return {
-    id: member.id,
-    documentId,
-    kind: member.kind,
-    cardId: member.kind === 'card' ? member.id : null,
-    annotationId: member.kind === 'annotation' ? member.id : null,
-    text: null,
-    imageKey: null,
-    parentId,
-    position,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-function upsertCanvas(nodes: CanvasNode[], next: CanvasNode): CanvasNode[] {
-  const index = nodes.findIndex((node) => node.id === next.id);
-  if (index < 0) return [...nodes, next];
-  const copy = nodes.slice();
-  copy[index] = next;
-  return copy;
-}
-
-function forestOf(
-  cards: readonly { id: string }[],
-  notes: readonly { id: string }[],
-  nodes: readonly CanvasNode[],
-): CanvasMember[] {
-  return mergeCanvasForest(
-    cards.map((card) => card.id),
-    notes.map((note) => note.id),
-    nodes,
-  );
-}
-
-function applyCanvasDetach(
-  nodes: CanvasNode[],
-  forest: readonly CanvasMember[],
-  removedId: string,
-  documentId: string,
-): CanvasNode[] {
-  const plan = planOutlineDetach(forest, removedId);
-  let next = nodes;
-  for (const move of plan.moves) {
-    const member = forest.find((item) => item.id === move.id);
-    if (!member) continue;
-    const existing = next.find((node) => node.id === move.id);
-    const base = existing ?? memberStub(documentId, member, move.parentId, move.position);
-    next = upsertCanvas(next, { ...base, parentId: move.parentId, position: move.position });
-  }
-  return next;
-}
-
-function cardsAfterDetach(
-  cards: DocumentCard[],
-  forest: readonly CanvasMember[],
-  removedId: string,
-): DocumentCard[] {
-  const plan = planOutlineDetach(forest, removedId);
-  const moves = new Map(plan.moves.map((move) => [move.id, move]));
-  return cards
-    .filter((card) => card.id !== removedId)
-    .map((card) => {
-      const move = moves.get(card.id);
-      if (!move) return card;
-      const parent = move.parentId ? forest.find((item) => item.id === move.parentId) : null;
-      return {
-        ...card,
-        outlineParentId: parent?.kind === 'card' ? parent.id : null,
-        outlinePosition: move.position,
-      };
-    });
-}
-
-function applyCanvasMoves(
-  nodes: CanvasNode[],
-  forest: readonly CanvasMember[],
-  moves: readonly { id: string; parentId: string | null; position: number }[],
-  documentId: string,
-): CanvasNode[] {
-  let next = nodes;
-  for (const move of moves) {
-    const member = forest.find((item) => item.id === move.id);
-    if (!member) continue;
-    const existing = next.find((node) => node.id === move.id);
-    const base = existing ?? memberStub(documentId, member, move.parentId, move.position);
-    next = upsertCanvas(next, { ...base, parentId: move.parentId, position: move.position });
-  }
-  return next;
-}
-
-function cardsAfterMoves(
-  cards: DocumentCard[],
-  forest: readonly CanvasMember[],
-  moves: readonly { id: string; parentId: string | null; position: number }[],
-): DocumentCard[] {
-  const byId = new Map(moves.map((move) => [move.id, move]));
-  return cards.map((card) => {
-    const move = byId.get(card.id);
-    if (!move) return card;
-    const parent = move.parentId ? forest.find((item) => item.id === move.parentId) : null;
-    return {
-      ...card,
-      outlineParentId: parent?.kind === 'card' ? parent.id : null,
-      outlinePosition: move.position,
-    };
-  });
-}
-
-function clipReason(reason: string): string {
-  const chars = [...reason.replaceAll('\0', '')];
-  return chars.length <= 500 ? chars.join('') : chars.slice(0, 500).join('');
-}
 
 /** One getDocument. Generation and doc load are captured when the request starts. */
 type DetailRead = {
@@ -275,35 +152,6 @@ type DetailRead = {
   protectedAtStart: boolean;
   changeAt: string | null;
 };
-
-function decisionError(err: unknown, action: 'accept' | 'reject'): string {
-  if (err instanceof ApiError) {
-    if (err.code === 'CARD_INDEX_FAILED') {
-      return action === 'accept'
-        ? '这张卡暂时没能进入检索，请再试'
-        : '这张卡暂时没能移出检索，请再试';
-    }
-    if (err.code === 'DIGEST_IN_PROGRESS') return '消化还在进行，暂时不能确认';
-    if (err.code === 'CARD_ALREADY_REVIEWED') return '请用回收站，而不是「有问题」';
-  }
-  return errorMessage(err, '操作没成功');
-}
-
-interface SelectionPopState {
-  kind: 'annotate' | 'card' | 'ask';
-  text: string;
-  left: number;
-  top: number;
-  documentId: string;
-  blockIndex?: number;
-  from?: number;
-  to?: number;
-  pdf?: {
-    pageIndex: number;
-    geometry: AnnotationGeometry;
-    imageKey?: string;
-  };
-}
 
 interface ThoughtPopState {
   left: number;
@@ -321,7 +169,6 @@ export class DocsService extends Service {
   captureTopicId: string | null = null;
   draft = '';
   error: string | null = null;
-  activeJobs: Job[] = [];
   retryingId: string | null = null;
   toast: string | null = null;
   topicMenuOpen = false;
@@ -355,24 +202,12 @@ export class DocsService extends Service {
   /** Anchor or annotation peek. Not the 浮层/并排 choice. */
   cardRailOverlayOpen = false;
   composingNew = false;
-  selectionDigesting = false;
-  selectionPollUntil = 0;
-  selectionPollDocId: string | null = null;
-  selectionCardCountAtStart = 0;
-  selectionJobId: string | null = null;
-  selectionPop: SelectionPopState | null = null;
   /** 记想法浮动输入框；null 表示没打开。位置和草稿都跟文章走。 */
   thoughtPop: ThoughtPopState | null = null;
-  private selectionByDocument = new Map<string, SelectionPopState>();
   private thoughtByDocument = new Map<string, ThoughtPopState>();
   editorHost: DocEditorHost | null = null;
 
-  pollTimer: ReturnType<typeof setInterval> | null = null;
   toastTimer: ReturnType<typeof setTimeout> | null = null;
-  selectionTickTimer: ReturnType<typeof setTimeout> | null = null;
-  selectionWatchdog: ReturnType<typeof setTimeout> | null = null;
-  private selectionTickInflight = false;
-  private flipFollowUps = new FlipFollowUpScheduler();
   loadGen = 0;
 
   private _sync: SyncService | null = null;
@@ -418,6 +253,32 @@ export class DocsService extends Service {
 
   get annotationService(): DocsAnnotationsService {
     return this.resolve(DocsAnnotationsService);
+  }
+
+  get canvasService(): DocsCanvasService {
+    return this.resolve(DocsCanvasService);
+  }
+
+  get selectionService(): DocsSelectionService {
+    return this.resolve(DocsSelectionService);
+  }
+
+  get pollService(): DocsPendingPollService {
+    return this.resolve(DocsPendingPollService);
+  }
+
+  get activeJobs(): Job[] {
+    return this.pollService.activeJobs;
+  }
+  set activeJobs(value: Job[]) {
+    this.pollService.activeJobs = value;
+  }
+
+  get pollTimer(): ReturnType<typeof setInterval> | null {
+    return this.pollService.pollTimer;
+  }
+  set pollTimer(value: ReturnType<typeof setInterval> | null) {
+    this.pollService.pollTimer = value;
   }
 
   get importError(): string | null {
@@ -477,18 +338,117 @@ export class DocsService extends Service {
   }
 
   /** 已经落库的画布节点。没摆过的卡片和批注不在这里，读的时候补成根。 */
-  canvasNodes: CanvasNode[] = [];
-  canvasUploading = false;
-  canvasUndo = 0;
-  canvasRedo = 0;
-  canvasRevisions: CanvasRevision[] = [];
-  canvasRevisionsOpen = false;
-  canvasRevisionsLoading = false;
-  canvasRevisionRestoring: string | null = null;
-  private canvasRevisionGen = 0;
-  private canvasHistory = new CanvasHistory();
-  /** 撤销和重做自己再改树时不再记一笔。 */
-  private historyOpen = true;
+  get canvasNodes(): CanvasNode[] {
+    return this.canvasService.canvasNodes;
+  }
+  set canvasNodes(value: CanvasNode[]) {
+    this.canvasService.canvasNodes = value;
+  }
+
+  get canvasUploading(): boolean {
+    return this.canvasService.canvasUploading;
+  }
+  set canvasUploading(value: boolean) {
+    this.canvasService.canvasUploading = value;
+  }
+
+  get canvasUndo(): number {
+    return this.canvasService.canvasUndo;
+  }
+  set canvasUndo(value: number) {
+    this.canvasService.canvasUndo = value;
+  }
+
+  get canvasRedo(): number {
+    return this.canvasService.canvasRedo;
+  }
+  set canvasRedo(value: number) {
+    this.canvasService.canvasRedo = value;
+  }
+
+  get canvasRevisions(): CanvasRevision[] {
+    return this.canvasService.canvasRevisions;
+  }
+  set canvasRevisions(value: CanvasRevision[]) {
+    this.canvasService.canvasRevisions = value;
+  }
+
+  get canvasRevisionsOpen(): boolean {
+    return this.canvasService.canvasRevisionsOpen;
+  }
+  set canvasRevisionsOpen(value: boolean) {
+    this.canvasService.canvasRevisionsOpen = value;
+  }
+
+  get canvasRevisionsLoading(): boolean {
+    return this.canvasService.canvasRevisionsLoading;
+  }
+  set canvasRevisionsLoading(value: boolean) {
+    this.canvasService.canvasRevisionsLoading = value;
+  }
+
+  get canvasRevisionRestoring(): string | null {
+    return this.canvasService.canvasRevisionRestoring;
+  }
+  set canvasRevisionRestoring(value: string | null) {
+    this.canvasService.canvasRevisionRestoring = value;
+  }
+
+  get selectionDigesting(): boolean {
+    return this.selectionService.selectionDigesting;
+  }
+  set selectionDigesting(value: boolean) {
+    this.selectionService.selectionDigesting = value;
+  }
+
+  get selectionPollUntil(): number {
+    return this.selectionService.selectionPollUntil;
+  }
+  set selectionPollUntil(value: number) {
+    this.selectionService.selectionPollUntil = value;
+  }
+
+  get selectionPollDocId(): string | null {
+    return this.selectionService.selectionPollDocId;
+  }
+  set selectionPollDocId(value: string | null) {
+    this.selectionService.selectionPollDocId = value;
+  }
+
+  get selectionCardCountAtStart(): number {
+    return this.selectionService.selectionCardCountAtStart;
+  }
+  set selectionCardCountAtStart(value: number) {
+    this.selectionService.selectionCardCountAtStart = value;
+  }
+
+  get selectionJobId(): string | null {
+    return this.selectionService.selectionJobId;
+  }
+  set selectionJobId(value: string | null) {
+    this.selectionService.selectionJobId = value;
+  }
+
+  get selectionPop(): SelectionPopState | null {
+    return this.selectionService.selectionPop;
+  }
+  set selectionPop(value: SelectionPopState | null) {
+    this.selectionService.selectionPop = value;
+  }
+
+  get selectionTickTimer(): ReturnType<typeof setTimeout> | null {
+    return this.selectionService.selectionTickTimer;
+  }
+  set selectionTickTimer(value: ReturnType<typeof setTimeout> | null) {
+    this.selectionService.selectionTickTimer = value;
+  }
+
+  get selectionWatchdog(): ReturnType<typeof setTimeout> | null {
+    return this.selectionService.selectionWatchdog;
+  }
+  set selectionWatchdog(value: ReturnType<typeof setTimeout> | null) {
+    this.selectionService.selectionWatchdog = value;
+  }
 
   get canvasForest(): CanvasMember[] {
     return forestOf(this.doc?.cards ?? [], this.annotations, this.canvasNodes);
@@ -976,9 +936,9 @@ export class DocsService extends Service {
       this.closeHighlight();
       this.appliedUrlAnchor = null;
       this.expandedCardIds = [];
-      this.resetCanvasHistory();
-      this.closeCanvasRevisionPanel();
-      this.selectionPop = this.selectionByDocument.get(id) ?? null;
+      this.canvasService.resetCanvasHistory();
+      this.canvasService.closeCanvasRevisionPanel();
+      this.selectionService.restoreSelection(id);
       this.thoughtPop = this.thoughtByDocument.get(id) ?? null;
     }
     const gen = ++this.docLoadGen;
@@ -1009,7 +969,7 @@ export class DocsService extends Service {
       this.doc = null;
       this.annotations = [];
       this.canvasNodes = [];
-      this.closeCanvasRevisionPanel();
+      this.canvasService.closeCanvasRevisionPanel();
     }
   }
 
@@ -1027,8 +987,8 @@ export class DocsService extends Service {
     this.closeHighlight();
     this.expandedCardIds = [];
     this.appliedUrlAnchor = null;
-    this.resetCanvasHistory();
-    this.closeCanvasRevisionPanel();
+    this.canvasService.resetCanvasHistory();
+    this.canvasService.closeCanvasRevisionPanel();
     this.cardRailOverlayOpen = false;
     this.closeSelectionPop();
     this.thoughtPop = null;
@@ -1249,25 +1209,17 @@ export class DocsService extends Service {
   }
 
   openSelectionPop(input: SelectionPopState): void {
-    if (this.selectionPop && this.selectionPop.documentId !== input.documentId) {
-      this.selectionByDocument.set(this.selectionPop.documentId, this.selectionPop);
-    }
-    this.selectionPop = input;
-    this.selectionByDocument.set(input.documentId, input);
+    this.selectionService.openSelectionPop(input);
   }
 
   closeSelectionPop(): void {
-    const documentId = this.selectionPop?.documentId;
-    if (documentId) this.selectionByDocument.delete(documentId);
-    this.selectionPop = null;
+    this.selectionService.closeSelectionPop();
   }
 
   /** 切文章时把当前浮层留给原文章，调用方再装上目标文章自己的。 */
   private parkDocumentPops(documentId: string | null): void {
     if (!documentId) return;
-    if (this.selectionPop?.documentId === documentId) {
-      this.selectionByDocument.set(documentId, this.selectionPop);
-    }
+    this.selectionService.parkSelection(documentId);
     if (this.thoughtPop?.documentId === documentId) {
       this.thoughtByDocument.set(documentId, this.thoughtPop);
     }
@@ -1466,25 +1418,6 @@ export class DocsService extends Service {
     }
   }
 
-  private resetCanvasHistory(): void {
-    this.canvasHistory.clear();
-    this.canvasUndo = 0;
-    this.canvasRedo = 0;
-  }
-
-  private syncCanvasHistory(): void {
-    this.canvasUndo = this.canvasHistory.undoCount;
-    this.canvasRedo = this.canvasHistory.redoCount;
-  }
-
-  private closeCanvasRevisionPanel(): void {
-    this.canvasRevisionsOpen = false;
-    this.canvasRevisions = [];
-    this.canvasRevisionsLoading = false;
-    this.canvasRevisionRestoring = null;
-    this.canvasRevisionGen += 1;
-  }
-
   noteCanvasRevised(): void {
     if (this.canvasRevisionsOpen) void this.reloadCanvasRevisions();
   }
@@ -1499,23 +1432,22 @@ export class DocsService extends Service {
   }
 
   closeCanvasRevisions(): void {
-    this.canvasRevisionsOpen = false;
+    this.canvasService.closeCanvasRevisions();
   }
 
   async reloadCanvasRevisions(): Promise<void> {
     const id = this.doc?.id;
     if (!id) return;
-    const gen = ++this.canvasRevisionGen;
-    this.canvasRevisionsLoading = true;
+    const gen = this.canvasService.startRevisionLoad();
     try {
       const revisions = await listCanvasRevisions(id);
-      if (gen !== this.canvasRevisionGen || this.doc?.id !== id) return;
+      if (!this.canvasService.revisionGenMatches(gen) || this.doc?.id !== id) return;
       this.canvasRevisions = revisions;
     } catch (err) {
-      if (gen !== this.canvasRevisionGen) return;
+      if (!this.canvasService.revisionGenMatches(gen)) return;
       this.showToast(errorMessage(err, '历史没读出来'));
     } finally {
-      if (gen === this.canvasRevisionGen) this.canvasRevisionsLoading = false;
+      this.canvasService.finishRevisionLoad(gen);
     }
   }
 
@@ -1537,7 +1469,7 @@ export class DocsService extends Service {
       this.annotations = notes;
       this.canvasNodes = canvas;
       this.editorHost?.ensureEntityMarks(this.doc.cards, this.annotations);
-      this.resetCanvasHistory();
+      this.canvasService.resetCanvasHistory();
       this.showToast('已恢复这一版脑图');
       await this.reloadCanvasRevisions();
     } catch (err) {
@@ -1547,14 +1479,8 @@ export class DocsService extends Service {
     }
   }
 
-  private rememberCanvas(undo: CanvasOp, redo: CanvasOp): void {
-    if (!this.historyOpen) return;
-    this.canvasHistory.push(undo, redo);
-    this.syncCanvasHistory();
-  }
-
   private refuseCanvas(message: string): void {
-    if (this.historyOpen) this.showToast(message);
+    if (this.canvasService.historyOpen) this.showToast(message);
     else throw new Error(message);
   }
 
@@ -1605,7 +1531,7 @@ export class DocsService extends Service {
       this.mirrorPlacedCard(updated);
       const after = outlineSlot(forestOf(this.doc.cards, this.annotations, this.canvasNodes), memberId);
       if (before && after) {
-        this.rememberCanvas(
+        this.canvasService.rememberCanvas(
           { type: 'place', id: memberId, at: before },
           { type: 'place', id: memberId, at: after },
         );
@@ -1617,7 +1543,7 @@ export class DocsService extends Service {
         this.canvasNodes = nodeSnapshot;
         this.doc = { ...this.doc, cards: cardSnapshot };
       }
-      if (!this.historyOpen) throw err;
+      if (!this.canvasService.historyOpen) throw err;
       this.showToast(errorMessage(err, '没放上去'));
     }
   }
@@ -1726,7 +1652,7 @@ export class DocsService extends Service {
       if (!this.doc || this.cardWriteGen !== gen) return true;
       this.canvasNodes = upsertCanvas(this.canvasNodes, updated);
       this.echoDocumentRow(updated.documentId, updated.updatedAt);
-      this.rememberCanvas(
+      this.canvasService.rememberCanvas(
         { type: 'edit', id, text: previous },
         { type: 'edit', id, text: trimmed },
       );
@@ -1734,7 +1660,7 @@ export class DocsService extends Service {
       return true;
     } catch (err) {
       if (this.doc && this.cardWriteGen === gen) this.canvasNodes = snapshot;
-      if (!this.historyOpen) throw err;
+      if (!this.canvasService.historyOpen) throw err;
       this.showToast(errorMessage(err, '没改上'));
       return false;
     }
@@ -1747,7 +1673,7 @@ export class DocsService extends Service {
     }
     const node = this.canvasNodes.find((item) => item.id === id);
     if (!node || (node.kind !== 'text' && node.kind !== 'image')) {
-      if (!this.historyOpen) this.refuseCanvas('没删掉');
+      if (!this.canvasService.historyOpen) this.refuseCanvas('没删掉');
       return;
     }
     const forest = forestOf(this.doc.cards, this.annotations, this.canvasNodes);
@@ -1762,7 +1688,7 @@ export class DocsService extends Service {
     this.canvasNodes = this.canvasNodes.filter((item) => item.id !== id);
     try {
       await deleteCanvasNode(documentId, id);
-      this.rememberCanvas(
+      this.canvasService.rememberCanvas(
         {
           type: 'restore',
           id,
@@ -1780,7 +1706,7 @@ export class DocsService extends Service {
         this.canvasNodes = nodeSnapshot;
         this.doc = { ...this.doc, cards: cardSnapshot };
       }
-      if (!this.historyOpen) throw err;
+      if (!this.canvasService.historyOpen) throw err;
       this.showToast(errorMessage(err, '没删掉'));
     }
   }
@@ -1804,7 +1730,7 @@ export class DocsService extends Service {
             parentId: created.parentId,
             index: 0,
           };
-        this.rememberCanvas(
+        this.canvasService.rememberCanvas(
           { type: 'delete', id: created.id },
           {
             type: 'create',
@@ -1819,7 +1745,7 @@ export class DocsService extends Service {
       this.noteCanvasRevised();
       return created;
     } catch (err) {
-      if (!this.historyOpen) throw err;
+      if (!this.canvasService.historyOpen) throw err;
       this.showToast(errorMessage(err, '没放上去'));
       return null;
     }
@@ -1834,19 +1760,17 @@ export class DocsService extends Service {
   }
 
   private async stepCanvas(dir: 'undo' | 'redo'): Promise<void> {
-    if (!this.historyOpen) return;
-    const op = dir === 'undo' ? this.canvasHistory.peekUndo() : this.canvasHistory.peekRedo();
+    if (!this.canvasService.historyOpen) return;
+    const op = this.canvasService.peekHistory(dir);
     if (!op) return;
-    this.historyOpen = false;
+    this.canvasService.suspendHistory();
     try {
       await this.runCanvasOp(op);
-      if (dir === 'undo') this.canvasHistory.commitUndo();
-      else this.canvasHistory.commitRedo();
+      this.canvasService.commitHistory(dir);
     } catch (err) {
       this.showToast(errorMessage(err, dir === 'undo' ? '没撤销成' : '没重做成'));
     } finally {
-      this.historyOpen = true;
-      this.syncCanvasHistory();
+      this.canvasService.resumeHistory();
     }
   }
 
@@ -1890,7 +1814,7 @@ export class DocsService extends Service {
             throw err;
           }
         }
-        if (created.id !== op.id) this.canvasHistory.remap(op.id, created.id);
+        if (created.id !== op.id) this.canvasService.remapHistory(op.id, created.id);
         return;
       }
       case 'unarchive':
@@ -1960,13 +1884,13 @@ export class DocsService extends Service {
       if (this.editingCardId === id) this.editingCardId = null;
       this.editorHost?.ensureEntityMarks(this.doc?.cards ?? [], this.annotations);
       if (card) {
-        this.rememberCanvas({ type: 'unarchive', id, card, children }, { type: 'archive', id });
+        this.canvasService.rememberCanvas({ type: 'unarchive', id, card, children }, { type: 'archive', id });
       }
-      if (this.historyOpen) this.showToast('已移入回收站，可在设置里恢复');
+      if (this.canvasService.historyOpen) this.showToast('已移入回收站，可在设置里恢复');
       this.noteCanvasRevised();
       return true;
     } catch (err) {
-      if (!this.historyOpen) throw err;
+      if (!this.canvasService.historyOpen) throw err;
       this.showToast(errorMessage(err, '没删掉'));
       return false;
     }
@@ -2091,91 +2015,42 @@ export class DocsService extends Service {
   }
 
   async queueSelectionCards(documentId: string, text: string, blockIndex: number): Promise<boolean> {
-    const clipped = text.trim();
-    if (!clipped || !Number.isFinite(blockIndex) || blockIndex < 1) return false;
-    this.selectionDigesting = true;
-    this.selectionPollDocId = documentId;
-    this.selectionCardCountAtStart =
-      this.doc?.id === documentId ? this.doc.cards.length : 0;
-    this.selectionPollUntil = Date.now() + SELECTION_POLL_FOR_MS;
-    try {
-      const job = await enqueueSelectionCards(documentId, { text: clipped, blockIndex });
-      this.selectionJobId = job.id;
-      this.startSelectionPoll(documentId);
-      return true;
-    } catch (err) {
-      this.finishSelectionPoll();
-      this.showToast(errorMessage(err, '没排上队'));
-      return false;
-    }
+    return this.selectionService.queueSelectionCards(
+      documentId,
+      text,
+      blockIndex,
+      this.selectionPollHooks(),
+    );
   }
 
   startSelectionPoll(documentId: string): void {
-    this.stopSelectionTick();
-    const deadline = this.selectionPollUntil;
-    this.selectionWatchdog = setTimeout(() => {
-      this.selectionWatchdog = null;
-      if (this.selectionPollUntil === deadline) this.finishSelectionPoll();
-    }, SELECTION_POLL_FOR_MS + 400);
-    // Job events and document reloads finish the flag. The 2s loop is only the fallback.
-    this.armSelectionLoop(documentId);
+    this.selectionService.startSelectionPoll(documentId, this.selectionPollHooks());
   }
 
   private armSelectionLoop(documentId: string): void {
-    if (this.syncActive()) return;
-    if (this.selectionTickTimer !== null || this.selectionTickInflight) return;
-    if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-    const startCount = this.selectionCardCountAtStart;
-    const tick = async () => {
-      this.selectionTickTimer = null;
-      this.selectionTickInflight = true;
-      try {
-        if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-        await this.refreshOne(documentId);
-        if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-        if (this.syncActive()) return;
-        const grown =
-          this.doc?.id === documentId && this.doc.cards.length > startCount;
-        const timedOut = Date.now() >= this.selectionPollUntil;
-        if (grown || timedOut) this.finishSelectionPoll();
-      } finally {
-        this.selectionTickInflight = false;
-      }
-      if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-      if (this.syncActive() || this.selectionTickTimer !== null) return;
-      this.selectionTickTimer = setTimeout(() => {
-        void tick();
-      }, SELECTION_POLL_MS);
-    };
-    this.selectionTickTimer = setTimeout(() => {
-      void tick();
-    }, SELECTION_POLL_MS);
+    this.selectionService.armSelectionLoop(documentId, this.selectionPollHooks());
   }
 
   stopSelectionTick(): void {
-    if (this.selectionTickTimer !== null) {
-      clearTimeout(this.selectionTickTimer);
-      this.selectionTickTimer = null;
-    }
-    if (this.selectionWatchdog !== null) {
-      clearTimeout(this.selectionWatchdog);
-      this.selectionWatchdog = null;
-    }
+    this.selectionService.stopSelectionTick();
   }
 
   /** Drop the 2s getDocument loop without clearing selectionDigesting or the watchdog. */
   private disarmSelectionLoop(): void {
-    if (this.selectionTickTimer === null) return;
-    clearTimeout(this.selectionTickTimer);
-    this.selectionTickTimer = null;
+    this.selectionService.disarmSelectionLoop();
   }
 
   finishSelectionPoll(): void {
-    this.stopSelectionTick();
-    this.selectionDigesting = false;
-    this.selectionPollUntil = 0;
-    this.selectionPollDocId = null;
-    this.selectionJobId = null;
+    this.selectionService.finishSelectionPoll();
+  }
+
+  private selectionPollHooks(): SelectionPollHooks {
+    return {
+      syncActive: () => this.syncActive(),
+      refreshOne: (id) => this.refreshOne(id),
+      showToast: (message) => this.showToast(message),
+      cardCount: (id) => (this.doc?.id === id ? this.doc.cards.length : null),
+    };
   }
 
   async setDocTopic(topicId: string | null, documentId?: string | null): Promise<void> {
@@ -2246,7 +2121,7 @@ export class DocsService extends Service {
   }
 
   stopPolling(): void {
-    stopPolling(this);
+    this.pollService.stopPolling();
   }
 
   noteCodeFold(json: unknown): void {
@@ -2312,87 +2187,46 @@ export class DocsService extends Service {
     this.importService.abortInFlight();
     this.stopPolling();
     this.finishSelectionPoll();
-    this.flipFollowUps.clear();
+    this.pollService.clearFlipFollowUps();
     stopToast(this);
     super.destroy();
   }
 
   syncPolling(): void {
-    // sync 激活期间不再停轮询：有 pending 文档或上传时进入轻量轮询（tickPending
-    // 里只合状态字段），让「消化完成」在文档打开时也能 live 翻转。
-    const listPending = hasPendingDoc(this.documents);
-    const docPending = this.doc?.status === 'pending';
-    const uploading = Object.keys(this.uploadByDoc).length > 0;
-    if (listPending || docPending || uploading) this.startPolling();
-    else this.stopPolling();
+    this.pollService.syncPolling(this.pendingPollHooks());
   }
 
   startPolling(): void {
-    startPolling(this, () => void this.tickPending());
+    this.pollService.startPolling(this.pendingPollHooks());
   }
 
   async tickPending(): Promise<void> {
-    const lite = this.syncActive();
-    const ids = pendingPollTargets(this.documents, this.doc);
-    const before = this.statusSnapshot(ids);
-    const tasks: Promise<void>[] = [this.refreshJobs()];
-    if (ids.length > 0) {
-      tasks.push(...ids.map((id) => (lite ? this.refreshOneMeta(id) : this.refreshOne(id))));
-    }
-    await Promise.all(tasks);
-    // digest 的状态翻转先于 meta（标题/描述/主题）落库时，翻转这次 fetch 拿到的
-    // 还是旧文案；翻转后没有 pending 轮询即停，行数据就滞留了。给刚翻转的文档
-    // 安排延迟补拉，让 meta 落定后行数据跟上。
-    const after = this.statusSnapshot(ids);
-    for (const id of justFlippedFromPending(before, after)) this.scheduleFlipFollowUp(id);
-    this.syncPolling();
+    await this.pollService.tickPending(this.pendingPollHooks());
   }
 
-  private statusSnapshot(ids: readonly string[]): { id: string; status: string }[] {
-    return ids.map((id) => {
-      const known = this.doc?.id === id ? this.doc : this.documents.find((item) => item.id === id);
-      return { id, status: known?.status ?? 'pending' };
-    });
-  }
-
-  private scheduleFlipFollowUp(id: string): void {
-    this.flipFollowUps.schedule(id, (docId) => {
-      const known =
-        this.doc?.id === docId ? this.doc : this.documents.find((item) => item.id === docId);
-      // 文档已删（forgetDocument 会 cancel，这里是兜底）或又变回 pending
-      // （正常轮询已接管）时不补拉。
-      if (!known || known.status === 'pending') return;
-      void (this.syncActive() ? this.refreshOneMeta(docId) : this.refreshOne(docId));
-    });
-  }
-
-  /**
-   * sync 激活期间的轻量刷新：只合状态类字段（status/failReason/updatedAt/卡数），
-   * 正文、preview 与编辑器状态一律不动，避免轮询 clobber 正在编辑的内容。
-   */
   async refreshOneMeta(id: string): Promise<void> {
-    try {
-      const detail = await getDocument(id);
-      this.documents = this.documents.map((item) =>
-        item.id === id ? mergeStatusDetail(item, detail) : item,
-      );
-      if (this.doc?.id === id) this.doc = mergeDocMeta(this.doc, detail);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        this.forgetDocument(id);
-        return;
-      }
-      // Transient poll errors should not wipe the list.
-    }
+    await this.pollService.refreshOneMeta(id, this.pendingPollHooks());
   }
 
   async refreshJobs(): Promise<void> {
-    try {
-      const queue = await getJobQueue();
-      this.activeJobs = [...queue.running, ...queue.pending];
-    } catch {
-      // keep the last good copy while polling
-    }
+    await this.pollService.refreshJobs();
+  }
+
+  private pendingPollHooks(): PendingPollHooks {
+    return {
+      documents: () => this.documents,
+      setDocuments: (items) => {
+        this.documents = items;
+      },
+      doc: () => this.doc,
+      setDoc: (doc) => {
+        this.doc = doc;
+      },
+      uploadByDoc: () => this.uploadByDoc,
+      syncActive: () => this.syncActive(),
+      refreshOne: (id) => this.refreshOne(id),
+      forgetDocument: (id) => this.forgetDocument(id),
+    };
   }
 
   async refreshOne(id: string, changeAt?: string | null): Promise<void> {
@@ -2669,7 +2503,7 @@ export class DocsService extends Service {
 
   private forgetDocument(id: string): void {
     dropPrefetchedDocument(id);
-    this.flipFollowUps.cancel(id);
+    this.pollService.cancelFlipFollowUp(id);
     const had = this.documents.some((item) => item.id === id);
     this.documents = this.documents.filter((item) => item.id !== id);
     if (had) this.documentsTotal = Math.max(0, this.documentsTotal - 1);

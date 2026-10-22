@@ -31,8 +31,9 @@ import { recalculateMapNodeStatus, requireWritableMapNode } from '../maps/map.se
 import { tryDeleteCardFromIndex, tryIndexCard } from '../retrieval/pipeline.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { presignGet } from '../storage/client.js';
-import { shouldIndexCard } from './card-acceptance-logic.js';
+import { planCardIndex, shouldIndexCard } from './card-acceptance-logic.js';
 import { checkNewCardLink } from './card-link-logic.js';
+import { insertCardRow, updateCards } from './card-write.js';
 import { diffCardQuestions, normalizeTags } from './card-logic.js';
 import { toCardSummary, toPublicCard, toPublicCardBase, toPublicQuestion } from './card.mapper.js';
 import { commitCanvasRevision, readCanvasHistoryState } from '../canvas/canvas-history.js';
@@ -99,22 +100,19 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
   const imageKey = input.imageKey !== undefined ? input.imageKey : null;
 
   const created = await getDb().transaction(async (tx) => {
-    const [row] = await tx
-      .insert(cards)
-      .values({
-        userId,
-        documentId: document.id,
-        topicId: document.topicId,
-        concept: input.concept,
-        example: input.example,
-        confusionPoint: '',
-        tags: [],
-        source: 'manual',
-        anchorText,
-        anchorBlockIndex,
-        imageKey,
-      })
-      .returning();
+    const row = await insertCardRow(tx, {
+      userId,
+      documentId: document.id,
+      topicId: document.topicId,
+      concept: input.concept,
+      example: input.example,
+      confusionPoint: '',
+      tags: [],
+      source: 'manual',
+      anchorText,
+      anchorBlockIndex,
+      imageKey,
+    });
     if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
     await insertInitialReviewState(userId, row.id, now, tx, now);
     if (input.annotationId) {
@@ -125,7 +123,8 @@ export async function createCard(userId: string, input: CreateCardInput): Promis
     }
     return row;
   });
-  await tryIndexCard(created);
+  const indexPlan = planCardIndex({ reason: 'manual' });
+  if (indexPlan.index && indexPlan.onFailure === 'swallow') await tryIndexCard(created);
   return toPublicCardBase(created);
 }
 
@@ -288,8 +287,7 @@ export async function setCardMapNode(
   const oldNodeId = card.mapNodeId;
   const now = new Date();
   return getDb().transaction(async (tx) => {
-    const [row] = await tx
-      .update(cards)
+    const [row] = await updateCards(tx)
       .set({
         mapNodeId: nodeId,
         ...(node && card.topicId === null ? { topicId: node.topicId } : {}),
@@ -341,8 +339,7 @@ export async function updateCard(
           .then((rows) => rows[0])
       : undefined;
 
-    await tx
-      .update(cards)
+    await updateCards(tx)
       .set(fields)
       .where(and(eq(cards.id, id), eq(cards.userId, userId)));
 
@@ -424,8 +421,7 @@ export async function archiveCard(userId: string, id: string): Promise<void> {
       : null;
     await applyOutlineDetach(tx, userId, id);
     await detachCanvasMember(tx, userId, id);
-    await tx
-      .update(cards)
+    await updateCards(tx)
       .set({ deletedAt: now, updatedAt: now })
       .where(and(eq(cards.id, id), eq(cards.userId, userId)));
     if (card.mapNodeId) await recalculateMapNodeStatus(card.mapNodeId, tx);
@@ -441,8 +437,7 @@ export async function restoreCard(userId: string, id: string): Promise<Card> {
   if (!card.deletedAt) return toPublicCardBase(card);
   const now = new Date();
   const restored = await getDb().transaction(async (tx) => {
-    const [row] = await tx
-      .update(cards)
+    const [row] = await updateCards(tx)
       .set({ deletedAt: null, updatedAt: now })
       .where(and(eq(cards.id, id), eq(cards.userId, userId)))
       .returning();
@@ -467,8 +462,7 @@ export async function restoreCard(userId: string, id: string): Promise<Card> {
         parent.documentId != null &&
         parent.documentId === row.documentId;
       if (!parentOk) {
-        const [cleared] = await tx
-          .update(cards)
+        const [cleared] = await updateCards(tx)
           .set({ outlineParentId: null, updatedAt: now })
           .where(eq(cards.id, row.id))
           .returning();

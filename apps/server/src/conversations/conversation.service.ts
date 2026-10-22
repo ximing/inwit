@@ -34,8 +34,8 @@ import {
   normalizeConversationSelection,
   normalizeDocumentIds,
   normalizeNodeRefs,
-} from '../agent/conversation-logic.js';
-import { loadMindNodeFacts, ownedNodeRefs } from '../agent/conversation-nodes.js';
+} from './conversation-message-logic.js';
+import { loadMindNodeFacts, ownedNodeRefs } from './conversation-nodes.js';
 import { assertOwnedLlmConfig } from '../llm/llm.service.js';
 import { resolveModelFor } from '../llm/pi.js';
 

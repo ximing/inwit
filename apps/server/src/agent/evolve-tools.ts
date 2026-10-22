@@ -2,6 +2,8 @@ import { Type, type Static } from '@earendil-works/pi-ai';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { CARD_LINK_TYPES, type CardLinkType, type EvolveReason } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNull, or } from 'drizzle-orm';
+import { planCardIndex } from '../cards/card-acceptance-logic.js';
+import { insertCardRow } from '../cards/card-write.js';
 import { toPublicQuestion } from '../cards/card.mapper.js';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
@@ -383,35 +385,35 @@ export function splitCardTool(session: EvolveSession): AgentTool<typeof splitCar
           }
           const tags =
             parent.tags.length > 0 ? parent.tags : ['拆小'];
-          const [row] = await getDb()
-            .insert(cards)
-            .values({
-              userId: session.userId,
-              documentId: parent.documentId,
-              topicId: parent.topicId,
-              mapNodeId: parent.mapNodeId,
-              concept: draft.concept.trim(),
-              example: draft.example.trim(),
-              confusionPoint: draft.confusion_point.trim(),
-              tags,
-              source: 'agent',
-              anchorText,
-              anchorBlockIndex,
-            })
-            .returning();
+          const row = await insertCardRow(getDb(), {
+            userId: session.userId,
+            documentId: parent.documentId,
+            topicId: parent.topicId,
+            mapNodeId: parent.mapNodeId,
+            concept: draft.concept.trim(),
+            example: draft.example.trim(),
+            confusionPoint: draft.confusion_point.trim(),
+            tags,
+            source: 'agent',
+            anchorText,
+            anchorBlockIndex,
+          });
           if (!row) throw new Error('failed to insert child card');
           createdIds.push(row.id);
+          const indexPlan = planCardIndex({ reason: 'evolve' });
           try {
             await insertInitialReviewState(session.userId, row.id, now);
-            await indexCard({
-              id: row.id,
-              userId: row.userId,
-              topicId: row.topicId,
-              concept: row.concept,
-              example: row.example,
-              confusionPoint: row.confusionPoint,
-              tags: row.tags,
-            });
+            if (indexPlan.index && indexPlan.onFailure === 'delete-card') {
+              await indexCard({
+                id: row.id,
+                userId: row.userId,
+                topicId: row.topicId,
+                concept: row.concept,
+                example: row.example,
+                confusionPoint: row.confusionPoint,
+                tags: row.tags,
+              });
+            }
           } catch (err) {
             logger.error('evolve.index_child_failed', err);
             try {

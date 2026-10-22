@@ -19,11 +19,14 @@ import {
   type ConceptPracticeBindingRow,
   type ReviewStateRow,
 } from '../db/schema.js';
+import { planCardIndex } from '../cards/card-acceptance-logic.js';
+import { insertCardRow, updateCards } from '../cards/card-write.js';
 import { AppError } from '../errors.js';
 import { isUniqueViolation } from '../db/pg.js';
 import { insertInitialReviewState } from '../review/state-init.js';
 import { MS_PER_DAY } from '../review/sm2.js';
-import { lockActiveTopic } from './concept.service.js';
+import { lockActiveTopic } from './concept-access.js';
+import { nextReviewRevision } from './concept-review-revision-logic.js';
 
 type Db = Pick<Database, 'select' | 'insert' | 'update' | 'delete' | 'execute'>;
 
@@ -368,20 +371,17 @@ export async function createConceptPracticeInTx(
 
   const now = input.now ?? new Date();
   const questionType = EXERCISE_TO_QUESTION_TYPE[input.exerciseKind];
-  const [card] = await tx
-    .insert(cards)
-    .values({
-      userId,
-      topicId: target.topicId,
-      documentId: target.primaryDocumentId,
-      concept: target.readable,
-      example: input.answer,
-      confusionPoint: '',
-      source: 'manual',
-      acceptance: 'accepted',
-      reviewRevision: 1,
-    })
-    .returning();
+  const card = await insertCardRow(tx, {
+    userId,
+    topicId: target.topicId,
+    documentId: target.primaryDocumentId,
+    concept: target.readable,
+    example: input.answer,
+    confusionPoint: '',
+    source: 'manual',
+    acceptance: 'accepted',
+    reviewRevision: nextReviewRevision(null, { reason: 'create' }),
+  });
   if (!card) throw AppError.of(500, 'INTERNAL_ERROR');
 
   const [question] = await tx
@@ -390,6 +390,8 @@ export async function createConceptPracticeInTx(
     .returning();
   if (!question) throw AppError.of(500, 'INTERNAL_ERROR');
 
+  const indexPlan = planCardIndex({ reason: 'practice' });
+  if (indexPlan.index) throw new Error('concept practice cards are not indexed');
   await insertInitialReviewState(userId, card.id, now, tx);
 
   const [binding] = await tx
@@ -482,9 +484,11 @@ export async function bindExistingConceptPracticeInTx(
     relationId: binding.relationId,
   });
   // 首次绑定进入新协议管理
-  await tx
-    .update(cards)
-    .set({ reviewRevision: (card.reviewRevision ?? 0) + 1, updatedAt: new Date() })
+  await updateCards(tx)
+    .set({
+      reviewRevision: nextReviewRevision(card.reviewRevision, { reason: 'bind' }),
+      updatedAt: new Date(),
+    })
     .where(eq(cards.id, card.id));
   return { binding, cardId: card.id, created: true };
 }
@@ -572,9 +576,11 @@ export async function refreshConceptPracticeInTx(
       .where(eq(reviewStates.id, state.id));
   }
 
-  await tx
-    .update(cards)
-    .set({ reviewRevision: card.reviewRevision! + 1, updatedAt: now })
+  await updateCards(tx)
+    .set({
+      reviewRevision: nextReviewRevision(card.reviewRevision, { reason: 'refresh' }),
+      updatedAt: now,
+    })
     .where(eq(cards.id, card.id));
   return updated;
 }
@@ -622,9 +628,11 @@ export async function unbindConceptPracticeInTx(
     .returning();
   if (!updated) throw AppError.of(500, 'INTERNAL_ERROR');
   // 解绑后仍保留受管理身份（reviewRevision 不退回 null）
-  await tx
-    .update(cards)
-    .set({ reviewRevision: (card.reviewRevision ?? 0) + 1, updatedAt: now })
+  await updateCards(tx)
+    .set({
+      reviewRevision: nextReviewRevision(card.reviewRevision, { reason: 'unbind' }),
+      updatedAt: now,
+    })
     .where(eq(cards.id, card.id));
   return updated;
 }
@@ -708,9 +716,15 @@ export async function guardManagedCardEdit(
       input.beforeFirst.answer !== after.answer);
 
   if (input.changed || firstChanged) {
-    await db
-      .update(cards)
-      .set({ reviewRevision: card.reviewRevision + 1, updatedAt: new Date() })
+    await updateCards(db)
+      .set({
+        reviewRevision: nextReviewRevision(card.reviewRevision, {
+          reason: 'content-edit',
+          changed: input.changed,
+          firstChanged,
+        }),
+        updatedAt: new Date(),
+      })
       .where(eq(cards.id, cardId));
   }
   if (!binding) return;

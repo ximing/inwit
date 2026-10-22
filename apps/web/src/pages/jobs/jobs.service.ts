@@ -1,13 +1,14 @@
 import { Service } from '@rabjs/react';
-import type {
-  AgentExecution,
-  Job,
-  JobQueue,
-  JobQueueCounts,
-  JobStatus,
-  JobType,
-  JobUsage,
-  SyncChange,
+import {
+  JOB_TYPES as JOB_TYPE_VALUES,
+  type AgentExecution,
+  type Job,
+  type JobQueue,
+  type JobQueueCounts,
+  type JobStatus,
+  type JobType,
+  type JobUsage,
+  type SyncChange,
 } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
 import {
@@ -35,19 +36,7 @@ const HISTORY_LIMIT = 20;
 const FAILED_LIMIT = 3;
 const RECENT_LIMIT = 8;
 
-export const JOB_TYPES: JobType[] = [
-  'digest',
-  'evolve',
-  'weekly_report',
-  'topic',
-  'chat',
-  'selection',
-  'extract',
-  'ocr',
-  'annotation_resurface',
-  'memory_organize',
-  'conversation',
-];
+export const JOB_TYPES: readonly JobType[] = JOB_TYPE_VALUES;
 export const JOB_STATUSES: JobStatus[] = ['pending', 'running', 'done', 'failed'];
 
 export const JOB_TYPE_LABELS: Record<JobType, string> = {

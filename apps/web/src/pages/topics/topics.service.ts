@@ -12,7 +12,7 @@ import type {
   SyncChange,
   Topic,
 } from '@inwit/dto';
-import { isChatQuestion, topicJobPayloadFrom, type TopicGraphResponse } from '@inwit/dto';
+import { topicJobPayloadFrom, type TopicGraphResponse } from '@inwit/dto';
 import { ApiError, errorMessage } from '@/api/client';
 import { getReviewTopicStats } from '@/api/review';
 import { listDocuments } from '@/api/documents';
@@ -38,14 +38,14 @@ import {
 } from '@/lib/sync-plan';
 import { cardPath, docAnchorPath, docsPath, topicDocPath } from '@/routes';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
+import { TopicsCaptureService } from './topics-capture.service.js';
+import { TopicsMapService } from './topics-map.service.js';
 import { getJob } from '@/api/jobs';
 import {
-  fillMapNode,
   getActiveTopicJob,
   getMapNodeDetail,
   getTopicMap,
   getTopicMapSummary,
-  organizeTopicMap,
 } from '@/api/maps';
 import {
   archiveTopic,
@@ -141,22 +141,6 @@ function blankItem(topic: Topic): TopicListItem {
   };
 }
 
-function collapsedKey(topicId: string): string {
-  return `inwit.map.collapsed.${topicId}`;
-}
-
-function readCollapsed(topicId: string): string[] {
-  try {
-    const raw = localStorage.getItem(collapsedKey(topicId));
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is string => typeof item === 'string');
-  } catch {
-    return [];
-  }
-}
-
 function jobIdFromConflict(err: unknown): string | null {
   if (!(err instanceof ApiError) || err.code !== 'TOPIC_JOB_IN_PROGRESS') return null;
   if (typeof err.details !== 'object' || err.details === null) return null;
@@ -182,15 +166,6 @@ export function chapterMeta(node: MapTreeNode): string {
   return `${cards}卡`;
 }
 
-function findMapNode(nodes: readonly MapTreeNode[], id: string): MapTreeNode | null {
-  for (const node of nodes) {
-    if (node.id === id) return node;
-    const child = findMapNode(node.children, id);
-    if (child) return child;
-  }
-  return null;
-}
-
 export class TopicsService extends Service {
   items: TopicListItem[] = [];
   /** topicId → 近 7 天复习量/想起率。加载失败时保持为空，UI 静默隐藏。 */
@@ -207,18 +182,11 @@ export class TopicsService extends Service {
   draftGoal = '';
 
   topic: Topic | null = null;
-  tree: MapTreeNode[] = [];
-  summary: MapSummary | null = null;
   documents: DocumentListItem[] = [];
   documentsTotal = 0;
-  titleByNodeId: Record<string, string> = {};
   tab: TopicTab = 'docs';
-  collapsedIds: string[] = [];
-  selectedNodeId: string | null = null;
-  nodeDetail: MapNodeDetail | null = null;
   activeJob: Job | null = null;
   topicId: string | null = null;
-  draft = '';
   toast: string | null = null;
 
   jobPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -269,6 +237,70 @@ export class TopicsService extends Service {
     return this.topic?.status === 'archived';
   }
 
+  get mapService(): TopicsMapService {
+    return this.resolve(TopicsMapService);
+  }
+
+  get captureService(): TopicsCaptureService {
+    return this.resolve(TopicsCaptureService);
+  }
+
+  get draft(): string {
+    return this.captureService.draft;
+  }
+  set draft(value: string) {
+    this.captureService.draft = value;
+  }
+
+  get captureHandle(): CaptureEditorHandle | null {
+    return this.captureService.captureHandle;
+  }
+  set captureHandle(value: CaptureEditorHandle | null) {
+    this.captureService.captureHandle = value;
+  }
+
+  get tree(): MapTreeNode[] {
+    return this.mapService.tree;
+  }
+  set tree(value: MapTreeNode[]) {
+    this.mapService.tree = value;
+  }
+
+  get summary(): MapSummary | null {
+    return this.mapService.summary;
+  }
+  set summary(value: MapSummary | null) {
+    this.mapService.summary = value;
+  }
+
+  get titleByNodeId(): Record<string, string> {
+    return this.mapService.titleByNodeId;
+  }
+  set titleByNodeId(value: Record<string, string>) {
+    this.mapService.titleByNodeId = value;
+  }
+
+  get collapsedIds(): string[] {
+    return this.mapService.collapsedIds;
+  }
+  set collapsedIds(value: string[]) {
+    this.mapService.collapsedIds = value;
+  }
+
+  get selectedNodeId(): string | null {
+    return this.mapService.selectedNodeId;
+  }
+  set selectedNodeId(value: string | null) {
+    this.mapService.selectedNodeId = value;
+  }
+
+  get nodeDetail(): MapNodeDetail | null {
+    return this.mapService.nodeDetail;
+  }
+  set nodeDetail(value: MapNodeDetail | null) {
+    this.mapService.nodeDetail = value;
+  }
+
   get coveredCount(): number {
     if (!this.summary) return 0;
     return Math.max(0, this.summary.totalNodes - this.summary.uncoveredNodes);
@@ -313,16 +345,11 @@ export class TopicsService extends Service {
   }
 
   get canSend(): boolean {
-    return (
-      this.draft.trim().length > 0 &&
-      !this.$model.send.loading &&
-      this.topic !== null &&
-      this.topic.status !== 'archived'
-    );
+    return this.captureService.canSend(this.$model.send.loading, this.topic);
   }
 
   get draftLooksLikeQuestion(): boolean {
-    return isChatQuestion(this.draft);
+    return this.captureService.draftLooksLikeQuestion;
   }
 
   get lastDigestedAt(): string | null {
@@ -356,7 +383,7 @@ export class TopicsService extends Service {
   }
 
   isCollapsed(id: string): boolean {
-    return this.collapsedIds.includes(id);
+    return this.mapService.isCollapsed(id);
   }
 
   setTab(tab: TopicTab): void {
@@ -395,13 +422,11 @@ export class TopicsService extends Service {
   }
 
   setDraft(value: string): void {
-    this.draft = value;
+    this.captureService.setDraft(value);
   }
 
-  captureHandle: CaptureEditorHandle | null = null;
-
   bindCapture(handle: CaptureEditorHandle | null): void {
-    this.captureHandle = handle;
+    this.captureService.bindCapture(handle);
   }
 
   setNewTitle(value: string): void {
@@ -454,35 +479,19 @@ export class TopicsService extends Service {
   }
 
   toggleCollapsed(id: string): void {
-    if (this.collapsedIds.includes(id)) {
-      this.collapsedIds = this.collapsedIds.filter((item) => item !== id);
-    } else {
-      this.collapsedIds = [...this.collapsedIds, id];
-    }
-    this.persistCollapsed();
+    this.mapService.toggleCollapsed(id, this.topicId);
   }
 
   persistCollapsed(): void {
-    if (!this.topicId) return;
-    localStorage.setItem(collapsedKey(this.topicId), JSON.stringify(this.collapsedIds));
+    this.mapService.persistCollapsed(this.topicId);
   }
 
   closeDrawer(): void {
-    this.selectedNodeId = null;
-    this.nodeDetail = null;
+    this.mapService.closeDrawer();
   }
 
   applyMap(nodes: MapTreeNode[]): void {
-    this.tree = nodes;
-    const titles: Record<string, string> = {};
-    const walk = (list: MapTreeNode[]) => {
-      for (const node of list) {
-        titles[node.id] = node.title;
-        walk(node.children);
-      }
-    };
-    walk(nodes);
-    this.titleByNodeId = titles;
+    this.mapService.applyMap(nodes);
   }
 
   applyTopic(topic: Topic): void {
@@ -638,7 +647,7 @@ export class TopicsService extends Service {
         this.stopDocPolling();
         return;
       }
-      this.collapsedIds = readCollapsed(id);
+      this.mapService.restoreCollapsed(id);
       let loaded = await this._loadTopicPane(id, 0);
       if (gen !== this.topicLoadGen) return;
       while (this.docSyncPending && gen === this.topicLoadGen) {
@@ -859,86 +868,44 @@ export class TopicsService extends Service {
   }
 
   async refreshSummary(refreshMap = false): Promise<boolean> {
-    const topicId = this.topicId;
-    const gen = this.topicLoadGen;
-    const nodeId = this.selectedNodeId;
-    if (!topicId) return false;
-    try {
-      const [summary, map] = await Promise.all([
-        getTopicMapSummary(topicId),
-        refreshMap ? getTopicMap(topicId) : Promise.resolve(null),
-      ]);
-      if (this.topicId !== topicId || this.topicLoadGen !== gen) return false;
-      this.summary = summary;
-      if (map) this.applyMap(map.nodes);
-      this.patchItem(topicId, {
-        cardCount: summary.cardCount,
-        totalNodes: summary.totalNodes,
-        uncoveredNodes: summary.uncoveredNodes,
-        masteryPct: summary.masteryPct,
-      });
-    } catch {
-      return false;
-    }
-    if (!refreshMap || !nodeId) return true;
-    try {
-      const detail = await getMapNodeDetail(nodeId);
-      if (this.topicId === topicId && this.topicLoadGen === gen && this.selectedNodeId === nodeId) {
-        this.nodeDetail = detail;
-      }
-    } catch (err) {
-      if (this.topicId !== topicId || this.topicLoadGen !== gen || this.selectedNodeId !== nodeId) {
-        return true;
-      }
-      if (err instanceof ApiError && err.status === 404) {
-        this.selectedNodeId = null;
-        this.nodeDetail = null;
-      }
-    }
-    return true;
+    return this.mapService.refreshSummary(refreshMap, {
+      topicId: () => this.topicId,
+      topicLoadGen: () => this.topicLoadGen,
+      patchItem: (id, patch) => this.patchItem(id, patch),
+    });
   }
 
   async openNode(nodeId: string): Promise<void> {
-    this.selectedNodeId = nodeId;
-    try {
-      this.nodeDetail = await getMapNodeDetail(nodeId);
-    } catch (err) {
-      this.detailError = errorMessage(err, '打不开这个节点');
-      this.nodeDetail = null;
-    }
+    await this.mapService.openNode(nodeId, {
+      setDetailError: (message) => {
+        this.detailError = message;
+      },
+    });
   }
 
   async organize(): Promise<void> {
-    if (!this.topic || this.topic.status === 'archived' || this.jobRunning) return;
-    this.detailError = null;
-    try {
-      const job = await organizeTopicMap(this.topic.id);
-      this.watchJob(job);
-    } catch (err) {
-      if (await this.resumeFromConflict(err)) return;
-      this.detailError = errorMessage(err, '整理地图失败');
-    }
+    await this.mapService.organize({
+      topic: this.topic,
+      jobRunning: this.jobRunning,
+      watchJob: (job) => this.watchJob(job),
+      resumeFromConflict: (err) => this.resumeFromConflict(err),
+      setDetailError: (message) => {
+        this.detailError = message;
+      },
+    });
   }
 
   async fill(nodeId: string): Promise<void> {
-    if (!this.topic || this.topic.status === 'archived' || this.jobRunning) return;
-    if (findMapNode(this.tree, nodeId)?.proposedCount) {
-      this.showToast('有待确认的卡');
-      return;
-    }
-    this.detailError = null;
-    try {
-      const job = await fillMapNode(nodeId);
-      this.watchJob(job);
-      void this.openNode(nodeId);
-    } catch (err) {
-      if (await this.resumeFromConflict(err)) return;
-      if (err instanceof ApiError && err.code === 'NODE_HAS_PROPOSED_CARDS') {
-        this.showToast('有待确认的卡');
-        return;
-      }
-      this.detailError = errorMessage(err, '补节点失败');
-    }
+    await this.mapService.fill(nodeId, {
+      topic: this.topic,
+      jobRunning: this.jobRunning,
+      watchJob: (job) => this.watchJob(job),
+      resumeFromConflict: (err) => this.resumeFromConflict(err),
+      setDetailError: (message) => {
+        this.detailError = message;
+      },
+      showToast: (message) => this.showToast(message),
+    });
   }
 
   async resumeFromConflict(err: unknown): Promise<boolean> {

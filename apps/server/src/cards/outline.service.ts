@@ -5,6 +5,7 @@ import { placeCanvasMember } from '../canvas/canvas.service.js';
 import { getDb, type Database } from '../db/index.js';
 import { cards } from '../db/schema.js';
 import { AppError } from '../errors.js';
+import { updateCards } from './card-write.js';
 import { toPublicCardBase } from './card.mapper.js';
 
 type OutlineDb = Pick<Database, 'select' | 'update'>;
@@ -26,8 +27,7 @@ export async function applyOutlineDetach(db: OutlineDb, userId: string, cardId: 
 
   const now = new Date();
   if (!card.documentId) {
-    await db
-      .update(cards)
+    await updateCards(db)
       .set({ outlineParentId: null, updatedAt: now })
       .where(and(eq(cards.userId, userId), eq(cards.outlineParentId, cardId)));
     return;
@@ -51,8 +51,7 @@ export async function applyOutlineDetach(db: OutlineDb, userId: string, cardId: 
     .map((row) => ({ id: row.id, parentId: row.parentId, position: row.position }));
   const plan = planOutlineDetach(visible, cardId);
   for (const move of plan.moves) {
-    await db
-      .update(cards)
+    await updateCards(db)
       .set({
         outlineParentId: move.parentId,
         outlinePosition: move.position,
@@ -60,8 +59,7 @@ export async function applyOutlineDetach(db: OutlineDb, userId: string, cardId: 
       })
       .where(and(eq(cards.id, move.id), eq(cards.userId, userId)));
   }
-  await db
-    .update(cards)
+  await updateCards(db)
     .set({ outlineParentId: plan.nextParent, updatedAt: now })
     .where(
       and(eq(cards.userId, userId), eq(cards.outlineParentId, cardId), isNull(cards.deletedAt)),

@@ -3,6 +3,7 @@ import { and, count, eq, isNull, sql } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { annotations, cards, documents, mapNodes, type JobRow } from '../db/schema.js';
 import { findOwnedDocument } from '../documents/document.service.js';
+import { markDocumentDigested } from '../documents/document-status.js';
 import { isPristineFillStub } from '../maps/fill-stub-logic.js';
 import { nodeHasProposedCards } from '../maps/map.service.js';
 import {
@@ -26,13 +27,6 @@ import { AgentTerminalError, runAgentJob } from './run-agent-job.js';
 import { suggestTools, type SuggestSession } from './suggest-tools.js';
 import { fillTools, organizeTools } from './topic-tools.js';
 import type { DigestSession } from './tools.js';
-
-async function markDigested(id: string): Promise<void> {
-  await getDb()
-    .update(documents)
-    .set({ status: 'digested', failReason: null, updatedAt: new Date() })
-    .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
-}
 
 async function processOrganize(job: JobRow, topicId: string): Promise<void> {
   const session: DigestSession = {
@@ -174,7 +168,7 @@ async function processFill(
         throw new Error(`fill missing questions for ${String(missingQuestions.length)} card(s)`);
       }
 
-      await markDigested(documentId);
+      await markDocumentDigested(documentId);
       return `action=fill node=${payload.nodeId} cards=${String(produced.length)} questions=${String(
         produced.reduce((sum, card) => sum + card.questionCount, 0),
       )}`;

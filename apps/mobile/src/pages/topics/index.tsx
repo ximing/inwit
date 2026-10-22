@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ProgressBar } from '@/components/progress-bar';
 import { useTheme, type ThemeTokens } from '@/theme';
+import { TopicsMapService } from './topics-map.service.js';
 import { TopicsService, type TopicListItem } from './topics.service';
 
 const TopicRow = observer(function TopicRow({
@@ -190,4 +191,4 @@ function makeStyles(theme: ThemeTokens) {
   });
 }
 
-export default bindServices(TopicsContent, [TopicsService]);
+export default bindServices(TopicsContent, [TopicsService, TopicsMapService]);

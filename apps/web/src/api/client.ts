@@ -65,12 +65,10 @@ async function doFetch(path: string, init: RequestInit = {}): Promise<Response> 
   }
 }
 
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const first = await doFetch(path, init);
+async function readBody<T>(response: Response): Promise<T> {
+  if (response.status === 204) return undefined as T;
 
-  if (first.status === 204) return undefined as T;
-
-  const text = await first.text();
+  const text = await response.text();
   let data: unknown;
   if (text.length > 0) {
     try {
@@ -80,12 +78,12 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     }
   }
 
-  if (!first.ok) {
+  if (!response.ok) {
     const parsed = isErrorBody(data) ? data.error : undefined;
     const err = new ApiError(
-      first.status,
+      response.status,
       parsed?.code ?? 'UNKNOWN',
-      parsed?.message ?? (text.length > 0 ? text : first.statusText),
+      parsed?.message ?? (text.length > 0 ? text : response.statusText),
       parsed && 'details' in parsed ? parsed.details : undefined,
     );
     if (err.code === 'INVALID_TOKEN') clearAuth();
@@ -93,4 +91,25 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   }
 
   return data as T;
+}
+
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return readBody(await doFetch(path, init));
+}
+
+export type ConditionalResult<T> =
+  | { status: 304 }
+  | { status: 200; body: T; etag: string | null };
+
+/** GET that sends If-None-Match and leaves a 304 body unread. */
+export async function requestConditional<T>(
+  path: string,
+  etag: string | undefined,
+): Promise<ConditionalResult<T>> {
+  const headers = new Headers();
+  if (etag) headers.set('If-None-Match', etag);
+  const response = await doFetch(path, { headers });
+  if (response.status === 304) return { status: 304 };
+  const body = await readBody<T>(response);
+  return { status: 200, body, etag: response.headers.get('etag') };
 }

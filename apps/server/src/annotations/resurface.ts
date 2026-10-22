@@ -28,7 +28,9 @@ import { insertInitialReviewState } from '../review/state-init.js';
 import { loadAnnotationsByIds } from '../search/search.service.js';
 import { localDateKey } from '../utils/date.js';
 import { logger } from '../utils/logger.js';
+import { planCardIndex } from '../cards/card-acceptance-logic.js';
 import { toPublicCardBase } from '../cards/card.mapper.js';
+import { insertCardRow } from '../cards/card-write.js';
 import {
   normalizeResurfaceKey,
   parseResurfaceContent,
@@ -361,22 +363,19 @@ export async function acceptAnnotationResurface(
 
   const now = new Date();
   const created = await getDb().transaction(async (tx) => {
-    const [cardRow] = await tx
-      .insert(cards)
-      .values({
-        userId,
-        documentId: document.id,
-        topicId: document.topicId,
-        concept: input.concept,
-        example: input.example,
-        confusionPoint: '',
-        tags: [],
-        source: 'manual',
-        anchorText: input.anchorText ?? null,
-        anchorBlockIndex: input.anchorBlockIndex ?? null,
-        imageKey: input.imageKey ?? null,
-      })
-      .returning();
+    const cardRow = await insertCardRow(tx, {
+      userId,
+      documentId: document.id,
+      topicId: document.topicId,
+      concept: input.concept,
+      example: input.example,
+      confusionPoint: '',
+      tags: [],
+      source: 'manual',
+      anchorText: input.anchorText ?? null,
+      anchorBlockIndex: input.anchorBlockIndex ?? null,
+      imageKey: input.imageKey ?? null,
+    });
     if (!cardRow) throw AppError.of(500, 'INTERNAL_ERROR');
     await insertInitialReviewState(userId, cardRow.id, now, tx, now);
     await tx
@@ -395,7 +394,8 @@ export async function acceptAnnotationResurface(
     await tx.update(memories).set({ content: nextContent, updatedAt: now }).where(eq(memories.id, row.id));
     return cardRow;
   });
-  await tryIndexCard(created);
+  const indexPlan = planCardIndex({ reason: 'resurface' });
+  if (indexPlan.index && indexPlan.onFailure === 'swallow') await tryIndexCard(created);
   return {
     card: toPublicCardBase(created),
     resurface: await getAnnotationResurface(userId),

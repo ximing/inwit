@@ -2,9 +2,10 @@ import { documentIdFromJobPayload } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
-import { annotations, cardQuestions, cards, documents, topics, type JobRow } from '../db/schema.js';
+import { annotations, cardQuestions, cards, topics, type JobRow } from '../db/schema.js';
 import { asPmJson } from '../documents/content-json.js';
 import { findOwnedDocument } from '../documents/document.service.js';
+import { markDocumentDigested } from '../documents/document-status.js';
 import { RescheduleJobError } from '../jobs/queue-logic.js';
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
 import { maybeEnqueueTopicSuggest } from '../topics/suggest.js';
@@ -46,19 +47,6 @@ async function deleteOutlineAnnotations(userId: string, documentId: string): Pro
         eq(annotations.kind, 'outline'),
       ),
     );
-}
-
-async function markDigested(id: string, extra?: { linkHint?: string | null }): Promise<void> {
-  await getDb()
-    .update(documents)
-    .set({
-      status: 'digested',
-      failReason: null,
-      updatedAt: new Date(),
-      ...(extra && 'linkHint' in extra ? { linkHint: extra.linkHint ?? null } : {}),
-    })
-    // Skip documents in 回收站: a stale job must not resurrect them.
-    .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
 }
 
 async function loadDigestAvoidance(userId: string, documentId: string) {
@@ -211,7 +199,7 @@ async function verifyDigest(
       });
     }
   }
-  await markDigested(documentId, { linkHint: hint });
+  await markDocumentDigested(documentId, { linkHint: hint });
   await tryIndexOwnedDocument(job.userId, documentId);
 
   if (!config.DIGEST_CARD_GATE && !session.topicId) {

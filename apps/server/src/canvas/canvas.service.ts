@@ -9,6 +9,7 @@ import type {
 import { mergeCanvasForest, planOutlineDetach, planOutlineMove, planOutlinePlace } from '@inwit/dto';
 import { and, asc, eq, inArray, isNull, ne } from 'drizzle-orm';
 import { assertOwnedAssetKey } from '../assets/asset-logic.js';
+import { updateCards } from '../cards/card-write.js';
 import { getDb, type Database } from '../db/index.js';
 import {
   annotations,
@@ -161,8 +162,7 @@ async function mirrorCardOutline(
   now: Date,
 ): Promise<void> {
   const parent = parentId ? forest.find((member) => member.id === parentId) : null;
-  await db
-    .update(cards)
+  await updateCards(db)
     .set({
       outlineParentId: parent?.kind === 'card' ? parent.id : null,
       outlinePosition: position,

@@ -1,6 +1,9 @@
 import type { Annotation, CanvasNode, DocumentCard, DocumentDetail } from '@inwit/dto';
 import { describe, expect, it, vi } from 'vitest';
 import { DocsAnnotationsService } from './docs-annotations.service';
+import { DocsCanvasService } from './docs-canvas.service.js';
+import { DocsPendingPollService } from './docs-pending-poll.service.js';
+import { DocsSelectionService } from './docs-selection.service.js';
 import { DocsService } from './docs.service';
 
 describe('document anchor card selection', () => {
@@ -74,9 +77,15 @@ function freeNode(id: string, kind: 'text' | 'image'): CanvasNode {
 function canvasService(cards: DocumentCard[], notes: Annotation[], nodes: CanvasNode[] = []) {
   const service = new DocsService();
   const annotations = new DocsAnnotationsService();
+  const canvas = new DocsCanvasService();
+  const selection = new DocsSelectionService();
+  const pendingPoll = new DocsPendingPollService();
   annotations.annotations = notes;
   vi.spyOn(service, 'resolve').mockImplementation(((token: unknown) => {
     if (token === DocsAnnotationsService) return annotations;
+    if (token === DocsCanvasService) return canvas;
+    if (token === DocsSelectionService) return selection;
+    if (token === DocsPendingPollService) return pendingPoll;
     throw new Error(`unexpected resolve: ${String(token)}`);
   }) as typeof service.resolve);
   service.doc = { id: 'doc-1', cards, contentJson: body } as DocumentDetail;

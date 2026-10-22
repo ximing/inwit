@@ -1,10 +1,8 @@
 import { documentIdFromJobPayload } from '@inwit/dto';
-import { and, eq, isNull } from 'drizzle-orm';
-import { getDb } from '../db/index.js';
-import { documents, type JobRow } from '../db/schema.js';
+import type { JobRow } from '../db/schema.js';
 import { documentPlainText } from '../documents/content-json.js';
 import { findOwnedDocument } from '../documents/document.service.js';
-import { markDocumentFailed } from '../documents/document-status.js';
+import { markDocumentDigested, markDocumentFailed } from '../documents/document-status.js';
 import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
 import { logger } from '../utils/logger.js';
 import {
@@ -18,19 +16,6 @@ import { extractAssistantText } from './messages.js';
 import { CHAT_SYSTEM_PROMPT, chatUserPrompt } from './prompts.js';
 import { AgentTerminalError, runAgentJob } from './run-agent-job.js';
 import { chatTools, type DigestSession } from './tools.js';
-
-async function markChatDigested(id: string, answer: string | null, linkHint?: string | null): Promise<void> {
-  await getDb()
-    .update(documents)
-    .set({
-      status: 'digested',
-      failReason: null,
-      answer,
-      updatedAt: new Date(),
-      ...(linkHint !== undefined ? { linkHint } : {}),
-    })
-    .where(and(eq(documents.id, id), isNull(documents.deletedAt)));
-}
 
 export async function processChat(job: JobRow): Promise<void> {
   const documentId = documentIdFromJobPayload(job.payload);
@@ -90,7 +75,10 @@ export async function processChat(job: JobRow): Promise<void> {
       const cardIds = produced.map((card) => card.id);
       const hint = await associationHintForCards(job.userId, cardIds);
       const linkN = await countOutgoingLinks(job.userId, cardIds);
-      await markChatDigested(documentId, answerText, hint);
+      await markDocumentDigested(documentId, {
+        answer: answerText,
+        ...(hint !== undefined ? { linkHint: hint } : {}),
+      });
       try {
         await ensureDocumentMeta({
           userId: job.userId,

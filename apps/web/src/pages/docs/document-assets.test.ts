@@ -6,6 +6,9 @@ import { DocsService } from './docs.service';
 import { EditorService } from './editor.service';
 import { DocsImportService } from './docs-import.service';
 import { DocsAnnotationsService } from './docs-annotations.service';
+import { DocsCanvasService } from './docs-canvas.service.js';
+import { DocsPendingPollService } from './docs-pending-poll.service.js';
+import { DocsSelectionService } from './docs-selection.service.js';
 
 vi.mock('@/api/documents', async (original) => ({
   ...await original<typeof import('@/api/documents')>(), getDocument: vi.fn(),
@@ -29,11 +32,17 @@ it.each(['read', 'edit'] as const)('seeds document image URLs before the %s view
   const service = new DocsService();
   const imports = new DocsImportService();
   const annotations = new DocsAnnotationsService();
+  const canvas = new DocsCanvasService();
+  const selection = new DocsSelectionService();
+  const pendingPoll = new DocsPendingPollService();
   vi.spyOn(service, 'resolve').mockImplementation(((token: unknown) => {
     if (token === AssetUrlsService) return assets;
     if (token === EditorService) return editor;
     if (token === DocsImportService) return imports;
     if (token === DocsAnnotationsService) return annotations;
+    if (token === DocsCanvasService) return canvas;
+    if (token === DocsSelectionService) return selection;
+    if (token === DocsPendingPollService) return pendingPoll;
     throw new Error('Unexpected service dependency');
   }) as typeof service.resolve);
   vi.spyOn(editor, 'resolve').mockReturnValue(assets);
@@ -53,5 +62,8 @@ it.each(['read', 'edit'] as const)('seeds document image URLs before the %s view
     assets.destroy();
     imports.destroy();
     annotations.destroy();
+    canvas.destroy();
+    selection.destroy();
+    pendingPoll.destroy();
   }
 });

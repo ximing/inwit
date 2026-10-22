@@ -5,7 +5,16 @@ import { listDocuments } from '@/api/documents';
 import { getJob } from '@/api/jobs';
 import { getActiveTopicJob, getMapNodeDetail, getTopicMap, getTopicMapSummary } from '@/api/maps';
 import { getTopic, listTopics } from '@/api/topics';
+import { TopicsMapService } from './topics-map.service.js';
 import { mergeListedRows, TopicsService, type TopicListItem } from './topics.service';
+
+function attachMap(service: TopicsService): void {
+  const map = new TopicsMapService();
+  vi.spyOn(service, 'resolve').mockImplementation(((token: unknown) => {
+    if (token === TopicsMapService) return map;
+    throw new Error(`unexpected resolve: ${String(token)}`);
+  }) as typeof service.resolve);
+}
 
 vi.mock('@/api/maps', async (original) => ({
   ...await original<typeof import('@/api/maps')>(),
@@ -42,6 +51,7 @@ beforeEach(() => vi.clearAllMocks());
 describe('topic map refresh after document changes', () => {
   it('refreshes node document counts as well as the summary', async () => {
     const service = new TopicsService();
+    attachMap(service);
     service.topicId = 'topic-1';
     service.applyMap([node]);
     vi.mocked(getTopicMapSummary).mockResolvedValue(summary);
@@ -52,6 +62,7 @@ describe('topic map refresh after document changes', () => {
 
   it('does not apply old topic responses after navigation', async () => {
     const service = new TopicsService();
+    attachMap(service);
     service.topicId = 'topic-1';
     let finish!: (value: typeof summary) => void;
     vi.mocked(getTopicMapSummary).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
@@ -66,6 +77,7 @@ describe('topic map refresh after document changes', () => {
 
   it('applies the tree when the open node is missing', async () => {
     const service = new TopicsService();
+    attachMap(service);
     service.topicId = 'topic-1';
     service.selectedNodeId = 'missing';
     service.nodeDetail = { node, cards: [], documents: [] };
@@ -237,6 +249,7 @@ describe('reset document window', () => {
     const doomed = docItem('doomed');
     const added = docItem('added');
     const service = new TopicsService();
+    attachMap(service);
     service.topic = topic;
     service.topicId = topic.id;
     service.docsHeadReady = true;

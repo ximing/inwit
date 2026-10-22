@@ -5,7 +5,7 @@ import { and, desc, eq, ilike, isNull } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { documents } from '../db/schema.js';
 import { asPmJson, documentPlainText, markdownToContentJson } from '../documents/content-json.js';
-import { tryIndexOwnedDocument } from '../retrieval/document-index.js';
+import { insertAgentDocument, replaceAgentDocumentContent } from '../documents/document-write.js';
 import { numberedBlocksFromDoc } from './card-anchor-logic.js';
 import {
   documentEditRefusal,
@@ -228,15 +228,12 @@ export function updateDocumentTool(
         params.title !== undefined && params.title.trim().length > 0
           ? plainClip(params.title, DOCUMENT_TITLE_MAX)
           : undefined;
-      await getDb()
-        .update(documents)
-        .set({
-          contentJson,
-          updatedAt: new Date(),
-          ...(nextTitle !== undefined ? { title: nextTitle } : {}),
-        })
-        .where(and(eq(documents.id, row.id), eq(documents.userId, session.userId)));
-      await tryIndexOwnedDocument(session.userId, row.id);
+      await replaceAgentDocumentContent({
+        userId: session.userId,
+        documentId: row.id,
+        contentJson,
+        ...(nextTitle !== undefined ? { title: nextTitle } : {}),
+      });
       const savedTitle = nextTitle ?? displayTitle(row.title);
       session.actions.push({
         type: 'update_document',
@@ -281,18 +278,12 @@ export function createConversationDocumentTool(
         params.title !== undefined && params.title.trim().length > 0
           ? plainClip(params.title, DOCUMENT_TITLE_MAX)
           : null;
-      const [row] = await getDb()
-        .insert(documents)
-        .values({
-          userId: session.userId,
-          title,
-          contentJson,
-          source: 'editor',
-          status: 'digested',
-        })
-        .returning({ id: documents.id, title: documents.title });
+      const row = await insertAgentDocument({
+        userId: session.userId,
+        title,
+        contentJson,
+      });
       if (!row) return toolResult(JSON.stringify({ ok: false, reason: '没能新建' }), { ok: false });
-      await tryIndexOwnedDocument(session.userId, row.id);
       const savedTitle = displayTitle(row.title);
       session.actions.push({
         type: 'create_document',

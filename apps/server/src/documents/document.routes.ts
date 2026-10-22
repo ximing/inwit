@@ -21,8 +21,8 @@ import {
   createDocument,
   destroyDocument,
   enqueueSelectionCards,
-  getDocument,
   getDocumentFile,
+  getDocumentIfModified,
   listArchivedDocuments,
   listDocuments,
   requestExcerptUpload,
@@ -31,6 +31,7 @@ import {
   updateDocument,
 } from './document.service.js';
 import { acceptProposedCards } from '../cards/card-decision.service.js';
+import { normalizeIfNoneMatch } from './document-etag-logic.js';
 import { abortImport, completeImport, initImport, presignImportParts } from './import.service.js';
 import { completeScreenshot, initScreenshot } from './screenshot.service.js';
 
@@ -125,9 +126,17 @@ export function registerDocumentRoutes(app: FastifyInstance): void {
     return requestExcerptUpload(requireUser(req).id, id, input);
   });
 
-  app.get('/api/documents/:id', auth, async (req) => {
+  app.get('/api/documents/:id', auth, async (req, reply) => {
     const { id } = idParamsSchema.parse(req.params);
-    return getDocument(requireUser(req).id, id);
+    const read = await getDocumentIfModified(
+      requireUser(req).id,
+      id,
+      normalizeIfNoneMatch(req.headers['if-none-match']),
+    );
+    reply.header('ETag', read.etag);
+    reply.header('Cache-Control', 'private, no-store');
+    if (read.notModified) return reply.code(304).send();
+    return read.detail;
   });
 
   app.put('/api/documents/:id', auth, async (req) => {

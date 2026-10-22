@@ -1,7 +1,6 @@
 import { Service } from '@rabjs/react';
 import {
   ASSET_IMAGE_MAX_BYTES,
-  ASSET_IMAGE_MIMES,
   EXCERPT_MAX_BYTES,
   IMAGE_EXCERPT_QUOTE,
   type Annotation,
@@ -48,15 +47,12 @@ import { ApiError, errorMessage } from '@/api/client';
 import {
   acceptProposedCards,
   deleteDocument,
-  enqueueSelectionCards,
   getDocument,
-  getDocumentFile,
   requestExcerptUpload,
   retryDocument,
   updateDocument,
 } from '@/api/documents';
 import { confirmAction } from '@/lib/confirm';
-import { getJob } from '@/api/jobs';
 import { getTopic, listTopics } from '@/api/topics';
 import { clipChars } from '@/lib/clip';
 import { formatTimeHm } from '@/lib/format';
@@ -104,50 +100,15 @@ import {
   SAVE_DEBOUNCE_MS,
   titlesDiffer,
 } from './editor-session';
-
-const IMAGE_MIMES = new Set<string>(ASSET_IMAGE_MIMES);
-
-function imageMime(uri: string, mimeType?: string | null): string | null {
-  if (mimeType) {
-    const mime = mimeType.split(';')[0]?.trim().toLowerCase() ?? '';
-    const normalized = mime === 'image/jpg' ? 'image/jpeg' : mime;
-    if (IMAGE_MIMES.has(normalized)) return normalized;
-  }
-  const lower = uri.split('?')[0]?.toLowerCase() ?? '';
-  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
-  if (lower.endsWith('.png')) return 'image/png';
-  if (lower.endsWith('.webp')) return 'image/webp';
-  if (lower.endsWith('.gif')) return 'image/gif';
-  return null;
-}
-
-function clipReason(reason: string): string {
-  return clipChars(reason.replaceAll('\0', ''), 500);
-}
-
-function reparentError(reason: string): string {
-  if (reason === 'cycle') return '不能挂到自己下面的节点';
-  if (reason === 'depth') return '这一层太深了';
-  if (reason === 'self') return '不能挂到自己下面';
-  return '没法移动';
-}
-
-function decisionError(err: unknown, action: 'accept' | 'reject'): string {
-  if (err instanceof ApiError) {
-    if (err.code === 'CARD_INDEX_FAILED') {
-      return action === 'accept'
-        ? '这张卡暂时没能进入检索，请再试'
-        : '这张卡暂时没能移出检索，请再试';
-    }
-    if (err.code === 'DIGEST_IN_PROGRESS') return '消化还在进行，暂时不能确认';
-    if (err.code === 'CARD_ALREADY_REVIEWED') return '请用回收站，而不是「有问题」';
-  }
-  return errorMessage(err, '操作没成功');
-}
+import { clipReason, decisionError, imageMime, reparentError } from './reader-logic.js';
+import { isPdfPageIndex, type PdfSelection } from './reader-pdf-logic.js';
+import { ReaderCanvasService } from './reader-canvas.service.js';
+import { ReaderEngineService } from './reader-engine.service.js';
+import { ReaderFormatService } from './reader-format.service.js';
+import { ReaderPdfService } from './reader-pdf.service.js';
+import { ReaderSelectionService, type SelectionPollHooks } from './reader-selection.service.js';
 
 const POLL_MS = 3000;
-const SELECTION_POLL_MS = 2000;
-const SELECTION_POLL_FOR_MS = 9000;
 const PDF_MIME = 'application/pdf';
 
 export type ReaderSheet =
@@ -180,21 +141,8 @@ export class ReaderService extends Service {
   annotations: Annotation[] = [];
   topics: Topic[] = [];
   docError: string | null = null;
-  engineError: string | null = null;
-  pdfUrl: string | null = null;
-  pdfError: string | null = null;
-  pdfSelection: { text: string; pageIndex: number; quads: number[][] } | null = null;
-  pdfMarquee = false;
-  pdfJump: { pageIndex: number; token: number } | null = null;
-  canvasNodes: CanvasNode[] = [];
-  canvasRevisions: CanvasRevision[] = [];
-  canvasRevisionsLoading = false;
-  canvasRevisionRestoring: string | null = null;
-  canvasHistoryOpen = false;
-  private canvasRevisionGen = 0;
   viewMode: 'body' | 'map' = 'body';
   canvasText = '';
-  engineReady = false;
   contentGen = 0;
   /** Bumped when cards change without a new document body. contentGen also reloads the doc. */
   entityGen = 0;
@@ -214,11 +162,6 @@ export class ReaderService extends Service {
   focused = false;
   appActive = true;
   pollTimer: ReturnType<typeof setInterval> | null = null;
-  selectionDigesting = false;
-  selectionPollUntil = 0;
-  selectionPollDocId: string | null = null;
-  selectionCardCountAtStart = 0;
-  selectionTickTimer: ReturnType<typeof setTimeout> | null = null;
   loadGen = 0;
   appliedAnchor: string | null = null;
   pendingAnchor: string | null = null;
@@ -234,10 +177,6 @@ export class ReaderService extends Service {
   saveState: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
   savedAt: Date | null = null;
   saveError: string | null = null;
-  formatState: FormatState | null = null;
-  linkDraft = '';
-  editingLink = false;
-  mathDraft = '';
   cardEditQuestion = '';
   cardEditAnswer = '';
   uploadingImage = false;
@@ -257,7 +196,6 @@ export class ReaderService extends Service {
   private syncChain: Promise<void> = Promise.resolve();
   private echoes: EchoStamp[] = [];
   private cardWriteGen = 0;
-  private canvasGen = 0;
   private linksGen = 0;
   private saveFloors = new Map<string, number>();
   private detailWrites = 0;
@@ -269,9 +207,6 @@ export class ReaderService extends Service {
   private appliedSerial = 0;
   private conflictNotifiedAt: string | null = null;
   private goneNotifiedId: string | null = null;
-  private selectionJobId: string | null = null;
-  private selectionTickInflight = false;
-  private selectionWatchdog: ReturnType<typeof setTimeout> | null = null;
   private remoteGone = false;
 
   constructor() {
@@ -290,6 +225,200 @@ export class ReaderService extends Service {
 
   get assets(): AssetUrlsService {
     return this.resolve(AssetUrlsService);
+  }
+
+  /** 不在构造器里解析（嵌套实例化顺序敏感，且让构造保持轻量可测）。 */
+  get canvasService(): ReaderCanvasService {
+    return this.resolve(ReaderCanvasService);
+  }
+
+  /** 不在构造器里解析，避免和 ReaderService 循环依赖。 */
+  get pdfService(): ReaderPdfService {
+    return this.resolve(ReaderPdfService);
+  }
+
+  /** 不在构造器里解析，避免和 ReaderService 循环依赖。 */
+  get formatService(): ReaderFormatService {
+    return this.resolve(ReaderFormatService);
+  }
+
+  /** 不在构造器里解析，避免和 ReaderService 循环依赖。 */
+  get engineService(): ReaderEngineService {
+    return this.resolve(ReaderEngineService);
+  }
+
+  /** 不在构造器里解析，避免和 ReaderService 循环依赖。 */
+  get selectionService(): ReaderSelectionService {
+    return this.resolve(ReaderSelectionService);
+  }
+
+  get engineReady(): boolean {
+    return this.engineService.engineReady;
+  }
+  set engineReady(value: boolean) {
+    this.engineService.engineReady = value;
+  }
+
+  get engineError(): string | null {
+    return this.engineService.engineError;
+  }
+  set engineError(value: string | null) {
+    this.engineService.engineError = value;
+  }
+
+  get formatState(): FormatState | null {
+    return this.formatService.formatState;
+  }
+  set formatState(value: FormatState | null) {
+    this.formatService.formatState = value;
+  }
+
+  get linkDraft(): string {
+    return this.formatService.linkDraft;
+  }
+  set linkDraft(value: string) {
+    this.formatService.linkDraft = value;
+  }
+
+  get editingLink(): boolean {
+    return this.formatService.editingLink;
+  }
+  set editingLink(value: boolean) {
+    this.formatService.editingLink = value;
+  }
+
+  get mathDraft(): string {
+    return this.formatService.mathDraft;
+  }
+  set mathDraft(value: string) {
+    this.formatService.mathDraft = value;
+  }
+
+  get pdfUrl(): string | null {
+    return this.pdfService.pdfUrl;
+  }
+  set pdfUrl(value: string | null) {
+    this.pdfService.pdfUrl = value;
+  }
+
+  get pdfError(): string | null {
+    return this.pdfService.pdfError;
+  }
+  set pdfError(value: string | null) {
+    this.pdfService.pdfError = value;
+  }
+
+  get pdfSelection(): PdfSelection | null {
+    return this.pdfService.pdfSelection;
+  }
+  set pdfSelection(value: PdfSelection | null) {
+    this.pdfService.pdfSelection = value;
+  }
+
+  get pdfMarquee(): boolean {
+    return this.pdfService.pdfMarquee;
+  }
+  set pdfMarquee(value: boolean) {
+    this.pdfService.pdfMarquee = value;
+  }
+
+  get pdfJump(): { pageIndex: number; token: number } | null {
+    return this.pdfService.pdfJump;
+  }
+  set pdfJump(value: { pageIndex: number; token: number } | null) {
+    this.pdfService.pdfJump = value;
+  }
+
+  /** 已经落库的画布节点。没摆过的卡片和批注不在这里，读的时候补成根。 */
+  get canvasNodes(): CanvasNode[] {
+    return this.canvasService.canvasNodes;
+  }
+  set canvasNodes(value: CanvasNode[]) {
+    this.canvasService.canvasNodes = value;
+  }
+
+  get canvasRevisions(): CanvasRevision[] {
+    return this.canvasService.canvasRevisions;
+  }
+  set canvasRevisions(value: CanvasRevision[]) {
+    this.canvasService.canvasRevisions = value;
+  }
+
+  get canvasRevisionsLoading(): boolean {
+    return this.canvasService.canvasRevisionsLoading;
+  }
+  set canvasRevisionsLoading(value: boolean) {
+    this.canvasService.canvasRevisionsLoading = value;
+  }
+
+  get canvasRevisionRestoring(): string | null {
+    return this.canvasService.canvasRevisionRestoring;
+  }
+  set canvasRevisionRestoring(value: string | null) {
+    this.canvasService.canvasRevisionRestoring = value;
+  }
+
+  get canvasHistoryOpen(): boolean {
+    return this.canvasService.canvasHistoryOpen;
+  }
+  set canvasHistoryOpen(value: boolean) {
+    this.canvasService.canvasHistoryOpen = value;
+  }
+
+  get selectionDigesting(): boolean {
+    return this.selectionService.selectionDigesting;
+  }
+  set selectionDigesting(value: boolean) {
+    this.selectionService.selectionDigesting = value;
+  }
+
+  get selectionPollUntil(): number {
+    return this.selectionService.selectionPollUntil;
+  }
+  set selectionPollUntil(value: number) {
+    this.selectionService.selectionPollUntil = value;
+  }
+
+  get selectionPollDocId(): string | null {
+    return this.selectionService.selectionPollDocId;
+  }
+  set selectionPollDocId(value: string | null) {
+    this.selectionService.selectionPollDocId = value;
+  }
+
+  get selectionCardCountAtStart(): number {
+    return this.selectionService.selectionCardCountAtStart;
+  }
+  set selectionCardCountAtStart(value: number) {
+    this.selectionService.selectionCardCountAtStart = value;
+  }
+
+  get selectionTickTimer(): ReturnType<typeof setTimeout> | null {
+    return this.selectionService.selectionTickTimer;
+  }
+  set selectionTickTimer(value: ReturnType<typeof setTimeout> | null) {
+    this.selectionService.selectionTickTimer = value;
+  }
+
+  private get selectionJobId(): string | null {
+    return this.selectionService.selectionJobId;
+  }
+  private set selectionJobId(value: string | null) {
+    this.selectionService.selectionJobId = value;
+  }
+
+  private get selectionTickInflight(): boolean {
+    return this.selectionService.selectionTickInflight;
+  }
+  private set selectionTickInflight(value: boolean) {
+    this.selectionService.selectionTickInflight = value;
+  }
+
+  private get selectionWatchdog(): ReturnType<typeof setTimeout> | null {
+    return this.selectionService.selectionWatchdog;
+  }
+  private set selectionWatchdog(value: ReturnType<typeof setTimeout> | null) {
+    this.selectionService.selectionWatchdog = value;
   }
 
   get isPdf(): boolean {
@@ -391,7 +520,7 @@ export class ReaderService extends Service {
   }
 
   noteFormatState(state: FormatState): void {
-    this.formatState = state;
+    this.formatService.noteFormatState(state);
   }
 
   openMore(): void {
@@ -403,24 +532,21 @@ export class ReaderService extends Service {
   }
 
   openLinkSheet(): void {
-    const state = this.formatState;
-    this.editingLink = state?.link === true;
-    const href = state?.link && typeof state.href === 'string' ? state.href : '';
-    this.linkDraft = href;
+    this.formatService.prepareLinkSheet();
     this.sheet = { kind: 'link' };
   }
 
   setLinkDraft(value: string): void {
-    this.linkDraft = value;
+    this.formatService.setLinkDraft(value);
   }
 
   openMathSheet(): void {
-    this.mathDraft = '';
+    this.formatService.prepareMathSheet();
     this.sheet = { kind: 'math' };
   }
 
   setMathDraft(value: string): void {
-    this.mathDraft = value;
+    this.formatService.setMathDraft(value);
   }
 
   markEngineReady(): void {
@@ -485,7 +611,7 @@ export class ReaderService extends Service {
       this.canvasText = '';
       this.pendingAnnotationId = null;
       this.appliedAnnotationId = null;
-      this.canvasGen += 1;
+      this.canvasService.bumpCanvasGen();
       this.loadGen += 1;
     }
     const gen = this.loadGen;
@@ -620,34 +746,24 @@ export class ReaderService extends Service {
   }
 
   async loadPdf(id = this.doc?.id, gen = this.loadGen): Promise<void> {
-    if (!id) return;
-    this.pdfError = null;
-    try {
-      const file = await getDocumentFile(id);
-      if (gen !== this.loadGen || this.doc?.id !== id) return;
-      this.pdfUrl = file.url;
-    } catch (err) {
-      if (gen !== this.loadGen || this.doc?.id !== id) return;
-      this.pdfUrl = null;
-      this.pdfError = errorMessage(err, '打不开这份 PDF');
-    }
+    await this.pdfService.loadPdf(
+      id,
+      gen,
+      () => this.loadGen,
+      () => this.doc?.id,
+    );
   }
 
   setPdfError(message: string | null): void {
-    this.pdfError = message;
+    this.pdfService.setPdfError(message);
   }
 
   setPdfSelection(text: string, pageIndex: number, quads: number[][] = []): void {
-    const quote = text.trim();
-    if (!quote) {
-      this.pdfSelection = null;
-      return;
-    }
-    this.pdfSelection = { text: quote, pageIndex, quads };
+    this.pdfService.setPdfSelection(text, pageIndex, quads);
   }
 
   clearPdfSelection(): void {
-    this.pdfSelection = null;
+    this.pdfService.clearPdfSelection();
   }
 
   beginPdfAnnotate(): void {
@@ -676,12 +792,11 @@ export class ReaderService extends Service {
   }
 
   togglePdfMarquee(): void {
-    this.pdfMarquee = !this.pdfMarquee;
-    if (this.pdfMarquee) this.pdfSelection = null;
+    this.pdfService.togglePdfMarquee();
   }
 
   revealPdfPage(pageIndex: number): void {
-    if (!Number.isInteger(pageIndex) || pageIndex < 0) return;
+    if (!isPdfPageIndex(pageIndex)) return;
     this.viewMode = 'body';
     this.pdfJump = { pageIndex, token: Date.now() };
   }
@@ -739,7 +854,7 @@ export class ReaderService extends Service {
           imageKey: presigned.key,
         });
         this.cardWriteGen += 1;
-        this.canvasGen += 1;
+        this.canvasService.bumpCanvasGen();
         if (this.doc?.id === documentId) {
           this.annotations = [...this.annotations.filter((item) => item.id !== created.id), created];
           this.entityGen += 1;
@@ -808,7 +923,7 @@ export class ReaderService extends Service {
       const kicker = note?.kind === 'pdf' ? `PDF ${(note.pageIndex ?? 0) + 1}` : '批注';
       return { kicker, title, imageKey: note?.imageKey ?? null };
     }
-    const node = this.canvasNodes.find((item) => item.id === id);
+    const node = this.canvasService.findNode(id);
     if (member.kind === 'text') return { kicker: '文本', title: node?.text?.trim() || '文本', imageKey: null };
     return { kicker: '图片', title: '图片', imageKey: node?.imageKey ?? null };
   }
@@ -882,7 +997,7 @@ export class ReaderService extends Service {
   }
 
   beginEditCanvasText(nodeId: string): void {
-    const node = this.canvasNodes.find((item) => item.id === nodeId);
+    const node = this.canvasService.findNode(nodeId);
     this.canvasText = node?.text ?? '';
     this.sheet = { kind: 'canvas-text', mode: 'edit', nodeId, parentId: node?.parentId ?? null };
   }
@@ -904,13 +1019,13 @@ export class ReaderService extends Service {
     }
     const documentId = this.doc.id;
     this.saving = true;
-    this.canvasGen += 1;
+    this.canvasService.bumpCanvasGen();
     let failed = false;
     try {
       await this.withDetailWrite(async () => {
         const updated = await updateCanvasNode(documentId, nodeId, { parentId: plan.parentId });
         this.cardWriteGen += 1;
-        this.upsertCanvasNode(updated);
+        this.canvasService.upsertNode(updated);
       });
       this.showToast(parentId ? '已挂到这个节点下' : '已独立成树');
       this.closeSheet();
@@ -918,7 +1033,7 @@ export class ReaderService extends Service {
       failed = true;
       this.showToast(errorMessage(err, '没移成'));
     } finally {
-      this.canvasGen += 1;
+      this.canvasService.bumpCanvasGen();
       this.saving = false;
     }
     if (failed) void this.loadCanvas();
@@ -934,13 +1049,13 @@ export class ReaderService extends Service {
     }
     const documentId = this.doc.id;
     this.saving = true;
-    this.canvasGen += 1;
+    this.canvasService.bumpCanvasGen();
     try {
       await this.withDetailWrite(async () => {
         if (sheet.mode === 'edit' && sheet.nodeId) {
           const updated = await updateCanvasNode(documentId, sheet.nodeId, { text });
           this.cardWriteGen += 1;
-          this.upsertCanvasNode(updated);
+          this.canvasService.upsertNode(updated);
           return;
         }
         // 新文本节点 = note 批注 + 落位（批注是痕迹层，画布只负责摆放）。
@@ -949,14 +1064,14 @@ export class ReaderService extends Service {
           parentId: sheet.parentId,
         });
         this.cardWriteGen += 1;
-        this.canvasGen += 1;
+        this.canvasService.bumpCanvasGen();
         if (this.doc?.id === documentId) {
           this.annotations = [
             ...this.annotations.filter((item) => item.id !== created.annotation.id),
             created.annotation,
           ];
           this.entityGen += 1;
-          this.upsertCanvasNode(created.node);
+          this.canvasService.upsertNode(created.node);
         }
         this.echoDocumentRow(created.annotation.documentId, created.annotation.updatedAt);
       });
@@ -967,7 +1082,7 @@ export class ReaderService extends Service {
       this.showToast(errorMessage(err, '没写上'));
       return false;
     } finally {
-      this.canvasGen += 1;
+      this.canvasService.bumpCanvasGen();
       this.saving = false;
     }
   }
@@ -984,20 +1099,20 @@ export class ReaderService extends Service {
       return;
     }
     const documentId = this.doc.id;
-    this.canvasGen += 1;
+    this.canvasService.bumpCanvasGen();
     try {
       await this.withDetailWrite(async () => {
         // 新图片节点 = 纯图片 note 批注 + 落位。
         const created = await createCanvasNote(documentId, { imageKey, parentId });
         this.cardWriteGen += 1;
-        this.canvasGen += 1;
+        this.canvasService.bumpCanvasGen();
         if (this.doc?.id === documentId) {
           this.annotations = [
             ...this.annotations.filter((item) => item.id !== created.annotation.id),
             created.annotation,
           ];
           this.entityGen += 1;
-          this.upsertCanvasNode(created.node);
+          this.canvasService.upsertNode(created.node);
         }
         this.echoDocumentRow(created.annotation.documentId, created.annotation.updatedAt);
       });
@@ -1006,7 +1121,7 @@ export class ReaderService extends Service {
     } catch (err) {
       this.showToast(errorMessage(err, '图片没加上'));
     } finally {
-      this.canvasGen += 1;
+      this.canvasService.bumpCanvasGen();
     }
   }
 
@@ -1018,9 +1133,11 @@ export class ReaderService extends Service {
     this.closeSheet();
     const ok = await confirmAction('删除这个节点？', '它下面的节点会各自独立成树。', '删除', true);
     if (!ok || this.doc?.id !== documentId) return;
-    this.canvasGen += 1;
+    this.canvasService.bumpCanvasGen();
     this.cardWriteGen += 1;
-    this.canvasNodes = nodesAfterMemberLeaves(this.canvasNodes, this.forest, nodeId, documentId, false);
+    this.canvasService.replaceNodes(
+      nodesAfterMemberLeaves(this.canvasNodes, this.forest, nodeId, documentId, false),
+    );
     let failed = false;
     try {
       await this.withDetailWrite(async () => {
@@ -1030,7 +1147,7 @@ export class ReaderService extends Service {
       failed = true;
       this.showToast(errorMessage(err, '没删掉'));
     } finally {
-      this.canvasGen += 1;
+      this.canvasService.bumpCanvasGen();
     }
     if (failed) void this.loadCanvas();
   }
@@ -1041,26 +1158,22 @@ export class ReaderService extends Service {
   }
 
   closeCanvasHistory(): void {
-    this.canvasHistoryOpen = false;
-    this.canvasRevisions = [];
-    this.canvasRevisionsLoading = false;
-    this.canvasRevisionGen += 1;
+    this.canvasService.closeHistory();
   }
 
   async loadCanvasRevisions(): Promise<void> {
     const id = this.doc?.id;
     if (!id) return;
-    const gen = ++this.canvasRevisionGen;
-    this.canvasRevisionsLoading = true;
+    const gen = this.canvasService.startRevisionLoad();
     try {
       const revisions = await listCanvasRevisions(id);
-      if (gen !== this.canvasRevisionGen || this.doc?.id !== id) return;
-      this.canvasRevisions = revisions;
+      if (!this.canvasService.revisionGenMatches(gen) || this.doc?.id !== id) return;
+      this.canvasService.storeRevisions(revisions);
     } catch (err) {
-      if (gen !== this.canvasRevisionGen) return;
+      if (!this.canvasService.revisionGenMatches(gen)) return;
       this.showToast(errorMessage(err, '历史没读出来'));
     } finally {
-      if (gen === this.canvasRevisionGen) this.canvasRevisionsLoading = false;
+      this.canvasService.finishRevisionLoad(gen);
     }
   }
 
@@ -1080,7 +1193,7 @@ export class ReaderService extends Service {
       if (!this.doc || this.doc.id !== documentId || this.cardWriteGen !== gen) return;
       this.doc = { ...this.doc, cards: detail.cards, updatedAt: detail.updatedAt };
       this.annotations = notes;
-      this.canvasNodes = canvas;
+      this.canvasService.replaceNodes(canvas);
       this.entityGen += 1;
       this.showToast('已恢复这一版脑图');
       await this.loadCanvasRevisions();
@@ -1094,11 +1207,11 @@ export class ReaderService extends Service {
   async loadCanvas(): Promise<void> {
     const id = this.doc?.id;
     if (!id) return;
-    const ticket = ++this.canvasGen;
+    const ticket = this.canvasService.bumpCanvasGen();
     try {
       const nodes = await listCanvasNodes(id);
-      if (ticket !== this.canvasGen || this.doc?.id !== id || this.detailWrites > 0) return;
-      this.canvasNodes = nodes;
+      if (!this.canvasService.canvasGenMatches(ticket) || this.doc?.id !== id || this.detailWrites > 0) return;
+      this.canvasService.replaceNodes(nodes);
       void this.ensureCanvasImages();
     } catch {
       // Keep the forest already on screen.
@@ -1283,27 +1396,14 @@ export class ReaderService extends Service {
 
   private detachCanvasMember(id: string, keepRow: boolean): void {
     if (!this.doc) return;
-    this.canvasGen += 1;
-    this.canvasNodes = nodesAfterMemberLeaves(this.canvasNodes, this.forest, id, this.doc.id, keepRow);
-  }
-
-  private upsertCanvasNode(node: CanvasNode): void {
-    const index = this.canvasNodes.findIndex((item) => item.id === node.id);
-    if (index < 0) {
-      this.canvasNodes = [...this.canvasNodes, node];
-      return;
-    }
-    const next = this.canvasNodes.slice();
-    next[index] = node;
-    this.canvasNodes = next;
+    this.canvasService.bumpCanvasGen();
+    this.canvasService.replaceNodes(
+      nodesAfterMemberLeaves(this.canvasNodes, this.forest, id, this.doc.id, keepRow),
+    );
   }
 
   private async ensureCanvasImages(): Promise<void> {
-    const keys = [
-      ...new Set(
-        this.canvasNodes.map((node) => node.imageKey).filter((key): key is string => Boolean(key)),
-      ),
-    ];
+    const keys = this.canvasService.imageKeys();
     if (keys.length === 0) return;
     await this.assets.ensure(keys.map(asAssetSrc));
     if (this.closed) return;
@@ -1522,90 +1622,38 @@ export class ReaderService extends Service {
 
   async queueDigest(anchor: TextSelectionAnchor): Promise<void> {
     if (!this.doc) return;
-    const clipped = clipChars(anchor.text.trim(), 100_000);
-    if (!clipped || !Number.isFinite(anchor.blockIndex) || anchor.blockIndex < 1) {
-      this.showToast('选区没法排队');
-      return;
-    }
-    const documentId = this.doc.id;
-    this.selectionDigesting = true;
-    this.selectionPollDocId = documentId;
-    this.selectionCardCountAtStart = this.doc.cards.length;
-    this.selectionPollUntil = Date.now() + SELECTION_POLL_FOR_MS;
-    try {
-      const job = await enqueueSelectionCards(documentId, { text: clipped, blockIndex: anchor.blockIndex });
-      this.selectionJobId = job.id;
-      this.showToast('已排队，消化完成后出现');
-      this.startSelectionPoll(documentId);
-    } catch (err) {
-      this.finishSelectionPoll();
-      this.showToast(errorMessage(err, '没排上队'));
-    }
+    await this.selectionService.queueDigest(anchor, this.doc.id, this.doc.cards.length, this.selectionPollHooks());
   }
 
   startSelectionPoll(documentId: string): void {
-    this.stopSelectionTick();
-    const deadline = this.selectionPollUntil;
-    this.selectionWatchdog = setTimeout(() => {
-      this.selectionWatchdog = null;
-      if (this.selectionPollUntil === deadline) this.finishSelectionPoll();
-    }, SELECTION_POLL_FOR_MS + 400);
-    this.armSelectionLoop(documentId);
+    this.selectionService.startSelectionPoll(documentId, this.selectionPollHooks());
   }
 
   private armSelectionLoop(documentId: string): void {
-    if (this.syncActive() || !this.appActive) return;
-    if (this.selectionTickTimer !== null || this.selectionTickInflight) return;
-    if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-    const startCount = this.selectionCardCountAtStart;
-    const tick = async () => {
-      this.selectionTickTimer = null;
-      this.selectionTickInflight = true;
-      try {
-        if (!this.appActive || !this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-        await this.refresh();
-        if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-        if (this.syncActive()) return;
-        const grown = this.doc?.id === documentId && this.doc.cards.length > startCount;
-        const timedOut = Date.now() >= this.selectionPollUntil;
-        if (grown || timedOut) this.finishSelectionPoll();
-      } finally {
-        this.selectionTickInflight = false;
-      }
-      if (!this.selectionDigesting || this.selectionPollDocId !== documentId) return;
-      if (!this.appActive || this.syncActive() || this.selectionTickTimer !== null) return;
-      this.selectionTickTimer = setTimeout(() => {
-        void tick();
-      }, SELECTION_POLL_MS);
-    };
-    this.selectionTickTimer = setTimeout(() => {
-      void tick();
-    }, SELECTION_POLL_MS);
+    this.selectionService.armSelectionLoop(documentId, this.selectionPollHooks());
   }
 
   stopSelectionTick(): void {
-    if (this.selectionTickTimer !== null) {
-      clearTimeout(this.selectionTickTimer);
-      this.selectionTickTimer = null;
-    }
-    if (this.selectionWatchdog !== null) {
-      clearTimeout(this.selectionWatchdog);
-      this.selectionWatchdog = null;
-    }
+    this.selectionService.stopSelectionTick();
   }
 
+  /** 只清 2 秒计时器，不清 selectionDigesting，也不清看门狗。 */
   private disarmSelectionLoop(): void {
-    if (this.selectionTickTimer === null) return;
-    clearTimeout(this.selectionTickTimer);
-    this.selectionTickTimer = null;
+    this.selectionService.disarmSelectionLoop();
   }
 
   finishSelectionPoll(): void {
-    this.stopSelectionTick();
-    this.selectionDigesting = false;
-    this.selectionPollUntil = 0;
-    this.selectionPollDocId = null;
-    this.selectionJobId = null;
+    this.selectionService.finishSelectionPoll();
+  }
+
+  private selectionPollHooks(): SelectionPollHooks {
+    return {
+      syncActive: () => this.syncActive(),
+      appActive: () => this.appActive,
+      refresh: () => this.refresh(),
+      showToast: (message) => this.showToast(message),
+      cardCount: (id) => (this.doc?.id === id ? this.doc.cards.length : null),
+    };
   }
 
   async setDocTopic(topicId: string | null): Promise<void> {
@@ -2300,7 +2348,7 @@ export class ReaderService extends Service {
       this.canvasImageUrls = {};
       this.closeCanvasHistory();
       this.viewMode = 'body';
-      this.canvasGen += 1;
+      this.canvasService.bumpCanvasGen();
       this.linksGen += 1;
       this.links = null;
       this.linksCache = {};
@@ -2370,14 +2418,7 @@ export class ReaderService extends Service {
   }
 
   private async settleSelectionJob(id: string): Promise<void> {
-    if (this.selectionJobId !== id || !this.selectionDigesting) return;
-    try {
-      const job = await getJob(id);
-      if (this.selectionJobId !== id) return;
-      if (job.status === 'done' || job.status === 'failed') this.finishSelectionPoll();
-    } catch {
-      // Watchdog still clears the flag.
-    }
+    await this.selectionService.settleSelectionJob(id);
   }
 
   private onSyncEvent(event: SyncEvent): void {

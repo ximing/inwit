@@ -100,15 +100,16 @@ import {
 } from './mindmap-focus';
 import { decideMindGesture, mindDeleteAction, mindNodeChatLabel, type MindIntent } from './mindmap-gesture';
 import { cardHidesBody, readoutPanelSize } from './mindmap-readout';
+import { edgePath, ghostPath, ghostTargetIds, hintFor, type PlaceVerdict } from './mindmap-edges.js';
 import { hitCardBox, hitMindDrop, mindDragCommit, type MindDrop } from './mindmap-hit';
 import {
   bindPointerSession,
-  pointerDragReleased,
   pointerEventIdentity,
   pointerReleasePoint,
+  routeMindPointer,
   type PointerSession,
   type PointerSessionEvent,
-} from './pointer-session';
+} from './pointer-session.js';
 import { layoutMindForest, type MindBox } from './mindmap-layout';
 import { quoteDropPlace, type QuoteDragPayload } from './mindmap-quote';
 import {
@@ -130,30 +131,6 @@ type Drag = {
   y: number;
   drop: MindDrop;
 };
-
-type PlaceVerdict =
-  | { ok: true; unchanged: boolean }
-  | { ok: false; reason: 'missing' | 'self' | 'cycle' | 'depth' }
-  | null;
-
-function hintFor(
-  drop: MindDrop,
-  plan: PlaceVerdict,
-  count = 1,
-): { text: string | null; accept: boolean } {
-  if (!plan || !plan.ok) {
-    return {
-      text: plan && !plan.ok && plan.reason === 'depth' ? '层级太深了' : '不能放到这里',
-      accept: false,
-    };
-  }
-  if (plan.unchanged) return { text: null, accept: false };
-  const prefix = count > 1 ? `${count} 个节点：` : '';
-  if (drop.kind === 'root') return { text: `${prefix}独立成树`, accept: true };
-  if (drop.kind === 'child') return { text: `${prefix}成为子节点`, accept: true };
-  if (drop.kind === 'before') return { text: `${prefix}排在前面`, accept: true };
-  return { text: `${prefix}排在后面`, accept: true };
-}
 
 function SizedNode({
   id,
@@ -209,25 +186,6 @@ function SizedNode({
       {children}
     </div>
   );
-}
-
-function edgePath(from: MindBox, to: MindBox): string {
-  const x1 = from.x + from.width;
-  const y1 = from.y + from.height / 2;
-  const x2 = to.x;
-  const y2 = to.y + to.height / 2;
-  const bend = Math.max(24, (x2 - x1) / 2);
-  return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
-}
-
-/** 脉络虚线边：中心对中心，方向任意，画在节点底下。 */
-function ghostPath(from: MindBox, to: MindBox): string {
-  const x1 = from.x + from.width / 2;
-  const y1 = from.y + from.height / 2;
-  const x2 = to.x + to.width / 2;
-  const y2 = to.y + to.height / 2;
-  const bend = Math.max(32, Math.min(140, Math.abs(x2 - x1) / 2)) * (x2 >= x1 ? 1 : -1);
-  return `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
 }
 
 const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif';
@@ -524,19 +482,10 @@ export const CardCanvas = observer(function CardCanvas({
       : null;
   const { links: selectedLinks } = useCardLinks(linksCardId, linksTick);
   /** 本文内、且在画布上的关联卡片，画虚线边。 */
-  const ghostTargets = useMemo(() => {
-    if (!linksCardId || !selectedLinks) return [];
-    const seen = new Set<string>();
-    const targets: string[] = [];
-    for (const item of [...selectedLinks.outgoing, ...selectedLinks.incoming]) {
-      const id = item.card.id;
-      if (id === linksCardId || seen.has(id) || !boxById.has(id)) continue;
-      if (item.card.documentId == null || item.card.documentId !== docId) continue;
-      seen.add(id);
-      targets.push(id);
-    }
-    return targets;
-  }, [linksCardId, selectedLinks, boxById, docId]);
+  const ghostTargets = useMemo(
+    () => ghostTargetIds(selectedLinks, linksCardId, docId, boxById),
+    [linksCardId, selectedLinks, boxById, docId],
+  );
 
   /** 卡片待办（待确认/到期复习）与子树待办计数。 */
   const cardTodos = useMemo(() => {
@@ -1768,39 +1717,61 @@ export const CardCanvas = observer(function CardCanvas({
     });
   };
 
+  const routePointer = (
+    phase: 'move' | 'up' | 'cancel' | 'blur',
+    point: { pointerId: number; buttons: number; pointerType: string },
+  ) =>
+    routeMindPointer({
+      phase,
+      pointerId: point.pointerId,
+      buttons: point.buttons,
+      pointerType: point.pointerType,
+      sawButton: sawPointerButton.current,
+      nodePointerId: dragGesture.current?.pointerId ?? null,
+      panPointerId: panGesture.current?.pointerId ?? null,
+      marqueePointerId: marqueeGesture.current?.pointerId ?? null,
+      linkPointerId: linkGesture.current?.pointerId ?? null,
+    });
+
   pointerRouter.current = {
     move(event) {
       if (!takePointer(event)) return;
-      const id = event.pointerId;
-      if (event.buttons !== 0) sawPointerButton.current = true;
-      else if (pointerDragReleased(event.pointerType, event.buttons, sawPointerButton.current)) {
-        releaseHeldPointer(id, event);
+      const route = routePointer('move', event);
+      sawPointerButton.current = route.sawButton;
+      if (route.action === 'release') {
+        releaseHeldPointer(event.pointerId, event);
         return;
       }
-      if (dragGesture.current?.pointerId === id) onNodePointerMove(event);
-      else if (panGesture.current?.pointerId === id || marqueeGesture.current?.pointerId === id) {
-        onViewportPointerMove(event);
-      } else if (linkGesture.current?.pointerId === id) onLinkDotMove(linkGesture.current.fromId, event);
+      if (route.action !== 'move') return;
+      if (route.gesture === 'node') onNodePointerMove(event);
+      else if (route.gesture === 'view') onViewportPointerMove(event);
+      else if (linkGesture.current) onLinkDotMove(linkGesture.current.fromId, event);
     },
     up(event) {
       if (!takePointer(event)) return;
-      releaseHeldPointer(event.pointerId, event);
+      const route = routePointer('up', event);
+      if (route.action === 'release') releaseHeldPointer(event.pointerId, event);
     },
     cancel(event) {
       if (!takePointer(event)) return;
+      const route = routePointer('cancel', event);
       // 关系边被取消时不落线。节点拖动和画布平移把取消当成在最后位置松开。
-      if (linkGesture.current?.pointerId === event.pointerId) {
+      if (route.action === 'cancel-link') {
         cancelLink();
         return;
       }
-      releaseHeldPointer(event.pointerId, event);
+      if (route.action === 'release') releaseHeldPointer(event.pointerId, event);
     },
     blur() {
-      const drag = dragGesture.current;
-      if (drag) finishNodeDrag(drag.lastX, drag.lastY, drag.pointerId);
-      else if (panGesture.current) finishView(panGesture.current.pointerId);
-      else if (marqueeGesture.current) finishView(marqueeGesture.current.pointerId);
-      else if (linkGesture.current) cancelLink();
+      const route = routePointer('blur', { pointerId: -1, buttons: 0, pointerType: '' });
+      if (route.action === 'finish-node') {
+        const drag = dragGesture.current;
+        if (drag) finishNodeDrag(drag.lastX, drag.lastY, route.pointerId);
+      } else if (route.action === 'finish-view') {
+        finishView(route.pointerId);
+      } else if (route.action === 'cancel-link') {
+        cancelLink();
+      }
       stopListening();
     },
   };

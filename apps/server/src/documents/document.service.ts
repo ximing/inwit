@@ -21,6 +21,7 @@ import type {
 import { toDocumentListItem } from '@inwit/dto';
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, like, lte, ne, or, sql, type SQL } from 'drizzle-orm';
 import { shouldIndexCard } from '../cards/card-acceptance-logic.js';
+import { updateCards } from '../cards/card-write.js';
 import { toPublicCard, toPublicQuestion } from '../cards/card.mapper.js';
 import { config } from '../config.js';
 import { getDb } from '../db/index.js';
@@ -56,7 +57,12 @@ import { deletePrefixExcept, isStorageConfigured, presignGet, presignPut } from 
 import { getOwnedTopic } from '../topics/topic.service.js';
 import { logger } from '../utils/logger.js';
 import { EMPTY_PM_DOC, textToParagraphDoc } from './content-json.js';
-import { isBlankDocumentContent, planDigestOnSave, type DigestPlan } from './document-logic.js';
+import {
+  documentDetailEtag,
+  ifNoneMatchSatisfied,
+  type DocumentDetailStamp,
+} from './document-etag-logic.js';
+import { insertUserDocument, saveUserDocument } from './document-write.js';
 import { retryJobKindForDocument } from './extract-logic.js';
 import { excerptKeyFor, validateExcerptUpload } from './excerpt-logic.js';
 import { documentObjectPrefix } from './import-logic.js';
@@ -123,38 +129,7 @@ export async function createDocument(
   input: Omit<CreateDocumentInput, 'source'> & { source?: DocumentSource | undefined },
 ): Promise<Document> {
   await assertWritableTopic(userId, input.topicId);
-
-  const blank = isBlankDocumentContent(input.contentJson);
-  // Editor documents are still being written; digest once the user pauses.
-  const digestDelayMs = !blank && input.source === 'editor' ? config.DIGEST_IDLE_DELAY_MS : 0;
-  if (!blank) await resolveModelFor(userId);
-
-  const document = await getDb().transaction(async (tx) => {
-    const [row] = await tx
-      .insert(documents)
-      .values({
-        userId,
-        topicId: input.topicId ?? null,
-        title: input.title ?? null,
-        contentJson: input.contentJson,
-        source: input.source ?? 'paste',
-        status: blank ? 'digested' : 'pending',
-      })
-      .returning();
-    if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
-    if (!blank) {
-      await enqueueJob(tx, {
-        userId,
-        type: 'digest',
-        payload: { documentId: row.id },
-        ...(digestDelayMs > 0 ? { runAt: new Date(Date.now() + digestDelayMs) } : {}),
-      });
-    }
-    return row;
-  });
-  // A delayed digest indexes the document when it finishes; don't embed drafts.
-  if (!blank && digestDelayMs === 0) await tryIndexDocument(document);
-  return toPublicDocument(document);
+  return toPublicDocument(await insertUserDocument(userId, input));
 }
 
 export async function createChat(userId: string, input: CreateChatInput): Promise<Document> {
@@ -327,125 +302,177 @@ export async function updateDocument(
   input: UpdateDocumentInput,
 ): Promise<Document> {
   const existing = await getOwnedDocument(userId, id);
-  const contentJson = input.contentJson !== undefined ? input.contentJson : existing.contentJson;
-  const title = input.title !== undefined ? input.title : existing.title;
-
   if (input.topicId) await assertWritableTopic(userId, input.topicId);
+  return toPublicDocument(await saveUserDocument(userId, id, existing, input));
+}
 
-  const topicChanged = input.topicId !== undefined && input.topicId !== existing.topicId;
-  const contentChanged =
-    input.contentJson !== undefined &&
-    JSON.stringify(input.contentJson) !== JSON.stringify(existing.contentJson);
-  // Digest planning only matters while a first digest can still be scheduled:
-  // blank content gaining text, or an editor draft with a pending digest job.
-  const needsDigestPlan =
-    input.contentJson !== undefined &&
-    (isBlankDocumentContent(existing.contentJson) || existing.source === 'editor');
-
-  const { row, digestPlanned, movedCards } = await getDb().transaction(async (tx) => {
-    let plan: DigestPlan = { kind: 'none' };
-    let pendingDigestId: string | null = null;
-    if (needsDigestPlan) {
-      const [cardCountRow] = await tx
-        .select({ n: count() })
-        .from(cards)
-        .where(and(eq(cards.userId, userId), eq(cards.documentId, id), isNull(cards.deletedAt)));
-      const digestJobs = await tx
-        .select({ id: jobs.id, status: jobs.status })
-        .from(jobs)
-        .where(
-          and(
-            eq(jobs.userId, userId),
-            eq(jobs.type, 'digest'),
-            inArray(jobs.status, ['pending', 'running']),
-            sql`coalesce(${jobs.payload}->>'documentId', ${jobs.payload}->>'captureId') = ${id}`,
-          ),
-        );
-      pendingDigestId = digestJobs.find((job) => job.status === 'pending')?.id ?? null;
-      plan = planDigestOnSave({
-        source: existing.source,
-        existing,
-        input,
-        contentChanged,
-        cardCount: Number(cardCountRow?.n ?? 0),
-        hasPendingDigest: pendingDigestId !== null,
-        hasRunningDigest: digestJobs.some((job) => job.status === 'running'),
-        idleDelayMs: config.DIGEST_IDLE_DELAY_MS,
-      });
-    }
-
-    if (plan.kind === 'enqueue') await resolveModelFor(userId);
-
-    const now = new Date();
-    const [updated] = await tx
-      .update(documents)
-      .set({
-        title,
-        contentJson,
-        updatedAt: now,
-        ...(input.topicId !== undefined ? { topicId: input.topicId } : {}),
-        ...(topicChanged ? { mapNodeId: null } : {}),
-        ...(plan.kind === 'enqueue' ? { status: 'pending' as const, failReason: null } : {}),
-      })
-      .where(and(eq(documents.id, id), eq(documents.userId, userId), isNull(documents.deletedAt)))
-      .returning();
-    if (!updated) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
-    if (plan.kind === 'enqueue') {
-      await enqueueJob(tx, {
-        userId,
-        type: 'digest',
-        payload: { documentId: id },
-        ...(plan.delayMs > 0 ? { runAt: new Date(now.getTime() + plan.delayMs) } : {}),
-      });
-    } else if (plan.kind === 'postpone' && pendingDigestId !== null) {
-      // Conditional update: if the worker claimed the job first, the digest
-      // handler re-checks freshness and reschedules itself.
-      await tx
-        .update(jobs)
-        .set({ runAt: new Date(now.getTime() + plan.delayMs), updatedAt: now })
-        .where(and(eq(jobs.id, pendingDigestId), eq(jobs.status, 'pending')));
-    }
-    let movedCards: (typeof cards.$inferSelect)[] = [];
-    if (topicChanged) {
-      const attached = await tx
-        .select({ mapNodeId: cards.mapNodeId })
-        .from(cards)
-        .where(and(eq(cards.userId, userId), eq(cards.documentId, id), isNull(cards.deletedAt)));
-      movedCards = await tx
-        .update(cards)
-        .set({ topicId: input.topicId ?? null, mapNodeId: null, updatedAt: now })
-        .where(and(eq(cards.userId, userId), eq(cards.documentId, id), isNull(cards.deletedAt)))
-        .returning();
-      const nodeIds = [
-        ...new Set(attached.map((row) => row.mapNodeId).filter((nodeId): nodeId is string => nodeId !== null)),
-      ];
-      for (const nodeId of nodeIds) {
-        await recalculateMapNodeStatus(nodeId, tx);
-      }
-    }
-    return { row: updated, digestPlanned: plan.kind !== 'none', movedCards };
-  });
-  const titleChanged = input.title !== undefined && title !== existing.title;
-  // While a digest is pending it re-indexes on completion; embedding every
-  // intermediate save would burn tokens on drafts.
-  if (topicChanged) {
-    for (const card of movedCards) {
-      if (!shouldIndexCard(card)) continue;
-      await tryIndexCard({
-        id: card.id,
-        userId: card.userId,
-        topicId: card.topicId,
-        concept: card.concept,
-        example: card.example,
-        confusionPoint: card.confusionPoint,
-        tags: card.tags,
-      });
-    }
+function stampText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime()) && value.includes('T')) return parsed.toISOString();
+    return value;
   }
-  if ((titleChanged || contentChanged || topicChanged) && !digestPlanned) {
-    await tryIndexDocument(row);
-  }
-  return toPublicDocument(row);
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value);
+  return null;
+}
+
+function stampCount(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'bigint') return value.toString();
+  return '0';
+}
+
+async function loadDocumentDetailStamp(
+  userId: string,
+  id: string,
+): Promise<DocumentDetailStamp | null> {
+  const result = await getDb().execute<{
+    updated_at: Date | string;
+    status: string;
+    fail_reason: string | null;
+    title: string | null;
+    description: string | null;
+    topic_id: string | null;
+    topic_title: string | null;
+    topic_updated_at: Date | string | null;
+    answer: string | null;
+    link_hint: string | null;
+    file_mime: string | null;
+    file_size: string | number | null;
+    page_count: number | null;
+    source: string;
+    kind: string;
+    content_hash: string;
+    card_count: number | string;
+    proposed_count: number | string;
+    card_updated_at: Date | string | null;
+    card_hash: string | null;
+    question_hash: string | null;
+    review_updated_at: Date | string | null;
+    review_count: number | string;
+  }>(sql`
+    SELECT
+      d.updated_at AS updated_at,
+      d.status AS status,
+      d.fail_reason AS fail_reason,
+      d.title AS title,
+      d.description AS description,
+      d.topic_id AS topic_id,
+      t.title AS topic_title,
+      t.updated_at AS topic_updated_at,
+      d.answer AS answer,
+      d.link_hint AS link_hint,
+      d.file_mime AS file_mime,
+      d.file_size AS file_size,
+      d.page_count AS page_count,
+      d.source AS source,
+      d.kind AS kind,
+      md5(d.content_json::text) AS content_hash,
+      coalesce(card_rev.card_count, 0) AS card_count,
+      coalesce(card_rev.proposed_count, 0) AS proposed_count,
+      card_rev.card_updated_at AS card_updated_at,
+      coalesce(card_rev.card_hash, '') AS card_hash,
+      coalesce(question_rev.question_hash, '') AS question_hash,
+      review_rev.review_updated_at AS review_updated_at,
+      coalesce(review_rev.review_count, 0) AS review_count
+    FROM ${documents} AS d
+    LEFT JOIN ${topics} AS t ON t.id = d.topic_id
+    LEFT JOIN LATERAL (
+      SELECT
+        count(*)::int AS card_count,
+        count(*) FILTER (WHERE c.acceptance = 'proposed')::int AS proposed_count,
+        max(c.updated_at) AS card_updated_at,
+        md5(coalesce(string_agg(
+          c.id::text || '|' || c.updated_at::text || '|' || c.acceptance || '|' ||
+          c.outline_position::text || '|' || coalesce(c.review_revision::text, '') || '|' ||
+          coalesce(c.outline_parent_id::text, ''),
+          ',' ORDER BY c.id
+        ), '')) AS card_hash
+      FROM ${cards} AS c
+      WHERE c.document_id = d.id
+        AND c.user_id = d.user_id
+        AND c.deleted_at IS NULL
+        AND c.acceptance <> 'rejected'
+    ) AS card_rev ON true
+    LEFT JOIN LATERAL (
+      SELECT md5(coalesce(string_agg(
+        q.id::text || '|' || q.type || '|' || q.question || '|' || q.answer,
+        ',' ORDER BY q.id
+      ), '')) AS question_hash
+      FROM ${cardQuestions} AS q
+      JOIN ${cards} AS c ON c.id = q.card_id
+      WHERE c.document_id = d.id
+        AND c.user_id = d.user_id
+        AND c.deleted_at IS NULL
+        AND c.acceptance <> 'rejected'
+    ) AS question_rev ON true
+    LEFT JOIN LATERAL (
+      SELECT max(r.updated_at) AS review_updated_at, count(*)::int AS review_count
+      FROM ${reviewStates} AS r
+      JOIN ${cards} AS c ON c.id = r.card_id
+      WHERE c.document_id = d.id
+        AND c.user_id = d.user_id
+        AND r.user_id = d.user_id
+        AND c.deleted_at IS NULL
+        AND c.acceptance <> 'rejected'
+    ) AS review_rev ON true
+    WHERE d.id = ${id}::uuid
+      AND d.user_id = ${userId}::uuid
+      AND d.deleted_at IS NULL
+    LIMIT 1
+  `);
+  const row = result.rows[0];
+  if (!row) return null;
+  const updatedAt = stampText(row.updated_at);
+  if (!updatedAt) return null;
+  return {
+    updatedAt,
+    status: row.status,
+    failReason: row.fail_reason,
+    title: row.title,
+    description: row.description,
+    topicId: row.topic_id,
+    topicTitle: row.topic_title,
+    topicUpdatedAt: stampText(row.topic_updated_at),
+    answer: row.answer,
+    linkHint: row.link_hint,
+    fileMime: row.file_mime,
+    fileSize: stampText(row.file_size),
+    pageCount: row.page_count === null || row.page_count === undefined ? null : String(row.page_count),
+    source: row.source,
+    kind: row.kind,
+    contentHash: row.content_hash,
+    cardCount: stampCount(row.card_count),
+    proposedCount: stampCount(row.proposed_count),
+    cardUpdatedAt: stampText(row.card_updated_at),
+    cardHash: row.card_hash ?? '',
+    questionHash: row.question_hash ?? '',
+    reviewUpdatedAt: stampText(row.review_updated_at),
+    reviewCount: stampCount(row.review_count),
+  };
+}
+
+export type DocumentRead =
+  | { etag: string; notModified: true }
+  | { etag: string; notModified: false; detail: DocumentDetail };
+
+/**
+ * Conditional read for polls. A matching If-None-Match returns before the
+ * content JSON, cards, and signed asset URLs are loaded.
+ */
+export async function getDocumentIfModified(
+  userId: string,
+  id: string,
+  ifNoneMatch: string | undefined,
+): Promise<DocumentRead> {
+  const stamp = await loadDocumentDetailStamp(userId, id);
+  if (!stamp) throw AppError.of(404, 'DOCUMENT_NOT_FOUND');
+  const etag = documentDetailEtag(stamp);
+  if (ifNoneMatchSatisfied(ifNoneMatch, etag)) return { etag, notModified: true };
+  return { etag, notModified: false, detail: await getDocument(userId, id) };
 }
 
 export async function getDocument(userId: string, id: string): Promise<DocumentDetail> {
@@ -574,8 +601,7 @@ export async function archiveDocument(userId: string, id: string): Promise<void>
           isNull(annotations.deletedAt),
         ),
       );
-    await tx
-      .update(cards)
+    await updateCards(tx)
       .set({ deletedAt: now, updatedAt: now })
       .where(and(eq(cards.documentId, id), eq(cards.userId, userId), isNull(cards.deletedAt)));
     // Document update stays last: sync coalesce needs that delete to win.
@@ -621,8 +647,7 @@ export async function restoreDocument(userId: string, id: string): Promise<Docum
         ),
       )
       .returning();
-    const cardRows = await tx
-      .update(cards)
+    const cardRows = await updateCards(tx)
       .set({ deletedAt: null, updatedAt: now })
       .where(
         and(

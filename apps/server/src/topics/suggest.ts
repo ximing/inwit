@@ -5,6 +5,7 @@ import {
   topicSuggestionSlugSchema,
 } from '@inwit/dto';
 import { and, count, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { updateCards } from '../cards/card-write.js';
 import { getDb } from '../db/index.js';
 import { isUniqueViolation } from '../db/pg.js';
 import { cards, documents, jobs, memories, topics, type MemoryRow } from '../db/schema.js';
@@ -412,8 +413,7 @@ export async function acceptTopicSuggestion(
             inArray(documents.id, content.documentIds),
           ),
         );
-      await tx
-        .update(cards)
+      await updateCards(tx)
         .set({ topicId: topic.id, updatedAt: now })
         .where(
           and(

@@ -27,6 +27,8 @@ import { DialogService } from '@/services/dialog.service';
 import { FeedTab, MapTab, NodeDrawer } from './detail';
 import { TopicConceptsTab } from './concepts-tab';
 import { TopicCanvas } from './topic-canvas';
+import { TopicsCaptureService } from './topics-capture.service.js';
+import { TopicsMapService } from './topics-map.service.js';
 import { TopicsService, type TopicListItem } from './topics.service';
 
 function warmTopicDoc(id: string): void {
@@ -733,4 +735,9 @@ const TopicSearch = observer(function TopicSearch() {
   );
 });
 
-export const TopicsPage = bindServices(TopicsPageContent, [TopicsService, SearchService]);
+export const TopicsPage = bindServices(TopicsPageContent, [
+  TopicsService,
+  TopicsMapService,
+  TopicsCaptureService,
+  SearchService,
+]);
