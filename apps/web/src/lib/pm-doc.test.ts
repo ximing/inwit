@@ -1,6 +1,6 @@
 import { EMPTY_PM_DOC } from '@inwit/dto';
 import { describe, expect, it } from 'vitest';
-import { textToPmDoc } from './pm-doc';
+import { jsonEqual, textToPmDoc } from './pm-doc';
 import { isBlankPmDoc } from './pm-doc-read';
 
 describe('isBlankPmDoc', () => {
@@ -45,6 +45,34 @@ describe('isBlankPmDoc', () => {
         ],
       }),
     ).toBe(false);
+  });
+});
+
+describe('jsonEqual', () => {
+  it('treats different key order as equal', () => {
+    expect(jsonEqual({ type: 'text', text: '甲' }, { text: '甲', type: 'text' })).toBe(true);
+  });
+
+  it('treats different text as unequal', () => {
+    expect(jsonEqual({ type: 'text', text: '甲' }, { type: 'text', text: '乙' })).toBe(false);
+  });
+
+  it('treats a different paragraph order as unequal', () => {
+    const first = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: '甲' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: '乙' }] },
+      ],
+    };
+    const swapped = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: '乙' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: '甲' }] },
+      ],
+    };
+    expect(jsonEqual(first, swapped)).toBe(false);
   });
 });
 
