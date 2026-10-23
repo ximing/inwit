@@ -217,7 +217,13 @@ export class DocsService extends Service {
   private echoes: EchoStamp[] = [];
   private saveFloors = new Map<string, number>();
   /** Latest folded body from the read view, waiting to be written. */
-  private codeFold: { id: string; json: PmDocJson; baseline: PmDocJson } | null = null;
+  private codeFold: {
+    id: string;
+    json: PmDocJson;
+    baseline: PmDocJson;
+    /** `updatedAt` of the body `baseline` was cloned from. */
+    baselineUpdatedAt: string;
+  } | null = null;
   private codeFoldTimer: ReturnType<typeof setTimeout> | null = null;
   private codeFoldInflight: Promise<void> | null = null;
   private conflictNotifiedAt: string | null = null;
@@ -691,6 +697,31 @@ export class DocsService extends Service {
     if (editor.id !== id) return;
     await editor.save();
     if (editor.saveState === 'error') throw new Error(editor.error ?? '请先保存文档');
+  }
+
+  /**
+   * Flush the open draft before preview, close, or another document.
+   * Failure stays in the editor: no idle, and the draft is not marked saved.
+   */
+  async commitEditorLeave(leave: boolean): Promise<boolean> {
+    const editor = this.resolve(EditorService);
+    const pending =
+      editor.dirty || editor.saveInflight !== null || editor.saveState === 'error';
+    if (pending) {
+      const ok = await editor.commitBeforeLeave();
+      if (!ok) return false;
+    }
+    if (!leave) return true;
+    if (editor.saveState === 'error' || editor.dirty || editor.saveInflight !== null) return false;
+    if (editor.id) {
+      this.noteEditorSaved(
+        editor.id,
+        editor.draftTitle.trim() || editor.lastSavedTitle.trim() || null,
+        editor.draftJson,
+      );
+    }
+    editor.idle();
+    return true;
   }
 
   applyDocumentChange(change: DocumentChange): void {
@@ -2128,8 +2159,10 @@ export class DocsService extends Service {
     const doc = this.doc;
     if (!doc) return;
     const next = asPmJson(json);
-    const baseline = this.codeFold?.id === doc.id ? this.codeFold.baseline : clonePmJson(doc.contentJson);
-    this.codeFold = { id: doc.id, json: next, baseline };
+    const same = this.codeFold?.id === doc.id ? this.codeFold : null;
+    const baseline = same ? same.baseline : clonePmJson(doc.contentJson);
+    const baselineUpdatedAt = same ? same.baselineUpdatedAt : doc.updatedAt;
+    this.codeFold = { id: doc.id, json: next, baseline, baselineUpdatedAt };
     if (this.codeFoldTimer) clearTimeout(this.codeFoldTimer);
     this.codeFoldTimer = setTimeout(() => {
       this.codeFoldTimer = null;
@@ -2160,8 +2193,10 @@ export class DocsService extends Service {
     id: string;
     json: PmDocJson;
     baseline: PmDocJson;
+    baselineUpdatedAt: string;
   }): Promise<void> {
     if (jsonEqual(pending.baseline, pending.json)) return;
+    if (this.foldBaselineStale(pending.id, pending.baselineUpdatedAt)) return;
     this.bumpCardWriteGen();
     try {
       const updated = await updateDocument(pending.id, { contentJson: pending.json });
@@ -2170,6 +2205,28 @@ export class DocsService extends Service {
       if (!this.codeFold) this.codeFold = pending;
       this.error = errorMessage(err, '没记住代码的折叠');
     }
+  }
+
+  /** Newest stamp we already accepted for this document, if any. */
+  private documentUpdatedAtMs(id: string): number | null {
+    const stamps: number[] = [];
+    const push = (value: string | number | null | undefined) => {
+      if (value === null || value === undefined) return;
+      const ms = typeof value === 'number' ? value : Date.parse(value);
+      if (!Number.isNaN(ms)) stamps.push(ms);
+    };
+    if (this.doc?.id === id) push(this.doc.updatedAt);
+    push(this.documents.find((item) => item.id === id)?.updatedAt);
+    push(this.saveFloors.get(id));
+    if (stamps.length === 0) return null;
+    return Math.max(...stamps);
+  }
+
+  private foldBaselineStale(id: string, baselineUpdatedAt: string): boolean {
+    const baselineMs = Date.parse(baselineUpdatedAt);
+    if (Number.isNaN(baselineMs)) return false;
+    const known = this.documentUpdatedAtMs(id);
+    return known !== null && known > baselineMs;
   }
 
   override destroy(): void {
@@ -2424,7 +2481,9 @@ export class DocsService extends Service {
     updatedAt: string,
   ): 'drop' | 'merge-keep-body' | 'merge-seed-body' {
     const editor = this.resolve(EditorService);
-    const bodyDirty = editor.id === id && !jsonEqual(editor.draftJson, editor.lastSavedJson);
+    const foldHeld = this.codeFold?.id === id;
+    const bodyDirty =
+      foldHeld || (editor.id === id && !jsonEqual(editor.draftJson, editor.lastSavedJson));
     const inflight = editor.id === id && editor.saveInflight !== null;
     // A read that started on this document keeps its generation after close.
     // Other rows ignore the counter so a card edit does not cancel their refresh.
@@ -2466,7 +2525,22 @@ export class DocsService extends Service {
       if (detail.assetUrls) {
         this.resolve(AssetUrlsService).seed(detail.assetUrls, detail.assetUrlsFetchedAt);
       }
-      const held = this.codeFold?.id === id ? this.codeFold.json : null;
+      let held: PmDocJson | null = null;
+      if (this.codeFold?.id === id) {
+        const baselineMs = Date.parse(this.codeFold.baselineUpdatedAt);
+        const detailMs = Date.parse(detail.updatedAt);
+        const remoteNewer =
+          !Number.isNaN(baselineMs) && !Number.isNaN(detailMs) && detailMs > baselineMs;
+        if (remoteNewer) {
+          if (this.codeFoldTimer) {
+            clearTimeout(this.codeFoldTimer);
+            this.codeFoldTimer = null;
+          }
+          this.codeFold = null;
+        } else {
+          held = this.codeFold.json;
+        }
+      }
       this.doc = held ? { ...detail, contentJson: held } : detail;
       if (notes) this.annotations = notes;
       if (canvas) {

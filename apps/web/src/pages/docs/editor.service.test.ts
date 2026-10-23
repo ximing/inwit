@@ -1,6 +1,7 @@
 import type { Document, DocumentDetail, PmDocJson } from '@inwit/dto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createDocument, getDocument, updateDocument } from '@/api/documents';
+import { DocsService } from './docs.service';
 import { EditorService } from './editor.service';
 
 vi.mock('@/api/documents', async (original) => ({
@@ -209,6 +210,135 @@ describe('EditorService autosave', () => {
     expect(editor.draftJson).toEqual(paragraph('下一篇'));
     expect(editor.lastSavedJson).toEqual(paragraph('下一篇'));
     expect(createDocument).not.toHaveBeenCalled();
+    editor.destroy();
+  });
+
+  it('waits for an in-flight save before leaving', async () => {
+    const update = deferred<Document>();
+    vi.mocked(updateDocument).mockReturnValue(update.promise);
+    const editor = new EditorService();
+    prime(editor);
+    editor.noteChange(paragraph('改过'));
+    const saving = editor.save();
+    let settled = false;
+    const leaving = editor.commitBeforeLeave().then((ok) => {
+      settled = true;
+      return ok;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(updateDocument).toHaveBeenCalledOnce();
+    update.resolve(
+      document({
+        id: ORIGINAL,
+        contentJson: paragraph('改过'),
+        updatedAt: '2026-10-19T15:00:00.000Z',
+      }),
+    );
+    await saving;
+    await expect(leaving).resolves.toBe(true);
+    expect(updateDocument).toHaveBeenCalledOnce();
+    expect(editor.draftJson).toEqual(paragraph('改过'));
+    expect(editor.saveState).toBe('saved');
+    editor.destroy();
+  });
+
+  it('writes a debounced draft before the timer when leaving', async () => {
+    vi.useFakeTimers();
+    vi.mocked(updateDocument).mockImplementation(async (id, patch) =>
+      document({
+        id,
+        contentJson: patch.contentJson ?? paragraph('改过'),
+        updatedAt: '2026-10-19T15:00:00.000Z',
+      }),
+    );
+    const editor = new EditorService();
+    prime(editor);
+    editor.noteChange(paragraph('改过'));
+    expect(editor.saveTimer).not.toBeNull();
+    await expect(editor.commitBeforeLeave()).resolves.toBe(true);
+    expect(updateDocument).toHaveBeenCalledWith(ORIGINAL, { contentJson: paragraph('改过') });
+    expect(editor.saveTimer).toBeNull();
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(updateDocument).toHaveBeenCalledOnce();
+    editor.destroy();
+  });
+
+  it('saves a dirty draft before opening another document', async () => {
+    vi.mocked(updateDocument).mockImplementation(async (id, patch) =>
+      document({
+        id,
+        contentJson: patch.contentJson ?? paragraph('改过'),
+        updatedAt: '2026-10-19T15:00:00.000Z',
+      }),
+    );
+    vi.mocked(getDocument).mockResolvedValue(detail(NEXT, paragraph('下一篇')));
+    const editor = new EditorService();
+    prime(editor);
+    editor.noteChange(paragraph('改过'));
+    await editor.open(NEXT, null);
+    expect(updateDocument).toHaveBeenCalledWith(ORIGINAL, { contentJson: paragraph('改过') });
+    expect(getDocument).toHaveBeenCalledWith(NEXT);
+    expect(editor.id).toBe(NEXT);
+    expect(editor.draftJson).toEqual(paragraph('下一篇'));
+    editor.destroy();
+  });
+
+  it('stays on the unsaved draft when opening another document fails to save', async () => {
+    vi.mocked(updateDocument).mockRejectedValue(new Error('没存上'));
+    vi.mocked(getDocument).mockResolvedValue(detail(NEXT, paragraph('下一篇')));
+    const editor = new EditorService();
+    const onSaved = vi.fn();
+    editor.onSaved = onSaved;
+    prime(editor);
+    editor.noteChange(paragraph('改过'));
+    await editor.open(NEXT, null);
+    expect(getDocument).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(editor.id).toBe(ORIGINAL);
+    expect(editor.phase).toBe('ready');
+    expect(editor.saveState).toBe('error');
+    expect(editor.draftJson).toEqual(paragraph('改过'));
+    editor.destroy();
+  });
+
+  it('notes a saved draft on leave and does not note or idle when save fails', async () => {
+    const docs = new DocsService();
+    const editor = new EditorService();
+    vi.spyOn(docs, 'resolve').mockImplementation(((token: unknown) => {
+      if (token === EditorService) return editor;
+      throw new Error('unexpected service');
+    }) as typeof docs.resolve);
+    const noted = vi.spyOn(docs, 'noteEditorSaved');
+    editor.onSaved = (saved) => {
+      docs.noteEditorSaved(saved.id, saved.title, saved.contentJson, saved.updatedAt);
+    };
+    prime(editor);
+    editor.noteChange(paragraph('改过'));
+    vi.mocked(updateDocument).mockRejectedValueOnce(new Error('没存上'));
+
+    await expect(docs.commitEditorLeave(true)).resolves.toBe(false);
+    expect(noted).not.toHaveBeenCalled();
+    expect(editor.phase).toBe('ready');
+    expect(editor.id).toBe(ORIGINAL);
+    expect(editor.draftJson).toEqual(paragraph('改过'));
+
+    vi.mocked(updateDocument).mockImplementation(async (id, patch) =>
+      document({
+        id,
+        contentJson: patch.contentJson ?? paragraph('改过'),
+        title: '标题',
+        updatedAt: '2026-10-19T15:00:00.000Z',
+      }),
+    );
+    await expect(docs.commitEditorLeave(true)).resolves.toBe(true);
+    expect(noted).toHaveBeenCalledWith(
+      ORIGINAL,
+      '标题',
+      paragraph('改过'),
+      '2026-10-19T15:00:00.000Z',
+    );
+    expect(editor.phase).toBe('idle');
     editor.destroy();
   });
 });

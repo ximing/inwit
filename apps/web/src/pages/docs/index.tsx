@@ -212,26 +212,49 @@ const DocsPageContent = observer(function DocsPageContent() {
     let cancelled = false;
 
     const sync = async () => {
+      let stay = false;
       try {
         await service.flushCodeFold();
         if (cancelled) return;
-        if (leavingEdit) {
-          await editor.save();
+        const editorLive = editor.phase === 'ready' || editor.phase === 'new';
+        const nextEditorId = editing && docId ? docId : null;
+        const leaveSession = leavingEdit || !editing || !docId;
+        const replacingEditor = editorLive && (leavingEdit || nextEditorId !== editor.id);
+        if (replacingEditor) {
+          const ok = await service.commitEditorLeave(leaveSession);
           if (cancelled) return;
-          if (editor.id) {
-            service.noteEditorSaved(
-              editor.id,
-              editor.draftTitle.trim() || editor.lastSavedTitle.trim() || null,
-              editor.draftJson,
-            );
+          if (!ok) {
+            stay = true;
+            if (!editing) prefs.setDocMode('edit');
+            const stayId = editor.id;
+            if (stayId && docId !== stayId) {
+              setParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set('doc', stayId);
+                  return next;
+                },
+                { replace: true },
+              );
+            } else if (!stayId && editor.phase === 'new' && docId) {
+              service.beginComposeNew();
+              setParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.delete('doc');
+                  return next;
+                },
+                { replace: true },
+              );
+            }
+            return;
           }
-          editor.idle();
         }
         if (cancelled) return;
         if (!docId && service.composingNew) {
           if (!editing) {
             service.endComposeNew();
-            editor.idle();
+            if (editor.phase !== 'idle') editor.idle();
             return;
           }
           await editor.open('new', newTopicId);
@@ -239,11 +262,7 @@ const DocsPageContent = observer(function DocsPageContent() {
         }
         if (!docId) {
           service.closeDoc();
-          if (editor.phase !== 'idle') {
-            await editor.save();
-            if (cancelled) return;
-            editor.idle();
-          }
+          if (editor.phase !== 'idle') editor.idle();
           return;
         }
         if (service.doc?.id !== docId || leavingEdit) {
@@ -258,14 +277,25 @@ const DocsPageContent = observer(function DocsPageContent() {
         }
       } finally {
         // 详情和编辑器都回来后再收起等待态，避免慢请求先画出空白编辑器。
-        if (!cancelled && docId) setSettledDocId(docId);
+        if (!cancelled && !stay && docId) setSettledDocId(docId);
       }
     };
     void sync();
     return () => {
       cancelled = true;
     };
-  }, [docId, editing, urlAnchor, urlAnnotation, newTopicId, service, editor, service.composingNew]);
+  }, [
+    docId,
+    editing,
+    urlAnchor,
+    urlAnnotation,
+    newTopicId,
+    service,
+    editor,
+    service.composingNew,
+    prefs,
+    setParams,
+  ]);
 
   useEffect(() => {
     if (!docId && editor.justCreated && editor.id) {

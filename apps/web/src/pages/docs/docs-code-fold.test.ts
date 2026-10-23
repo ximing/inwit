@@ -10,9 +10,13 @@ vi.mock('@/api/documents', () => ({
   acceptProposedCards: vi.fn(),
   retryDocument: vi.fn(),
 }));
+vi.mock('@/api/annotations', () => ({ listDocumentAnnotations: vi.fn(async () => []) }));
+vi.mock('@/api/canvas', () => ({ listCanvasNodes: vi.fn(async () => []) }));
 
-import { updateDocument } from '@/api/documents';
+import { getDocument, updateDocument } from '@/api/documents';
+import { DocsPendingPollService } from './docs-pending-poll.service.js';
 import { DocsService } from './docs.service';
+import { EditorService } from './editor.service';
 
 const saved = {
   type: 'doc',
@@ -77,5 +81,75 @@ describe('read-mode code fold', () => {
     await service.flushCodeFold();
 
     expect(updateDocument).not.toHaveBeenCalled();
+  });
+
+  it('does not put the folded baseline over a newer document stamp', async () => {
+    const service = new DocsService();
+    service.doc = {
+      id: 'doc-1',
+      title: '笔记',
+      contentJson: saved,
+      updatedAt: '2026-10-21T00:00:00.000Z',
+    } as DocumentDetail;
+    service.noteCodeFold(folded);
+    service.doc = {
+      ...service.doc,
+      updatedAt: '2026-10-21T00:00:02.000Z',
+    };
+
+    await service.flushCodeFold();
+
+    expect(updateDocument).not.toHaveBeenCalled();
+    expect(service.doc?.contentJson).toEqual(saved);
+  });
+
+  it('keeps the editor body when a fold is pending and drops a newer remote body from the put', async () => {
+    const service = new DocsService();
+    const editor = new EditorService();
+    const polls = new DocsPendingPollService();
+    vi.spyOn(service, 'resolve').mockImplementation(((token: unknown) => {
+      if (token === EditorService) return editor;
+      if (token === DocsPendingPollService) return polls;
+      throw new Error('unexpected service');
+    }) as typeof service.resolve);
+    const remote = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: '另一端刚写的' }] }],
+    };
+    service.doc = {
+      id: 'doc-1',
+      title: '笔记',
+      contentJson: saved,
+      updatedAt: '2026-10-21T00:00:00.000Z',
+      topicId: null,
+      cards: [],
+    } as DocumentDetail;
+    editor.phase = 'ready';
+    editor.id = 'doc-1';
+    editor.draftTitle = '笔记';
+    editor.lastSavedTitle = '笔记';
+    editor.draftJson = saved;
+    editor.lastSavedJson = saved;
+    service.noteCodeFold(folded);
+    vi.mocked(getDocument).mockResolvedValue({
+      id: 'doc-1',
+      title: '笔记',
+      contentJson: remote,
+      updatedAt: '2026-10-21T00:00:03.000Z',
+      topicId: null,
+      cards: [],
+    } as Awaited<ReturnType<typeof getDocument>>);
+
+    try {
+      await service.refreshOne('doc-1');
+      await service.flushCodeFold();
+
+      expect(editor.draftJson).toEqual(saved);
+      expect(service.doc?.contentJson).toEqual(remote);
+      expect(updateDocument).not.toHaveBeenCalled();
+    } finally {
+      polls.stopPolling();
+      editor.destroy();
+    }
   });
 });

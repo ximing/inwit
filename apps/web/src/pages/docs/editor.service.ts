@@ -112,6 +112,15 @@ export class EditorService extends Service {
       this.justCreated = false;
       return;
     }
+    if (
+      routeId !== this.id &&
+      (this.phase === 'ready' || this.phase === 'new') &&
+      (this.dirty || this.saveInflight !== null || this.saveState === 'error')
+    ) {
+      const ok = await this.commitBeforeLeave();
+      if (!ok) return;
+      if (this.id === routeId && this.phase === 'ready') return;
+    }
     await this.load(routeId);
   }
 
@@ -238,6 +247,23 @@ export class EditorService extends Service {
       this.publishPresence();
       this.onLocalWriteEnd?.();
     }
+  }
+
+  /**
+   * Write a pending draft before leaving this document.
+   * False: the draft is still unsent. Caller must not idle or open another document.
+   */
+  async commitBeforeLeave(): Promise<boolean> {
+    if (this.remoteGone) return true;
+    if (!this.dirty && this.saveInflight === null && this.saveState !== 'error') return true;
+    await this.save();
+    if (this.saveState === 'error') return false;
+    if (this.dirty || this.saveInflight !== null) await this.save();
+    if (this.saveState === 'error' || this.saveInflight !== null) return false;
+    if (this.dirty && this.id === null && this.phase === 'new' && isBlankPmDoc(this.draftJson)) {
+      return true;
+    }
+    return !this.dirty;
   }
 
   private async persist(): Promise<void> {
