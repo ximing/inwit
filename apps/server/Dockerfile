@@ -69,6 +69,8 @@ FROM base AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends fontconfig \
   && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
+# 复习日界读进程本地日历。未设 TZ 时 slim 默认 UTC，上海日界在 08:00。回滚：删掉下一行。
+ENV TZ=Asia/Shanghai
 WORKDIR /app
 COPY --from=prod-deps /app/package.json /app/pnpm-workspace.yaml ./
 COPY --from=prod-deps /app/node_modules ./node_modules
