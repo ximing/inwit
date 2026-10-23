@@ -9,7 +9,7 @@ Inwit — 一个「扔进去、AI 消化、催你复习」的学习伴侣。pnpm
 ### 子系统与包结构
 
 - `apps/server` — Fastify 5 + drizzle-orm + PostgreSQL 后端服务，以及独立异步 `worker` 进程
-- `apps/web` — Vite + React 19 + `@rabjs/react` + react-router + Tiptap Web 应用（同时作为桌面壳加载的远端站点）
+- `apps/web` — Vite + React 19 + `@rabjs/react` + react-router + Tiptap Web 应用（同时作为桌面壳加载的远端站点）。纸张编辑器在 `apps/web/src/pages/docs/paper-editor.tsx`
 - `apps/mobile` — Expo + React Native + `expo-router` + `@rabjs/react` 移动端应用
 - `apps/desktop` — Tauri 2 桌面壳（加载 dev 或线上 Web 站点，提供系统菜单、托盘、全局快捷键与区域截图）
 - `packages/dto` — 跨端共享的 Zod Schema 与类型定义（API 契约唯一来源）
@@ -17,7 +17,7 @@ Inwit — 一个「扔进去、AI 消化、催你复习」的学习伴侣。pnpm
 - `packages/doc-engine` — 供 Mobile WebView 消费的单文件富文本引擎构建包与桥接协议
 - `packages/markdown` — Markdown（含 `[[kind:id]]` 实体 token）与 ProseMirror JSON 双向转换
 - `packages/brand` — 品牌 Logo 与多端图标生成管线（改 `src/logo.svg` 后跑 `pnpm --filter @inwit/brand raster-icons`）
-- `docs/` — PRD、设计系统、UI 设计稿（`docs/design/v2/*.html` 为视觉唯一真相来源）与重构上下文（`docs/rewrite/CONTEXT.md`）
+- `docs/` — 历史基线在 `docs/prd.md` 与 `docs/design-system.md`；设计稿在 `docs/design/v2/`（先读该目录索引；稿与稿冲突时以现行样式为准）。`docs/rewrite/` 已归档，不要把 `docs/rewrite/CONTEXT.md` 当必读
 - `skills/inwit` — 面向 Agent 的 HTTP 投喂与操作技能（由 `pnpm gen:inwit-skill` 从路由与 DTO 提取接口参考）
 
 ## 全局规则

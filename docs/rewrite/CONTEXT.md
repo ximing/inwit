@@ -1,4 +1,6 @@
-# Inwit UI/UX 大重构 — 共享上下文（每个任务必读）
+# Inwit UI/UX 大重构 — 共享上下文（归档）
+
+> 归档。本文不再是每个任务的必读，也不描述现行仓库。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留当时的说明，不要按它开工。
 
 ## 你要做什么
 
@@ -18,7 +20,7 @@
 
 - pnpm monorepo：`apps/server`（Fastify + drizzle + Postgres）、`apps/web`（React 19 + @rabjs/react 响应式 Service 模式 + react-router）、`packages/dto`（zod schema 共享类型）
 - 前端状态模式：`bindServices` + `observer` + `useService`，每页一个 `*.service.ts`（参考现有 `apps/web/src/pages/today/today.service.ts`）
-- 现有编辑器已经是 **tiptap**（`apps/web/src/pages/editor/paper-editor.tsx`），不是 textarea
+- 编辑器是 **tiptap**，不是 textarea。`apps/web/src/pages/editor/paper-editor.tsx` 已不存在；现行文件是 `apps/web/src/pages/docs/paper-editor.tsx`
 - API 风格：Fastify 路由注册在 `apps/server/src/**/*.routes.ts`，统一 `app.authenticate`；service 层在 `*.service.ts`；表结构在 `apps/server/src/db/schema.ts`；migration 用 `pnpm -F @inwit/server migrate:generate` 生成 + `pnpm -F @inwit/server migrate` 执行（远程 PG，.env 已配好，可直接跑）
 - DTO 变更要同步 `packages/dto/src/*.ts`（zod schema + 导出）
 - 图标统一用 **lucide-react**（如未安装：`pnpm -F @inwit/web add lucide-react`）

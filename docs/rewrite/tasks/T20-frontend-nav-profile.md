@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T20 · 前端：导航收窄可折叠 + 个人资料设置
 
 先读 `docs/rewrite/CONTEXT.md`。T19 已提供：`PATCH /api/me {displayName?,email?}`、`POST /api/me/avatar/upload-url` → `{uploadUrl,key}` → PUT 直传 → `POST /api/me/avatar {key}` 确认；User DTO 带 `displayName`/`avatarUrl`（presigned，1h 过期）。

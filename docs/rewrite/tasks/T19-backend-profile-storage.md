@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T19 · 后端：个人资料 + S3 签名下发的头像存储
 
 先读 `docs/rewrite/CONTEXT.md`。

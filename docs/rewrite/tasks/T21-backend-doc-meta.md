@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T21 · 后端：标题可空 + Agent 总结标题与摘要（description）
 
 先读 `docs/rewrite/CONTEXT.md`。

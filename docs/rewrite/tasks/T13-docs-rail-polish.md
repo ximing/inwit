@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T13 · 视觉打磨：文档工作台 + 左侧导航
 
 先读 `docs/rewrite/CONTEXT.md`，再读 `docs/design/v2/docs.html` 与 `docs/design/v2/inwit.css`。这次是**在现有设计体系内的精修**，沿用 paper 配色 / 宋体阅读 / 朱红 accent，不引入新风格。用户原话反馈（要逐条解决）：

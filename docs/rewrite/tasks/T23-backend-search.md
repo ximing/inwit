@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T23 · 后端：全局搜索 API（文档+卡片，双路召回 RRF 融合 rerank）
 
 先读 `docs/rewrite/CONTEXT.md`。

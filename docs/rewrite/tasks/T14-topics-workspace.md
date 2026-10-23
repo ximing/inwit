@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T14 · 主题页重构：三栏工作台 + 详情重设计
 
 先读 `docs/rewrite/CONTEXT.md`，再读 `docs/design/v2/topics.html`、`docs/design/v2/docs.html`（三栏工作台范式）与 `docs/design/v2/inwit.css`。T13 刚打磨过 docs 工作台与导航，沿用其组件与样式约定。

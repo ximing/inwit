@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T22 · 前端：文档行展示摘要 + 空标题补偿
 
 先读 `docs/rewrite/CONTEXT.md`。T21 已提供：`Document`/`DocumentListItem` 的 `title` 可空 + 新增 `description`，dto 有共享 helper `docDisplayTitle(doc)`（title → description 首行截断 → 「未命名文档」）。

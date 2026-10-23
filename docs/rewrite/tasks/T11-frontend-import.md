@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T11 · 前端：新建文档 + 文件导入入口
 
 先读 `docs/rewrite/CONTEXT.md`，再读 `docs/design/v2/docs.html` 与 `docs/design/v2/inwit.css`（视觉唯一真相）。T10 已提供 `POST /api/documents/import`（multipart，字段 `file` + 可选 `topicId`，返回 Document）。

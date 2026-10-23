@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T6 · 前端：复习中心（/review）
 
 先读 `docs/rewrite/CONTEXT.md`，再完整读 `docs/design/v2/review.html`（结构+文案唯一真相）和 `docs/design/v2/inwit.css`。T1 已提供 `/api/review/settings`（GET/PUT）与扩展版 `/api/review/stats`（streak/totalCards/masteredCount/retention7d/reviews7d/daily/forecast）。

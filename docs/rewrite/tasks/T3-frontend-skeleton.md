@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T3 · 前端：设计系统 + 应用骨架 + 路由收敛
 
 先读 `docs/rewrite/CONTEXT.md`，再通读 `docs/design/v2/inwit.css` 和 `docs/design/v2/today.html`（rail 导航结构）。

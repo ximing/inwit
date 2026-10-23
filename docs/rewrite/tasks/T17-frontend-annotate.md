@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T17 · 前端：批注/写卡交互 + 编辑器视觉打磨
 
 先读 `docs/rewrite/CONTEXT.md`。T16 已提供后端：批注 CRUD（`GET /api/documents/:id/annotations`、`POST/PATCH/DELETE /api/annotations`）、手动写卡 `POST /api/cards{documentId,concept,example,anchorText?}`、选段 AI 写卡 `POST /api/documents/:id/selection-cards{text}`（返回已入队，卡片稍后出现在卡片栏）。

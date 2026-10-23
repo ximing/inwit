@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T7 · 前端：任务页 + 主题页 + 设置页
 
 先读 `docs/rewrite/CONTEXT.md`，再完整读 `docs/design/v2/jobs.html`、`docs/design/v2/topics.html`、`docs/design/v2/settings.html`（视觉唯一真相）。T2 已提供 `/api/jobs/queue` 与 `/api/jobs/usage`，T3 已搭骨架。

@@ -47,7 +47,7 @@ Inwit 是 **AI First**，同时追求 **纸上学习**。打开后先看到今�
 - **回忆必须是你自己的。** 切卡和出题可以交给模型；翻面之前先想，三档反馈才写进 SM-2。偷看作对，下次只会隔得更远。
 - **基础层不依赖 AI。** 卡片 + 间隔重复在没有模型时也能跑。AI 只做增强：换讲法、拆小、对比专题、周报。密钥按需配置（BYOK），用量在任务页可见。
 
-视觉主题为 **纸上学习**：宣纸底、暖墨字、朱批红。浅色是白日书桌，深色是灯下夜读。规范见 [docs/design-system.md](docs/design-system.md)。
+视觉主题为 **纸上学习**：宣纸底、暖墨字、朱批红。浅色是白日书桌，深色是灯下夜读。[docs/design-system.md](docs/design-system.md) 是 v1 历史基线，不是现行样式。
 
 ## 它不是什么
 
@@ -372,7 +372,7 @@ inwit/
 - **图片与文件**只走服务端预签名 URL。
 - 发版前先升级 `apps/web/package.json` 的 `version`（semver），Vite 构建时打进前端常量；不要在 UI 里手写版本号。
 
-UI 视觉以 [`docs/design/v2/`](docs/design/v2/) 为设计稿。产品需求见 [`docs/prd.md`](docs/prd.md)。
+设计稿在 [`docs/design/v2/`](docs/design/v2/)（先看目录索引；稿与稿冲突时以实现中的样式为准）。[`docs/prd.md`](docs/prd.md) 与 [`docs/design-system.md`](docs/design-system.md) 是历史基线，不是现行需求。
 
 ---
 
@@ -380,9 +380,9 @@ UI 视觉以 [`docs/design/v2/`](docs/design/v2/) 为设计稿。产品需求见
 
 | 文档 | 内容 |
 |---|---|
-| [docs/prd.md](docs/prd.md) | 产品需求与概念模型 |
-| [docs/design-system.md](docs/design-system.md) | 「纸上学习」设计系统 |
-| [docs/design/v2/](docs/design/v2/) | UI 重构设计稿 |
+| [docs/prd.md](docs/prd.md) | 历史基线：早期产品需求与概念模型，不是现行需求 |
+| [docs/design-system.md](docs/design-system.md) | 历史基线：v1「纸上学习」设计系统，不是现行样式 |
+| [docs/design/v2/](docs/design/v2/) | UI 设计稿。同页多稿冲突时以实现中的样式为准，见目录索引 |
 | [skills/inwit/SKILL.md](skills/inwit/SKILL.md) | 给外部编码 Agent：HTTP 投喂与复习 |
 | [CLAUDE.md](CLAUDE.md) | 给在本仓库里改代码的代理 |
 | [docs/dev-log.md](docs/dev-log.md) | 开发日志 |

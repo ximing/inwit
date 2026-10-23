@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T15 · 编辑/预览全局开关 + 右侧批注卡片栏 + 退出死循环修复
 
 先读 `docs/rewrite/CONTEXT.md`。视觉沿用现有设计体系（docs/design/v2/ + styles.css tokens），T13 刚打磨过 docs 工作台，保持一致。

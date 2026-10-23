@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T18 · 编辑态去"膏药盒"：写作面即页面
 
 先读 `docs/rewrite/CONTEXT.md`。

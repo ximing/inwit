@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T24 · 前端：首页与文档页搜索（共用组件）
 
 先读 `docs/rewrite/CONTEXT.md`。T23 已提供 `GET /api/search?q=` → `{ documents: DocumentListItem[], cards: Card[] }`（双路召回+RRF+rerank，带降级）。

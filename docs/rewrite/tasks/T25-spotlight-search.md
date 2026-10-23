@@ -1,3 +1,5 @@
+> 归档。本文不再作为现行任务。编辑器现路径是 `apps/web/src/pages/docs/paper-editor.tsx`，不是已不存在的 `pages/editor/paper-editor.tsx`。下文保留原文。
+
 # T25 · 首页搜索改版：Spotlight 命令面板
 
 先读 `docs/rewrite/CONTEXT.md`。沿用设计体系（纸张、朱红 accent、宋体点缀）。
