@@ -1,6 +1,11 @@
 import { EMPTY_PM_DOC, type PmDocJson } from '@inwit/dto';
 
-type PmNode = { type: string; text?: string; content?: PmNode[] };
+type PmNode = {
+  type?: string;
+  text?: string;
+  attrs?: { latex?: unknown };
+  content?: PmNode[];
+};
 
 function cloneEmpty(): PmDocJson {
   return JSON.parse(JSON.stringify(EMPTY_PM_DOC)) as PmDocJson;
@@ -52,8 +57,29 @@ function hasTable(node: unknown): boolean {
   return n.content.some((child) => hasTable(child));
 }
 
+/** Top-level only. A nested page break does not add `--- 第 N 页 ---` on web. */
+function hasTopLevelPageBreak(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const doc = node as PmNode;
+  if (doc.type !== 'doc' || !Array.isArray(doc.content)) return false;
+  return doc.content.some((child) => child.type === 'pageBreak');
+}
+
+/** Non-empty `attrs.latex` only. Whitespace-only latex stays blank, same as mathPlainText. */
+function hasVisibleMath(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const n = node as PmNode;
+  if ((n.type === 'inlineMath' || n.type === 'blockMath') && typeof n.attrs?.latex === 'string') {
+    if (n.attrs.latex.trim().length > 0) return true;
+  }
+  if (!Array.isArray(n.content)) return false;
+  return n.content.some((child) => hasVisibleMath(child));
+}
+
 export function isBlankPmDoc(value: unknown): boolean {
-  if (hasMedia(value) || hasTable(value)) return false;
+  if (hasMedia(value) || hasTable(value) || hasTopLevelPageBreak(value) || hasVisibleMath(value)) {
+    return false;
+  }
   try {
     return collectText(value).replaceAll('\u200b', '').trim().length === 0;
   } catch {

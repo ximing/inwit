@@ -66,6 +66,41 @@ describe('editor session patch', () => {
     });
   });
 
+  it('keeps formula or page-break JSON when a chat answer is present', () => {
+    const formula = {
+      type: 'doc' as const,
+      content: [{ type: 'paragraph', content: [{ type: 'inlineMath', attrs: { latex: 'E=mc^2' } }] }],
+    };
+    const shown = displayedPmJson({ contentJson: formula, answer: '聊天回答' });
+    expect(shown).toEqual(formula);
+    expect(enginePmJson(null, { contentJson: formula, answer: '聊天回答' }, false)).toEqual(formula);
+    expect(
+      buildDocumentPatch({
+        draftTitle: '笔记',
+        lastSavedTitle: '笔记',
+        draftJson: shown,
+        lastSavedJson: formula,
+      }),
+    ).toBeNull();
+    const block = {
+      type: 'doc' as const,
+      content: [{ type: 'blockMath', attrs: { latex: '\\frac{1}{2}' } }],
+    };
+    expect(displayedPmJson({ contentJson: block, answer: '回答' })).toEqual(block);
+    const pages = {
+      type: 'doc' as const,
+      content: [{ type: 'pageBreak', attrs: { pageIndex: 1 } }],
+    };
+    expect(displayedPmJson({ contentJson: pages, answer: '回答' })).toEqual(pages);
+    const emptyMath = {
+      type: 'doc' as const,
+      content: [{ type: 'inlineMath', attrs: { latex: '   ' } }],
+    };
+    expect(displayedPmJson({ contentJson: emptyMath, answer: '回答' })).toMatchObject({
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: '回答' }] }],
+    });
+  });
+
   it('restores the unsaved draft instead of the saved body', () => {
     const saved = {
       type: 'doc' as const,
