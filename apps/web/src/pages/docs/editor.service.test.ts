@@ -341,4 +341,35 @@ describe('EditorService autosave', () => {
     expect(editor.phase).toBe('idle');
     editor.destroy();
   });
+
+  it('returns false when the second leave save fails after the draft stays dirty', async () => {
+    const editor = new EditorService();
+    prime(editor);
+    editor.noteChange(paragraph('改过'));
+    vi.mocked(updateDocument)
+      .mockImplementationOnce(async (id, patch) => {
+        editor.noteChange(paragraph('还在改'));
+        return document({
+          id,
+          contentJson: patch.contentJson ?? paragraph('改过'),
+          updatedAt: '2026-10-19T15:00:00.000Z',
+        });
+      })
+      .mockRejectedValueOnce(new Error('没存上'));
+
+    await expect(editor.commitBeforeLeave()).resolves.toBe(false);
+
+    expect(updateDocument).toHaveBeenNthCalledWith(1, ORIGINAL, {
+      contentJson: paragraph('改过'),
+    });
+    expect(updateDocument).toHaveBeenNthCalledWith(2, ORIGINAL, {
+      contentJson: paragraph('还在改'),
+    });
+    expect(editor.saveState).toBe('error');
+    expect(editor.phase).toBe('ready');
+    expect(editor.id).toBe(ORIGINAL);
+    expect(editor.draftJson).toEqual(paragraph('还在改'));
+    expect(editor.dirty).toBe(true);
+    editor.destroy();
+  });
 });

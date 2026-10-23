@@ -257,9 +257,9 @@ export class EditorService extends Service {
     if (this.remoteGone) return true;
     if (!this.dirty && this.saveInflight === null && this.saveState !== 'error') return true;
     await this.save();
-    if (this.saveState === 'error') return false;
+    if (this.saveFailed()) return false;
     if (this.dirty || this.saveInflight !== null) await this.save();
-    if (this.saveState === 'error' || this.saveInflight !== null) return false;
+    if (this.saveFailed() || this.saveInflight !== null) return false;
     if (this.dirty && this.id === null && this.phase === 'new' && isBlankPmDoc(this.draftJson)) {
       return true;
     }
@@ -348,6 +348,11 @@ export class EditorService extends Service {
     this.phase = 'idle';
     this.publishPresence();
     super.destroy();
+  }
+
+  /** 第二次保存仍可能失败，不能靠第一次检查之后的类型收窄。 */
+  private saveFailed(): boolean {
+    return this.saveState === 'error';
   }
 
   /** A new editor may create. An open document may only update that id. */
