@@ -56,7 +56,7 @@ export const documents = pgTable(
     linkHint: text('link_hint'),
     /** Object storage key (not a URL). */
     fileKey: text('file_key'),
-    fileMime: varchar('file_mime', { length: 64 }),
+    fileMime: varchar('file_mime', { length: 255 }),
     fileSize: bigint('file_size', { mode: 'number' }),
     pageCount: integer('page_count'),
     createdAt: timestamptz('created_at').notNull().defaultNow(),
