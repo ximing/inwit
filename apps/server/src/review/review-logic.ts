@@ -14,12 +14,23 @@ export function shiftLocalDateKey(key: string, days: number): string {
   return localDateKey(d);
 }
 
-export function applyReviewQueueLimits<T extends { reps: number }>(
+export interface ReviewQueueCandidate {
+  reps: number;
+  lapses: number;
+  lastFeedback: ReviewFeedback | null;
+}
+
+/** 从未学过。忘记会把 reps 归零，不能单看 reps。 */
+export function isUnseenReviewCard(row: ReviewQueueCandidate): boolean {
+  return row.reps === 0 && row.lapses === 0 && row.lastFeedback == null;
+}
+
+export function applyReviewQueueLimits<T extends ReviewQueueCandidate>(
   due: T[],
   settings: Pick<ReviewSettings, 'dailyReviewLimit' | 'dailyNewLimit'>,
 ): { selected: T[]; truncated: number } {
-  const news = due.filter((row) => row.reps === 0);
-  const reviews = due.filter((row) => row.reps > 0);
+  const news = due.filter((row) => isUnseenReviewCard(row));
+  const reviews = due.filter((row) => !isUnseenReviewCard(row));
   const newCap = Math.min(settings.dailyNewLimit, settings.dailyReviewLimit);
   const selectedNews = news.slice(0, newCap);
   const reviewCap = Math.max(0, settings.dailyReviewLimit - selectedNews.length);

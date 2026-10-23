@@ -13,49 +13,60 @@ function atLocal(year: number, monthIndex: number, day: number, hour = 12): Date
   return new Date(year, monthIndex, day, hour, 0, 0, 0);
 }
 
+function queueCard(
+  id: string,
+  reps: number,
+  lapses = 0,
+  lastFeedback: 'forgot' | 'fuzzy' | 'remembered' | null = null,
+) {
+  return { id, reps, lapses, lastFeedback };
+}
+
 describe('applyReviewQueueLimits', () => {
   const settings = { dailyReviewLimit: 5, dailyNewLimit: 2 };
 
-  it('puts new cards first, caps new + total, and reports truncated', () => {
+  it('puts unseen cards first and treats a lapsed reps=0 card as review', () => {
     const due = [
-      { id: 'r1', reps: 3 },
-      { id: 'n1', reps: 0 },
-      { id: 'r2', reps: 1 },
-      { id: 'n2', reps: 0 },
-      { id: 'n3', reps: 0 },
-      { id: 'r3', reps: 4 },
-      { id: 'r4', reps: 2 },
+      queueCard('r1', 3, 0, 'remembered'),
+      queueCard('n1', 0),
+      queueCard('r2', 1, 0, 'fuzzy'),
+      queueCard('n2', 0),
+      queueCard('forgot', 0, 1, 'forgot'),
+      queueCard('r3', 4, 0, 'remembered'),
+      queueCard('r4', 2, 0, 'remembered'),
     ];
     const { selected, truncated } = applyReviewQueueLimits(due, settings);
-    expect(selected.map((row) => row.id)).toEqual(['n1', 'n2', 'r1', 'r2', 'r3']);
+    expect(selected.map((row) => row.id)).toEqual(['n1', 'n2', 'r1', 'r2', 'forgot']);
     expect(truncated).toBe(2);
   });
 
   it('uses leftover slots for review cards when fewer new cards exist', () => {
     const due = [
-      { id: 'n1', reps: 0 },
-      { id: 'r1', reps: 1 },
-      { id: 'r2', reps: 2 },
-      { id: 'r3', reps: 3 },
-      { id: 'r4', reps: 4 },
-      { id: 'r5', reps: 5 },
+      queueCard('n1', 0),
+      queueCard('forgot', 0, 1, 'forgot'),
+      queueCard('r1', 1, 0, 'remembered'),
+      queueCard('r2', 2, 0, 'remembered'),
+      queueCard('r3', 3, 0, 'remembered'),
+      queueCard('r4', 4, 0, 'remembered'),
+      queueCard('r5', 5, 0, 'remembered'),
     ];
     const { selected, truncated } = applyReviewQueueLimits(due, settings);
-    expect(selected.map((row) => row.id)).toEqual(['n1', 'r1', 'r2', 'r3', 'r4']);
-    expect(truncated).toBe(1);
+    expect(selected.map((row) => row.id)).toEqual(['n1', 'forgot', 'r1', 'r2', 'r3']);
+    expect(truncated).toBe(2);
   });
 
-  it('takes no new cards when dailyNewLimit is 0', () => {
+  it('takes no new cards when dailyNewLimit is 0, but keeps lapsed and graded reps=0 cards', () => {
     const due = [
-      { id: 'n1', reps: 0 },
-      { id: 'r1', reps: 1 },
-      { id: 'r2', reps: 2 },
+      queueCard('n1', 0),
+      queueCard('forgot', 0, 1, 'forgot'),
+      queueCard('fuzzy', 0, 0, 'fuzzy'),
+      queueCard('r1', 1, 0, 'remembered'),
     ];
     const { selected, truncated } = applyReviewQueueLimits(due, {
       dailyReviewLimit: 5,
       dailyNewLimit: 0,
     });
-    expect(selected.map((row) => row.id)).toEqual(['r1', 'r2']);
+    expect(selected.map((row) => row.id)).toEqual(['forgot', 'fuzzy', 'r1']);
     expect(truncated).toBe(1);
   });
 });

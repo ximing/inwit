@@ -176,6 +176,20 @@ async function loadQuestionsByCard(cardIds: string[]): Promise<Map<string, CardQ
   return questionsByCard;
 }
 
+function isIsolatedQueueMiss(err: unknown): err is AppError {
+  return err instanceof AppError && err.status === 404;
+}
+
+async function eligibilityForQueue(userId: string, cardId: string) {
+  try {
+    return await getReviewEligibility(getDb(), userId, cardId);
+  } catch (err) {
+    if (!isIsolatedQueueMiss(err)) throw err;
+    logger.warn('review.today.skip_card', { cardId, code: err.code });
+    return null;
+  }
+}
+
 export async function getReviewToday(
   userId: string,
   now = new Date(),
@@ -215,6 +229,7 @@ export async function getReviewToday(
   ]);
 
   // 协议分流：旧客户端不领取受管理卡；协议 2 下受管理卡还需通过知识资格校验。
+  // 单卡 404（卡片或绑定已不在）跳过该卡，不让整份今日队列失败。
   const protocolVisible: typeof dueRows = [];
   for (const row of dueRows) {
     const managed = row.card.reviewRevision !== null;
@@ -223,13 +238,18 @@ export async function getReviewToday(
       continue;
     }
     if (protocol !== REVIEW_PROTOCOL_CURRENT) continue;
-    const eligibility = await getReviewEligibility(getDb(), userId, row.card.id);
-    if (!eligibility.eligible) continue;
+    const eligibility = await eligibilityForQueue(userId, row.card.id);
+    if (!eligibility?.eligible) continue;
     protocolVisible.push(row);
   }
 
   const limited = applyReviewQueueLimits(
-    protocolVisible.map((row) => ({ row, reps: row.state.reps })),
+    protocolVisible.map((row) => ({
+      row,
+      reps: row.state.reps,
+      lapses: row.state.lapses,
+      lastFeedback: row.state.lastFeedback ?? null,
+    })),
     settings,
   );
   const selectedRows = limited.selected.map((item) => item.row);
@@ -245,27 +265,33 @@ export async function getReviewToday(
       mapPlacement: placements.get(row.card.id) ?? null,
     };
     if (row.card.reviewRevision !== null) {
-      // 受管理卡：固定本次下发的实际首题并签发版本令牌（不含答案）。
-      const first = questions[0];
-      const binding = await activeBindingOf(getDb(), row.card.id);
-      if (first) {
-        item.servedQuestionId = first.id;
-        item.reviewToken = issueReviewToken({
-          userId,
-          cardId: row.card.id,
-          questionId: first.id,
-          reviewRevision: row.card.reviewRevision,
-          bindingId: binding?.id ?? null,
-          epochId: binding?.epochId ?? null,
-          targetVersion: binding?.targetVersion ?? null,
-        });
-        if (binding) {
-          item.knowledgeTarget = {
-            kind: binding.conceptId ? 'concept' : 'relation',
-            id: binding.conceptId ?? binding.relationId!,
-            label: '',
-          };
+      try {
+        // 受管理卡：固定本次下发的实际首题并签发版本令牌（不含答案）。
+        const first = questions[0];
+        const binding = await activeBindingOf(getDb(), row.card.id);
+        if (first) {
+          item.servedQuestionId = first.id;
+          item.reviewToken = issueReviewToken({
+            userId,
+            cardId: row.card.id,
+            questionId: first.id,
+            reviewRevision: row.card.reviewRevision,
+            bindingId: binding?.id ?? null,
+            epochId: binding?.epochId ?? null,
+            targetVersion: binding?.targetVersion ?? null,
+          });
+          if (binding) {
+            item.knowledgeTarget = {
+              kind: binding.conceptId ? 'concept' : 'relation',
+              id: binding.conceptId ?? binding.relationId!,
+              label: '',
+            };
+          }
         }
+      } catch (err) {
+        if (!isIsolatedQueueMiss(err)) throw err;
+        logger.warn('review.today.skip_card', { cardId: row.card.id, code: err.code });
+        continue;
       }
     }
     items.push(item);
