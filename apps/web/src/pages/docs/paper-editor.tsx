@@ -112,6 +112,8 @@ type PaperEditorProps = {
   activeAnnotationId?: string | null;
   onChange: (json: ReturnType<typeof asPmJson>) => void;
   onSave: () => void;
+  /** 图片、视频或粘贴转存进行中。顶栏与保存状态共用这一处提示。 */
+  onUploadingChange?: (uploading: boolean) => void;
   onAnchorClick?: (cardIds: string[]) => void;
   onAnnotationClick?: (ids: string[]) => void;
   bindHost?: (host: DocEditorHost | null) => void;
@@ -129,6 +131,7 @@ export const PaperEditor = observer(function PaperEditor({
   activeAnnotationId = null,
   onChange,
   onSave,
+  onUploadingChange,
   onAnchorClick,
   onAnnotationClick,
   bindHost,
@@ -165,6 +168,12 @@ export const PaperEditor = observer(function PaperEditor({
   activeAnnotationIdRef.current = activeAnnotationId;
   const [uploading, setUploading] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<{ text: string; error: boolean } | null>(null);
+  const onUploadingChangeRef = useRef(onUploadingChange);
+  onUploadingChangeRef.current = onUploadingChange;
+  useEffect(() => {
+    onUploadingChangeRef.current?.(uploading);
+    return () => onUploadingChangeRef.current?.(false);
+  }, [uploading]);
 
   const ingestFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -531,7 +540,6 @@ export const PaperEditor = observer(function PaperEditor({
       <div className="paper-sticky">
         <PaperToolbar
           editor={editor}
-          uploading={uploading}
           canInsertMedia={canInsertMedia}
           onInsertLink={insertLink}
           onPickImage={() => imageInputRef.current?.click()}

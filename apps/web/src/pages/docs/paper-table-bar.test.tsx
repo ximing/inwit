@@ -31,7 +31,6 @@ beforeEach(async () => {
     root.render(
       <PaperToolbar
         editor={editor}
-        uploading={false}
         canInsertMedia={false}
         onInsertLink={() => {}}
         onPickImage={() => {}}

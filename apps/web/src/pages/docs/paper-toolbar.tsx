@@ -700,7 +700,6 @@ function TableActionBar({
 
 export function PaperToolbar({
   editor,
-  uploading,
   canInsertMedia,
   onInsertLink,
   onPickImage,
@@ -711,7 +710,6 @@ export function PaperToolbar({
   findOpen,
 }: {
   editor: Editor;
-  uploading: boolean;
   canInsertMedia: boolean;
   onInsertLink: () => void;
   onPickImage: () => void;
@@ -863,18 +861,6 @@ export function PaperToolbar({
           tool('find', '查找', <Search width={TOOL_ICON} height={TOOL_ICON} strokeWidth={2} />, onFind, {
             active: findOpen,
           }),
-          ...(uploading
-            ? [
-                textSlot(
-                  'uploading',
-                  'paper-tool is-wide',
-                  '上传中…',
-                  <span className="paper-tool is-wide" aria-live="polite">
-                    上传中…
-                  </span>,
-                ),
-              ]
-            : []),
         ]}
       />
       {active.table ? (

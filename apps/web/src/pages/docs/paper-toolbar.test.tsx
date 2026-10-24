@@ -23,7 +23,7 @@ beforeEach(async () => {
   });
   root = createRoot(host);
   await act(async () => {
-    root.render(<PaperToolbar editor={editor} uploading={false} canInsertMedia={false}
+    root.render(<PaperToolbar editor={editor} canInsertMedia={false}
       onInsertLink={() => {}} onPickImage={() => {}} onPickVideo={() => {}}
       onToggleTable={() => {}} onInsertMath={() => {}} onFind={() => {}} findOpen={false} />);
   });

@@ -1,6 +1,6 @@
 import { observer, useService } from '@rabjs/react';
 import { Loader2 } from 'lucide-react';
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { StudyDock } from '@/features/study-workspace/study-workspace.js';
 import { documentReturnTarget } from '@/routes';
@@ -18,6 +18,7 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
   const [params] = useSearchParams();
   const returnTo = documentReturnTarget(location.pathname, params);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [mediaUploading, setMediaUploading] = useState(false);
   const justCreatedRef = useRef(false);
   justCreatedRef.current = editor.justCreated;
 
@@ -52,7 +53,7 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
       <div className="pane-main">
         <div className="pane-scroll" ref={scrollRef}>
           <div className="pane-inner">
-            <DocTopRow editing docId={docId} />
+            <DocTopRow editing docId={docId} mediaUploading={mediaUploading} />
             {editor.phase === 'loading' ? (
               <p className="empty" role="status">
                 <Loader2 className="icon-spin" width={14} height={14} strokeWidth={1.8} />
@@ -86,6 +87,7 @@ export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | 
                     activeAnnotationId={service.activeAnnotationId}
                     onChange={(json) => editor.noteChange(json)}
                     onSave={() => void editor.save()}
+                    onUploadingChange={setMediaUploading}
                     bindHost={(host) => service.attachEditorHost(host)}
                     onAnchorClick={(ids) => service.openAnchors(ids)}
                     onAnnotationClick={(ids) => {

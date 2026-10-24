@@ -36,7 +36,7 @@ const ModeSwitch = observer(function ModeSwitch() {
 });
 
 /**
- * 文档题区顶行：左侧主题 kicker，右侧弱视觉工具丸（保存状态 / 模式切换 / 关闭）。
+ * 文档题区顶行：左侧主题 kicker，右侧弱视觉工具丸（上传与保存状态 / 模式切换 / 关闭）。
  * 默认 inline 形态放在 .pane-inner 内与正文列对齐；PDF 等无正文列的场景用 bar 形态置顶。
  */
 export const DocTopRow = observer(function DocTopRow({
@@ -44,11 +44,14 @@ export const DocTopRow = observer(function DocTopRow({
   docId,
   hideModeSwitch = false,
   layout = 'inline',
+  mediaUploading = false,
 }: {
   editing: boolean;
   docId: string | null;
   hideModeSwitch?: boolean;
   layout?: 'inline' | 'bar';
+  /** 图片或视频正在写入存储。与保存状态共用同一处提示。 */
+  mediaUploading?: boolean;
 }) {
   const service = useService(DocsService);
   const editor = useService(EditorService);
@@ -68,7 +71,8 @@ export const DocTopRow = observer(function DocTopRow({
     navigate(returnTo.path, returnTo.replace ? { replace: true } : undefined);
   };
 
-  const showSave = editing && Boolean(editor.saveLabel);
+  const statusLabel = mediaUploading ? '上传中…' : editor.saveLabel;
+  const showStatus = editing && Boolean(statusLabel);
   const showMode = !hideModeSwitch;
   // 预览态把更新时间放在工具丸里（原标题下 meta 的位置）；编辑态这个位置是保存状态
   const timeDoc = !editing && service.doc && service.doc.id === docId ? service.doc : null;
@@ -90,11 +94,14 @@ export const DocTopRow = observer(function DocTopRow({
       />
       <span className="spacer" />
       <div className="doc-fab">
-        {showSave ? (
+        {showStatus ? (
           <>
-            <span className={`save-state is-${editor.saveState}`}>
-              {editor.saveState === 'saved' ? <span className="ok">●</span> : null}
-              {editor.saveLabel}
+            <span
+              className={`save-state${mediaUploading ? '' : ` is-${editor.saveState}`}`}
+              aria-live="polite"
+            >
+              {!mediaUploading && editor.saveState === 'saved' ? <span className="ok">●</span> : null}
+              {statusLabel}
             </span>
             {showMode ? <span className="divider" /> : null}
           </>
