@@ -348,12 +348,29 @@ function replaceMathWidgets(html: string): string {
 }
 
 function htmlToPlain(html: string): string {
-  return decodeHtml(
-    html
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/p>\s*<p\b[^>]*>/gi, '\n')
-      .replace(/<[^>]+>/g, ''),
-  );
+  const broken = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p\b[^>]*>/gi, '\n');
+  let text = '';
+  let i = 0;
+  while (i < broken.length) {
+    const lt = broken.indexOf('<', i);
+    if (lt < 0) {
+      text += broken.slice(i);
+      break;
+    }
+    text += broken.slice(i, lt);
+    if (!looksLikeTag(broken, lt)) {
+      text += '<';
+      i = lt + 1;
+      continue;
+    }
+    const gt = findTagEnd(broken, lt);
+    if (gt < 0) {
+      text += broken.slice(lt);
+      break;
+    }
+    i = gt + 1;
+  }
+  return decodeHtml(text);
 }
 
 function wrapDisplayInner(full: string, inner: string): string {
@@ -403,6 +420,29 @@ function spliceMath(text: string): string {
   return out;
 }
 
+/**
+ * A `<` inside TeX such as `x_{<i}` is not a tag. A real tag has a name and
+ * then `>`, `/`, or whitespace — `<i)` does not.
+ */
+function looksLikeTag(html: string, index: number): boolean {
+  const match = /^<\s*\/?\s*[A-Za-z][A-Za-z0-9:-]*/.exec(html.slice(index));
+  if (!match) return false;
+  const after = html[index + match[0].length];
+  return after === '>' || after === '/' || (after !== undefined && /\s/.test(after));
+}
+
+/** Next comment or real tag. Literal `<` inside a formula stays in the text. */
+function nextMarkup(html: string, from: number): number {
+  let i = from;
+  while (i < html.length) {
+    const lt = html.indexOf('<', i);
+    if (lt < 0) return -1;
+    if (html.startsWith('<!--', lt) || looksLikeTag(html, lt)) return lt;
+    i = lt + 1;
+  }
+  return -1;
+}
+
 function replaceTextDelimiters(html: string): string {
   let out = '';
   let i = 0;
@@ -416,7 +456,7 @@ function replaceTextDelimiters(html: string): string {
       i = to;
       continue;
     }
-    if (html[i] === '<') {
+    if (html[i] === '<' && looksLikeTag(html, i)) {
       const gt = findTagEnd(html, i);
       if (gt < 0) {
         out += html.slice(i);
@@ -440,7 +480,7 @@ function replaceTextDelimiters(html: string): string {
       i = gt + 1;
       continue;
     }
-    const next = html.indexOf('<', i);
+    const next = nextMarkup(html, i);
     const text = html.slice(i, next < 0 ? html.length : next);
     out += skipping() ? text : spliceMath(text);
     i = next < 0 ? html.length : next;

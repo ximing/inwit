@@ -30,7 +30,7 @@ const BLOCK_SIGNALS: RegExp[] = [
   /^[ \t]{0,3}\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)+\|?[ \t]*$/m,
   /^[^\n]+\n[ \t]{0,3}=+[ \t]*$/m,
   /^[ \t]*\$\$[ \t]*$/m,
-  /^[ \t]*\\\[\[ \t]*$/m,
+  /^[ \t]*\\[[\]][ \t]*$/m,
   /^::video\{/m,
 ];
 
@@ -57,9 +57,18 @@ const NAMED_ENTITIES: Record<string, string> = {
   nbsp: ' ',
 };
 
+/** `<i` inside `\[...\]` / `$...$` is TeX, not an italic tag. */
+function maskDelimitedMath(value: string): string {
+  return value
+    .replace(/\\\[[\s\S]*?\\\]/g, ' ')
+    .replace(/\\\([\s\S]*?\\\)/g, ' ')
+    .replace(/\$\$[\s\S]*?\$\$/g, ' ')
+    .replace(/(?<!\\)\$(?!\$)[^$\n]*\$(?!\$)/g, ' ');
+}
+
 export function htmlClipboardIsRich(html: string): boolean {
   if (!html) return false;
-  return RICH_TAG.test(stripNoise(html));
+  return RICH_TAG.test(maskDelimitedMath(stripNoise(html)));
 }
 
 /** PM blocks to insert, or null when the editor should keep its normal paste. */
@@ -88,8 +97,13 @@ function hasMarkdownSignal(text: string): boolean {
   return hasBlockSignal(text) || hasInlineSignal(text) || hasMathSignal(text);
 }
 
+/** A display formula broken across lines is one block, not two plain lines. */
+function hasCrossLineMath(text: string): boolean {
+  return /\\\[[\s\S]*?\n[\s\S]*?\\\]/.test(text) || /(?<!\\)\$\$[\s\S]*?\n[\s\S]*?\$\$(?!\$)/.test(text);
+}
+
 function hasBlockSignal(text: string): boolean {
-  return BLOCK_SIGNALS.some((pattern) => pattern.test(text));
+  return BLOCK_SIGNALS.some((pattern) => pattern.test(text)) || hasCrossLineMath(text);
 }
 
 function hasInlineSignal(text: string): boolean {
@@ -204,12 +218,46 @@ function stripNoise(html: string): string {
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
 }
 
+function isRealTag(html: string, index: number): boolean {
+  const match = /^<\s*\/?\s*[A-Za-z][A-Za-z0-9:-]*/.exec(html.slice(index));
+  if (!match) return false;
+  const after = html[index + match[0].length];
+  return after === '>' || after === '/' || (after !== undefined && /\s/.test(after));
+}
+
+/** Drop real tags. A TeX `<` such as `x_{<i}` stays. */
+function stripRealTags(html: string): string {
+  let out = '';
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf('<', i);
+    if (lt < 0) {
+      out += html.slice(i);
+      break;
+    }
+    out += html.slice(i, lt);
+    if (!isRealTag(html, lt)) {
+      out += '<';
+      i = lt + 1;
+      continue;
+    }
+    const gt = html.indexOf('>', lt + 1);
+    if (gt < 0) {
+      out += html.slice(lt);
+      break;
+    }
+    i = gt + 1;
+  }
+  return out;
+}
+
 function looseTextFromHtml(html: string): string {
   if (!html) return '';
-  const withBreaks = stripNoise(html)
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(?:p|div|h[1-6]|li|tr|blockquote|pre)>/gi, '\n')
-    .replace(/<[^>]+>/g, '');
+  const withBreaks = stripRealTags(
+    stripNoise(html)
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(?:p|div|h[1-6]|li|tr|blockquote|pre)>/gi, '\n'),
+  );
   return decodeEntities(withBreaks).replace(/\u00a0/g, ' ');
 }
 

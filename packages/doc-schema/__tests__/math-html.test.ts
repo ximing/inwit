@@ -101,6 +101,36 @@ describe('normalizeMathHtml', () => {
     expect(normalizeMathHtml(html)).toBe(html);
   });
 
+  it.each([
+    ['chain rule', 'p(x_1,\\ldots,x_n)=\\prod_{i=1}^{n}p(x_i\\mid x_{<i})'],
+    [
+      'autoregressive loss',
+      '\\mathcal L_{\\mathrm{AR}} = -\\sum_{i=1}^{N} \\log p_\\theta(z_i\\mid z_{<i},c)',
+    ],
+  ])('keeps a less-than inside a %s formula', (_name, latex) => {
+    const stored = latex.replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+    const display = normalizeMathHtml(`<p>\\[ ${latex} \\]</p>`);
+    expect(display).toContain(`data-type="block-math" data-latex="${stored}"`);
+    expect(display).toContain('&lt;i');
+    expect(display).not.toContain('x_{<');
+    expect(display).not.toContain('z_{<');
+    const inline = normalizeMathHtml(`<p>见 \\(${latex}\\)。</p>`);
+    expect(inline).toContain(`data-type="inline-math" data-latex="${stored}"`);
+    expect(inline).toContain('见 ');
+    expect(normalizeMathHtml(`<p><strong>粗</strong> \\[ ${latex} \\]</p>`)).toContain(
+      `data-latex="${stored}"`,
+    );
+    expect(normalizeMathHtml(`<p>\\[</p><p>${latex}</p><p>\\]</p>`)).toContain(
+      `data-latex="${stored}"`,
+    );
+  });
+
+  it('still treats a real italic tag as markup beside a formula', () => {
+    expect(normalizeMathHtml('<p>这是 <i>斜体</i> $E=mc^2$。</p>')).toBe(
+      '<p>这是 <i>斜体</i> <span data-type="inline-math" data-latex="E=mc^2"></span>。</p>',
+    );
+  });
+
   it('escapes quotes in latex attributes', () => {
     expect(normalizeMathHtml('<p>$a\\text{"b"}$</p>')).toContain('data-latex="a\\text{&quot;b&quot;}"');
   });

@@ -50,6 +50,17 @@ describe('math markdown', () => {
     expect(wrappedText).toContain('前文');
     expect(wrappedText).toContain('后文');
     expect(wrappedText).not.toContain('"latex":"后文"');
+
+    const chain = 'p(x_1,\\ldots,x_n)=\\prod_{i=1}^{n}p(x_i\\mid x_{<i})';
+    const chained = parseMarkdownToPmJSON(`\\[\n${chain}\n\\]\n`);
+    expect(chained.content?.[0]).toMatchObject({ type: 'blockMath', attrs: { latex: chain } });
+
+    const loss = '\\mathcal L_{\\mathrm{AR}} = -\\sum_{i=1}^{N} \\log p_\\theta(z_i\\mid z_{<i},c)';
+    const broken = parseMarkdownToPmJSON(`\\[ \\mathcal L_{\\mathrm{AR}} = -\\sum_{i=1}^{N} \\log p_\\theta(z_i\\mid\nz_{<i},c) \\]\n`);
+    expect(broken.content?.[0]).toMatchObject({
+      type: 'blockMath',
+      attrs: { latex: loss.replace('\\mid ', '\\mid\n') },
+    });
   });
 
   it('keeps a price as text and escapes the dollar on the way out', () => {

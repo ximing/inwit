@@ -104,6 +104,48 @@ describe('markdownPasteBlocks', () => {
     expect(markdownPasteBlocks(plain, html.replace(' data-pm-slice="0 0 []"', ''))?.[0]?.type).toBe('paragraph');
   });
 
+  it.each([
+    ['chain rule', 'p(x_1,\\ldots,x_n)=\\prod_{i=1}^{n}p(x_i\\mid x_{<i})'],
+    [
+      'autoregressive loss',
+      '\\mathcal L_{\\mathrm{AR}} = -\\sum_{i=1}^{N} \\log p_\\theta(z_i\\mid z_{<i},c)',
+    ],
+  ])('pastes a %s formula that contains < instead of the raw delimiters', (_name, latex) => {
+    expect(markdownPasteBlocks(`\\[ ${latex} \\]`)).toMatchObject([
+      { type: 'blockMath', attrs: { latex } },
+    ]);
+    expect(markdownPasteBlocks(`\\[\n${latex}\n\\]`)).toMatchObject([
+      { type: 'blockMath', attrs: { latex } },
+    ]);
+    const wrappedLatex = latex.replace('\\mid ', '\\mid\n');
+    expect(markdownPasteBlocks(`\\[ ${wrappedLatex} \\]`)).toMatchObject([
+      { type: 'blockMath', attrs: { latex: wrappedLatex } },
+    ]);
+
+    const doc = `说明\n\n\\[ ${latex} \\]\n\n其中条件写在括号里。`;
+    const html = doc
+      .split('\n\n')
+      .map((part) => `<p>${part.replaceAll('\n', '<br>')}</p>`)
+      .join('');
+    expect(htmlClipboardIsRich(html)).toBe(false);
+    expect(markdownPasteBlocks(doc, html)).toMatchObject([
+      { type: 'paragraph' },
+      { type: 'blockMath', attrs: { latex } },
+      { type: 'paragraph' },
+    ]);
+    expect(markdownPasteBlocks(`见 \\(${latex}\\) 如上。`)).toMatchObject([
+      {
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: '见 ' },
+          { type: 'inlineMath', attrs: { latex } },
+          { type: 'text', text: ' 如上。' },
+        ],
+      },
+    ]);
+    expect(markdownPasteBlocks('普通一行\n普通第二行')).toBeNull();
+  });
+
   it('keeps rendered HTML and converts a source wrapper', () => {
     expect(htmlClipboardIsRich('<p><strong>粗</strong></p>')).toBe(true);
     expect(htmlClipboardIsRich('<div><span style="color:#000"># 标题</span></div>')).toBe(false);
