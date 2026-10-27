@@ -161,7 +161,7 @@ pnpm --filter @inwit/desktop dev          # 打开 http://localhost:5190，会�
 
 生产安装包的窗口打开 `https://inwit.aimo.plus`，不再内嵌一份前端。
 
-macOS 点红灯会藏到菜单栏，并不退出；「退出 Inwit」才退出。全局快捷键 ⌘⇧2 / Ctrl+Shift+2 区域截图（macOS 需「屏幕录制」权限）。
+macOS 点红灯会隐藏窗口，并不退出，从程序坞再打开；「退出 Inwit」才退出。菜单栏不放图标。全局快捷键 ⌘⇧2 / Ctrl+Shift+2 区域截图（macOS 需「屏幕录制」权限）。
 
 ### 生产与安装包
 

@@ -93,7 +93,9 @@ describe('Tauri desktop contract', () => {
     assert.match(lib, /StateFlags::VISIBLE/);
   });
 
-  it('puts a template tray icon in the macOS menu bar', () => {
+  it('does not put a status icon in the macOS menu bar', () => {
+    assert.match(lib, /#\[cfg\(not\(target_os = "macos"\)\)\]\s*install_tray\(app\)\?/);
+    assert.match(lib, /#\[cfg\(not\(target_os = "macos"\)\)\]\s*fn install_tray/);
     assert.match(lib, /TrayIconBuilder/);
     assert.match(lib, /icon_as_template\(true\)/);
     assert.match(lib, /icons\/tray\.png/);

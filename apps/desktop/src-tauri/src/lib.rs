@@ -54,6 +54,8 @@ pub fn run() {
                     tauri::webview::NewWindowResponse::Deny
                 })
                 .build()?;
+            // macOS 不放菜单栏状态图标。红灯只隐藏窗口，从程序坞再打开。
+            #[cfg(not(target_os = "macos"))]
             install_tray(app)?;
             app.global_shortcut().register(shortcut)?;
             Ok(())
@@ -317,6 +319,7 @@ fn build_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<tau
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn install_tray(app: &tauri::App) -> tauri::Result<()> {
     use tauri::image::Image;
     use tauri::menu::{Menu, MenuItem};

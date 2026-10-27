@@ -18,6 +18,6 @@
 以下约束由 `__tests__/tauri.contract.test.mjs` 强制守护，修改后必须运行 `pnpm --filter @inwit/desktop test`：
 
 - **禁止 Bearer 与存储插件**：不得引入 `tauri-plugin-http`、`tauri-plugin-store`、`tauri-plugin-notification` 或开启 `unsafe-headers`。
-- **窗口与平台行为**：保持 1280×800（最小 960×640）及系统默认标题栏；macOS 点击红灯关闭按钮时隐藏窗口而非退出进程（`CloseRequested` → `prevent_close` + `hide`），托盘图标开启 `icon_as_template(true)`。
+- **窗口与平台行为**：保持 1280×800（最小 960×640）及系统默认标题栏；macOS 点击红灯关闭按钮时隐藏窗口而非退出进程（`CloseRequested` → `prevent_close` + `hide`），且不放菜单栏状态图标；Windows / Linux 托盘仍用 `icon_as_template(true)`。
 - **导航与外链安全**：仅允许 http/https/`about:blank` 导航，禁止导航至 `tauri://` 或 `tauri.localhost`；外部链接仅在 `on_new_window` 中通过系统浏览器打开并 `Deny` 新窗口。
 - **Web 桥接对齐**：Rust 命令（`capture_region`、`clipboard_image`）与事件名（`screenshot-captured`、`screenshot-failed`）必须与 `apps/web/src/platform/native.ts` 保持一致。

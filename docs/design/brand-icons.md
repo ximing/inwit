@@ -21,7 +21,7 @@
 | web / mobile / Win·Linux | 6%（纸砖 88%） | 原尺寸铺满 | 字形与纸砖等比，由 `BASE_TILE_SPAN=0.88` 保证 |
 | macOS `icon.icns` | 10%（纸砖 80%） | 随纸砖等比 | Apple HIG：1024 画布可见图形 ≈824px（80%），否则 Dock 里偏大 |
 | Android `adaptive-icon.png` | —（透明前景） | 0.78 | 字形须在 adaptive mask 安全区（圆形 mask 直径 ≈61% 画布）内 |
-| `tray.png` | —（纯字形） | 0.9，黑色 | macOS 菜单栏模板图标，系统着色 |
+| `tray.png` | —（纯字形） | 0.9，黑色 | Windows / Linux 托盘图标。macOS 不放菜单栏图标 |
 
 ## 各端输出
 
