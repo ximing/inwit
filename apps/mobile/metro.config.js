@@ -20,20 +20,24 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// dto `types` points at src/index.ts. If Metro lands on that TS graph (or a
-// sibling .js specifier inside packages/dto|doc-schema), rewrite to .ts so
-// babel-preset-expo can transpile it.
+// dto `types` points at src/index.ts. Relative imports keep the `.js` suffix
+// (NodeNext). Metro does not map that suffix onto `.ts` / `.tsx`, so rewrite
+// it for the mobile app and the workspace packages it bundles.
 const defaultResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   const origin = context.originModulePath ?? '';
-  const fromWorkspaceTs =
+  const fromTypedSource =
+    origin.includes(`${path.sep}apps${path.sep}mobile${path.sep}`) ||
     origin.includes(`${path.sep}packages${path.sep}dto${path.sep}`) ||
     origin.includes(`${path.sep}packages${path.sep}doc-schema${path.sep}`);
-  if (fromWorkspaceTs && moduleName.startsWith('.') && moduleName.endsWith('.js')) {
+  if (fromTypedSource && moduleName.startsWith('.') && moduleName.endsWith('.js')) {
     const originDir = path.dirname(origin);
-    const tsCandidate = path.resolve(originDir, moduleName.replace(/\.js$/, '.ts'));
-    if (fs.existsSync(tsCandidate)) {
-      return { type: 'sourceFile', filePath: tsCandidate };
+    const stem = moduleName.replace(/\.js$/, '');
+    for (const ext of ['.ts', '.tsx']) {
+      const candidate = path.resolve(originDir, `${stem}${ext}`);
+      if (fs.existsSync(candidate)) {
+        return { type: 'sourceFile', filePath: candidate };
+      }
     }
   }
   if (defaultResolveRequest) {
