@@ -1,4 +1,4 @@
-import { Service } from '@rabjs/react';
+import { raw, Service } from '@rabjs/react';
 import { EMPTY_PM_DOC, type Document, type PmDocJson, type UpdateDocumentInput } from '@inwit/dto';
 import { createDocument, getDocument, updateDocument } from '@/api/documents';
 import { errorMessage } from '@/api/client';
@@ -7,6 +7,7 @@ import { asPmJson, clonePmJson, jsonEqual } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { EditorPresenceService } from '@/services/editor-presence.service';
+import { cachedBodyDiffers } from './editor-draft-logic.js';
 
 const SAVE_DEBOUNCE_MS = 2000;
 
@@ -58,11 +59,25 @@ export class EditorService extends Service {
     return '';
   }
 
+  /**
+   * Body equality walks the whole document. Read the raw fields and keep the
+   * result off the service proxy: a proxied read wraps every node, and typing
+   * used to do that twice per keystroke. Later keystrokes reuse the cached
+   * "differs" answer. The debounced save passes force so an undo back to the
+   * saved body does not write.
+   */
+  private _bodyDiffers(force = false): boolean {
+    const self = raw(this);
+    return cachedBodyDiffers(self, self.draftJson, self.lastSavedJson, jsonEqual, force);
+  }
+
+  /** Draft body differs from the saved body. Title is separate. */
+  get bodyDirty(): boolean {
+    return this._bodyDiffers();
+  }
+
   get dirty(): boolean {
-    return (
-      !jsonEqual(this.draftJson, this.lastSavedJson) ||
-      this.draftTitle.trim() !== this.lastSavedTitle.trim()
-    );
+    return this.bodyDirty || this.draftTitle.trim() !== this.lastSavedTitle.trim();
   }
 
   /** Remote title. Skip while the body or the title input still has a local draft. */
@@ -70,7 +85,7 @@ export class EditorService extends Service {
     if (this.remoteGone) return;
     if (this.id !== doc.id || this.phase !== 'ready') return;
     if (this.saveInflight) return;
-    if (!jsonEqual(this.draftJson, this.lastSavedJson)) return;
+    if (this.bodyDirty) return;
     if (this.draftTitle.trim() !== this.lastSavedTitle.trim()) return;
     const next = doc.title ?? '';
     if (next === this.lastSavedTitle) return;
@@ -86,7 +101,8 @@ export class EditorService extends Service {
     if (this.remoteGone) return;
     if (this.id !== doc.id || this.phase !== 'ready') return;
     const json = clonePmJson(doc.contentJson);
-    if (jsonEqual(json, this.lastSavedJson) && jsonEqual(json, this.draftJson)) return;
+    const self = raw(this);
+    if (jsonEqual(json, self.lastSavedJson) && jsonEqual(json, self.draftJson)) return;
     this.preserveViewport = true;
     this.lastSavedJson = json;
     this.draftJson = clonePmJson(json);
@@ -260,7 +276,7 @@ export class EditorService extends Service {
     if (this.saveFailed()) return false;
     if (this.dirty || this.saveInflight !== null) await this.save();
     if (this.saveFailed() || this.saveInflight !== null) return false;
-    if (this.dirty && this.id === null && this.phase === 'new' && isBlankPmDoc(this.draftJson)) {
+    if (this.dirty && this.id === null && this.phase === 'new' && isBlankPmDoc(raw(this).draftJson)) {
       return true;
     }
     return !this.dirty;
@@ -271,17 +287,14 @@ export class EditorService extends Service {
     const epoch = this.saveEpoch;
     const documentId = this.id;
     this.clearTimer();
-    const contentJson = this.draftJson;
+    const contentJson = raw(this).draftJson;
     const titleAtSend = this.draftTitle;
     const draftTitle = titleAtSend.trim();
     const titleValue = draftTitle.length > 0 ? draftTitle : null;
     const lastTitle = this.lastSavedTitle.trim() || null;
+    const bodyChanged = this._bodyDiffers(true);
     if (documentId === null && isBlankPmDoc(contentJson)) return;
-    if (
-      documentId !== null &&
-      jsonEqual(contentJson, this.lastSavedJson) &&
-      titleValue === lastTitle
-    ) {
+    if (documentId !== null && !bodyChanged && titleValue === lastTitle) {
       return;
     }
 
@@ -310,7 +323,7 @@ export class EditorService extends Service {
       } else {
         const patch: UpdateDocumentInput = {};
         if (titleValue !== lastTitle) patch.title = titleValue;
-        if (!jsonEqual(contentJson, this.lastSavedJson)) patch.contentJson = contentJson;
+        if (bodyChanged) patch.contentJson = contentJson;
         if (patch.title === undefined && patch.contentJson === undefined) {
           if (!this.saveStillCurrent(epoch)) return;
           this.saveState = 'saved';

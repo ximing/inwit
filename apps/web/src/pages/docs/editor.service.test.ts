@@ -91,6 +91,47 @@ describe('EditorService autosave', () => {
     editor.destroy();
   });
 
+  it('does not write when later keystrokes undo back to the saved body', async () => {
+    vi.mocked(updateDocument).mockImplementation(async (id, patch) =>
+      document({
+        id,
+        contentJson: patch.contentJson ?? paragraph('原文'),
+        title: patch.title === undefined ? '标题' : patch.title,
+        updatedAt: '2026-10-19T15:00:00.000Z',
+      }),
+    );
+    const editor = new EditorService();
+    prime(editor);
+    editor.noteChange(paragraph('改过'));
+    editor.noteChange(paragraph('又改'));
+    editor.noteChange(paragraph('原文'));
+    expect(editor.dirty).toBe(true);
+    await editor.save();
+    expect(updateDocument).not.toHaveBeenCalled();
+    expect(editor.dirty).toBe(false);
+    editor.destroy();
+  });
+
+  it('saves a title edit after the body is undone', async () => {
+    vi.mocked(updateDocument).mockImplementation(async (id, patch) =>
+      document({
+        id,
+        contentJson: patch.contentJson ?? paragraph('原文'),
+        title: patch.title === undefined ? '标题' : patch.title,
+        updatedAt: '2026-10-19T15:00:00.000Z',
+      }),
+    );
+    const editor = new EditorService();
+    prime(editor);
+    editor.noteTitleChange('新标题');
+    editor.noteChange(paragraph('改过'));
+    editor.noteChange(paragraph('原文'));
+    await editor.save();
+    expect(updateDocument).toHaveBeenCalledWith(ORIGINAL, { title: '新标题' });
+    expect(editor.dirty).toBe(false);
+    editor.destroy();
+  });
+
   it('updates an open document', async () => {
     vi.mocked(updateDocument).mockImplementation(async (id, patch) =>
       document({

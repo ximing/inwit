@@ -2381,7 +2381,7 @@ export class DocsService extends Service {
           ? {
               id: editor.id,
               updatedAt: this.serverStamp(editor.id),
-              bodyDirty: !jsonEqual(editor.draftJson, editor.lastSavedJson),
+              bodyDirty: editor.bodyDirty,
               titleDirty: editor.draftTitle.trim() !== editor.lastSavedTitle.trim(),
               saveInflight: editor.saveInflight !== null,
             }
@@ -2482,8 +2482,7 @@ export class DocsService extends Service {
   ): 'drop' | 'merge-keep-body' | 'merge-seed-body' {
     const editor = this.resolve(EditorService);
     const foldHeld = this.codeFold?.id === id;
-    const bodyDirty =
-      foldHeld || (editor.id === id && !jsonEqual(editor.draftJson, editor.lastSavedJson));
+    const bodyDirty = foldHeld || (editor.id === id && editor.bodyDirty);
     const inflight = editor.id === id && editor.saveInflight !== null;
     // A read that started on this document keeps its generation after close.
     // Other rows ignore the counter so a card edit does not cancel their refresh.
