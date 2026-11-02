@@ -1,19 +1,29 @@
 export const CARD_RAIL_WIDTH_DEFAULT = 300;
 export const CARD_RAIL_WIDTH_MIN = 220;
 export const CARD_RAIL_WIDTH_MAX = 520;
-/** 禅模式和脑图用的右栏上限。列表模式仍停在 CARD_RAIL_WIDTH_MAX。 */
-export const CARD_RAIL_WIDE_MAX = 1120;
 export const CANVAS_PANE_WIDTH_DEFAULT = 560;
+/** 栏宽还没量到时的暂用上限，避免把已保存的大屏宽度裁掉。量到之后不再使用。 */
+const CARD_RAIL_UNMEASURED_MAX = 8192;
 
-/** 脑图栏变宽时，正文至少留出标题和工具条能横排的宽度。 */
+/** 脑图或概念图变宽时，正文至少留出标题和工具条能横排的宽度。 */
 const WIDE_DOC_MIN = 520;
 
 export function cardRailLimits(wide: boolean, paneWidth = 0): { min: number; max: number } {
-  const absMax = wide ? CARD_RAIL_WIDE_MAX : CARD_RAIL_WIDTH_MAX;
-  const fraction = wide ? 0.72 : 0.48;
-  let paneCap = paneWidth > 0 ? Math.floor(paneWidth * fraction) : absMax;
-  if (wide && paneWidth > 0) paneCap = Math.min(paneCap, paneWidth - WIDE_DOC_MIN);
-  return { min: CARD_RAIL_WIDTH_MIN, max: Math.min(absMax, Math.max(CARD_RAIL_WIDTH_MIN, paneCap)) };
+  if (!wide) {
+    const paneCap = paneWidth > 0 ? Math.floor(paneWidth * 0.48) : CARD_RAIL_WIDTH_MAX;
+    return {
+      min: CARD_RAIL_WIDTH_MIN,
+      max: Math.min(CARD_RAIL_WIDTH_MAX, Math.max(CARD_RAIL_WIDTH_MIN, paneCap)),
+    };
+  }
+  // 图表不设固定像素上限。大屏可以一直拖，直到正文只剩可读宽度。
+  if (paneWidth > 0) {
+    return {
+      min: CARD_RAIL_WIDTH_MIN,
+      max: Math.max(CARD_RAIL_WIDTH_MIN, paneWidth - WIDE_DOC_MIN),
+    };
+  }
+  return { min: CARD_RAIL_WIDTH_MIN, max: CARD_RAIL_UNMEASURED_MAX };
 }
 
 export function clampCardRailWidth(width: number, paneWidth = 0, wide = false): number {

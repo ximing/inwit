@@ -106,7 +106,8 @@ export const StudyDock = observer(function StudyDock() {
   const showOutline = workspace.showOutline;
   const showConcepts = workspace.showConcepts;
   const compare = effective.mode === 'compare' && !workspace.layout.zoomedPane;
-  const wide = prefs.cardLayout === 'map' || prefs.zenMode;
+  // 概念图和对照也是图表，大屏不要停在列表的 520px。
+  const wide = prefs.cardLayout === 'map' || prefs.zenMode || workspace.showConcepts;
   const dockWidth = clampCardRailWidth(
     wide ? prefs.canvasPaneWidth : prefs.cardRailWidth,
     docs.paneWidth,
