@@ -15,6 +15,7 @@ export const SETTINGS_SECTIONS = [
   'profile',
   'appearance',
   'models',
+  'translation',
   'ocr',
   'token',
   'archive',

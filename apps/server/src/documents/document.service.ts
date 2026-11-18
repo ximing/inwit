@@ -1,3 +1,4 @@
+import { cancelUndispatchedDocumentTranslations, deleteDocumentTranslationCarriers } from './translation/translation.service.js';
 import type {
   ArchiveListQuery,
   ArchivedDocumentsResponse,
@@ -590,6 +591,8 @@ export async function archiveDocument(userId: string, id: string): Promise<void>
   // and cards archived by this call, leaving earlier user-deleted ones in 回收站.
   const now = new Date();
   await getDb().transaction(async (tx) => {
+    await tx.select({ id: documents.id }).from(documents).where(and(eq(documents.id, id), eq(documents.userId, userId))).for('update');
+    await cancelUndispatchedDocumentTranslations(tx, userId, id, now);
     await cancelDocumentJobs(tx, userId, id, now);
     await tx
       .update(annotations)
@@ -716,6 +719,7 @@ export async function destroyDocument(userId: string, id: string): Promise<void>
   // Snapshot surviving references before the transaction removes the cards.
   const keepKeys = isStorageConfigured() ? await excerptKeysReferencedByCards(userId, id) : new Set<string>();
   await getDb().transaction(async (tx) => {
+    await deleteDocumentTranslationCarriers(tx, userId, id);
     await cancelDocumentJobs(tx, userId, id);
     // Delete the cards first: the FK is ON DELETE SET NULL, so removing the
     // document row first would orphan them instead of deleting them.

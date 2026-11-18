@@ -1,3 +1,4 @@
+import { PdfTranslationService } from './pdf-translation.service.js';
 import { useCapture } from '@embedpdf/plugin-capture/react';
 import { useScroll } from '@embedpdf/plugin-scroll/react';
 import { useViewportCapability } from '@embedpdf/plugin-viewport/react';
@@ -18,6 +19,7 @@ import {
 
 export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documentId: string }) {
   const pdf = useService(PdfPaneService);
+  const translation = useService(PdfTranslationService);
   const scroll = useScroll(documentId);
   const zoom = useZoom(documentId);
   const capture = useCapture(documentId);
@@ -30,6 +32,19 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
   const pageValue = pdf.pageDraft ?? (total > 0 ? String(page) : '');
   const activePreset = matchingZoomPresetId(zoom.state.zoomLevel);
   const didInitZoom = useRef(false);
+  const restoredPage = useRef(false);
+  useEffect(() => {
+    if (total <= 0) return;
+    try {
+      const key = `pdf-reading-page:${documentId}`;
+      if (!restoredPage.current) {
+        restoredPage.current = true;
+        const saved = Number(sessionStorage.getItem(key));
+        if (saved > 0 && saved <= total && saved !== page) { scroll.provides?.scrollToPage({ pageNumber: saved, behavior: 'instant' }); return; }
+      }
+      sessionStorage.setItem(key, String(page));
+    } catch {}
+  }, [documentId, page, total, scroll.provides]);
 
   // Zoom plugin gates the viewport on document load and only ungates after a
   // successful requestZoom. FitWidth often runs while metrics are still 0, so
@@ -70,6 +85,7 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
     const next = parsePageInput(pdf.pageDraft, total);
     pdf.endPageEdit();
     if (next) {
+      translation.close();
       scroll.provides?.scrollToPage({ pageNumber: next, behavior: 'smooth' });
     }
   };
@@ -87,6 +103,7 @@ export const PdfToolbar = observer(function PdfToolbar({ documentId }: { documen
           <PanelLeft width={15} height={15} strokeWidth={2} />
         </button>
       </Tip>
+      <button className={`pdf-tool${translation.enabled ? ' is-on' : ''}`} aria-pressed={translation.enabled} onClick={() => translation.toggle()}>中文辅助</button>
       <form className="pdf-page-form" onSubmit={commitPage}>
         <input
           className="pdf-page-input"

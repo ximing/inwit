@@ -38,6 +38,7 @@ import { prefetchDocument } from '@/lib/document-prefetch';
 import { estimateReviewMinutes } from '@/lib/review-eta';
 
 const JOB_ICONS: Record<JobType, LucideIcon> = {
+  pdf_translate: FileText,
   digest: BrainCircuit,
   chat: MessageCircle,
   weekly_report: BookOpen,

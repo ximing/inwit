@@ -51,6 +51,8 @@ export function retryAdminJob(userId: string, id: string): Promise<Job> {
 }
 
 function toUsageTotals(row: {
+  unknownUsageCalls?: unknown;
+  unknownCostCalls?: unknown;
   calls: unknown;
   promptTokens: unknown;
   completionTokens: unknown;
@@ -58,6 +60,8 @@ function toUsageTotals(row: {
   costEstimate: unknown;
 }): UsageTotals {
   return {
+    unknownUsageCalls: asNumber(row.unknownUsageCalls),
+    unknownCostCalls: asNumber(row.unknownCostCalls),
     calls: asNumber(row.calls),
     promptTokens: asNumber(row.promptTokens),
     completionTokens: asNumber(row.completionTokens),
@@ -79,6 +83,8 @@ export async function getUsageSummary(
       provider: llmUsageLogs.provider,
       model: llmUsageLogs.model,
       capability: llmUsageLogs.capability,
+      unknownUsageCalls: sql<number>`count(*) filter (where ${llmUsageLogs.usageStatus} <> 'known')::int`,
+      unknownCostCalls: sql<number>`count(*) filter (where ${llmUsageLogs.capability} = 'translation')::int`,
       calls: sql<number>`count(*)::int`,
       promptTokens: sql<number>`coalesce(sum(${llmUsageLogs.promptTokens}), 0)::int`,
       completionTokens: sql<number>`coalesce(sum(${llmUsageLogs.completionTokens}), 0)::int`,
@@ -99,6 +105,7 @@ export async function getUsageSummary(
 
   const totals = emptyTotals();
   const byCapability: Record<LlmCapability, UsageTotals> = {
+    translation: emptyTotals(),
     chat: emptyTotals(),
     embed: emptyTotals(),
     rerank: emptyTotals(),
@@ -113,6 +120,8 @@ export async function getUsageSummary(
   const dayRows = await getDb()
     .select({
       date: dayExpr,
+      unknownUsageCalls: sql<number>`count(*) filter (where ${llmUsageLogs.usageStatus} <> 'known')::int`,
+      unknownCostCalls: sql<number>`count(*) filter (where ${llmUsageLogs.capability} = 'translation')::int`,
       calls: sql<number>`count(*)::int`,
       totalTokens: sql<number>`coalesce(sum(${llmUsageLogs.totalTokens}), 0)::int`,
       costEstimate: sql<number>`coalesce(sum(${llmUsageLogs.costEstimate})::float8, 0)`,
@@ -131,7 +140,9 @@ export async function getUsageSummary(
     days,
     dayRows.map((row) => ({
       date: row.date,
-      calls: asNumber(row.calls),
+      unknownUsageCalls: asNumber(row.unknownUsageCalls),
+    unknownCostCalls: asNumber(row.unknownCostCalls),
+    calls: asNumber(row.calls),
       totalTokens: asNumber(row.totalTokens),
       costEstimate: roundCost(asNumber(row.costEstimate)),
       chatTokens: asNumber(row.chatTokens),
@@ -152,6 +163,7 @@ export async function getUsageSummary(
         embed: byCapability.embed,
         rerank: byCapability.rerank,
         ocr: byCapability.ocr,
+        translation: byCapability.translation,
       },
     },
     byModel,

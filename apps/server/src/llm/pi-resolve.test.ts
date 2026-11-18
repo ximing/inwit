@@ -78,6 +78,7 @@ function llmRow(apiKeyEncrypted: string): LlmConfigRow {
   return {
     id: CONFIG_ID,
     userId: USER_ID,
+    purpose: 'chat',
     provider: 'openai',
     apiKeyEncrypted,
     model: 'gpt-4o-mini',

@@ -1,3 +1,4 @@
+import { cancelPdfTranslationCarrier, visibleTranslationJob } from './pdf-translation-lifecycle.js';
 import type { AgentExecution, Job, JobQueue, JobUsage, ListJobsQuery, Paginated } from '@inwit/dto';
 import { and, asc, count, desc, eq, gte, inArray, isNull, lte, type SQL } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
@@ -35,6 +36,7 @@ export function toPublicJob(row: JobRow, related?: JobRelated): Job {
   const payload = publicJobPayload(row.type, row.payload);
   const { summary, description } = summarizeJob(row.type, payload, related);
   return {
+    ...(row.type === 'pdf_translate' ? { canCancel: row.status === 'pending' } : {}),
     id: row.id,
     userId: row.userId,
     type: row.type,
@@ -134,7 +136,7 @@ async function getOwned(userId: string, id: string): Promise<JobRow> {
   const [row] = await getDb()
     .select()
     .from(jobs)
-    .where(and(eq(jobs.id, id), eq(jobs.userId, userId)))
+    .where(and(eq(jobs.id, id), eq(jobs.userId, userId), visibleTranslationJob()))
     .limit(1);
   if (!row) throw AppError.of(404, 'JOB_NOT_FOUND');
   return row;
@@ -173,7 +175,7 @@ export async function listJobExecutions(userId: string, jobId: string): Promise<
 }
 
 export async function listJobs(userId: string, query: ListJobsQuery): Promise<Paginated<Job>> {
-  const conditions: SQL[] = [eq(jobs.userId, userId)];
+  const conditions: SQL[] = [eq(jobs.userId, userId), visibleTranslationJob()];
   if (query.status !== undefined) conditions.push(eq(jobs.status, query.status));
   if (query.type !== undefined) conditions.push(eq(jobs.type, query.type));
   const where = and(...conditions);
@@ -204,7 +206,7 @@ function statusCount(
 }
 
 export async function getJobQueue(userId: string, now = new Date()): Promise<JobQueue> {
-  const owned = eq(jobs.userId, userId);
+  const owned = and(eq(jobs.userId, userId), visibleTranslationJob());
   const dayStart = startOfLocalDay(now);
   const dayEnd = endOfLocalDay(now);
 
@@ -261,6 +263,7 @@ export async function getJobUsage(userId: string, now = new Date()): Promise<Job
     .select({
       createdAt: llmUsageLogs.createdAt,
       tokens: llmUsageLogs.totalTokens,
+      usageStatus: llmUsageLogs.usageStatus,
       agentType: agentExecutions.agentType,
       capability: llmUsageLogs.capability,
     })
@@ -268,7 +271,7 @@ export async function getJobUsage(userId: string, now = new Date()): Promise<Job
     .leftJoin(agentExecutions, eq(llmUsageLogs.executionId, agentExecutions.id))
     .where(and(eq(llmUsageLogs.userId, userId), gte(llmUsageLogs.createdAt, from)));
 
-  return aggregateJobUsage(
+  const aggregate = aggregateJobUsage(
     rows.map((row) => ({
       createdAt: row.createdAt,
       tokens: Number(row.tokens ?? 0),
@@ -277,12 +280,13 @@ export async function getJobUsage(userId: string, now = new Date()): Promise<Job
     now,
     USAGE_DAYS,
   );
+  return { ...aggregate, unknownUsageCalls: rows.filter(row => row.usageStatus !== 'known' || row.tokens === null).length };
 }
 
 export async function retryJob(userId: string, id: string): Promise<Job> {
   const existing = await getOwned(userId, id);
   // 概念生成/出题任务不按原任务重试：批次终态后由创建接口产生新批次（retryOfBatchId）。
-  if (existing.type === 'concept_extract' || existing.type === 'concept_practice') {
+  if (existing.type === 'pdf_translate' || existing.type === 'concept_extract' || existing.type === 'concept_practice') {
     throw AppError.of(409, 'JOB_NOT_RETRYABLE');
   }
   const now = new Date();
@@ -298,7 +302,7 @@ export async function retryJob(userId: string, id: string): Promise<Job> {
         attempts: 0,
         updatedAt: now,
       })
-      .where(and(eq(jobs.id, id), eq(jobs.userId, userId), eq(jobs.status, 'failed')))
+      .where(and(eq(jobs.id, id), eq(jobs.userId, userId), visibleTranslationJob(), eq(jobs.status, 'failed')))
       .returning();
   } catch (err) {
     if (isUniqueViolation(err)) throw AppError.of(409, 'ORGANIZE_JOB_IN_PROGRESS');
@@ -311,7 +315,12 @@ export async function retryJob(userId: string, id: string): Promise<Job> {
 }
 
 export async function cancelJob(userId: string, id: string): Promise<Job> {
-  await getOwned(userId, id);
+  const existing = await getOwned(userId, id);
+  if (existing.type === 'pdf_translate') {
+    const cancelled = await cancelPdfTranslationCarrier(existing);
+    if (!cancelled) throw AppError.of(409, 'JOB_NOT_CANCELABLE');
+    return toHydratedJob(userId, cancelled);
+  }
   // Running jobs settle cooperatively: the worker's status probe notices
   // the row left 'running' and aborts the agent (see run-agent-job.ts).
   const row = await markJobCancelled(userId, id);

@@ -1,3 +1,4 @@
+import { PdfTranslationService } from './pdf-pane/pdf-translation.service.js';
 import {
   AGENT_DOC_LABEL_REPORT,
   agentDocumentMetaLabel,
@@ -14,18 +15,21 @@ import { PdfViewer } from './pdf-pane/pdf-viewer';
 const PdfPaneView = observer(function PdfPaneView() {
   const docs = useService(DocsService);
   const pdf = useService(PdfPaneService);
+  const translation = useService(PdfTranslationService);
   const doc = docs.doc;
 
   useEffect(() => {
     if (!doc) return;
+    translation.start(doc.id);
     pdf.resetJumpTracking();
     pdf.resetChrome();
     void pdf.loadFile(doc.id);
     return () => {
+      translation.dispose();
       pdf.resetJumpTracking();
       pdf.resetChrome();
     };
-  }, [doc?.id, pdf]);
+  }, [doc?.id, pdf, translation]);
 
   if (!doc) return null;
 
@@ -79,5 +83,5 @@ const PdfPaneView = observer(function PdfPaneView() {
   );
 });
 
-export const PdfPane = bindServices(PdfPaneView, [PdfPaneService]);
+export const PdfPane = bindServices(PdfPaneView, [PdfPaneService, PdfTranslationService]);
 export default PdfPane;

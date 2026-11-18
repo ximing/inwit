@@ -25,6 +25,7 @@ export const JOB_TYPES: readonly JobType[] = JOB_TYPE_VALUES;
 export const JOB_STATUSES: JobStatus[] = ['pending', 'running', 'done', 'failed'];
 
 export const JOB_TYPE_LABELS: Record<JobType, string> = {
+  pdf_translate: '论文翻译',
   digest: '消化',
   chat: '对话',
   weekly_report: '周报',

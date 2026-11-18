@@ -1,10 +1,12 @@
+import { PdfTranslationService } from './pdf-translation.service.js';
 import { useScroll } from '@embedpdf/plugin-scroll/react';
 import { ThumbImg, ThumbnailsPane, type ThumbMeta } from '@embedpdf/plugin-thumbnail/react';
-import { observer } from '@rabjs/react';
+import { observer, useService } from '@rabjs/react';
 import { PDF_THUMBS_WIDTH_PX } from './chrome-logic.js';
 
 export const PdfThumbs = observer(function PdfThumbs({ documentId }: { documentId: string }) {
   const scroll = useScroll(documentId);
+  const translation = useService(PdfTranslationService);
   const current = scroll.state.currentPage;
 
   return (
@@ -26,9 +28,7 @@ export const PdfThumbs = observer(function PdfThumbs({ documentId }: { documentI
                 height: meta.wrapperHeight,
                 width: '100%',
               }}
-              onClick={() =>
-                scroll.provides?.scrollToPage({ pageNumber, behavior: 'smooth' })
-              }
+              onClick={() => { translation.close(); scroll.provides?.scrollToPage({ pageNumber, behavior: 'smooth' }); }}
             >
               <span className="pdf-thumb-frame" style={{ width: meta.width, height: meta.height }}>
                 <ThumbImg documentId={documentId} meta={meta} className="pdf-thumb-img" />

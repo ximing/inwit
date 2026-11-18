@@ -35,6 +35,7 @@ export const llmConfigs = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    purpose: varchar('purpose', { length: 16 }).$type<'chat' | 'translation'>().notNull().default('chat'),
     provider: varchar('provider', { length: 32 }).$type<LlmProvider>().notNull(),
     apiKeyEncrypted: text('api_key_encrypted').notNull(),
     model: varchar('model', { length: 128 }).notNull(),
@@ -48,6 +49,7 @@ export const llmConfigs = pgTable(
     uniqueIndex('llm_configs_user_default_uidx')
       .on(t.userId)
       .where(sql`${t.isDefault} = true`),
+    enumCheck('llm_configs_purpose_check', t.purpose, ['chat', 'translation']),
     enumCheck('llm_configs_provider_check', t.provider, LLM_PROVIDERS),
   ],
 );

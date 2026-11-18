@@ -1,3 +1,10 @@
+import { Languages } from 'lucide-react';
+import { PdfTranslationLayer, PdfSelectionTranslationAnchor } from './pdf-translation-layer.js';
+import { PdfTranslationPopover } from './pdf-translation-popover.js';
+import { PdfTranslationService } from './pdf-translation.service.js';
+import { fromEnginePoint } from './translation-geometry-logic.js';
+import { rectsFromGeometry } from './annotation-adapter.js';
+import type { PdfQuad } from '@inwit/dto';
 import { createPluginRegistration } from '@embedpdf/core';
 import { EmbedPDF, useDocumentState } from '@embedpdf/core/react';
 import { ignore, type PdfEngine, type Rect } from '@embedpdf/models';
@@ -189,6 +196,8 @@ const PdfSelectionMenu = observer(function PdfSelectionMenu({
   const docs = useService(DocsService);
   const boxRef = useRef<HTMLDivElement>(null);
   const ocrPending = pdf.ocrPending;
+  const translation = useService(PdfTranslationService);
+  const documentState = useDocumentState(docs.doc?.id ?? '');
   const top = placement.suggestTop ? -48 : rect.size.height + 8;
 
   if (ocrPending) {
@@ -218,6 +227,17 @@ const PdfSelectionMenu = observer(function PdfSelectionMenu({
           pointerEvents: 'auto',
         }}
       >
+        <button type="button" className="float-tool" title="翻译为中文" aria-label="翻译为中文" onClick={() => {
+          if (pdf.selectionPageCount > 1) { docs.showToast('请按页分别选择文字翻译'); return; }
+          const page = translation.pages[pdf.selectionPageIndex];
+          const size = documentState?.document?.pages[pdf.selectionPageIndex]?.size;
+          if (!page?.geometry || !size || !pdf.selectionGeometry) { docs.showToast('请等待当前页索引准备完成'); return; }
+          const quads = rectsFromGeometry(pdf.selectionGeometry).map(r => [
+            { x:r.origin.x, y:r.origin.y }, { x:r.origin.x+r.size.width,y:r.origin.y },
+            { x:r.origin.x+r.size.width,y:r.origin.y+r.size.height },{ x:r.origin.x,y:r.origin.y+r.size.height },
+          ].map(p=>fromEnginePoint(p,page.geometry!,size)) as PdfQuad);
+          void translation.open({key:`selection:${pdf.selectionPageIndex}:${pdf.selectionText}:${JSON.stringify(quads)}`,pageIndex:pdf.selectionPageIndex,text:pdf.selectionText,rects:quads});
+        }}><Languages size={16} aria-hidden="true" /></button>
         <SelectionActions
           text={pdf.selectionText}
           documentId={docs.doc?.id ?? null}
@@ -250,6 +270,7 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
   const pdf = useService(PdfPaneService);
   const docs = useService(DocsService);
   const theme = useService(ThemeService);
+  const translation = useService(PdfTranslationService);
   const isDark = theme.resolved === 'dark';
   const annotation = useAnnotation(documentId);
   const selectionCap = useSelectionCapability();
@@ -301,7 +322,9 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
         pdf.clearSelection();
         return;
       }
-      const first = scope.getFormattedSelection()[0];
+      const formatted = scope.getFormattedSelection();
+      pdf.selectionPageCount = formatted.length;
+      const first = formatted[0];
       if (!first) {
         pdf.clearSelection();
         return;
@@ -469,6 +492,7 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
       if (!root) return;
       const target = event.target;
       if (!(target instanceof Node) || !root.contains(target)) return;
+      if (event.key === 'Escape' && translation.target) return;
       const action = pdfViewerKeyAction(event, {
         typing: isEditableKeyTarget(target),
         searchOpen: pdf.searchOpen,
@@ -486,12 +510,12 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
         search.provides?.stopSearch();
         pdf.closeSearch();
       } else if (action === 'close-zoom') pdf.closeZoomMenu();
-      else if (action === 'prev-page') scroll.provides?.scrollToPreviousPage();
-      else if (action === 'next-page') scroll.provides?.scrollToNextPage();
+      else if (action === 'prev-page') { translation.close(); scroll.provides?.scrollToPreviousPage(); }
+      else if (action === 'next-page') { translation.close(); scroll.provides?.scrollToNextPage(); }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [pdf, search.provides, scroll.provides]);
+  }, [pdf, translation, search.provides, scroll.provides]);
 
   useEffect(() => {
     if (prevThumbsOpen.current === pdf.thumbsOpen) return;
@@ -504,8 +528,10 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
     return () => window.clearTimeout(timer);
   }, [pdf.thumbsOpen, zoom.provides, zoom.state.zoomLevel]);
 
+
   return (
     <div className="pdf-doc-body" ref={rootRef} tabIndex={-1}>
+      <PdfTranslationPopover />
       <PdfToolbar documentId={documentId} />
       <PdfSearchBar documentId={documentId} />
       <div className="pdf-stage">
@@ -533,10 +559,14 @@ const PdfDocumentBody = observer(function PdfDocumentBody({ documentId }: { docu
                       <SelectionLayer
                         documentId={documentId}
                         pageIndex={pageIndex}
-                        {...(isDark ? { background: 'rgba(122,162,212,0.4)' } : {})}
+                        textStyle={{
+                          background: isDark ? 'rgba(209,169,111,0.24)' : 'rgba(186,143,86,0.26)',
+                        }}
                         selectionMenu={(props) => <PdfSelectionMenu {...props} />}
                       />
                       <AnnotationLayer documentId={documentId} pageIndex={pageIndex} />
+                      <PdfTranslationLayer documentId={documentId} pageIndex={pageIndex} />
+                      <PdfSelectionTranslationAnchor documentId={documentId} pageIndex={pageIndex} />
                       <PdfMarqueeCapture
                         documentId={documentId}
                         pageIndex={pageIndex}

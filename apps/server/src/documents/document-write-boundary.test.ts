@@ -38,6 +38,7 @@ const ALLOWED_DOCUMENT_WRITERS = [
   'documents/extract-job.ts',
   'documents/import.service.ts',
   'documents/screenshot.service.ts',
+  'documents/translation/index.service.ts',
   'maps/apply.ts',
   'maps/map.jobs.ts',
   'maps/map.service.ts',

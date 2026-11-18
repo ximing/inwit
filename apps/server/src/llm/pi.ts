@@ -131,7 +131,7 @@ export interface ResolvedModel {
   configId: string | null;
 }
 
-async function resolvedOf(
+export async function resolvedOf(
   provider: LlmProvider,
   modelId: string,
   apiKey: string,
@@ -183,7 +183,7 @@ export async function resolveModelFor(userId: string, configId?: string | null):
     const [chosen] = await getDb()
       .select()
       .from(llmConfigs)
-      .where(and(eq(llmConfigs.id, configId), eq(llmConfigs.userId, userId)))
+      .where(and(eq(llmConfigs.id, configId), eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat')))
       .limit(1);
     if (!chosen) throw new LlmConfigUnavailableError('模型配置不存在');
     const chosenKey = decryptSecret(chosen.apiKeyEncrypted);
@@ -193,7 +193,7 @@ export async function resolveModelFor(userId: string, configId?: string | null):
   const [row] = await getDb()
     .select()
     .from(llmConfigs)
-    .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.isDefault, true)))
+    .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat'), eq(llmConfigs.isDefault, true)))
     .limit(1);
   if (!row) throw AppError.of(400, 'LLM_NOT_CONFIGURED');
   const apiKey = decryptSecret(row.apiKeyEncrypted);

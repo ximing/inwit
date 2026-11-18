@@ -1,0 +1,42 @@
+[
+  {
+    "name": "attention",
+    "url": "https://arxiv.org/pdf/1706.03762",
+    "sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697"
+  },
+  {
+    "name": "bert",
+    "url": "https://arxiv.org/pdf/1810.04805",
+    "sha256": "5692a5514787a8c6727b4ff3b726a3385798bc68e12138d1d4af83947e2acf6e"
+  },
+  {
+    "name": "resnet",
+    "url": "https://arxiv.org/pdf/1512.03385",
+    "sha256": "1e0651b6810ecba34a3dbc5b5b0209226f889004607c1f203540a48d64e5a93a"
+  },
+  {
+    "name": "adam",
+    "url": "https://arxiv.org/pdf/1412.6980",
+    "sha256": "eab9c73ae2ceda884b94830bda99312254bac4806f6c9f045cbab90721ecda31"
+  },
+  {
+    "name": "gpt3",
+    "url": "https://arxiv.org/pdf/2005.14165",
+    "sha256": "97fd272f1fdfc18677462d0292f5fbf26ca86b4d1b485c2dba03269b643a0e83"
+  },
+  {
+    "name": "lora",
+    "url": "https://arxiv.org/pdf/2106.09685",
+    "sha256": "e9a0d3128767db616085dc0f4e6e455e672e89af823e8ed1282793682787395a"
+  },
+  {
+    "name": "diffusion",
+    "url": "https://arxiv.org/pdf/2006.11239",
+    "sha256": "aee5e07a802e8dfd2a386374c94fd61d1d056cb7e1e0fec4f28e8120ff5d8505"
+  },
+  {
+    "name": "clip",
+    "url": "https://arxiv.org/pdf/2103.00020",
+    "sha256": "6478b6e571a7d6fcd846d8ef77bfd60c285f1986abb8f475eedc43de403074f5"
+  }
+]

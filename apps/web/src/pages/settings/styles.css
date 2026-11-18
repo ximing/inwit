@@ -294,3 +294,12 @@
   .file-thumb { width: 56px; height: 42px; }
   .file-meta-list div { grid-template-columns: 64px minmax(0, 1fr); }
 }
+
+/* 论文翻译沿用设置表单和按钮规格，仅在此组织操作区。 */
+.settings-layout .translation-copy-panel { margin-bottom: 16px; }
+.translation-copy-panel .field { margin-bottom: 0; }
+.translation-copy-panel .btn-secondary { margin-top: 8px; }
+.settings-layout .translation-settings-actions .btn-primary { margin-top: 0; }
+.translation-config-panel > .settings-hint:last-child,
+.translation-config-panel > .ok-line:last-child,
+.translation-config-panel > .banner-error:last-child { margin-bottom: 0; }

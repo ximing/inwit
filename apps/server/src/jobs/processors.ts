@@ -1,3 +1,4 @@
+import { processPdfTranslation } from '../documents/translation/processor.js';
 import type { JobType } from '@inwit/dto';
 import { processChat } from '../agent/chat.js';
 import { processConversation } from '../agent/conversation.js';
@@ -17,6 +18,7 @@ import { processOcr } from '../ocr/ocr-job.js';
 import { logger } from '../utils/logger.js';
 
 const HANDLERS: Record<JobType, (job: JobRow) => Promise<void>> = {
+  pdf_translate: processPdfTranslation,
   digest: processDigest,
   chat: processChat,
   evolve: processEvolve,

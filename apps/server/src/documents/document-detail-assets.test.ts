@@ -19,6 +19,7 @@ it('returns the editable document together with ready-to-use image URLs', async 
     contentJson: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'image', attrs: { src } }] }] },
     source: 'api', kind: 'document', reportWeekStart: null, status: 'digested',
     failReason: null, answer: null, linkHint: null,
+    fileRevision: null,
     fileKey: null, fileMime: null, fileSize: null, pageCount: null,
     createdAt: new Date(), updatedAt: new Date(), deletedAt: null,
   };

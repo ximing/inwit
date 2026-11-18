@@ -154,3 +154,6 @@ export type {
   NewOcrPage,
   OcrPageRow,
 } from './schema-job.js';
+export { llmCredentialVersions, userTranslationSettings, pdfSegmentPages, pdfSegments, pdfTranslationContents, pdfTranslationJobs, pdfTranslations } from './schema-translation.js';
+export type { PdfTranslationJobRow, PdfTranslationContentRow, PdfTranslationRow, PdfSegmentRow } from './schema-translation.js';
+export { pdfTranslationRequests } from './schema-translation.js';

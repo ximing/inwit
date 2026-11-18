@@ -41,6 +41,7 @@ import { useTheme, type ThemeTokens } from '@/theme';
 import { TodayService } from './today.service';
 
 const JOB_ICONS: Record<JobType, LucideIcon> = {
+  pdf_translate: FileText,
   digest: BrainCircuit,
   chat: MessageCircle,
   weekly_report: BookOpen,

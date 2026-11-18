@@ -39,6 +39,7 @@ export class PdfPaneService extends Service {
   fileTotal: number | null = null;
   loadGen = 0;
   selectionText = '';
+  selectionPageCount = 0;
   selectionPageIndex = 0;
   selectionGeometry: AnnotationGeometry | null = null;
   jump: PdfJumpRequest | null = null;
@@ -136,6 +137,7 @@ export class PdfPaneService extends Service {
   }
 
   clearSelection(): void {
+    this.selectionPageCount = 0;
     this.selectionText = '';
     this.selectionGeometry = null;
   }

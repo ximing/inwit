@@ -1,3 +1,4 @@
+import { pdfFileRevision, readPdfOriginal } from './translation/index.service.js';
 import { randomUUID } from 'node:crypto';
 import type {
   Document,
@@ -109,11 +110,13 @@ export async function completeImport(
     throw AppError.of(400, 'VALIDATION_ERROR');
   }
 
+  const fileRevision = doc.fileMime === 'application/pdf' ? pdfFileRevision(await readPdfOriginal(doc.fileKey!)) : null;
   const updated = await getDb().transaction(async (tx) => {
     const [row] = await tx
       .update(documents)
       .set({
         updatedAt: new Date(),
+        fileRevision,
       })
       .where(and(eq(documents.id, documentId), eq(documents.userId, userId)))
       .returning();

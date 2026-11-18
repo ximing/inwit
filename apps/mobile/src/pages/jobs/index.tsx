@@ -43,6 +43,7 @@ import {
 } from './jobs.service';
 
 const JOB_ICONS: Record<JobType, LucideIcon> = {
+  pdf_translate: FileText,
   digest: BrainCircuit,
   chat: MessageCircle,
   weekly_report: BookOpen,
@@ -123,7 +124,7 @@ const JobsContent = observer(function JobsContent() {
                   {Math.max(1, job.attempts)} 次尝试
                 </Text>
                 <Pressable
-                  disabled={service.cancellingId === job.id}
+                  disabled={service.cancellingId === job.id || (job.type === 'pdf_translate' && !job.canCancel)}
                   onPress={() => void service.cancel(job.id)}
                   style={styles.ghostBtn}
                 >
@@ -150,7 +151,7 @@ const JobsContent = observer(function JobsContent() {
                   <JobHead job={job} theme={theme} styles={styles} />
                   <Text style={styles.desc}>{job.description}</Text>
                   <Pressable
-                    disabled={service.cancellingId === job.id}
+                    disabled={service.cancellingId === job.id || (job.type === 'pdf_translate' && !job.canCancel)}
                     onPress={() => void service.cancel(job.id)}
                     style={styles.ghostBtn}
                   >
@@ -170,6 +171,7 @@ const JobsContent = observer(function JobsContent() {
             <Text style={styles.hint}>读取用量…</Text>
           ) : (
             <>
+              {service.usage.unknownUsageCalls ? <Text>仅统计已知用量，另有 {service.usage.unknownUsageCalls} 次用量不完整。</Text> : null}
               <UsageBars usage={service.usage} max={service.usageMax} theme={theme} />
               <UsageLegend usage={service.usage} theme={theme} />
             </>
@@ -287,7 +289,7 @@ const HistoryRow = observer(function HistoryRow({
         {time} · {duration}
       </Text>
       <View style={styles.histOps}>
-        {job.status === 'failed' ? (
+        {job.status === 'failed' && job.type !== 'pdf_translate' ? (
           <Pressable
             disabled={service.retryingId === job.id}
             onPress={() => void service.retry(job.id)}

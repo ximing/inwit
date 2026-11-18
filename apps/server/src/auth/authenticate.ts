@@ -75,3 +75,16 @@ export function requireUser(req: FastifyRequest): AuthPrincipal {
   if (!user) throw AppError.of(401, 'INVALID_TOKEN');
   return user;
 }
+
+/** Revalidate a long-lived read without trying to set cookies after headers were sent. */
+export async function streamPrincipal(req: FastifyRequest): Promise<AuthPrincipal | undefined> {
+  const bearer = readBearerToken(req.headers.authorization);
+  if (bearer) return principalFromBearer(bearer);
+  for (const [name, kind] of [[ACCESS_COOKIE_NAME, 'access'], [REFRESH_COOKIE_NAME, 'refresh']] as const) {
+    const token = readSignedCookie(req, name);
+    if (!token) continue;
+    const user = await userFromToken(token, kind);
+    if (user) return { id: user.id };
+  }
+  return undefined;
+}

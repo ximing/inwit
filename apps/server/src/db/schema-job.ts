@@ -191,9 +191,11 @@ export const llmUsageLogs = pgTable(
     provider: varchar('provider', { length: 120 }).notNull(),
     model: varchar('model', { length: 128 }).notNull(),
     capability: varchar('capability', { length: 16 }).$type<LlmCapability>().notNull(),
-    promptTokens: integer('prompt_tokens').notNull().default(0),
-    completionTokens: integer('completion_tokens').notNull().default(0),
-    totalTokens: integer('total_tokens').notNull().default(0),
+    translationTaskId: uuid('translation_task_id').unique(),
+    usageStatus: varchar('usage_status', { length: 16 }).$type<'known'|'partial'|'unknown'>().notNull().default('known'),
+    promptTokens: integer('prompt_tokens').default(0),
+    completionTokens: integer('completion_tokens').default(0),
+    totalTokens: integer('total_tokens').default(0),
     costEstimate: numeric('cost_estimate', { precision: 14, scale: 8, mode: 'number' })
       .notNull()
       .default(0),

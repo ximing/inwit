@@ -42,6 +42,8 @@ export const usageSummaryQuerySchema = z.object({
 export type UsageSummaryQuery = z.infer<typeof usageSummaryQuerySchema>;
 
 export const usageTotalsSchema = z.object({
+  unknownUsageCalls: z.number().int().nonnegative().optional(),
+  unknownCostCalls: z.number().int().nonnegative().optional(),
   calls: z.number().int().nonnegative(),
   promptTokens: z.number().int().nonnegative(),
   completionTokens: z.number().int().nonnegative(),
@@ -58,6 +60,8 @@ export const usageGroupSchema = usageTotalsSchema.extend({
 export type UsageGroup = z.infer<typeof usageGroupSchema>;
 
 export const usageDaySchema = z.object({
+  unknownUsageCalls: z.number().int().nonnegative().optional(),
+  unknownCostCalls: z.number().int().nonnegative().optional(),
   date: z.string().min(1),
   calls: z.number().int().nonnegative(),
   totalTokens: z.number().int().nonnegative(),
@@ -79,6 +83,7 @@ export const usageSummarySchema = z.object({
       embed: usageTotalsSchema,
       rerank: usageTotalsSchema,
       ocr: usageTotalsSchema,
+      translation: usageTotalsSchema.optional(),
     }),
   }),
   byModel: z.array(usageGroupSchema),

@@ -41,6 +41,7 @@ import {
 } from './jobs.service';
 
 const JOB_ICONS: Record<JobType, LucideIcon> = {
+  pdf_translate: FileText,
   digest: BrainCircuit,
   chat: MessageCircle,
   weekly_report: BookOpen,
@@ -181,6 +182,7 @@ const FailCard = observer(function FailCard({ job }: { job: Job }) {
           <button
             type="button"
             className="retry"
+            hidden={job.type === 'pdf_translate'}
             disabled={service.retryingId === job.id}
             onClick={() => void service.retry(job.id)}
           >
@@ -250,6 +252,7 @@ const RunningList = observer(function RunningList() {
               <button
                 type="button"
                 className="btn btn-ghost job-stop"
+                hidden={job.type === 'pdf_translate' && !job.canCancel}
                 disabled={service.cancellingId === job.id}
                 onClick={() => void service.cancel(job.id)}
               >
@@ -289,7 +292,8 @@ const PendingList = observer(function PendingList() {
             <button
               type="button"
               className="btn btn-ghost"
-              disabled={service.cancellingId === job.id}
+              hidden={job.type === 'pdf_translate' && !job.canCancel}
+                disabled={service.cancellingId === job.id}
               onClick={() => void service.cancel(job.id)}
             >
               {service.cancellingId === job.id ? '取消中…' : '取消'}
@@ -341,7 +345,7 @@ const HistoryRow = observer(function HistoryRow({
         </td>
         <td>
           <div className="hist-ops">
-            {job.status === 'failed' ? (
+            {job.status === 'failed' && job.type !== 'pdf_translate' ? (
               <button type="button" className="retry" disabled={busy} onClick={onRetry}>
                 {busy ? '重试中…' : '重试'}
               </button>
@@ -502,7 +506,7 @@ const UsagePanel = observer(function UsagePanel() {
       <div className="jobs-sec">
         近 7 天用量
         <span className="line" />
-        {usage ? <span className="jobs-sec-note">{formatTokens(usage.total)}</span> : null}
+        {usage ? <span className="jobs-sec-note">{usage.unknownUsageCalls ? `已知 ${formatTokens(usage.total)} · ${usage.unknownUsageCalls} 次用量不完整` : formatTokens(usage.total)}</span> : null}
       </div>
       <div className="usage-panel">
         {!usage ? (
@@ -529,10 +533,10 @@ const UsagePanel = observer(function UsagePanel() {
                 </div>
               ))}
               {usage.byType.length === 0 ? (
-                <p className="empty compact">这周还没有用量。</p>
+                <p className="empty compact">{usage.unknownUsageCalls ? '存在用量未知的请求，暂时没有完整统计。' : '这周还没有用量。'}</p>
               ) : null}
               <div className="usage-legend-row is-total">
-                <b>合计</b>
+                <b>{usage.unknownUsageCalls ? '已知用量合计' : '合计'}</b>
                 <span className="v">
                   <b>{formatTokens(usage.total)}</b>
                 </span>

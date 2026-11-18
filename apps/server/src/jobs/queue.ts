@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { failPdfTranslationCarrier, recoverPdfTranslationCarriers } from './pdf-translation-lifecycle.js';
+import { and, asc, eq, inArray, lte, ne, sql } from 'drizzle-orm';
 import { scheduleMemoryOrganizeSafely } from '../agent/memory-organize-enqueue.js';
 import {
   memoryOrganizeFollowupExclude,
@@ -65,9 +66,9 @@ export async function recoverStuckJobs(now = new Date()): Promise<number> {
       runAt: now,
       updatedAt: now,
     })
-    .where(and(eq(jobs.status, 'running'), lte(jobs.updatedAt, cutoff)))
+    .where(and(eq(jobs.status, 'running'), lte(jobs.updatedAt, cutoff), ne(jobs.type, 'pdf_translate')))
     .returning({ id: jobs.id });
-  return recovered.length;
+  return recovered.length + await recoverPdfTranslationCarriers(cutoff, now);
 }
 
 function errorMessage(err: unknown): string {
@@ -203,7 +204,7 @@ async function processOne(job: JobRow): Promise<void> {
   const started = Date.now();
   try {
     await processJob(job);
-    await markDone(job, new Date());
+    if (job.type !== 'pdf_translate') await markDone(job, new Date());
     logger.info('job.done', { jobId: job.id, type: job.type, ms: Date.now() - started });
     if (job.type === 'memory_organize') {
       // Leftovers can take the one active slot only after this row leaves running.
@@ -211,6 +212,10 @@ async function processOne(job: JobRow): Promise<void> {
       await scheduleMemoryOrganizeSafely(job.userId, skippedMemoryOrganizeFeedback(job.payload));
     }
   } catch (err) {
+    if (job.type === 'pdf_translate') {
+      try { await failPdfTranslationCarrier(job); } catch { logger.warn('pdf_translate.finalize_failed', { jobId: job.id }); }
+      return;
+    }
     if (err instanceof RescheduleJobError) {
       try {
         await rescheduleJob(job, err.runAt, new Date());

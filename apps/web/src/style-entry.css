@@ -29,3 +29,5 @@
 @import './pages/docs/card-edit-dialog.css';
 @import './pages/review/reports.css';
 @import './features/concepts/concepts.css';
+
+@import "./pages/docs/pdf-pane/translation.css";

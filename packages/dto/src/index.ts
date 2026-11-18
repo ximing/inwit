@@ -27,3 +27,52 @@ export * from './search.js';
 export * from './asset.js';
 export * from './storage-file.js';
 export * from './sync.js';
+
+export {
+  PDF_TRANSLATION_STATES,
+  pdfTranslationStateSchema,
+  translationUsageSchema,
+  translationModelSnapshotSchema,
+  translationSettingsSchema,
+  updateTranslationSettingsSchema,
+  pdfPointSchema,
+  pdfQuadSchema,
+  pdfPageGeometrySchema,
+  pdfSegmentSchema,
+  pdfSegmentsPageSchema,
+  pdfTranslationSchema,
+  pdfTranslationJobSchema,
+  pdfTranslationDraftSchema,
+  pdfTranslationResponseSchema,
+  translationRequestSchema,
+  selectionTranslationRequestSchema,
+  translationRetrySchema,
+  translationRegenerateSchema,
+  translationDocumentParamsSchema,
+  translationJobParamsSchema,
+  translationResultParamsSchema,
+  pdfSegmentsQuerySchema,
+  translationsQuerySchema,
+  translationSettingsTestSchema,
+  translationsResponseSchema
+} from './translation.js';
+export type {
+  PdfTranslationState,
+  TranslationUsage,
+  TranslationModelSnapshot,
+  TranslationSettings,
+  UpdateTranslationSettings,
+  PdfPoint,
+  PdfQuad,
+  PdfPageGeometry,
+  PdfSegment,
+  PdfSegmentsPage,
+  PdfTranslation,
+  PdfTranslationJob,
+  PdfTranslationDraft,
+  PdfTranslationResponse,
+  TranslationRequest,
+  SelectionTranslationRequest,
+  TranslationSettingsTest,
+  TranslationsResponse
+} from './translation.js';

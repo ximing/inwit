@@ -1,3 +1,5 @@
+import { registerTranslationSettingsRoutes } from './llm/translation-settings.routes.js';
+import { registerPdfTranslationRoutes } from './documents/translation/translation.routes.js';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
@@ -73,6 +75,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerUserRoutes(app);
   registerFileRoutes(app);
   registerLlmRoutes(app);
+  registerTranslationSettingsRoutes(app);
+  registerPdfTranslationRoutes(app);
   registerOcrRoutes(app);
   registerDocumentRoutes(app);
   registerConversationRoutes(app);

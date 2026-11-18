@@ -38,6 +38,7 @@ export interface JobRelatedMaps {
 }
 
 const GENERIC: Record<JobType, { summary: string; description: string }> = {
+  pdf_translate: { summary: '论文翻译 · 一个段落', description: '按需生成并保存中文译文' },
   digest: { summary: '消化 · 一篇文档', description: '提取知识卡片并更新知识地图' },
   chat: { summary: '对话 · 一个问题', description: '检索已有卡片后生成回答' },
   weekly_report: { summary: '周报 · 本周', description: '生成本周学习复盘' },
@@ -73,6 +74,7 @@ function payloadString(payload: JobPayload, key: string): string | undefined {
 
 /** Drop OCR page texts if a leftover `pageTexts` field is still on the row. */
 export function publicJobPayload(type: JobType, payload: JobPayload): JobPayload {
+  if (type === 'pdf_translate') return typeof payload.translationJobId === 'string' ? { translationJobId: payload.translationJobId } : {};
   if (type !== 'ocr') return payload;
   if (!Object.prototype.hasOwnProperty.call(payload, 'pageTexts')) return payload;
   const rest = { ...payload };

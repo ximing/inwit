@@ -80,6 +80,8 @@ export function previewText(value: string | null | undefined, max = 80): string 
 }
 
 export function addTotals(into: UsageTotals, next: UsageTotals): void {
+  if (next.unknownUsageCalls) into.unknownUsageCalls = (into.unknownUsageCalls ?? 0) + next.unknownUsageCalls;
+  if (next.unknownCostCalls) into.unknownCostCalls = (into.unknownCostCalls ?? 0) + next.unknownCostCalls;
   into.calls += next.calls;
   into.promptTokens += next.promptTokens;
   into.completionTokens += next.completionTokens;

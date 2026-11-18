@@ -93,7 +93,7 @@ export const PROVIDER_BASE_URLS: Record<LlmProvider, string> = {
   openrouter: 'https://openrouter.ai/api/v1',
 };
 
-export const LLM_CAPABILITIES = ['chat', 'embed', 'rerank', 'ocr'] as const;
+export const LLM_CAPABILITIES = ['chat', 'embed', 'rerank', 'ocr', 'translation'] as const;
 export const llmCapabilitySchema = z.enum(LLM_CAPABILITIES);
 export type LlmCapability = z.infer<typeof llmCapabilitySchema>;
 
@@ -141,9 +141,10 @@ export const llmUsageLogSchema = z.object({
   provider: z.string().min(1).max(120),
   model: z.string().min(1).max(128),
   capability: llmCapabilitySchema,
-  promptTokens: z.number().int().nonnegative(),
-  completionTokens: z.number().int().nonnegative(),
-  totalTokens: z.number().int().nonnegative(),
+  usageStatus: z.enum(['known','partial','unknown']).optional(),
+  promptTokens: z.number().int().nonnegative().nullable(),
+  completionTokens: z.number().int().nonnegative().nullable(),
+  totalTokens: z.number().int().nonnegative().nullable(),
   costEstimate: z.number(),
   createdAt: z.string(),
 });

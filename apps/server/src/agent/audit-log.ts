@@ -1,4 +1,4 @@
-import { and, inArray, lt } from 'drizzle-orm';
+import { and, inArray, lt, ne } from 'drizzle-orm';
 import { getDb } from '../db/index.js';
 import { agentExecutions, jobs, llmUsageLogs } from '../db/schema.js';
 import { agentLogCutoff, PRUNABLE_LOG_STATUSES } from './audit-log-logic.js';
@@ -34,7 +34,7 @@ export async function pruneAgentLogs(now = new Date()): Promise<AgentLogPruneCou
 
   const finishedJobs = await db
     .delete(jobs)
-    .where(and(inArray(jobs.status, settled), lt(jobs.createdAt, cutoff)))
+    .where(and(inArray(jobs.status, settled), lt(jobs.createdAt, cutoff), ne(jobs.type, 'pdf_translate')))
     .returning({ id: jobs.id });
 
   return {

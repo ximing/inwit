@@ -31,7 +31,7 @@ async function getOwned(userId: string, id: string): Promise<LlmConfigRow> {
   const [row] = await getDb()
     .select()
     .from(llmConfigs)
-    .where(and(eq(llmConfigs.id, id), eq(llmConfigs.userId, userId)))
+    .where(and(eq(llmConfigs.id, id), eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat')))
     .limit(1);
   if (!row) throw AppError.of(404, 'LLM_PROVIDER_NOT_FOUND');
   return row;
@@ -41,7 +41,7 @@ export async function listLlmConfigs(userId: string): Promise<LlmConfig[]> {
   const rows = await getDb()
     .select()
     .from(llmConfigs)
-    .where(eq(llmConfigs.userId, userId))
+    .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat')))
     .orderBy(desc(llmConfigs.createdAt));
   return rows.map(toPublic);
 }
@@ -54,7 +54,7 @@ export async function createLlmConfig(
   const existing = await getDb()
     .select({ id: llmConfigs.id })
     .from(llmConfigs)
-    .where(eq(llmConfigs.userId, userId));
+    .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat')));
   const isDefault = input.isDefault ?? existing.length === 0;
   const now = new Date();
   const row = await getDb().transaction(async (tx) => {
@@ -62,7 +62,7 @@ export async function createLlmConfig(
       await tx
         .update(llmConfigs)
         .set({ isDefault: false, updatedAt: now })
-        .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.isDefault, true)));
+        .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat'), eq(llmConfigs.isDefault, true)));
     }
     const [created] = await tx
       .insert(llmConfigs)
@@ -97,7 +97,7 @@ export async function updateLlmConfig(
       ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl } : {}),
       updatedAt: now,
     })
-    .where(and(eq(llmConfigs.id, current.id), eq(llmConfigs.userId, userId)))
+    .where(and(eq(llmConfigs.id, current.id), eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat')))
     .returning();
   if (!row) throw AppError.of(404, 'LLM_PROVIDER_NOT_FOUND');
   return toPublic(row);
@@ -107,7 +107,7 @@ export async function deleteLlmConfig(userId: string, id: string): Promise<void>
   const current = await getOwned(userId, id);
   await getDb()
     .delete(llmConfigs)
-    .where(and(eq(llmConfigs.id, current.id), eq(llmConfigs.userId, userId)));
+    .where(and(eq(llmConfigs.id, current.id), eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat')));
 }
 
 export async function setDefaultLlmConfig(userId: string, id: string): Promise<LlmConfig> {
@@ -117,11 +117,11 @@ export async function setDefaultLlmConfig(userId: string, id: string): Promise<L
     await tx
       .update(llmConfigs)
       .set({ isDefault: false, updatedAt: now })
-      .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.isDefault, true)));
+      .where(and(eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat'), eq(llmConfigs.isDefault, true)));
     const [updated] = await tx
       .update(llmConfigs)
       .set({ isDefault: true, updatedAt: now })
-      .where(and(eq(llmConfigs.id, current.id), eq(llmConfigs.userId, userId)))
+      .where(and(eq(llmConfigs.id, current.id), eq(llmConfigs.userId, userId), eq(llmConfigs.purpose, 'chat')))
       .returning();
     if (!updated) throw AppError.of(404, 'LLM_PROVIDER_NOT_FOUND');
     return updated;

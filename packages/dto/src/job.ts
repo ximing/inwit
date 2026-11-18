@@ -15,6 +15,7 @@ export const JOB_TYPES = [
   'conversation',
   'concept_extract',
   'concept_practice',
+  'pdf_translate',
 ] as const;
 export const jobTypeSchema = z.enum(JOB_TYPES);
 export type JobType = z.infer<typeof jobTypeSchema>;
@@ -46,6 +47,7 @@ export const jobSchema = z.object({
   startedElapsedSec: z.number().int().nonnegative().optional(),
   /** Present on pending items from `GET /api/jobs/queue` (`runAt` ISO). */
   scheduledFor: z.string().optional(),
+  canCancel: z.boolean().optional(),
 });
 export type Job = z.infer<typeof jobSchema>;
 
@@ -278,6 +280,7 @@ export const jobUsageByTypeSchema = z.object({
 export type JobUsageByType = z.infer<typeof jobUsageByTypeSchema>;
 
 export const jobUsageSchema = z.object({
+  unknownUsageCalls: z.number().int().nonnegative().optional(),
   daily: z.array(jobUsageDaySchema),
   byType: z.array(jobUsageByTypeSchema),
   total: z.number().int().nonnegative(),

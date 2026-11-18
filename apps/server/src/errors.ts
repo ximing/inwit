@@ -1,4 +1,15 @@
 export const ERROR_MESSAGES = {
+  PDF_VERSION_CONFLICT: '原文件已变化，请重新加载',
+  PDF_SEGMENT_NOT_FOUND: '未找到该段落，请重新加载',
+  PDF_INDEX_NOT_READY: '段落索引尚未就绪',
+  PDF_TRANSLATION_NOT_FOUND: '译文或翻译任务不存在',
+  PDF_TRANSLATION_REQUEST_CONFLICT: '请求标识已用于不同内容',
+  PDF_TRANSLATION_RETRY_INVALID: '此任务不能重新开始',
+  PDF_TRANSLATION_UNKNOWN_ACK_REQUIRED: '请确认重新翻译可能重复计费',
+  PDF_SELECTION_INVALID: '请在同一页内选择有效文字',
+  PDF_TRANSLATION_CONTEXT_TOO_LARGE: '原文超出模型上下文，请缩小选区',
+  PDF_TRANSLATION_INVALID_OUTPUT: '模型未返回完整译文',
+
   VALIDATION_ERROR: '请求参数不合法',
   NOT_FOUND: '资源不存在',
   INVALID_CREDENTIALS: '邮箱或密码错误',

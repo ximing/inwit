@@ -1,3 +1,4 @@
+import { TranslationSection } from './translation-section.js';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect, useRef } from 'react';
 import { NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -43,6 +44,7 @@ const NAV: Array<{ id: SettingsSection; label: string }> = [
   { id: 'profile', label: '个人资料' },
   { id: 'appearance', label: '外观' },
   { id: 'models', label: '模型配置' },
+  { id: 'translation', label: '论文翻译' },
   { id: 'ocr', label: '文档解析' },
   { id: 'token', label: '接口令牌' },
   { id: 'archive', label: '回收站' },
@@ -992,6 +994,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
         </div>
 
         ) : null}
+        {section === 'translation' ? <TranslationSection /> : null}
         {section === 'files' ? <FilesSection /> : null}
 
         <p className="settings-version">版本 {APP_VERSION}</p>
