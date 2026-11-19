@@ -28,8 +28,8 @@ Inwit 今天只认自己的会话：邮箱密码登录后签发 `inwit_at` / `in
 | 登出 | `{issuer}/protocol/openid-connect/logout` |
 | 撤销 | `{issuer}/protocol/openid-connect/revoke` |
 
-- prod issuer：`https://super-agent-auth.aimo.plus/realms/super-agent-prod`
-- test issuer：`https://super-agent-auth.aimo.plus/realms/super-agent-test`
+- prod issuer：`https://super-agent-auth.aimo.plus/realms/aimo-plus-prod`
+- test issuer：`https://super-agent-auth.aimo.plus/realms/aimo-plus-test`
 - 管理控制台：`https://super-agent-auth.aimo.plus/admin`
 - 发现文档里的 `registration_endpoint` 不能用。匿名动态注册已关。Inwit 不能替用户自助注册。
 - 现有 client `super-agent-native` 只允许回调 `superagent://oauth/callback`，audience 是 `super-agent-api`，prod 和 test 各有一份。Inwit 不得复用该 client、该回调或该 audience。
@@ -563,8 +563,8 @@ v1 的 Keycloak client **不要**预先登记 `inwit://oidc/callback`。那个 s
 
 - 应用机：`ssh -p 11022 root@222.128.65.91`，目录 `/root/apps/super-agent-oidc`。管理员账号在该目录 `.env` 的 `OIDC_ADMIN_USER` 和 `OIDC_ADMIN_PASSWORD`。只在那台机器上读，不复制进 Inwit。
 - 数据库机：`ssh -p 11023 root@222.128.65.91`，内网 `192.168.9.109`。Keycloak 的库是 `222.128.65.91:25432` / `aimo_oidc` / 角色 `super_agent_oidc_owner`。Inwit 禁止连接。不要把连接串写进 `PG_*`。
-- realm 导入文件在应用机 `realms/super-agent-prod.json` 和 `realms/super-agent-test.json`。**已经存在的 realm 在容器启动时不会被这份文件覆盖。** 改 client 必须走 Admin API 或控制台。改 JSON 再重启不会更新现网 client。
-- 管理 API：先 `POST https://super-agent-auth.aimo.plus/realms/master/protocol/openid-connect/token`，`client_id=admin-cli`，`grant_type=password`，用户名口令来自上面的 `.env`。再调用 `/admin/realms/super-agent-prod/clients` 或 `/admin/realms/super-agent-test/clients`。
+- realm 导入文件在应用机 `realms/aimo-plus-prod.json` 和 `realms/aimo-plus-test.json`。**已经存在的 realm 在容器启动时不会被这份文件覆盖。** 改 client 必须走 Admin API 或控制台。改 JSON 再重启不会更新现网 client。
+- 管理 API：先 `POST https://super-agent-auth.aimo.plus/realms/master/protocol/openid-connect/token`，`client_id=admin-cli`，`grant_type=password`，用户名口令来自上面的 `.env`。再调用 `/admin/realms/aimo-plus-prod/clients` 或 `/admin/realms/aimo-plus-test/clients`。
 - 自助注册保持关闭。不要调用发现文档里的 `registration_endpoint`。
 - 不要改 `super-agent-native`，不要改它的回调 `superagent://oauth/callback`，不要改它的 audience `super-agent-api`。
 

@@ -3,7 +3,7 @@
 | 项 | 值 |
 | --- | --- |
 | 日期 | 2026-11-19 |
-| 状态 | `inwit_prod` 已导入 `super-agent-prod` |
+| 状态 | `inwit_prod` 已导入 `aimo-plus-prod` |
 | 相关 | `docs/design/oidc-login.md` |
 | 范围 | 把已有应用账号一次性导入共用 Keycloak。不改登录页，不打开自助注册 |
 
@@ -13,13 +13,13 @@ Inwit、Vital 以及其他应用共用一套 Keycloak 26.8.2。test 与 prod 仍
 
 各应用保留自己的用户表和业务数据。应用只多记一条对应关系：本应用用户 id ↔ `(issuer, sub)`。登录身份统一，文档、任务、令牌仍在各自的库里。
 
-这次先导入 `inwit_prod` 到 realm `super-agent-prod`。Vital 以后按同一规则导入，不在这次执行。
+这次先导入 `inwit_prod` 到 realm `aimo-plus-prod`。Vital 以后按同一规则导入，不在这次执行。
 
 ## sub 是什么
 
 `sub` 是 Keycloak 给这个人的编号，一个 UUID。它写在 access token 和 ID token 的 `sub` 字段里。它不是邮箱，也不等于 Inwit 或 Vital 自己的用户 id。
 
-同一个人在 `super-agent-prod` 里永远是同一个 `sub`。他在 test realm `super-agent-test` 里是另一条用户、另一个 `sub`。换 realm 之后对不上。
+同一个人在 `aimo-plus-prod` 里永远是同一个 `sub`。他在 test realm `aimo-plus-test` 里是另一条用户、另一个 `sub`。换 realm 之后对不上。
 
 应用之间靠这个编号认出同一个人：
 
@@ -41,13 +41,13 @@ Inwit 登录成功后仍签发自己的会话。Keycloak access token 只在登�
 这次做：
 
 - 数据来源：Inwit 生产库 `inwit_prod` 的 `users`。连接信息在应用机 `/root/apps/inwit/.env`。
-- 目标 realm：`super-agent-prod`。
-- issuer：`https://super-agent-auth.aimo.plus/realms/super-agent-prod`。
-- 通道：Keycloak Admin API。先向 master realm 用 `admin-cli` 和密码模式换管理员 token，再调用 `/admin/realms/super-agent-prod/users`。管理员口令只读应用机 `/root/apps/super-agent-oidc/.env`，不写入仓库、文档或日志。
+- 目标 realm：`aimo-plus-prod`。
+- issuer：`https://super-agent-auth.aimo.plus/realms/aimo-plus-prod`。
+- 通道：Keycloak Admin API。先向 master realm 用 `admin-cli` 和密码模式换管理员 token，再调用 `/admin/realms/aimo-plus-prod/users`。管理员口令只读应用机 `/root/apps/super-agent-oidc/.env`，不写入仓库、文档或日志。
 
 这次不做：
 
-- 不导入 `inwit_dev`、`inwit_test`，也不把生产用户复制进 `super-agent-test`。
+- 不导入 `inwit_dev`、`inwit_test`，也不把生产用户复制进 `aimo-plus-test`。
 - 不导入 Vital。规则写在下面，等 Vital 单独执行。
 - 不连接 PostgreSQL 库 `aimo_oidc`。Keycloak 自己的库只给 Keycloak 用。
 - 不打开 Keycloak 自助注册，不调用 `registration_endpoint`。
@@ -143,8 +143,8 @@ OIDC 登录上线后，对应关系进 Inwit 的 `oidc_identities`（见 `oidc-l
 ## 执行顺序
 
 1. 在 `inwit_prod` 统计用户数、可识别的 argon2id 行数、折成小写后重复的邮箱。不把哈希打出来。
-2. 用一个一次性密码在本机算出符合上面参数的 PHC，在 `super-agent-test` 建一个可丢弃用户，走登录页验证原密码能通过，然后删除该用户。生产导入不开始，直到这一步通过。
-3. 对 `inwit_prod` 的每一行按「去重与密码」处理 `super-agent-prod`。
+2. 用一个一次性密码在本机算出符合上面参数的 PHC，在 `aimo-plus-test` 建一个可丢弃用户，走登录页验证原密码能通过，然后删除该用户。生产导入不开始，直到这一步通过。
+3. 对 `inwit_prod` 的每一行按「去重与密码」处理 `aimo-plus-prod`。
 4. 写出对应关系文件。再跑一遍必须是空操作：已有 `inwit_user_id` 的不再创建。
 
 失败时停在这一行并留下已完成的对应关系。已创建的 Keycloak 用户不自动删除。修复后重跑，靠邮箱和 `inwit_user_id` 接上。
@@ -153,7 +153,7 @@ OIDC 登录上线后，对应关系进 Inwit 的 `oidc_identities`（见 `oidc-l
 
 Vital 的密码函数与 Inwit 相同，邮箱在 Vital 库里也有唯一约束。以后导入时：
 
-- 只进同一个目标 realm。生产对 `super-agent-prod`，测试对 `super-agent-test`，不要交叉。
+- 只进同一个目标 realm。生产对 `aimo-plus-prod`，测试对 `aimo-plus-test`，不要交叉。
 - 邮箱已存在：复用那个 `sub`，不覆盖密码。属性用 `vital_user_id`，不要改掉已有的 `inwit_user_id`。
 - 邮箱不存在：新建用户并写入 Vital 的 argon2 哈希。
 - 单独建 client `vital`，audience `vital-api`。回调只写 Vital 自己的地址。
@@ -178,8 +178,12 @@ OIDC 五个登录变量配齐、并且配置了 `OIDC_ADMIN_USER` 与 `OIDC_ADMI
 
 ## 2026-11-19 执行结果
 
-导入前用一次性密码在 `super-agent-test` 验证了哈希格式：Keycloak 登录页接受该密码，并在补上姓名后跳回 `superagent://oauth/callback`。验证用户已删除。
+导入前用一次性密码在 `aimo-plus-test` 验证了哈希格式：Keycloak 登录页接受该密码，并在补上姓名后跳回 `superagent://oauth/callback`。验证用户已删除。
 
-`inwit_prod` 共 11 个用户，邮箱没有撞车，哈希全部是约定的 argon2id。写入 `super-agent-prod` 的结果是新建 10 个、沿用已有邮箱 1 个。沿用的那个没有改密码。11 个账号都有密码凭证，`inwit_user_id` 已写上。
+`inwit_prod` 共 11 个用户，邮箱没有撞车，哈希全部是约定的 argon2id。写入 `aimo-plus-prod` 的结果是新建 10 个、沿用已有邮箱 1 个。沿用的那个没有改密码。11 个账号都有密码凭证。
 
-对应关系在应用机 `/root/apps/super-agent-oidc/imports/inwit-prod.json`，模式 `600`。文件里没有密码哈希。`oidc_identities` 还没建，所以还没灌进 Inwit 库。Inwit 登录页也还没有统一账号入口。
+对应关系在应用机 `/root/apps/super-agent-oidc/imports/inwit-prod.json`，模式 `600`。文件里没有密码哈希。`oidc_identities` 已有这 11 行，issuer 为 `https://super-agent-auth.aimo.plus/realms/aimo-plus-prod`，`sub` 与 Keycloak 用户 id 一致。
+
+同日把 realm 从 `super-agent-prod` / `super-agent-test` 换成 `aimo-plus-prod` / `aimo-plus-test`。用户 id 未变，密码凭证未变。旧 realm 地址已删除。
+
+第一次写入时 realm 用户资料只允许 `username`、`email`、`firstName`、`lastName`，未声明的 `inwit_user_id` 被丢掉。2026-11-19 补上了可选、仅管理员可读写的资料项 `inwit_user_id`，并写回这 11 个用户。没有改密码，也没有把这项设成登录必填。
