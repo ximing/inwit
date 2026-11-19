@@ -1,5 +1,8 @@
 import { Service } from '@rabjs/react';
 import { errorMessage } from '@/api/client';
+import { getOidcStatus } from '@/api/auth';
+import { oidcErrorText } from '@/lib/oidc-error-text';
+import { isTauriRuntime } from '@/platform/runtime';
 import { AuthService } from '@/services/auth.service';
 
 export class LoginService extends Service {
@@ -7,6 +10,8 @@ export class LoginService extends Service {
   email = '';
   password = '';
   error: string | null = null;
+  oidcEnabled = false;
+  oidcError: string | null = null;
 
   get auth(): AuthService {
     return this.resolve(AuthService);
@@ -27,6 +32,27 @@ export class LoginService extends Service {
 
   setPassword(value: string): void {
     this.password = value;
+  }
+
+  async loadOidc(): Promise<void> {
+    if (isTauriRuntime()) {
+      this.oidcEnabled = false;
+      return;
+    }
+    try {
+      this.oidcEnabled = (await getOidcStatus()).enabled;
+    } catch {
+      this.oidcEnabled = false;
+    }
+  }
+
+  startOidc(returnTo: string): void {
+    const safe = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/';
+    window.location.assign(`/api/auth/oidc/start?return=${encodeURIComponent(safe)}`);
+  }
+
+  noteOidcError(code: string | null): void {
+    this.oidcError = oidcErrorText(code);
   }
 
   async submit(): Promise<void> {

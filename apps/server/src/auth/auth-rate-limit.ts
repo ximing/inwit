@@ -53,8 +53,12 @@ export function assertRegisterRateLimit(ip: string, now = Date.now()): void {
   if (!consume(`register:ip:${normalizeIp(ip)}`, REGISTER_IP_LIMIT, HOUR_MS, now)) deny();
 }
 
+export function consumeLoginIp(ip: string, now = Date.now()): boolean {
+  return consume(`login:ip:${normalizeIp(ip)}`, LOGIN_IP_LIMIT, FIFTEEN_MIN_MS, now);
+}
+
 export function assertLoginRateLimit(ip: string, email: string, now = Date.now()): void {
-  if (!consume(`login:ip:${normalizeIp(ip)}`, LOGIN_IP_LIMIT, FIFTEEN_MIN_MS, now)) deny();
+  if (!consumeLoginIp(ip, now)) deny();
   if (!consume(`login:email:${normalizeEmail(email)}`, LOGIN_EMAIL_LIMIT, FIFTEEN_MIN_MS, now)) {
     deny();
   }

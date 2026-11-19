@@ -70,6 +70,27 @@ export async function authenticate(req: FastifyRequest, reply: FastifyReply): Pr
   throw AppError.of(401, 'INVALID_TOKEN');
 }
 
+/** Cookie session used by browser OIDC bind. Does not throw. */
+export async function readSessionUser(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<UserRow | undefined> {
+  const access = readSignedCookie(req, ACCESS_COOKIE_NAME);
+  if (access) {
+    const user = await userFromToken(access, 'access');
+    if (user) return user;
+  }
+  const refresh = readSignedCookie(req, REFRESH_COOKIE_NAME);
+  if (refresh) {
+    const user = await userFromToken(refresh, 'refresh');
+    if (user) {
+      issueAuthCookies(reply, user.id, user.sessionVersion);
+      return user;
+    }
+  }
+  return undefined;
+}
+
 export function requireUser(req: FastifyRequest): AuthPrincipal {
   const user = req.user;
   if (!user) throw AppError.of(401, 'INVALID_TOKEN');

@@ -2,7 +2,7 @@
 
 # 主题与知识地图
 
-Generated 2026-10-09T10:13:18.866Z. 20 endpoints.
+Generated 2026-11-19T07:52:51.902Z. 27 endpoints.
 
 ### DELETE `/api/map-nodes/:id`
 
@@ -333,6 +333,961 @@ auth=bearer
   },
   "required": [
     "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/topics/:id/concept-bundles`
+
+auth=bearer · 201
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `saveConceptBundleInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "concept": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "create"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "refined": true
+            },
+            "aliases": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "refined": true
+              },
+              "maxItems": 10,
+              "optional": true,
+              "default": []
+            },
+            "sense": {
+              "type": "string",
+              "minLength": 1,
+              "optional": true,
+              "nullable": true,
+              "refined": true
+            },
+            "definition": {
+              "type": "string",
+              "minLength": 1,
+              "optional": true,
+              "nullable": true,
+              "refined": true
+            },
+            "example": {
+              "type": "string",
+              "minLength": 1,
+              "optional": true,
+              "nullable": true,
+              "refined": true
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "locator": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "block"
+                          },
+                          "blockIndex": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true
+                          },
+                          "quote": {
+                            "type": "string",
+                            "minLength": 1,
+                            "refined": true
+                          },
+                          "prefix": {
+                            "type": "string",
+                            "optional": true,
+                            "refined": true
+                          },
+                          "suffix": {
+                            "type": "string",
+                            "optional": true,
+                            "refined": true
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "blockIndex",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "pdf"
+                          },
+                          "pageNumber": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "exclusiveMinimum": true
+                          },
+                          "quote": {
+                            "refined": true
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "pageNumber",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "const": "quote"
+                          },
+                          "quote": {
+                            "refined": true
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "quote"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "basis": {
+                    "type": "string",
+                    "enum": [
+                      "explicit",
+                      "inferred",
+                      "user"
+                    ],
+                    "optional": true,
+                    "default": "user"
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "locator"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 10,
+              "optional": true,
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "reuse"
+            },
+            "conceptId": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "expectedVersion": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true
+            },
+            "note": {
+              "type": "string",
+              "minLength": 1,
+              "optional": true,
+              "refined": true
+            },
+            "evidence": {
+              "type": "array",
+              "items": {},
+              "maxItems": 10,
+              "optional": true,
+              "default": []
+            }
+          },
+          "required": [
+            "kind",
+            "conceptId",
+            "expectedVersion"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string",
+            "enum": [
+              "outgoing",
+              "incoming"
+            ]
+          },
+          "other": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "create"
+                  },
+                  "name": {
+                    "refined": true
+                  },
+                  "aliases": {
+                    "optional": true,
+                    "default": []
+                  },
+                  "sense": {
+                    "optional": true,
+                    "nullable": true,
+                    "refined": true
+                  },
+                  "definition": {
+                    "optional": true,
+                    "nullable": true,
+                    "refined": true
+                  },
+                  "example": {
+                    "optional": true,
+                    "nullable": true,
+                    "refined": true
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "existing"
+                  },
+                  "conceptId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "conceptId"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "composition",
+              "execution",
+              "evaluation",
+              "dependency",
+              "contrast",
+              "other"
+            ]
+          },
+          "predicate": {
+            "type": "string",
+            "minLength": 1,
+            "refined": true
+          },
+          "context": {
+            "type": "string",
+            "minLength": 1,
+            "optional": true,
+            "nullable": true,
+            "refined": true
+          },
+          "explanation": {
+            "type": "string",
+            "minLength": 1,
+            "optional": true,
+            "nullable": true,
+            "refined": true
+          },
+          "example": {
+            "optional": true,
+            "nullable": true,
+            "refined": true
+          },
+          "basis": {
+            "optional": true,
+            "default": "user"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {},
+            "maxItems": 10,
+            "optional": true,
+            "default": []
+          }
+        },
+        "required": [
+          "direction",
+          "other",
+          "kind",
+          "predicate"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 20,
+      "optional": true,
+      "default": []
+    },
+    "documentId": {
+      "type": "string",
+      "format": "uuid",
+      "optional": true
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    }
+  },
+  "required": [
+    "concept",
+    "requestId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### GET `/api/topics/:id/concept-graph`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **query** `conceptGraphQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "focusId": {
+      "type": "string",
+      "format": "uuid",
+      "optional": true
+    },
+    "documentId": {
+      "type": "string",
+      "format": "uuid",
+      "optional": true
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 500,
+      "optional": true
+    },
+    "limit": {
+      "type": "integer",
+      "coerced": true,
+      "minimum": 1,
+      "maximum": 50,
+      "optional": true,
+      "default": 50
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+### POST `/api/topics/:id/concept-graph/view`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `conceptGraphViewInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "documentId": {
+      "type": "string",
+      "format": "uuid",
+      "optional": true
+    },
+    "nodeIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "minItems": 1,
+      "maxItems": 50
+    },
+    "expectedGraphRevision": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "edgeCursor": {
+      "type": "string",
+      "maxLength": 500,
+      "optional": true
+    }
+  },
+  "required": [
+    "nodeIds",
+    "expectedGraphRevision"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/topics/:id/concept-matches`
+
+auth=bearer
+
+同名/别名匹配建议（POST 以携带别名数组）；只提示，不合并。
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `conceptMatchesQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "refined": true
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "refined": true
+      },
+      "maxItems": 10,
+      "optional": true,
+      "default": []
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/topics/:id/concept-relations`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `createConceptRelationInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "fromConceptId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "toConceptId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "composition",
+        "execution",
+        "evaluation",
+        "dependency",
+        "contrast",
+        "other"
+      ]
+    },
+    "predicate": {
+      "type": "string",
+      "minLength": 1,
+      "refined": true
+    },
+    "context": {
+      "type": "string",
+      "minLength": 1,
+      "optional": true,
+      "nullable": true,
+      "refined": true
+    },
+    "explanation": {
+      "type": "string",
+      "minLength": 1,
+      "optional": true,
+      "nullable": true,
+      "refined": true
+    },
+    "example": {
+      "type": "string",
+      "minLength": 1,
+      "optional": true,
+      "nullable": true,
+      "refined": true
+    },
+    "basis": {
+      "type": "string",
+      "enum": [
+        "explicit",
+        "inferred",
+        "user"
+      ],
+      "optional": true,
+      "default": "user"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "block"
+                  },
+                  "blockIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "quote": {
+                    "type": "string",
+                    "minLength": 1,
+                    "refined": true
+                  },
+                  "prefix": {
+                    "type": "string",
+                    "optional": true,
+                    "refined": true
+                  },
+                  "suffix": {
+                    "type": "string",
+                    "optional": true,
+                    "refined": true
+                  }
+                },
+                "required": [
+                  "kind",
+                  "blockIndex",
+                  "quote"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "pdf"
+                  },
+                  "pageNumber": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "quote": {
+                    "refined": true
+                  }
+                },
+                "required": [
+                  "kind",
+                  "pageNumber",
+                  "quote"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "quote"
+                  },
+                  "quote": {
+                    "refined": true
+                  }
+                },
+                "required": [
+                  "kind",
+                  "quote"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "basis": {
+            "optional": true,
+            "default": "user"
+          }
+        },
+        "required": [
+          "documentId",
+          "locator"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 10,
+      "optional": true,
+      "default": []
+    }
+  },
+  "required": [
+    "fromConceptId",
+    "toConceptId",
+    "kind",
+    "predicate"
+  ],
+  "additionalProperties": false
+}
+```
+
+### GET `/api/topics/:id/concepts`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **query** `listConceptsQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "q": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "optional": true
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 500,
+      "optional": true
+    },
+    "limit": {
+      "type": "integer",
+      "coerced": true,
+      "minimum": 1,
+      "maximum": 100,
+      "optional": true,
+      "default": 50
+    },
+    "includeArchived": {
+      "type": "boolean",
+      "optional": true
+    }
+  },
+  "additionalProperties": false
+}
+```
+
+### POST `/api/topics/:id/concepts`
+
+auth=bearer · 201
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `createConceptInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "refined": true
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "refined": true
+      },
+      "maxItems": 10,
+      "optional": true,
+      "default": []
+    },
+    "sense": {
+      "type": "string",
+      "minLength": 1,
+      "optional": true,
+      "nullable": true,
+      "refined": true
+    },
+    "definition": {
+      "type": "string",
+      "minLength": 1,
+      "optional": true,
+      "nullable": true,
+      "refined": true
+    },
+    "example": {
+      "type": "string",
+      "minLength": 1,
+      "optional": true,
+      "nullable": true,
+      "refined": true
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "block"
+                  },
+                  "blockIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "quote": {
+                    "type": "string",
+                    "minLength": 1,
+                    "refined": true
+                  },
+                  "prefix": {
+                    "type": "string",
+                    "optional": true,
+                    "refined": true
+                  },
+                  "suffix": {
+                    "type": "string",
+                    "optional": true,
+                    "refined": true
+                  }
+                },
+                "required": [
+                  "kind",
+                  "blockIndex",
+                  "quote"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "pdf"
+                  },
+                  "pageNumber": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "exclusiveMinimum": true
+                  },
+                  "quote": {
+                    "refined": true
+                  }
+                },
+                "required": [
+                  "kind",
+                  "pageNumber",
+                  "quote"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "const": "quote"
+                  },
+                  "quote": {
+                    "refined": true
+                  }
+                },
+                "required": [
+                  "kind",
+                  "quote"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "explicit",
+              "inferred",
+              "user"
+            ],
+            "optional": true,
+            "default": "user"
+          }
+        },
+        "required": [
+          "documentId",
+          "locator"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 10,
+      "optional": true,
+      "default": []
+    }
+  },
+  "required": [
+    "name"
   ],
   "additionalProperties": false
 }

@@ -2,7 +2,7 @@
 
 # 媒体资源
 
-Generated 2026-10-03T13:52:33.918Z. 6 endpoints.
+Generated 2026-11-19T07:52:51.902Z. 6 endpoints.
 
 ### POST `/api/assets/import`
 

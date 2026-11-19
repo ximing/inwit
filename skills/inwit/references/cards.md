@@ -2,7 +2,7 @@
 
 # 卡片
 
-Generated 2026-10-09T10:13:18.866Z. 17 endpoints.
+Generated 2026-11-19T07:52:51.902Z. 20 endpoints.
 
 ### DELETE `/api/card-links/:id`
 
@@ -261,6 +261,94 @@ auth=bearer
   "additionalProperties": false
 }
 ```
+
+### GET `/api/cards/:id/knowledge-links`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/cards/:id/knowledge-links`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `addCardKnowledgeLinkInputSchema` (dto)
+```json
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "targetKind": {
+          "const": "concept"
+        },
+        "targetId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "targetKind",
+        "targetId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "targetKind": {
+          "const": "relation"
+        },
+        "targetId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "targetKind",
+        "targetId"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}
+```
+
+### DELETE `/api/cards/:id/knowledge-links/:linkId`
+
+auth=bearer · 204
 
 ### GET `/api/cards/:id/links`
 

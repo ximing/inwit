@@ -86,6 +86,10 @@ const SettingsPageContent = observer(function SettingsPageContent() {
     service.setTokenPane(searchParams.get('pane') === 'logs' ? 'logs' : 'list');
   }, [params.section, searchParams, service]);
 
+  useEffect(() => {
+    service.noteOidcError(searchParams.get('oidc_error'));
+  }, [searchParams, service]);
+
   return (
     <div className="settings-layout">
       <nav className="settings-nav" aria-label="设置分节">
@@ -166,6 +170,9 @@ const SettingsPageContent = observer(function SettingsPageContent() {
                   value={service.email}
                   onChange={(event) => service.setEmail(event.target.value)}
                 />
+                {service.oidcAccount?.emailSynthetic ? (
+                  <p className="settings-hint">统一账号没有提供邮箱，请填写一个可用的邮箱。</p>
+                ) : null}
               </div>
               {service.profileError ? (
                 <p className="banner-error" role="alert">
@@ -181,6 +188,27 @@ const SettingsPageContent = observer(function SettingsPageContent() {
               </button>
             </form>
           </div>
+          {service.oidcAccount?.enabled ? (
+            <div className="panel profile-oidc">
+              {service.oidcError ? (
+                <p className="banner-error" role="alert">
+                  {service.oidcError}
+                </p>
+              ) : null}
+              {service.oidcAccount.linked ? (
+                <p>已绑定统一账号</p>
+              ) : (
+                <button type="button" className="btn btn-secondary" onClick={() => service.startOidcBind()}>
+                  绑定统一账号
+                </button>
+              )}
+            </div>
+          ) : null}
+          {service.oidcAccount && !service.oidcAccount.hasPassword ? (
+            <div className="panel profile-password">
+              <p>此账号没有本地密码</p>
+            </div>
+          ) : (
           <form
             className="panel profile-password"
             noValidate
@@ -239,6 +267,7 @@ const SettingsPageContent = observer(function SettingsPageContent() {
             </button>
             <p className="settings-hint">修改后，其它设备和脚本需要重新登录。当前页面保持登录。</p>
           </form>
+          )}
         </div>
 
         ) : null}

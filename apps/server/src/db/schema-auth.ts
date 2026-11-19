@@ -17,7 +17,8 @@ import { enumCheck, timestamptz } from './schema-shared.js';
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email', { length: 255 }).notNull().unique(),
-  passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  /** NULL means this account cannot sign in with a local password. */
+  passwordHash: varchar('password_hash', { length: 255 }),
   displayName: varchar('display_name', { length: 64 }),
   /** Object storage key (not a URL). */
   avatarKey: varchar('avatar_key', { length: 255 }),
@@ -111,7 +112,26 @@ export const ocrConfigs = pgTable(
   (t) => [uniqueIndex('ocr_configs_user_uidx').on(t.userId)],
 );
 
+export const oidcIdentities = pgTable(
+  'oidc_identities',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    issuer: varchar('issuer', { length: 512 }).notNull(),
+    sub: varchar('sub', { length: 255 }).notNull(),
+    createdAt: timestamptz('created_at').notNull().defaultNow(),
+    updatedAt: timestamptz('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('oidc_identities_issuer_sub_uidx').on(t.issuer, t.sub),
+    uniqueIndex('oidc_identities_user_issuer_uidx').on(t.userId, t.issuer),
+  ],
+);
+
 export type UserRow = typeof users.$inferSelect;
+export type OidcIdentityRow = typeof oidcIdentities.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type AccessTokenRow = typeof accessTokens.$inferSelect;
 export type NewAccessToken = typeof accessTokens.$inferInsert;

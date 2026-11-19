@@ -24,6 +24,11 @@ const LoginContent = observer(function LoginContent() {
     navigate(from, { replace: true });
   }, [auth.user, from, navigate]);
 
+  useEffect(() => {
+    form.noteOidcError(new URLSearchParams(location.search).get('oidc_error'));
+    void form.loadOidc();
+  }, [form, location.search]);
+
   if (auth.user) {
     return (
       <div className="splash">
@@ -100,6 +105,19 @@ const LoginContent = observer(function LoginContent() {
             {form.$model.submit.loading ? '请稍等…' : form.mode === 'login' ? '登录' : '注册并进入'}
           </button>
         </form>
+        {form.oidcEnabled ? (
+          <div className="auth-oidc">
+            {form.oidcError ? (
+              <p className="banner-error" role="alert">
+                {form.oidcError}
+              </p>
+            ) : null}
+            <button type="button" className="btn btn-secondary" onClick={() => form.startOidc(from)}>
+              使用统一账号登录
+            </button>
+            <p className="hint">使用管理员已经开通的统一账号。这里不会注册新账号。</p>
+          </div>
+        ) : null}
       </div>
     </div>
   );

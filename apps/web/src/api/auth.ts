@@ -13,6 +13,8 @@ import type {
   Paginated,
   RegisterInput,
   UpdateProfileInput,
+  OidcAccount,
+  OidcStatus,
   User,
 } from '@inwit/dto';
 import { clearAuth, request } from './client';
@@ -41,6 +43,14 @@ export async function logoutUser(): Promise<void> {
 
 export function getMe(): Promise<User> {
   return request<User>('/api/auth/me');
+}
+
+export function getOidcStatus(): Promise<OidcStatus> {
+  return request<OidcStatus>('/api/auth/oidc/status');
+}
+
+export function getOidcAccount(): Promise<OidcAccount> {
+  return request<OidcAccount>('/api/me/oidc');
 }
 
 export function updateMe(input: UpdateProfileInput): Promise<User> {

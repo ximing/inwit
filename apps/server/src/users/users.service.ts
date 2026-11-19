@@ -62,6 +62,7 @@ export async function changePassword(
   reply: FastifyReply,
 ): Promise<AuthResponse> {
   const current = await getUserById(userId);
+  if (!current.passwordHash) throw AppError.of(400, 'PASSWORD_NOT_SET');
   if (!(await verifyPassword(input.currentPassword, current.passwordHash))) {
     throw AppError.of(401, 'WRONG_PASSWORD');
   }

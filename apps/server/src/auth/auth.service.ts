@@ -15,6 +15,7 @@ import {
   setAccessCookie,
   setRefreshCookie,
 } from './cookies.js';
+import { assertOidcEmailAvailable, provisionOidcRegistration } from './oidc.service.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { signAccessToken, signRefreshToken, verifyToken } from './token.js';
 
@@ -99,17 +100,23 @@ export async function registerUser(
 ): Promise<AuthResponse> {
   const email = input.email.trim().toLowerCase();
   const passwordHash = await hashPassword(input.password);
+  const [existing] = await getDb().select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+  if (existing) throw AppError.of(409, 'EMAIL_ALREADY_REGISTERED');
+  await assertOidcEmailAvailable(email);
+  let row: UserRow | undefined;
   try {
-    const [row] = await getDb()
-      .insert(users)
-      .values({ email, passwordHash })
-      .returning();
+    const inserted = await getDb().insert(users).values({ email, passwordHash }).returning();
+    row = inserted[0];
     if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
-    return issueAuthResponse(reply, row, mode);
+    await provisionOidcRegistration(row, passwordHash);
   } catch (err) {
+    if (row) await getDb().delete(users).where(eq(users.id, row.id));
+    if (err instanceof AppError) throw err;
     if (isUniqueViolation(err)) throw AppError.of(409, 'EMAIL_ALREADY_REGISTERED');
     throw err;
   }
+  if (!row) throw AppError.of(500, 'INTERNAL_ERROR');
+  return issueAuthResponse(reply, row, mode);
 }
 
 export async function loginUser(
@@ -119,7 +126,7 @@ export async function loginUser(
 ): Promise<AuthResponse> {
   const email = input.email.trim().toLowerCase();
   const [row] = await getDb().select().from(users).where(eq(users.email, email)).limit(1);
-  if (!row || !(await verifyPassword(input.password, row.passwordHash))) {
+  if (!row?.passwordHash || !(await verifyPassword(input.password, row.passwordHash))) {
     throw AppError.of(401, 'INVALID_CREDENTIALS');
   }
   return issueAuthResponse(reply, row, mode);

@@ -15,6 +15,7 @@ import {
   type LlmTestResult,
   type OcrConfig,
   type OcrTestResult,
+  type OidcAccount,
   type UpdateProfileInput,
   type UpsertOcrConfigInput,
 } from '@inwit/dto';
@@ -24,6 +25,7 @@ import {
   createAccessToken,
   deleteAccessToken,
   listAccessTokenLogs,
+  getOidcAccount,
   listAccessTokens,
   requestAvatarUploadUrl,
   revealAccessToken,
@@ -38,6 +40,7 @@ import {
   restoreDocument,
 } from '@/api/documents';
 import { putPresigned } from '@/lib/presign-put';
+import { oidcErrorText } from '@/lib/oidc-error-text';
 import {
   createLlmConfig,
   deleteLlmConfig,
@@ -80,6 +83,8 @@ export class SettingsService extends Service {
   newPassword = '';
   confirmPassword = '';
   passwordError: string | null = null;
+  oidcAccount: OidcAccount | null = null;
+  oidcError: string | null = null;
   avatarError: string | null = null;
   ocrConfig: OcrConfig | null = null;
   ocrApiKey = '';
@@ -250,6 +255,22 @@ export class SettingsService extends Service {
     }
   }
 
+  noteOidcError(code: string | null): void {
+    this.oidcError = oidcErrorText(code);
+  }
+
+  startOidcBind(): void {
+    window.location.assign('/api/auth/oidc/bind/start?return=/settings/profile');
+  }
+
+  async loadOidcAccount(): Promise<void> {
+    try {
+      this.oidcAccount = await getOidcAccount();
+    } catch {
+      this.oidcAccount = null;
+    }
+  }
+
   async load(): Promise<void> {
     this.error = null;
     this.hydrateProfile();
@@ -266,6 +287,7 @@ export class SettingsService extends Service {
       void this.loadArchivedCards();
       void this.loadArchivedAnnotations();
       void this.loadArchivedDocuments();
+      void this.loadOidcAccount();
     } catch (err) {
       this.error = errorMessage(err, '加载模型配置失败');
     }

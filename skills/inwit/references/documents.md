@@ -2,7 +2,7 @@
 
 # 文档与问答
 
-Generated 2026-10-09T10:13:18.866Z. 29 endpoints.
+Generated 2026-11-19T07:52:51.902Z. 41 endpoints.
 
 ### POST `/api/chat`
 
@@ -147,7 +147,7 @@ Soft delete: the document (with its annotations) moves to 回收站.
 
 ### GET `/api/documents/:id`
 
-auth=bearer
+auth=bearer · 304
 
 - **params** `idParamsSchema` (local)
 ```json
@@ -568,6 +568,93 @@ auth=bearer
 }
 ```
 
+### POST `/api/documents/:id/concept-batches`
+
+auth=bearer
+
+文章生成入口（M2/T5）：创建批次并入队 concept_extract。 发布开关关闭时 404；同 requestId 重放返回原结果。
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `createConceptBatchInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "topicId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "scope": {
+      "type": "string",
+      "enum": [
+        "document",
+        "selection"
+      ],
+      "optional": true,
+      "default": "document"
+    },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "fromBlockIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true
+        },
+        "toBlockIndex": {
+          "type": "integer",
+          "minimum": 0,
+          "exclusiveMinimum": true
+        }
+      },
+      "required": [
+        "fromBlockIndex",
+        "toBlockIndex"
+      ],
+      "additionalProperties": false,
+      "optional": true
+    },
+    "expectedDocumentHash": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "optional": true
+    },
+    "retryOfBatchId": {
+      "type": "string",
+      "format": "uuid",
+      "optional": true
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    }
+  },
+  "required": [
+    "topicId",
+    "requestId"
+  ],
+  "additionalProperties": false
+}
+```
+
 ### POST `/api/documents/:id/excerpts`
 
 auth=bearer
@@ -635,6 +722,184 @@ auth=bearer
 }
 ```
 
+### GET `/api/documents/:id/knowledge`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **query** `documentKnowledgeQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "topicId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "cursor": {
+      "type": "string",
+      "maxLength": 500,
+      "optional": true
+    },
+    "limit": {
+      "type": "integer",
+      "coerced": true,
+      "minimum": 1,
+      "maximum": 100,
+      "optional": true,
+      "default": 100
+    }
+  },
+  "required": [
+    "topicId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### GET `/api/documents/:id/knowledge-locations`
+
+auth=bearer
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **query** `knowledgeLocationsQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "topicId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "targetKind": {
+      "type": "string",
+      "enum": [
+        "concept",
+        "relation"
+      ]
+    },
+    "targetId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "topicId",
+    "targetKind",
+    "targetId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/documents/:id/knowledge-refs`
+
+auth=bearer · 201
+
+- **params** `idParamsSchema` (local)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `setDocumentKnowledgeRefInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "topicId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "targetKind": {
+      "type": "string",
+      "enum": [
+        "concept",
+        "relation"
+      ]
+    },
+    "targetId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    }
+  },
+  "required": [
+    "topicId",
+    "targetKind",
+    "targetId",
+    "requestId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### DELETE `/api/documents/:id/knowledge-refs/:refId`
+
+auth=bearer
+
+- **body** `removeDocumentKnowledgeRefInputSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "confirmDependentRelations": {
+      "type": "boolean",
+      "optional": true,
+      "default": false
+    }
+  },
+  "additionalProperties": false
+}
+```
+
 ### PUT `/api/documents/:id/map-node`
 
 auth=bearer
@@ -669,6 +934,45 @@ auth=bearer
   },
   "required": [
     "nodeId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### GET `/api/documents/:id/pdf-segments`
+
+auth=bearer
+
+- **params** `translationDocumentParamsSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **query** `pdfSegmentsQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "pageIndex": {
+      "type": "integer",
+      "coerced": true,
+      "minimum": 0
+    }
+  },
+  "required": [
+    "pageIndex"
   ],
   "additionalProperties": false
 }
@@ -779,6 +1083,299 @@ auth=bearer · 201
   "required": [
     "text",
     "blockIndex"
+  ],
+  "additionalProperties": false
+}
+```
+
+### GET `/api/documents/:id/translation-jobs/:jobId`
+
+auth=bearer
+
+- **params** `translationJobParamsSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "jobId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id",
+    "jobId"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/documents/:id/translation-jobs/:jobId/retry`
+
+auth=bearer
+
+- **params** `translationJobParamsSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "jobId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id",
+    "jobId"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `translationRetrySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "idempotencyKey": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "acknowledgeUnknownCharge": {
+      "type": "boolean",
+      "optional": true
+    }
+  },
+  "required": [
+    "idempotencyKey"
+  ],
+  "additionalProperties": false
+}
+```
+
+### GET `/api/documents/:id/translations`
+
+auth=bearer
+
+- **params** `translationDocumentParamsSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **query** `translationsQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "segmentIds": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "maxItems": 100
+    },
+    "fileRevision": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "segmentIds",
+    "fileRevision"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/documents/:id/translations`
+
+auth=bearer
+
+- **params** `translationDocumentParamsSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `translationRequestSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "segmentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fileRevision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "segmentId",
+    "fileRevision",
+    "idempotencyKey"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/documents/:id/translations/:translationId/regenerate`
+
+auth=bearer
+
+- **params** `translationResultParamsSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "translationId": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id",
+    "translationId"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `translationRegenerateSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "idempotencyKey": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "idempotencyKey"
+  ],
+  "additionalProperties": false
+}
+```
+
+### POST `/api/documents/:id/translations/selection`
+
+auth=bearer
+
+- **params** `translationDocumentParamsSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}
+```
+
+- **body** `selectionTranslationRequestSchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "pageIndex": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "rects": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          {},
+          {},
+          {}
+        ]
+      },
+      "minItems": 1
+    },
+    "fileRevision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "format": "uuid"
+    }
+  },
+  "required": [
+    "pageIndex",
+    "text",
+    "rects",
+    "fileRevision",
+    "idempotencyKey"
   ],
   "additionalProperties": false
 }

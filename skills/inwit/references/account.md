@@ -2,7 +2,7 @@
 
 # 账号与设置
 
-Generated 2026-10-09T10:13:18.866Z. 25 endpoints.
+Generated 2026-11-19T07:52:51.902Z. 30 endpoints.
 
 ### POST `/api/auth/login`
 
@@ -37,6 +37,14 @@ Generated 2026-10-09T10:13:18.866Z. 25 endpoints.
 ### GET `/api/auth/me`
 
 auth=bearer
+
+### GET `/api/auth/oidc/bind/start`
+
+### GET `/api/auth/oidc/callback`
+
+### GET `/api/auth/oidc/start`
+
+### GET `/api/auth/oidc/status`
 
 ### POST `/api/auth/refresh`
 
@@ -104,8 +112,16 @@ auth=bearer · 201
         "openai",
         "deepseek",
         "claude",
+        "gemini",
+        "xai",
+        "mistral",
         "zhipu",
-        "dashscope"
+        "dashscope",
+        "kimi",
+        "minimax",
+        "doubao",
+        "groq",
+        "openrouter"
       ]
     },
     "apiKey": {
@@ -491,6 +507,10 @@ auth=bearer
   "additionalProperties": false
 }
 ```
+
+### GET `/api/me/oidc`
+
+auth=bearer
 
 ### POST `/api/me/password`
 

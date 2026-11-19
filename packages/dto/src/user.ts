@@ -49,6 +49,32 @@ export const refreshInputSchema = z.object({
 });
 export type RefreshInput = z.infer<typeof refreshInputSchema>;
 
+export const oidcStatusSchema = z.object({
+  enabled: z.boolean(),
+});
+export type OidcStatus = z.infer<typeof oidcStatusSchema>;
+
+export const oidcAccountSchema = z.object({
+  enabled: z.boolean(),
+  linked: z.boolean(),
+  hasPassword: z.boolean(),
+  emailSynthetic: z.boolean(),
+});
+export type OidcAccount = z.infer<typeof oidcAccountSchema>;
+
+export const oidcReturnQuerySchema = z.object({
+  return: z.string().max(512).optional(),
+});
+export type OidcReturnQuery = z.infer<typeof oidcReturnQuerySchema>;
+
+export const oidcCallbackQuerySchema = z.object({
+  code: z.string().optional(),
+  state: z.string().optional(),
+  error: z.string().max(64).optional(),
+  session_state: z.string().optional(),
+});
+export type OidcCallbackQuery = z.infer<typeof oidcCallbackQuerySchema>;
+
 export const updateProfileInputSchema = z.object({
   displayName: z.string().trim().min(1).max(64).optional(),
   email: z.string().email().max(255).optional(),

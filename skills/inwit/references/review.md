@@ -2,7 +2,7 @@
 
 # 复习
 
-Generated 2026-10-03T13:52:33.918Z. 8 endpoints.
+Generated 2026-11-19T07:52:51.902Z. 8 endpoints.
 
 ### POST `/api/review/:cardId/feedback`
 
@@ -37,6 +37,17 @@ auth=bearer
         "fuzzy",
         "remembered"
       ]
+    },
+    "reviewToken": {
+      "type": "string",
+      "maxLength": 2000,
+      "optional": true
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "optional": true
     }
   },
   "required": [
@@ -155,5 +166,22 @@ auth=bearer
 ### GET `/api/review/today`
 
 auth=bearer
+
+- **query** `reviewTodayQuerySchema` (dto)
+```json
+{
+  "type": "object",
+  "properties": {
+    "reviewProtocol": {
+      "type": "integer",
+      "coerced": true,
+      "minimum": 1,
+      "maximum": 2,
+      "optional": true
+    }
+  },
+  "additionalProperties": false
+}
+```
 
 

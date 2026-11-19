@@ -135,6 +135,17 @@
 .profile-avatar-actions .banner-error { margin: 0; }
 .profile-password { margin-top: 16px; }
 
+.profile-oidc {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.profile-oidc p {
+  margin: 0;
+  color: var(--ink-3);
+}
+
 @media (max-width: 760px) {
   .settings-layout {
     padding: 24px 20px 80px;

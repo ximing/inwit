@@ -4,6 +4,7 @@ export {
   accessTokens,
   accessTokenLogs,
   ocrConfigs,
+  oidcIdentities,
 } from './schema-auth.js';
 export { topics, mapNodes } from './schema-topic.js';
 export { documents, annotations } from './schema-document.js';
@@ -78,6 +79,7 @@ export type {
   NewOcrConfig,
   NewUser,
   OcrConfigRow,
+  OidcIdentityRow,
   UserRow,
 } from './schema-auth.js';
 export type {

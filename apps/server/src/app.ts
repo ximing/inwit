@@ -3,13 +3,16 @@ import { registerPdfTranslationRoutes } from './documents/translation/translatio
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
 import { authenticate } from './auth/authenticate.js';
 import { registerAccessTokenLogHook } from './auth/access-tokens.js';
 import { registerAdminRoutes } from './admin/admin.routes.js';
 import { registerAnnotationRoutes } from './annotations/annotation.routes.js';
 import { registerAssetRoutes } from './assets/asset.routes.js';
 import { registerAuthRoutes } from './auth/auth.routes.js';
+import { oidcReqSerializer } from './auth/oidc-logic.js';
+import { registerOidcRoutes } from './auth/oidc.routes.js';
+import { logOidcStartup } from './auth/oidc.service.js';
 import { registerCanvasRoutes } from './canvas/canvas.routes.js';
 import { registerCardRoutes } from './cards/card.routes.js';
 import { registerConceptRoutes } from './concepts/concept.routes.js';
@@ -44,9 +47,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   if (opts.db) setDb(opts.db);
 
   const app = Fastify({
-    logger: true,
+    logger: {
+      level: config.LOG_LEVEL,
+      serializers: { req: oidcReqSerializer },
+    },
     requestIdHeader: 'x-request-id',
-  });
+  } as FastifyServerOptions);
 
   app.decorate('db', getDb());
   app.decorate('authenticate', authenticate);
@@ -72,6 +78,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   app.get('/health', async () => healthStatus());
 
   registerAuthRoutes(app);
+  registerOidcRoutes(app);
+  logOidcStartup(app.log);
   registerUserRoutes(app);
   registerFileRoutes(app);
   registerLlmRoutes(app);

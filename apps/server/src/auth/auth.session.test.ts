@@ -412,6 +412,30 @@ describe('session version', () => {
     expect(fresh.statusCode).toBe(200);
   });
 
+  it('rejects a passwordless account with the same credential error', async () => {
+    mem.users[0]!.passwordHash = null;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'reader@example.com', password: PASSWORD },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error.code).toBe('INVALID_CREDENTIALS');
+  });
+
+  it('refuses to change a password that was never set', async () => {
+    mem.users[0]!.passwordHash = null;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/me/password',
+      headers: { cookie: accessCookie(0), origin: WEB_ORIGIN },
+      payload: { currentPassword: PASSWORD, newPassword: NEW_PASSWORD },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('PASSWORD_NOT_SET');
+    expect(res.json().error.message).toBe('此账号没有本地密码');
+  });
+
   it('does not rotate the session when the current password is wrong', async () => {
     const cookie = accessCookie(0);
     const res = await app.inject({

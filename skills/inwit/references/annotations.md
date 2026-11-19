@@ -2,7 +2,7 @@
 
 # 批注
 
-Generated 2026-10-09T10:13:18.866Z. 10 endpoints.
+Generated 2026-11-19T07:52:51.902Z. 10 endpoints.
 
 ### GET `/api/annotation-resurface`
 
@@ -98,7 +98,8 @@ auth=bearer · 201
         "text",
         "pdf",
         "media",
-        "note"
+        "note",
+        "outline"
       ],
       "optional": true
     },

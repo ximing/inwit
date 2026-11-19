@@ -4,6 +4,7 @@ import {
   assertLoginRateLimit,
   assertRefreshRateLimit,
   assertRegisterRateLimit,
+  consumeLoginIp,
   resetAuthRateLimits,
 } from './auth-rate-limit.js';
 
@@ -33,6 +34,14 @@ describe('auth rate limits', () => {
     assertRegisterRateLimit('203.0.113.2', 0);
     for (let i = 0; i < 5; i += 1) assertRegisterRateLimit('203.0.113.1', HOUR_MS);
     expectLimited(() => assertRegisterRateLimit('203.0.113.1', HOUR_MS));
+  });
+
+  it('shares the login IP bucket without charging the email bucket', () => {
+    for (let i = 0; i < 10; i += 1) expect(consumeLoginIp('203.0.113.9', 0)).toBe(true);
+    assertLoginRateLimit('203.0.113.9', 'fresh@example.com', 0);
+    resetAuthRateLimits();
+    for (let i = 0; i < 20; i += 1) expect(consumeLoginIp('203.0.113.9', 0)).toBe(true);
+    expect(consumeLoginIp('203.0.113.9', 0)).toBe(false);
   });
 
   it('caps login by IP and by normalized email on separate 15 minute windows', () => {
