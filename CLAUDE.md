@@ -22,6 +22,8 @@ Inwit — 一个「扔进去、AI 消化、催你复习」的学习伴侣。pnpm
 
 ## 全局规则
 
+Codex 的根指令在 `AGENTS.md`。改下面这些全局规则或常用命令时，两处一起改。
+
 - **ESM 导入**：TypeScript 相对导入一律带 `.js` 后缀。
 - **契约先行**：前后端与移动端共享类型均从 `@inwit/dto` 导入；修改 API 先改 `packages/dto`。
 - **数据库迁移**：改表结构必须走 drizzle migration（`apps/server/src/db/schema.ts` → `migrate:generate` → `migrate`），禁止手改数据库。
@@ -54,7 +56,7 @@ pnpm --filter @inwit/server migrate              # 执行迁移
 
 进入具体子系统或修改特定类型文件时，遵循对应的局部指令与路径规则：
 
-- **子系统 `CLAUDE.md`**（按目录按需加载）：
+- **子系统 `CLAUDE.md`**（按目录按需加载）。Codex 在同目录的 `AGENTS.md` 里引入这份文件，不要另写一份正文：
   - `apps/server/CLAUDE.md` — 服务端分层、多租户隔离、Job/Agent 管线、混合检索与 SM-2 复习
   - `apps/web/CLAUDE.md` — Web 目录边界、路由与弹窗规范、Tiptap/PDF 工作台、平台传输边界
   - `apps/mobile/CLAUDE.md` — Expo 路由结构、PAT 鉴权传输、WebView `doc-engine` 同步机制
@@ -62,11 +64,11 @@ pnpm --filter @inwit/server migrate              # 执行迁移
   - `packages/dto/CLAUDE.md` — API 契约 Schema 编写与导出规范
   - `packages/doc-schema/CLAUDE.md` — ProseMirror / Tiptap 节点扩展与锚点纯函数规范
   - `packages/doc-engine/CLAUDE.md` — WebView 编辑器单文件产物构建与桥接协议规范
-- **横切路径规则 `.claude/rules/`**（按文件 glob 按需加载）：
-  - `.claude/rules/rab-service-ui.md` — `@rabjs/react` 响应式 Service 与组件开发规范
-  - `.claude/rules/web-styles.md` — Web CSS 模块化就近维护与 `style-entry.css` 登记规范
-  - `.claude/rules/testing.md` — `*-logic.ts` 纯函数切分、测试环境隔离与架构守护测试
-  - `.claude/rules/api-contract.md` — 跨端 API 变更协同与 Skill 引用生成
+- **横切路径规则**（按文件 glob 按需加载）。`.claude/rules/` 与 `.Codex/rules/` 同名文件正文保持一致，改一处时改另一处：
+  - `rab-service-ui.md` — `@rabjs/react` 响应式 Service 与组件开发规范
+  - `web-styles.md` — Web CSS 模块化就近维护与 `style-entry.css` 登记规范
+  - `testing.md` — `*-logic.ts` 纯函数切分、测试环境隔离与架构守护测试
+  - `api-contract.md` — 跨端 API 变更协同与 Skill 引用生成
 
 <!-- agent-recall -->
 ## 记忆

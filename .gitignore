@@ -19,3 +19,16 @@ apps/desktop/src-tauri/gen/
 deploy/info.md
 # grok CLI 本地目录
 .grok/
+
+# 本地技能副本。已入库的版本在 .claude/skills/
+.agents/skills/
+
+# Python 缓存与 PDF 翻译验收的本地结果
+__pycache__/
+*.py[cod]
+scripts/pdf-translation-acceptance/*.json
+scripts/pdf-translation-acceptance/*.png
+scripts/pdf-translation-acceptance/screenshots/
+scripts/pdf-translation-streaming-validation/close-results.json
+scripts/pdf-translation-streaming-validation/results.json
+scripts/pdf-translation-validation/manual-review.json

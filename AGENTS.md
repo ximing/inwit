@@ -1,3 +1,59 @@
+# 项目指令
+
+## 项目概览
+
+Inwit 是一个「扔进去、AI 消化、催你复习」的学习伴侣。pnpm monorepo，Node 22+，全 ESM。TypeScript 相对导入必须带 `.js` 后缀。
+
+- `apps/server` — Fastify 5、drizzle、PostgreSQL，以及独立的 worker
+- `apps/web` — Vite、React 19、`@rabjs/react`。生产站点同时给桌面壳加载
+- `apps/mobile` — Expo、React Native、`expo-router`
+- `apps/desktop` — Tauri 2 远程站点壳
+- `packages/dto` — 跨端 Zod 契约
+- `packages/doc-schema` — ProseMirror / Tiptap 文档模型与锚点
+- `packages/doc-engine` — 移动端 WebView 用的单文件编辑器
+- `packages/markdown` — Markdown 与 ProseMirror JSON 互转
+- `packages/brand` — 图标生成。改 `src/logo.svg` 后跑 `pnpm --filter @inwit/brand raster-icons`
+
+Claude 的同文根指令在 `CLAUDE.md`。改全局规则、命令或子系统名单时，两处一起改。
+
+## 全局规则
+
+- TypeScript 相对导入一律带 `.js` 后缀。
+- 共享类型从 `@inwit/dto` 导入。改 API 先改 `packages/dto`。
+- 改表走 drizzle migration（`apps/server/src/db/schema.ts` → `migrate:generate` → `migrate`）。禁止手改数据库。
+- 图片和文件只用服务端签发的 S3 presigned URL。客户端不持有存储凭证。数据库只存对象 key。
+- 产品文案用中文，语气克制书面。图标用 `lucide-react` 或 `lucide-react-native`。各端图标由 `packages/brand` 生成，不手改产物。
+- 发版前先升级 `apps/web/package.json` 的 `version`。不要在界面里手写版本号。
+
+## 开发入口
+
+- `pnpm dev`：server `:3020` 与 web `:5190`
+- `pnpm --filter @inwit/server worker`：没有它，文档会停在消化中
+- `pnpm typecheck`
+- `pnpm --filter @inwit/server test`、`pnpm --filter @inwit/web test`、`pnpm --filter @inwit/mobile test`、`pnpm --filter @inwit/desktop test`
+- `pnpm --filter @inwit/server migrate:generate`，然后 `pnpm --filter @inwit/server migrate`
+
+## 局部规则导航
+
+进入子系统时，该目录的 `AGENTS.md` 会引入同目录 `CLAUDE.md`。不要把子系统细则复制回本文件。
+
+- `apps/server/` — 分层、多租户、Job 与检索
+- `apps/web/` — 页面边界、路由、平台传输
+- `apps/mobile/` — Expo 路由、PAT、文档引擎同步
+- `apps/desktop/` — Tauri 壳契约与权限
+- `packages/dto/` — 契约包
+- `packages/doc-schema/` — 文档模型
+- `packages/doc-engine/` — WebView 引擎
+
+横切规则在 `.Codex/rules/`，只在命中路径时加载。正文与 `.claude/rules/` 同名文件保持一致，改一处时改另一处。
+
+- `.Codex/rules/api-contract.md`
+- `.Codex/rules/rab-service-ui.md`
+- `.Codex/rules/testing.md`
+- `.Codex/rules/web-styles.md`
+
+`packages/markdown/`、`packages/brand/`、`docs/`、`skills/` 没有单独的目录指令。
+
 <!-- agent-recall -->
 ## 记忆
 
