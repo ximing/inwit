@@ -18,7 +18,7 @@
 
 server / worker 启动时 `ensureRetrievalStores()`。
 
-`.env`：PRD 写的 `https://meilisearch.aimo.plus` 旧 key 已 403，改为与 Qdrant 同机的 `http://222.128.65.91:7700`（vital 正在用的 admin key）。Qdrant / DashScope 未改。
+`.env`：PRD 写的 `https://meilisearch.aimo.plus` 旧 key 已 403，改为与 Qdrant 同机的 `http://192.0.2.1:7700`（vital 正在用的 admin key）。Qdrant / DashScope 未改。
 
 ### 消化 Agent（`src/agent/`，pi-agent-core 0.85.1）
 
@@ -97,5 +97,5 @@ psql：
 
 - `write_cards` 未建 `review_states`（T6 明确可在本任务或 T6 补；留给 T6）。
 - evolve / weekly_report / thread / chat 处理器仍是 stub。
-- Meili 从 PRD 的 aimo.plus 改到 `222.128.65.91:7700`，因为公开 skill 里的 key 已 403。若 aimo.plus 换新 key，改 `.env` 即可，代码只读 `MEILI_HOST` / `MEILI_API_KEY`。
+- Meili 从 PRD 的 aimo.plus 改到 `192.0.2.1:7700`，因为公开 skill 里的 key 已 403。若 aimo.plus 换新 key，改 `.env` 即可，代码只读 `MEILI_HOST` / `MEILI_API_KEY`。
 - Agent 默认 180s 超时、最多 16 轮；更长材料可能要再加 heartbeat / 提超时。

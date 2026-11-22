@@ -64,7 +64,7 @@ Inwit 今天只认自己的会话：邮箱密码登录后签发 `inwit_at` / `in
 
 非目标：
 
-- 运行时不把 Inwit 用户持续同步进 Keycloak。一次性导入见 `docs/design/oidc-account-import.md`。不读不写 PostgreSQL `222.128.65.91:25432` 上的库 `aimo_oidc`（角色 `super_agent_oidc_owner`）。Inwit 的 `PG_*` 仍只指向 Inwit 自己的库。本文不给出该库的口令或连接串。
+- 运行时不把 Inwit 用户持续同步进 Keycloak。一次性导入见 `docs/design/oidc-account-import.md`。不读不写 PostgreSQL `192.0.2.1:25432` 上的库 `aimo_oidc`（角色 `super_agent_oidc_owner`）。Inwit 的 `PG_*` 仍只指向 Inwit 自己的库。本文不给出该库的口令或连接串。
 - 不实现 Keycloak 管理后台，不调用 `registration_endpoint`，不打开自助注册。
 - 不替换 PAT，不让 `/api/**` 业务路由接受 Keycloak JWT，也不接受 audience `super-agent-api`。
 - 不启用 ROPC（密码模式）或 implicit。
@@ -561,8 +561,8 @@ v1 的 Keycloak client **不要**预先登记 `inwit://oidc/callback`。那个 s
 
 事实：
 
-- 应用机：`ssh -p 11022 root@222.128.65.91`，目录 `/root/apps/super-agent-oidc`。管理员账号在该目录 `.env` 的 `OIDC_ADMIN_USER` 和 `OIDC_ADMIN_PASSWORD`。只在那台机器上读，不复制进 Inwit。
-- 数据库机：`ssh -p 11023 root@222.128.65.91`，内网 `192.168.9.109`。Keycloak 的库是 `222.128.65.91:25432` / `aimo_oidc` / 角色 `super_agent_oidc_owner`。Inwit 禁止连接。不要把连接串写进 `PG_*`。
+- 应用机：`ssh -p 11022 root@192.0.2.1`，目录 `/root/apps/super-agent-oidc`。管理员账号在该目录 `.env` 的 `OIDC_ADMIN_USER` 和 `OIDC_ADMIN_PASSWORD`。只在那台机器上读，不复制进 Inwit。
+- 数据库机：`ssh -p 11023 root@192.0.2.1`，内网 `192.168.9.109`。Keycloak 的库是 `192.0.2.1:25432` / `aimo_oidc` / 角色 `super_agent_oidc_owner`。Inwit 禁止连接。不要把连接串写进 `PG_*`。
 - realm 导入文件在应用机 `realms/aimo-plus-prod.json` 和 `realms/aimo-plus-test.json`。**已经存在的 realm 在容器启动时不会被这份文件覆盖。** 改 client 必须走 Admin API 或控制台。改 JSON 再重启不会更新现网 client。
 - 管理 API：先 `POST https://super-agent-auth.aimo.plus/realms/master/protocol/openid-connect/token`，`client_id=admin-cli`，`grant_type=password`，用户名口令来自上面的 `.env`。再调用 `/admin/realms/aimo-plus-prod/clients` 或 `/admin/realms/aimo-plus-test/clients`。
 - 自助注册保持关闭。不要调用发现文档里的 `registration_endpoint`。

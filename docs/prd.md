@@ -206,9 +206,9 @@ inwit/
 
 ### 4.4 环境配置（均通过 .env 注入，不入库）
 
-- PostgreSQL：`222.128.65.91:25432`，超级用户 postgres
+- PostgreSQL：`192.0.2.1:25432`，超级用户 postgres
   - 两个库：`inwit_dev` / `inwit_prod`
-- Qdrant：`http://222.128.65.91:16333`（api-key header）
+- Qdrant：`http://192.0.2.1:16333`（api-key header）
 - Meilisearch：`https://meilisearch.aimo.plus`
 - DashScope（百炼）：embedding（qwen3-vl-embedding, 2560 维）+ rerank（qwen3.7-text-rerank）+ 默认系统模型
 
