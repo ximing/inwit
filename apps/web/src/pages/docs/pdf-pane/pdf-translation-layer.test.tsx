@@ -15,7 +15,7 @@ const mock = vi.hoisted(() => ({
     openSegment: vi.fn(),
   },
 }));
-vi.mock('../pdf-pane.service.js', () => ({ PdfPaneService: class PdfPaneService {} }));
+vi.mock('./pdf-pane.service.js', () => ({ PdfPaneService: class PdfPaneService {} }));
 vi.mock('./pdf-translation.service.js', () => ({
   PdfTranslationService: class PdfTranslationService {},
 }));

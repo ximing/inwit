@@ -2,7 +2,7 @@ import { useDocumentState } from '@embedpdf/core/react';
 import { useCapture } from '@embedpdf/plugin-capture/react';
 import { observer, useService } from '@rabjs/react';
 import { Fragment, useEffect, useRef } from 'react';
-import { PdfPaneService } from '../pdf-pane.service.js';
+import { PdfPaneService } from './pdf-pane.service.js';
 import { PdfTranslationService } from './pdf-translation.service.js';
 import { quadBounds } from './translation-geometry-logic.js';
 

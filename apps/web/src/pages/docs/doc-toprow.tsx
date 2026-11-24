@@ -1,15 +1,15 @@
 import { observer, useService } from '@rabjs/react';
 import { Lightbulb, Maximize2, Minimize2, Search, X } from 'lucide-react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router';
-import { Tip } from '@/components/tip';
+import { Tip } from '@/components/tip/tip';
 import { formatRelativeTime } from '@/lib/format';
 import { documentReturnTarget } from '@/routes';
 import { UiPrefsService, type DocMode } from '@/services/ui-prefs.service';
-import { DocFindService } from './doc-find.service';
+import { DocFindService } from './doc-find/doc-find.service';
 import { DocsService } from './docs.service';
-import { findSeedFromSelection } from './find-replace-logic';
-import { EditorService } from './editor.service';
-import { TopicPicker } from './topic-picker';
+import { findSeedFromSelection } from './doc-find/find-replace-logic';
+import { EditorService } from './editor/editor.service';
+import { TopicPicker } from './topic-picker/topic-picker';
 
 const ModeSwitch = observer(function ModeSwitch() {
   const prefs = useService(UiPrefsService);

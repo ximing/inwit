@@ -31,7 +31,7 @@ import {
   rebindRelation,
   type DraftChoiceState,
 } from './concept-selection-logic.js';
-import { pushFocus, type FocusFrame } from './concept-graph-nav.js';
+import { pushFocus, type FocusFrame } from './concept-graph/concept-graph-nav.js';
 
 export type ConceptViewMode = 'graph' | 'list';
 export type ConceptFilter = 'all' | 'document' | 'inferred' | 'practice';

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { ListTree, Loader2, Network, Plus, Search } from 'lucide-react';
 import { shortcutBlockedTarget } from '../study-workspace/study-mode-hotkey.js';
 import { ConceptsService } from './concepts.service.js';
-import { ConceptGraph } from './concept-graph.js';
+import { ConceptGraph } from './concept-graph/concept-graph.js';
 import { ConceptDetailPane, RelationDetailPane } from './concept-detail.js';
 import { ConceptBatchPanel } from './concept-batch-panel.js';
 import { ConceptEditorDialog, ConceptLinkDraft, RelationEditorDialog } from './concept-editor.js';

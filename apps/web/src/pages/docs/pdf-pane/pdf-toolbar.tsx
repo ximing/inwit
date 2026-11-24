@@ -7,8 +7,8 @@ import { useRotate } from '@embedpdf/plugin-rotate/react';
 import { observer, useService } from '@rabjs/react';
 import { Crop, Minus, PanelLeft, Plus, RotateCw, Search } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { Tip } from '@/components/tip';
-import { PdfPaneService } from '../pdf-pane.service';
+import { Tip } from '@/components/tip/tip';
+import { PdfPaneService } from './pdf-pane.service';
 import {
   PDF_ZOOM_PRESETS,
   formatZoomPercent,

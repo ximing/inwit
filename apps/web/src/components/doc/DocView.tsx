@@ -12,8 +12,8 @@ import {
 } from '@/lib/entity-marks';
 import { asPmJson } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
-import { AnchorHighlight } from '@/pages/docs/anchor-highlight';
-import { DocFindController } from '@/pages/docs/doc-find-bar';
+import { AnchorHighlight } from '@/pages/docs/anchor-highlight/anchor-highlight';
+import { DocFindController } from '@/pages/docs/doc-find/doc-find-bar';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { createDocExtensions } from './extensions';
 

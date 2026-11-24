@@ -1,4 +1,4 @@
-import { TranslationSection } from './translation-section.js';
+import { TranslationSection } from './translation/translation-section.js';
 import { bindServices, observer, useService } from '@rabjs/react';
 import { useEffect, useRef } from 'react';
 import { NavLink, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
@@ -11,7 +11,7 @@ import {
   docDisplayTitle,
   type LlmProvider,
 } from '@inwit/dto';
-import { Select } from '@/components/select';
+import { Select } from '@/components/select/select';
 import { UserAvatar } from '@/components/user-avatar';
 import { Tag } from '@/components/tag';
 import { APP_VERSION } from '@/lib/app-version';
@@ -26,8 +26,8 @@ function clipArchiveText(text: string, max = 60): string {
 }
 import { DialogService } from '@/services/dialog.service';
 import { THEME_OPTIONS, ThemeService, type ThemePreference } from '@/services/theme.service';
-import { FilesSection } from './files-section';
-import { FilesService } from './files.service';
+import { FilesSection } from './files/files-section';
+import { FilesService } from './files/files.service';
 import {
   ACCESS_TOKEN_MAX_PER_USER,
   ACCESS_TOKEN_NAME_MAX,

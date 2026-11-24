@@ -1,5 +1,5 @@
 import { AssetUrlsService } from '@/services/asset-urls.service';
-import type { DocumentChange } from '@/components/document-actions.service';
+import type { DocumentChange } from '@/components/document-actions/document-actions.service';
 import { Service } from '@rabjs/react';
 import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
 import {
@@ -30,7 +30,7 @@ import {
   type Topic,
   type UpdateCardInput,
 } from '@inwit/dto';
-import { discardThoughtDraft } from './thought-draft';
+import { discardThoughtDraft } from './thought/thought-draft';
 import { listDocumentAnnotations } from '@/api/annotations';
 import {
   completeAssetMultipart,
@@ -102,10 +102,10 @@ import { putPresigned } from '@/lib/presign-put';
 import { DialogService } from '@/services/dialog.service';
 import { CARD_RAIL_NARROW_PX } from '@/services/ui-prefs.service';
 import { SyncService, type SyncEvent } from '@/services/sync.service';
-import { AssetUploadError, storeDocAsset, type UploadDocAssetApi } from './upload-asset';
-import { type CanvasOp } from './canvas-history';
+import { AssetUploadError, storeDocAsset, type UploadDocAssetApi } from './editor/upload-asset';
+import { type CanvasOp } from './card-canvas/canvas-history';
 import { DocsAnnotationsService } from './docs-annotations.service';
-import { DocsCanvasService } from './docs-canvas.service.js';
+import { DocsCanvasService } from './card-canvas/docs-canvas.service.js';
 import {
   DocsSelectionService,
   type SelectionPollHooks,
@@ -115,9 +115,9 @@ import {
   DocsPendingPollService,
   type PendingPollHooks,
 } from './docs-pending-poll.service.js';
-import { MIND_NEW_TEXT } from './mindmap-edit';
+import { MIND_NEW_TEXT } from './card-canvas/mindmap-edit';
 import { DocsImportService, importFailMessage } from './docs-import.service';
-import { EditorService } from './editor.service';
+import { EditorService } from './editor/editor.service';
 import {
   applyCanvasDetach,
   applyCanvasMoves,
@@ -128,7 +128,7 @@ import {
   decisionError,
   forestOf,
   upsertCanvas,
-} from './docs-canvas-logic.js';
+} from './card-canvas/docs-canvas-logic.js';
 
 const canvasAssetApi: UploadDocAssetApi = {
   presign: presignAsset,

@@ -3,10 +3,10 @@ import type { DocumentDetail } from '@inwit/dto';
 import { getDocument } from '@/api/documents';
 import { AssetUrlsService } from '@/services/asset-urls.service';
 import { DocsService } from './docs.service';
-import { EditorService } from './editor.service';
+import { EditorService } from './editor/editor.service';
 import { DocsImportService } from './docs-import.service';
 import { DocsAnnotationsService } from './docs-annotations.service';
-import { DocsCanvasService } from './docs-canvas.service.js';
+import { DocsCanvasService } from './card-canvas/docs-canvas.service.js';
 import { DocsPendingPollService } from './docs-pending-poll.service.js';
 import { DocsSelectionService } from './docs-selection.service.js';
 

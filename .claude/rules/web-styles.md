@@ -7,8 +7,8 @@ paths:
 # Web 样式组织规范
 
 - **按功能就近维护**：
-  - 页面样式放在 `apps/web/src/pages/<功能>/styles.css`；复杂页面按子功能继续拆分（如 `pages/docs/editor.css`、`card-rail.css`、`pdf-pane/styles.css`、`pages/review/reports.css`）。
-  - 组件样式放在对应组件目录的 `styles.css`，或与组件同级的同名 CSS（如 `components/doc-row.css`）。
+  - 页面级样式放在 `apps/web/src/pages/<功能>/styles.css`。页面里的独立组件再进子目录，样式放该目录的 `styles.css`（如 `pages/docs/pdf-pane/styles.css`）。
+  - 组件样式放在该组件目录的 `styles.css`（如 `components/search/styles.css`）。组件的 `tsx`、`*.service.ts`、`*.test.ts` 与样式同目录，不要在父目录平铺同名 css。
   - 应用骨架样式放在 `apps/web/src/shell/styles.css`。
 - **全局样式边界**：`apps/web/src/styles.css` 只维护主题变量、基础元素/reset、全局可访问性规则，以及按钮、表单、对话框、标签等通用基础原语。**禁止**向该文件追加页面或业务功能专属样式；跨页面复用的业务组件仍由所属组件目录维护样式。
 - **规则随模块归属**：功能相关的响应式 `@media`、深色主题覆盖、`@keyframes` 和减少动画规则（`prefers-reduced-motion`），与该功能的基础样式放在一起。跨模块的组合选择器按归属拆开，避免在全局文件末尾集中堆积适配或补丁。

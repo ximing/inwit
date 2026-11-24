@@ -16,7 +16,7 @@ vi.mock('@/api/canvas', () => ({ listCanvasNodes: vi.fn(async () => []) }));
 import { getDocument, updateDocument } from '@/api/documents';
 import { DocsPendingPollService } from './docs-pending-poll.service.js';
 import { DocsService } from './docs.service';
-import { EditorService } from './editor.service';
+import { EditorService } from './editor/editor.service';
 
 const saved = {
   type: 'doc',

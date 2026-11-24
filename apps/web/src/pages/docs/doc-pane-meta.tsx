@@ -1,6 +1,6 @@
 import { listBodyPreview, type DocumentListItem } from '@inwit/dto';
 import { observer, useService } from '@rabjs/react';
-import { AiSpark, AiStageText } from '@/components/ai-flow';
+import { AiSpark, AiStageText } from '@/components/ai-flow/ai-flow';
 import type { DocPipelineStage } from '@/lib/doc-pipeline';
 import { DocsService } from './docs.service';
 

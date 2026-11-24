@@ -1,6 +1,6 @@
 import { observer, useService } from '@rabjs/react';
 import { Camera } from 'lucide-react';
-import { Tip } from '@/components/tip';
+import { Tip } from '@/components/tip/tip';
 import { ScreenshotService } from '@/services/screenshot.service';
 
 export const ScreenshotButton = observer(function ScreenshotButton({

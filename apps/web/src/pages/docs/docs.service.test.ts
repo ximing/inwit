@@ -1,7 +1,7 @@
 import type { Annotation, CanvasNode, DocumentCard, DocumentDetail } from '@inwit/dto';
 import { describe, expect, it, vi } from 'vitest';
 import { DocsAnnotationsService } from './docs-annotations.service';
-import { DocsCanvasService } from './docs-canvas.service.js';
+import { DocsCanvasService } from './card-canvas/docs-canvas.service.js';
 import { DocsPendingPollService } from './docs-pending-poll.service.js';
 import { DocsSelectionService } from './docs-selection.service.js';
 import { DocsService } from './docs.service';

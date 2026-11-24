@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import { ROUTES, weeklyReportsPath } from '@/routes';
-import { prefetchReportsPane } from './load-reports';
+import { prefetchReportsPane } from './reports/load-reports';
 
 const WEEKDAY_CN = ['日', '一', '二', '三', '四', '五', '六'] as const;
 

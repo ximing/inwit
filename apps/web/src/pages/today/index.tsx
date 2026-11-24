@@ -1,4 +1,4 @@
-import { Tip } from '@/components/tip';
+import { Tip } from '@/components/tip/tip';
 import { weeklyReportsPath } from '@/routes';
 import {
   agentDocumentMetaLabel,
@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { AiSpark, AiStageText } from '@/components/ai-flow';
+import { AiSpark, AiStageText } from '@/components/ai-flow/ai-flow';
 import { SearchPalette, SearchService } from '@/components/search';
 import { ScreenshotButton } from '@/components/screenshot-button';
 import { Tag } from '@/components/tag';

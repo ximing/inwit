@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import { Navigate, Route, Routes, useParams, useSearchParams } from 'react-router';
-import { AppDialog } from '@/components/app-dialog';
+import { AppDialog } from '@/components/app-dialog/app-dialog';
 import { PAGE_LIST, ROUTES, docPath, editorNewPath, editorPath, routeSegment, topicPath } from '@/routes';
 import { Layout } from '@/shell/Layout';
 import {

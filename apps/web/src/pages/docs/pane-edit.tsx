@@ -7,8 +7,8 @@ import { documentReturnTarget } from '@/routes';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
 import { DocTopRow } from './doc-toprow';
-import { EditorService } from './editor.service';
-import { PaperEditor } from './paper-editor';
+import { EditorService } from './editor/editor.service';
+import { PaperEditor } from './editor/paper-editor';
 
 export const PaneEdit = observer(function PaneEdit({ docId }: { docId: string | null }) {
   const service = useService(DocsService);

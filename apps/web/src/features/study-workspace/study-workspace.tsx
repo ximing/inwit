@@ -3,7 +3,7 @@ import { Columns2, Loader2, Rows2, Sparkles } from 'lucide-react';
 import { useEffect, useRef, type CSSProperties, type PointerEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { DocsService } from '@/pages/docs/docs.service.js';
-import { CardRail } from '@/pages/docs/card-rail';
+import { CardRail } from '@/pages/docs/card-rail/card-rail';
 import {
   CANVAS_PANE_WIDTH_DEFAULT,
   CARD_RAIL_WIDTH_DEFAULT,

@@ -3,9 +3,9 @@ import { useSearch } from '@embedpdf/plugin-search/react';
 import { observer, useService } from '@rabjs/react';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { Tip } from '@/components/tip';
+import { Tip } from '@/components/tip/tip';
 import { imeBlocksEnterFromEvent, runAfterImeEnter } from '@/lib/ime-enter';
-import { PdfPaneService } from '../pdf-pane.service';
+import { PdfPaneService } from './pdf-pane.service';
 import { searchResultLabel } from './chrome-logic.js';
 
 const SEARCH_DEBOUNCE_MS = 220;

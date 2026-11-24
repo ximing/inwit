@@ -1,4 +1,4 @@
-import type { DocumentChange } from '@/components/document-actions.service';
+import type { DocumentChange } from '@/components/document-actions/document-actions.service';
 import { Service } from '@rabjs/react';
 import type { CaptureEditorHandle } from '@/components/capture/capture-editor';
 import type {

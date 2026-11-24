@@ -9,13 +9,13 @@ import { bindServices, observer, useService } from '@rabjs/react';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, MoreHorizontal, Pause, Trash2, X } from 'lucide-react';
 import { lazy, Suspense, useEffect, useState, type ReactElement } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { loadReportsPane } from './load-reports';
+import { loadReportsPane } from './reports/load-reports';
 import { weeklyReportsPath, ROUTES } from '@/routes';
 import { cardPath } from '@/routes';
 import { cloneSettings, ReviewService } from './review.service';
 import { ReviewSectionHead, todayLabel } from './section-head';
 import { estimateReviewMinutes } from '@/lib/review-eta';
-import { Tip } from '@/components/tip';
+import { Tip } from '@/components/tip/tip';
 
 const ReportsPane = lazy(() => loadReportsPane().then((mod) => ({ default: mod.ReportsPane })));
 

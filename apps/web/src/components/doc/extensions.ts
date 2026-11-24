@@ -30,7 +30,7 @@ import type { NodeView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import { common, createLowlight } from 'lowlight';
 import type { AssetUrlsService } from '@/services/asset-urls.service';
-import { DocFind } from '@/pages/docs/doc-find-plugin';
+import { DocFind } from '@/pages/docs/doc-find/doc-find-plugin';
 import { externalLinkOpen } from './external-link-plugin';
 
 const lowlight = createLowlight(common);

@@ -13,12 +13,12 @@ import { textToPmDoc } from '@/lib/pm-doc';
 import { isBlankPmDoc } from '@/lib/pm-doc-read';
 import { documentReturnTarget } from '@/routes';
 import { StudyDock } from '@/features/study-workspace/study-workspace.js';
-import { DocFindBar } from './doc-find-bar';
+import { DocFindBar } from './doc-find/doc-find-bar';
 import { DocsService } from './docs.service';
 import { DocPaneMeta } from './doc-pane-meta';
 import { DocTopRow } from './doc-toprow';
-import { ReadSelectionToolbar } from './selection-toolbar';
-import { loadPdfPane } from './pdf-pane-loader';
+import { ReadSelectionToolbar } from './selection-toolbar/selection-toolbar';
+import { loadPdfPane } from './pdf-pane/pdf-pane-loader';
 
 const PdfPane = lazy(() => loadPdfPane());
 

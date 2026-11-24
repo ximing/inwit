@@ -9,7 +9,8 @@
 
 - `src/pages/<page>/` — 页面级视图组件、页面专属 `*.service.ts`、子组件及就近样式（如 `pages/docs/` 下的富文本编辑器 `paper-editor.tsx`、思维导图画布、PDF 阅读器 `pdf-pane/`）。
 - `src/features/` — 跨页面复用的完整业务特性模块（如 `concepts/`、`study-workspace/`）。
-- `src/components/` — 跨页面共享的通用组件与对应样式，不耦合单一页面的私有状态。
+- `src/components/` — 跨页面共享的通用组件与对应样式，不耦合单一页面的私有状态。每个组件单独一个目录，把 `tsx`、`styles.css`、`*.service.ts`、`*.test.ts` 放在一起（如 `components/search/`）。不要在父目录平铺 `foo.tsx`、`foo.css`、`foo.service.ts`、`foo.test.ts`。
+- 页面本身仍是 `pages/<page>/`：入口 `index.tsx`、页面级 `styles.css`、页面级 service 留在该目录。从页面拆出的独立组件再进子目录（如 `pages/docs/pdf-pane/`）。
 - `src/services/` — 全局单例或跨页共享 Service（如 `AuthService`、`DialogService`、`ThemeService`、`AssetUrlsService`）。
 - `src/api/` — 薄 fetch 封装，按领域划分文件，统一走 `src/api/client.ts` 与 `transport.ts`。
 - `src/lib/` — 与视图解耦的纯函数与 `*-logic.ts`（配 co-located `*.test.ts`）。

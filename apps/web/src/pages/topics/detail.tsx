@@ -3,8 +3,8 @@ import { docCardFace, docCardLabel, type MapNodeStatus, type MapTreeNode } from 
 import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { DocRow } from '@/components/doc-row';
-import { Tip } from '@/components/tip';
+import { DocRow } from '@/components/doc-row/doc-row';
+import { Tip } from '@/components/tip/tip';
 import { prefetchDocument } from '@/lib/document-prefetch';
 import { formatRelativeTime } from '@/lib/format';
 import { chapterMeta, TopicsService } from './topics.service';

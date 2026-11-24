@@ -17,7 +17,7 @@ import {
 import { useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Chip } from '@/components/chip';
-import { Tip } from '@/components/tip';
+import { Tip } from '@/components/tip/tip';
 import { Tag } from '@/components/tag';
 import { formatDuration, formatRelativeTime, formatTokens } from '@/lib/format';
 import { jobsPath } from '@/routes';
